@@ -1,0 +1,11 @@
+{
+  "name": "@gitworklog/desktop",
+  "private": true,
+  "version": "0.1.0",
+  "main": "src/main.ts",
+  "scripts": {
+    "dev": "echo \"desktop app shell placeholder\"",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  }
+}

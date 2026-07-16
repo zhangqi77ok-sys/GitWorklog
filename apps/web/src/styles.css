@@ -1,0 +1,74 @@
+:root {
+  color-scheme: light;
+  --bg: #f6f2e9;
+  --surface: #fffdf8;
+  --surface-strong: #efe5d2;
+  --text: #1d1a15;
+  --muted: #6e6559;
+  --accent: #b45309;
+  --border: #d8c8b0;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Segoe UI", "PingFang SC", sans-serif;
+  background:
+    radial-gradient(circle at top left, #fff2d6, transparent 26%),
+    linear-gradient(180deg, #f8f1e5 0%, var(--bg) 100%);
+  color: var(--text);
+}
+
+.shell {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 48px 20px 80px;
+}
+
+.hero,
+.panel {
+  background: rgba(255, 253, 248, 0.92);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  padding: 24px;
+  box-shadow: 0 18px 60px rgba(68, 49, 20, 0.08);
+}
+
+.hero {
+  margin-bottom: 20px;
+}
+
+.eyebrow {
+  margin: 0 0 8px;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+h1,
+h2 {
+  margin: 0 0 12px;
+}
+
+.lead,
+.panel p,
+li {
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+.grid {
+  display: grid;
+  gap: 20px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+ul {
+  margin: 0;
+  padding-left: 18px;
+}

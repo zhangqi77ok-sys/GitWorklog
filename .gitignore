@@ -1,0 +1,14 @@
+node_modules/
+dist/
+build/
+.turbo/
+.vite/
+coverage/
+*.log
+*.db
+*.sqlite
+*.sqlite3
+.env
+.env.*
+apps/desktop/out/
+apps/desktop/release/
