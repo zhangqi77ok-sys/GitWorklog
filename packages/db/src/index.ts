@@ -814,6 +814,13 @@ export class ReviewRepository {
       .all(actionId) as ReviewRow[];
     return rows.map(toReview);
   }
+
+  listPending(): Review[] {
+    const rows = this.database
+      .prepare("SELECT * FROM reviews WHERE result = 'pending' ORDER BY created_at DESC")
+      .all() as ReviewRow[];
+    return rows.map(toReview);
+  }
 }
 
 function toTask(row: TaskRow): Task {

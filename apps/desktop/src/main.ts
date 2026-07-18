@@ -23,3 +23,12 @@ export function startDesktopRuntime(runtime: DesktopRuntime): DesktopRuntime {
     state: "ready",
   };
 }
+
+export { createDesktopAppService, DesktopAppService } from "./local-service.js";
+export type {
+  BindDiscoveredSessionInput,
+  CreateTaskAndRunInput,
+  DesktopAppServiceOptions,
+  LoopRunSnapshot,
+  TaskListItem,
+} from "./local-service.js";

@@ -8,7 +8,9 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build --workspaces --if-present",
+    "build": "npm run build:packages && npm run build:apps",
+    "build:apps": "npm run build --workspace @gitworklog/desktop && npm run build --workspace @gitworklog/web",
+    "build:packages": "npm run build --workspace @gitworklog/shared-types && npm run build --workspace @gitworklog/db && npm run build --workspace @gitworklog/action-engine && npm run build --workspace @gitworklog/analyzers && npm run build --workspace @gitworklog/policy && npm run build --workspace @gitworklog/connectors && npm run build --workspace @gitworklog/evidence && npm run build --workspace @gitworklog/core",
     "dev:web": "npm run dev --workspace @gitworklog/web",
     "dev:desktop": "npm run dev --workspace @gitworklog/desktop",
     "typecheck": "npm run typecheck --workspaces --if-present"
