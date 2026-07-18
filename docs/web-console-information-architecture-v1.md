@@ -68,6 +68,12 @@ Decision:
 - Convert large generic cards into queue rows, signal chips, timeline entries, and inspector panels.
 - Preserve existing bridge-backed behavior while redesigning hierarchy and component presentation.
 
+Implemented Phase 1:
+
+- Graphite dark theme tokens now replace the warm paper prototype palette.
+- The desktop shell, rail, workbench, inspector, panels, task rows, signal chips, timeline entries, and review cards now share the same control-plane surface system.
+- Existing bridge-backed behavior remains unchanged.
+
 Next implementation slices:
 
 - Add Replay & Audit view for event/evidence/decision/action history.

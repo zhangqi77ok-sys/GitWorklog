@@ -159,6 +159,7 @@ packages/
 - 新视觉系统不再像通用 SaaS 卡片墙
 - 当前任务和 LoopRun 成为页面视觉中心
 - 状态、风险、审核和失败信号有清晰区分
+- Phase 1 已实现 graphite tokens、dark shell、queue row、signal chip 和 timeline 基础视觉
 
 ### T0UX2 重构控制台布局层级
 
