@@ -7,16 +7,40 @@ export interface ConsoleTaskItem {
   run: string;
 }
 
+export interface ConsoleReviewItem {
+  reviewId: string;
+  actionId: string;
+  result: string;
+  comment?: string;
+}
+
 export interface ConsoleData {
   source: "desktop" | "fixture";
   tasks: ConsoleTaskItem[];
+  reviews: ConsoleReviewItem[];
   pendingReviewCount: number;
+}
+
+export interface TaskDraft {
+  title: string;
+  goal: string;
+  risk: string;
 }
 
 export interface GitWorklogBridgeLike {
   api?: {
     tasks?: {
       list(): Promise<unknown>;
+      createAndRun?(input: {
+        task: {
+          title: string;
+          goal: string;
+          riskProfile?: string;
+        };
+        loopRun?: {
+          policyId?: string;
+        };
+      }): Promise<unknown>;
     };
     reviews?: {
       listPending(): Promise<unknown>;
@@ -29,6 +53,14 @@ export interface GitWorklogBridgeLike {
 export const fixtureConsoleData: ConsoleData = {
   source: "fixture",
   pendingReviewCount: 1,
+  reviews: [
+    {
+      reviewId: "fixture-review",
+      actionId: "fixture-action",
+      result: "pending",
+      comment: "Conservative policy requires manual approval.",
+    },
+  ],
   tasks: [
     {
       id: "fixture-repair",
@@ -65,16 +97,54 @@ export async function loadConsoleData(bridge: GitWorklogBridgeLike | undefined):
   try {
     const [rawTasks, rawReviews] = await Promise.all([bridge.api.tasks.list(), bridge.api.reviews.listPending()]);
     const tasks = Array.isArray(rawTasks) ? rawTasks.map(toConsoleTaskItem).filter(isConsoleTaskItem) : [];
-    const pendingReviewCount = Array.isArray(rawReviews) ? rawReviews.length : 0;
+    const reviews = Array.isArray(rawReviews) ? rawReviews.map(toConsoleReviewItem).filter(isConsoleReviewItem) : [];
+    const pendingReviewCount = reviews.length;
 
     return {
       source: "desktop",
       tasks: tasks.length ? tasks : fixtureConsoleData.tasks,
+      reviews,
       pendingReviewCount,
     };
   } catch {
     return fixtureConsoleData;
   }
+}
+
+export async function submitTaskDraft(
+  bridge: GitWorklogBridgeLike | undefined,
+  draft: TaskDraft,
+): Promise<ConsoleData> {
+  if (!bridge?.api?.tasks?.createAndRun) {
+    return fixtureConsoleData;
+  }
+
+  await bridge.api.tasks.createAndRun({
+    task: {
+      title: draft.title,
+      goal: draft.goal,
+      riskProfile: draft.risk,
+    },
+    loopRun: {
+      policyId: "conservative",
+    },
+  });
+  return loadConsoleData(bridge);
+}
+
+export async function decideReview(
+  bridge: GitWorklogBridgeLike | undefined,
+  reviewId: string,
+  result: "approved" | "rejected",
+): Promise<unknown> {
+  const reviews = bridge?.api?.reviews;
+  if (result === "approved" && reviews?.approve) {
+    return reviews.approve({ reviewId });
+  }
+  if (result === "rejected" && reviews?.reject) {
+    return reviews.reject({ reviewId });
+  }
+  return undefined;
 }
 
 function toConsoleTaskItem(item: unknown): ConsoleTaskItem | undefined {
@@ -101,7 +171,31 @@ function toConsoleTaskItem(item: unknown): ConsoleTaskItem | undefined {
   };
 }
 
+function toConsoleReviewItem(item: unknown): ConsoleReviewItem | undefined {
+  if (!isRecord(item)) {
+    return undefined;
+  }
+
+  const reviewId = readString(item.reviewId);
+  const actionId = readString(item.actionId);
+  const result = readString(item.result);
+  if (!reviewId || !actionId || !result) {
+    return undefined;
+  }
+
+  return {
+    reviewId,
+    actionId,
+    result,
+    comment: readString(item.comment),
+  };
+}
+
 function isConsoleTaskItem(value: ConsoleTaskItem | undefined): value is ConsoleTaskItem {
+  return Boolean(value);
+}
+
+function isConsoleReviewItem(value: ConsoleReviewItem | undefined): value is ConsoleReviewItem {
   return Boolean(value);
 }
 

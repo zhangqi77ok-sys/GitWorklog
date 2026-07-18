@@ -174,11 +174,21 @@ packages/
   - Policy Center
   - Review Queue
   - Replay & Audit
+- 建立桌面端友好的三栏控制台：
+  - 左侧导航与连接状态
+  - 中央任务和 LoopRun 工作区
+  - 右侧审核队列与策略说明
+- 提供基础交互：
+  - 新建 Task 并创建首条 LoopRun
+  - 查看任务队列和选中任务
+  - 对待审核 Review 执行 approve/reject
 
 完成标准：
 
 - 页面可切换
 - 有统一布局和状态栏
+- Electron 中加载本地构建产物时页面不空白
+- 核心空状态必须提示下一步操作
 
 ### T004 初始化本地数据库
 
@@ -232,11 +242,13 @@ packages/
 - 展示 Task 列表
 - 展示每个 Task 的最新 LoopRun 状态
 - 支持新建 Task
+- 桌面端布局必须保留任务队列、当前 LoopRun 和 Review Gate 三个信息区
 
 完成标准：
 
 - 可以通过 UI 创建 Task
 - 可以看到 LoopRun 基础状态
+- 创建后刷新任务列表，不需要用户手动重启应用
 
 ## 5.3 M2：Session 接入与事件采集
 
@@ -468,11 +480,14 @@ v1 先用规则实现
 
 - 创建 `reviews` 表
 - 对高风险动作进入待审核队列
+- 在桌面控制台右侧 inspector 中展示待审核项
+- 支持 approve/reject 并刷新审核队列
 
 完成标准：
 
 - UI 可显示待审核动作
 - 可批准或拒绝
+- 审核动作需要同步更新对应 Action 状态
 
 ### T504 实现 Action 记录
 

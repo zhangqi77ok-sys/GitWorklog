@@ -14,7 +14,28 @@ The Web console should make the loop control plane understandable before real IP
 - Loop detail: shows the ordered control flow for the selected run.
 - Review gate: highlights pending manual approval and active policy.
 
+## Desktop UX Phase
+
+The next console iteration uses a desktop-oriented control surface instead of a landing-page style layout:
+
+- Left rail: product identity, primary sections, connection status, and quick actions.
+- Main workspace: task queue, selected task summary, loop timeline, and evidence cues.
+- Right inspector: review queue, approve/reject actions, and active policy explanation.
+- Task creation: inline form for creating a task and its first conservative LoopRun through the desktop bridge.
+- Empty states: each region must explain what the user can do next instead of showing blank panels.
+
+Interaction rules:
+
+- Desktop bridge data is preferred; browser preview uses fixture data.
+- Create/approve/reject actions refresh visible console state after completion.
+- Risk and policy language stays visible near destructive or automation-related actions.
+
 ## Wiring Plan
 
-The current UI uses local example data only. The next implementation slice should replace the arrays in `App.tsx` with calls to the desktop bridge backed by `DesktopAppService`.
+The current UI reads task and review data from `window.gitWorklog.api` when running in Electron, with fixture fallback for browser-only previews.
 
+Next implementation slices:
+
+- Wire selected task to `loopRuns:snapshot`.
+- Add Session Discovery and binding UI.
+- Add Replay & Audit view for event/evidence/decision/action history.
