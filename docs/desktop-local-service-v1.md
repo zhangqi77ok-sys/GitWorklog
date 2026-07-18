@@ -38,4 +38,5 @@ flowchart LR
 - The default database path is local to the user's home directory, but tests can inject `:memory:`.
 - Review gates are visible in snapshots so the UI can show why an action cannot auto-run.
 - Session event ingestion is connector-owned; the service validates LoopRun/session binding and persists normalized events.
+- Repeated ingestion is idempotent. Duplicate events are skipped, and `importedCount` reports only newly stored events.
 - Actual auto-resume transport is out of scope for this slice.

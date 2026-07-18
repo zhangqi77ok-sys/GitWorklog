@@ -294,6 +294,7 @@ packages/
 - 采集并保存最近消息、错误、工具调用、状态变化
 - 支持按 LoopRun 查询最近 session events，并返回给 snapshot
 - 从绑定 session 的 `sourcePath` 读取 Codex JSONL 并导入事件
+- 重复导入同一会话来源时跳过重复事件
 - 在 UI 上提供“导入事件到时间线”的显式操作
 
 完成标准：
@@ -302,6 +303,7 @@ packages/
 - 能从数据库读取时间线
 - Loop Detail 能看到当前 LoopRun 的最近 session events
 - 导入后 snapshot 刷新，Replay Seed 能显示最新事件摘要
+- 第二次导入同一批事件时 `importedCount = 0`，时间线不新增重复项
 
 ### T204 实现基础状态识别
 

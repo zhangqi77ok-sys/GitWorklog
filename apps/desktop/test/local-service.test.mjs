@@ -198,3 +198,54 @@ test("desktop service ingests events from a bound discovered session source", as
     service.close();
   }
 });
+
+test("desktop service skips duplicate events when ingesting the same session source again", async () => {
+  const service = createDesktopAppService({
+    databasePath: ":memory:",
+    connector: {
+      connectorId: "fake",
+      displayName: "Fake connector",
+      discoverSessions: async () => [],
+      readSessionEvents: async () => [
+        {
+          eventType: "tool_result",
+          payload: { command: "npm test", exitCode: 0 },
+          createdAt: "2026-07-18T03:00:00.000Z",
+        },
+      ],
+    },
+  });
+
+  try {
+    const created = service.createTaskAndRun({
+      task: {
+        title: "Idempotent ingest",
+        goal: "Repeated imports should not duplicate timeline events",
+      },
+    });
+    const session = service.bindDiscoveredSession({
+      loopRunId: created.loopRun.loopRunId,
+      session: {
+        sessionId: "dedupe-session-1",
+        title: "Dedupe session",
+        sourcePath: "C:/tmp/dedupe.jsonl",
+      },
+    });
+
+    const first = await service.ingestSessionEvents({
+      loopRunId: created.loopRun.loopRunId,
+      sessionId: session.sessionId,
+    });
+    const second = await service.ingestSessionEvents({
+      loopRunId: created.loopRun.loopRunId,
+      sessionId: session.sessionId,
+    });
+    const snapshot = service.getLoopRunSnapshot(created.loopRun.loopRunId);
+
+    assert.equal(first.importedCount, 1);
+    assert.equal(second.importedCount, 0);
+    assert.equal(snapshot.sessionEvents.length, 1);
+  } finally {
+    service.close();
+  }
+});

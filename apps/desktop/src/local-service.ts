@@ -133,17 +133,21 @@ export class DesktopAppService {
       input.limit,
     );
 
+    let importedCount = 0;
     for (const event of events) {
-      this.store.sessionEvents.create({
+      const created = this.store.sessionEvents.createIfNotExists({
         loopRunId: input.loopRunId,
         sessionId: session.sessionId,
         eventType: event.eventType,
         payload: event.payload,
         createdAt: event.createdAt,
       });
+      if (created) {
+        importedCount += 1;
+      }
     }
 
-    return { importedCount: events.length };
+    return { importedCount };
   }
 
   appendSessionEvent(input: CreateSessionEventInput) {

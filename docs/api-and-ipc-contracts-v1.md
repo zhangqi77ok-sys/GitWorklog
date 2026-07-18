@@ -161,6 +161,8 @@ v1 建议采用：
 用途：
 - 从绑定 session 的 `sourcePath` 读取 Codex JSONL
 - 将解析后的事件写入 `session_events`
+- 重复导入同一来源时保持幂等，`importedCount` 只统计新增事件
+- 重复事件按 `loopRunId + sessionId + eventType + createdAt + payload` 判断
 - 导入后可通过 `loopRuns:snapshot` 查看 Replay Seed 时间线
 
 ### `sessions:refresh`

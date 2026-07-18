@@ -634,6 +634,41 @@ export class SessionEventRepository {
     return event;
   }
 
+  createIfNotExists(input: CreateSessionEventInput): SessionEvent | null {
+    const payloadJson = JSON.stringify(input.payload);
+    const createdAt = input.createdAt ?? new Date().toISOString();
+    const existing = this.database
+      .prepare(
+        `SELECT * FROM session_events
+        WHERE loop_run_id = ? AND session_id = ? AND event_type = ? AND created_at = ? AND payload_json = ?
+        LIMIT 1`,
+      )
+      .get(input.loopRunId, input.sessionId, input.eventType, createdAt, payloadJson) as SessionEventRow | undefined;
+
+    if (existing) {
+      return null;
+    }
+
+    const event: SessionEvent = {
+      eventId: randomUUID(),
+      loopRunId: input.loopRunId,
+      sessionId: input.sessionId,
+      eventType: input.eventType,
+      payload: input.payload,
+      createdAt,
+    };
+
+    this.database
+      .prepare(
+        `INSERT INTO session_events (
+          event_id, loop_run_id, session_id, event_type, payload_json, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?)`,
+      )
+      .run(event.eventId, event.loopRunId, event.sessionId, event.eventType, payloadJson, event.createdAt);
+
+    return event;
+  }
+
   listBySession(sessionId: string, limit = 100): SessionEvent[] {
     const rows = this.database
       .prepare("SELECT * FROM session_events WHERE session_id = ? ORDER BY created_at DESC LIMIT ?")
