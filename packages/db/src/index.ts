@@ -4,11 +4,19 @@ import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type {
   CreateLoopRunInput,
+  Action,
+  CreateActionInput,
+  CreateDecisionInput,
+  CreateEvidenceInput,
+  CreateReviewInput,
   CreateTaskInput,
   CreateSessionEventInput,
   CreateSessionInput,
+  Decision,
+  Evidence,
   LoopRun,
   LoopRunStatus,
+  Review,
   SessionEvent,
   SessionMeta,
   Task,
@@ -162,7 +170,64 @@ CREATE TABLE IF NOT EXISTS actions (
   FOREIGN KEY (decision_id) REFERENCES decisions(decision_id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS reviews (
+  review_id TEXT PRIMARY KEY,
+  action_id TEXT NOT NULL,
+  review_type TEXT NOT NULL,
+  reviewer TEXT,
+  result TEXT NOT NULL,
+  comment TEXT,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (action_id) REFERENCES actions(action_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS policies (
+  policy_id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  scope_type TEXT NOT NULL,
+  mode TEXT NOT NULL,
+  risk_threshold TEXT NOT NULL,
+  auto_resume_enabled INTEGER NOT NULL DEFAULT 0,
+  auto_resume_limit INTEGER NOT NULL DEFAULT 0,
+  cooldown_seconds INTEGER NOT NULL DEFAULT 0,
+  requires_review_on_high_risk INTEGER NOT NULL DEFAULT 1,
+  config_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS rules (
+  rule_id TEXT PRIMARY KEY,
+  policy_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  priority INTEGER NOT NULL DEFAULT 100,
+  condition_json TEXT NOT NULL,
+  action_json TEXT NOT NULL,
+  risk_level TEXT NOT NULL,
+  description TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (policy_id) REFERENCES policies(policy_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS feedbacks (
+  feedback_id TEXT PRIMARY KEY,
+  loop_run_id TEXT NOT NULL,
+  target_type TEXT NOT NULL,
+  target_id TEXT NOT NULL,
+  feedback_type TEXT NOT NULL,
+  comment TEXT,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (loop_run_id) REFERENCES loop_runs(loop_run_id) ON DELETE CASCADE
+);
+
 CREATE INDEX IF NOT EXISTS idx_loop_runs_task_id ON loop_runs(task_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_loop_run_id ON sessions(loop_run_id);
+CREATE INDEX IF NOT EXISTS idx_session_events_loop_run_id ON session_events(loop_run_id);
+CREATE INDEX IF NOT EXISTS idx_evidences_loop_run_id ON evidences(loop_run_id);
+CREATE INDEX IF NOT EXISTS idx_decisions_loop_run_id ON decisions(loop_run_id);
+CREATE INDEX IF NOT EXISTS idx_actions_loop_run_id ON actions(loop_run_id);
 `;
 
 type TaskRow = {
@@ -198,6 +263,10 @@ export interface GitWorklogDatabase {
   loopRuns: LoopRunRepository;
   sessions: SessionRepository;
   sessionEvents: SessionEventRepository;
+  evidences: EvidenceRepository;
+  decisions: DecisionRepository;
+  actions: ActionRepository;
+  reviews: ReviewRepository;
 }
 
 export function openGitWorklogDatabase(path = ":memory:"): GitWorklogDatabase {
@@ -215,6 +284,10 @@ export function openGitWorklogDatabase(path = ":memory:"): GitWorklogDatabase {
     loopRuns: new LoopRunRepository(database),
     sessions: new SessionRepository(database),
     sessionEvents: new SessionEventRepository(database),
+    evidences: new EvidenceRepository(database),
+    decisions: new DecisionRepository(database),
+    actions: new ActionRepository(database),
+    reviews: new ReviewRepository(database),
   };
 }
 
@@ -416,6 +489,53 @@ type SessionEventRow = {
   created_at: string;
 };
 
+type EvidenceRow = {
+  evidence_id: string;
+  loop_run_id: string;
+  session_id: string | null;
+  evidence_type: Evidence["evidenceType"];
+  source_type: string;
+  source_ref: string | null;
+  snippet: string;
+  confidence: number;
+  related_event_ids_json: string;
+  created_at: string;
+};
+
+type DecisionRow = {
+  decision_id: string;
+  loop_run_id: string;
+  decision_type: string;
+  reason: string;
+  risk_level: Decision["riskLevel"];
+  confidence: number;
+  evidence_ids_json: string;
+  created_at: string;
+};
+
+type ActionRow = {
+  action_id: string;
+  loop_run_id: string;
+  decision_id: string;
+  action_type: Action["actionType"];
+  message: string | null;
+  status: Action["status"];
+  requires_review: 0 | 1;
+  review_status: Action["reviewStatus"] | null;
+  executed_at: string | null;
+  created_at: string;
+};
+
+type ReviewRow = {
+  review_id: string;
+  action_id: string;
+  review_type: string;
+  reviewer: string | null;
+  result: Review["result"];
+  comment: string | null;
+  created_at: string;
+};
+
 export class SessionRepository {
   constructor(private readonly database: DatabaseSync) {}
 
@@ -516,6 +636,186 @@ export class SessionEventRepository {
   }
 }
 
+export class EvidenceRepository {
+  constructor(private readonly database: DatabaseSync) {}
+
+  create(input: CreateEvidenceInput): Evidence {
+    const evidence: Evidence = {
+      evidenceId: randomUUID(),
+      loopRunId: input.loopRunId,
+      sessionId: input.sessionId,
+      evidenceType: input.evidenceType,
+      sourceType: input.sourceType,
+      sourceRef: input.sourceRef,
+      snippet: input.snippet,
+      confidence: input.confidence ?? 0.5,
+      relatedEventIds: input.relatedEventIds ?? [],
+      createdAt: input.createdAt ?? new Date().toISOString(),
+    };
+
+    this.database
+      .prepare(
+        `INSERT INTO evidences (
+          evidence_id, loop_run_id, session_id, evidence_type, source_type, source_ref,
+          snippet, confidence, related_event_ids_json, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        evidence.evidenceId,
+        evidence.loopRunId,
+        evidence.sessionId ?? null,
+        evidence.evidenceType,
+        evidence.sourceType,
+        evidence.sourceRef ?? null,
+        evidence.snippet,
+        evidence.confidence,
+        JSON.stringify(evidence.relatedEventIds),
+        evidence.createdAt,
+      );
+
+    return evidence;
+  }
+
+  listByLoopRun(loopRunId: string): Evidence[] {
+    const rows = this.database
+      .prepare("SELECT * FROM evidences WHERE loop_run_id = ? ORDER BY created_at DESC")
+      .all(loopRunId) as EvidenceRow[];
+    return rows.map(toEvidence);
+  }
+}
+
+export class DecisionRepository {
+  constructor(private readonly database: DatabaseSync) {}
+
+  create(input: CreateDecisionInput): Decision {
+    const decision: Decision = {
+      decisionId: randomUUID(),
+      loopRunId: input.loopRunId,
+      decisionType: input.decisionType,
+      reason: input.reason,
+      riskLevel: input.riskLevel,
+      confidence: input.confidence ?? 0.5,
+      evidenceIds: input.evidenceIds ?? [],
+      createdAt: input.createdAt ?? new Date().toISOString(),
+    };
+
+    this.database
+      .prepare(
+        `INSERT INTO decisions (
+          decision_id, loop_run_id, decision_type, reason, risk_level, confidence, evidence_ids_json, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        decision.decisionId,
+        decision.loopRunId,
+        decision.decisionType,
+        decision.reason,
+        decision.riskLevel,
+        decision.confidence,
+        JSON.stringify(decision.evidenceIds),
+        decision.createdAt,
+      );
+
+    return decision;
+  }
+
+  listByLoopRun(loopRunId: string): Decision[] {
+    const rows = this.database
+      .prepare("SELECT * FROM decisions WHERE loop_run_id = ? ORDER BY created_at DESC")
+      .all(loopRunId) as DecisionRow[];
+    return rows.map(toDecision);
+  }
+}
+
+export class ActionRepository {
+  constructor(private readonly database: DatabaseSync) {}
+
+  create(input: CreateActionInput): Action {
+    const action: Action = {
+      actionId: randomUUID(),
+      loopRunId: input.loopRunId,
+      decisionId: input.decisionId,
+      actionType: input.actionType,
+      message: input.message,
+      status: input.status ?? (input.requiresReview ? "pending_review" : "draft"),
+      requiresReview: input.requiresReview ?? false,
+      reviewStatus: input.reviewStatus,
+      executedAt: input.executedAt,
+      createdAt: input.createdAt ?? new Date().toISOString(),
+    };
+
+    this.database
+      .prepare(
+        `INSERT INTO actions (
+          action_id, loop_run_id, decision_id, action_type, message, status,
+          requires_review, review_status, executed_at, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        action.actionId,
+        action.loopRunId,
+        action.decisionId,
+        action.actionType,
+        action.message ?? null,
+        action.status,
+        action.requiresReview ? 1 : 0,
+        action.reviewStatus ?? null,
+        action.executedAt ?? null,
+        action.createdAt,
+      );
+
+    return action;
+  }
+
+  listByLoopRun(loopRunId: string): Action[] {
+    const rows = this.database
+      .prepare("SELECT * FROM actions WHERE loop_run_id = ? ORDER BY created_at DESC")
+      .all(loopRunId) as ActionRow[];
+    return rows.map(toAction);
+  }
+}
+
+export class ReviewRepository {
+  constructor(private readonly database: DatabaseSync) {}
+
+  create(input: CreateReviewInput): Review {
+    const review: Review = {
+      reviewId: randomUUID(),
+      actionId: input.actionId,
+      reviewType: input.reviewType,
+      reviewer: input.reviewer,
+      result: input.result ?? "pending",
+      comment: input.comment,
+      createdAt: input.createdAt ?? new Date().toISOString(),
+    };
+
+    this.database
+      .prepare(
+        `INSERT INTO reviews (
+          review_id, action_id, review_type, reviewer, result, comment, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        review.reviewId,
+        review.actionId,
+        review.reviewType,
+        review.reviewer ?? null,
+        review.result,
+        review.comment ?? null,
+        review.createdAt,
+      );
+
+    return review;
+  }
+
+  listByAction(actionId: string): Review[] {
+    const rows = this.database
+      .prepare("SELECT * FROM reviews WHERE action_id = ? ORDER BY created_at DESC")
+      .all(actionId) as ReviewRow[];
+    return rows.map(toReview);
+  }
+}
+
 function toTask(row: TaskRow): Task {
   return {
     taskId: row.task_id,
@@ -567,6 +867,61 @@ function toSessionEvent(row: SessionEventRow): SessionEvent {
     sessionId: row.session_id,
     eventType: row.event_type,
     payload: JSON.parse(row.payload_json) as Record<string, unknown>,
+    createdAt: row.created_at,
+  };
+}
+
+function toEvidence(row: EvidenceRow): Evidence {
+  return {
+    evidenceId: row.evidence_id,
+    loopRunId: row.loop_run_id,
+    sessionId: row.session_id ?? undefined,
+    evidenceType: row.evidence_type,
+    sourceType: row.source_type,
+    sourceRef: row.source_ref ?? undefined,
+    snippet: row.snippet,
+    confidence: row.confidence,
+    relatedEventIds: JSON.parse(row.related_event_ids_json) as string[],
+    createdAt: row.created_at,
+  };
+}
+
+function toDecision(row: DecisionRow): Decision {
+  return {
+    decisionId: row.decision_id,
+    loopRunId: row.loop_run_id,
+    decisionType: row.decision_type,
+    reason: row.reason,
+    riskLevel: row.risk_level,
+    confidence: row.confidence,
+    evidenceIds: JSON.parse(row.evidence_ids_json) as string[],
+    createdAt: row.created_at,
+  };
+}
+
+function toAction(row: ActionRow): Action {
+  return {
+    actionId: row.action_id,
+    loopRunId: row.loop_run_id,
+    decisionId: row.decision_id,
+    actionType: row.action_type,
+    message: row.message ?? undefined,
+    status: row.status,
+    requiresReview: Boolean(row.requires_review),
+    reviewStatus: row.review_status ?? undefined,
+    executedAt: row.executed_at ?? undefined,
+    createdAt: row.created_at,
+  };
+}
+
+function toReview(row: ReviewRow): Review {
+  return {
+    reviewId: row.review_id,
+    actionId: row.action_id,
+    reviewType: row.review_type,
+    reviewer: row.reviewer ?? undefined,
+    result: row.result,
+    comment: row.comment ?? undefined,
     createdAt: row.created_at,
   };
 }

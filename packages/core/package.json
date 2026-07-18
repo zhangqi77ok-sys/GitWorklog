@@ -11,7 +11,10 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@gitworklog/action-engine": "0.1.0",
+    "@gitworklog/analyzers": "0.1.0",
     "@gitworklog/db": "0.1.0",
+    "@gitworklog/policy": "0.1.0",
     "@gitworklog/shared-types": "0.1.0"
   }
 }

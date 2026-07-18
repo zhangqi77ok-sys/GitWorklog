@@ -116,3 +116,109 @@ export interface CreateSessionEventInput {
   payload: Record<string, unknown>;
   createdAt?: string;
 }
+
+export type EvidenceType =
+  | "last_message"
+  | "tool_error"
+  | "tool_result"
+  | "idle_window"
+  | "plan_step_match"
+  | "risk_signal";
+
+export interface Evidence {
+  evidenceId: string;
+  loopRunId: string;
+  sessionId?: string;
+  evidenceType: EvidenceType;
+  sourceType: string;
+  sourceRef?: string;
+  snippet: string;
+  confidence: number;
+  relatedEventIds: string[];
+  createdAt: string;
+}
+
+export interface CreateEvidenceInput {
+  loopRunId: string;
+  sessionId?: string;
+  evidenceType: EvidenceType;
+  sourceType: string;
+  sourceRef?: string;
+  snippet: string;
+  confidence?: number;
+  relatedEventIds?: string[];
+  createdAt?: string;
+}
+
+export interface Decision {
+  decisionId: string;
+  loopRunId: string;
+  decisionType: string;
+  reason: string;
+  riskLevel: RiskLevel;
+  confidence: number;
+  evidenceIds: string[];
+  createdAt: string;
+}
+
+export interface CreateDecisionInput {
+  loopRunId: string;
+  decisionType: string;
+  reason: string;
+  riskLevel: RiskLevel;
+  confidence?: number;
+  evidenceIds?: string[];
+  createdAt?: string;
+}
+
+export type ActionType =
+  | "observe"
+  | "suggest"
+  | "resume_with_prompt"
+  | "pause_loop"
+  | "request_manual_takeover"
+  | "mark_completed_candidate";
+
+export interface Action {
+  actionId: string;
+  loopRunId: string;
+  decisionId: string;
+  actionType: ActionType;
+  message?: string;
+  status: "draft" | "pending_review" | "approved" | "rejected" | "executed" | "failed";
+  requiresReview: boolean;
+  reviewStatus?: "pending" | "approved" | "rejected";
+  executedAt?: string;
+  createdAt: string;
+}
+
+export interface CreateActionInput {
+  loopRunId: string;
+  decisionId: string;
+  actionType: ActionType;
+  message?: string;
+  status?: Action["status"];
+  requiresReview?: boolean;
+  reviewStatus?: Action["reviewStatus"];
+  executedAt?: string;
+  createdAt?: string;
+}
+
+export interface Review {
+  reviewId: string;
+  actionId: string;
+  reviewType: string;
+  reviewer?: string;
+  result: "pending" | "approved" | "rejected";
+  comment?: string;
+  createdAt: string;
+}
+
+export interface CreateReviewInput {
+  actionId: string;
+  reviewType: string;
+  reviewer?: string;
+  result?: Review["result"];
+  comment?: string;
+  createdAt?: string;
+}
