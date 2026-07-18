@@ -1,56 +1,121 @@
-const milestones = [
-  "Task / LoopRun / Session 主链",
-  "Session Discovery 与事件采集",
-  "Evidence 与 Decision 基础模型",
-  "Policy / Review / Action 治理闭环",
+const taskCards = [
+  {
+    title: "Repair failing desktop test",
+    status: "Needs review",
+    goal: "恢复测试并留下可回放证据",
+    risk: "medium",
+    run: "conservative loop",
+  },
+  {
+    title: "Codex session discovery",
+    status: "Watching",
+    goal: "扫描本地会话并绑定到任务",
+    risk: "low",
+    run: "assist loop",
+  },
+  {
+    title: "Auto-resume policy pack",
+    status: "Draft",
+    goal: "内置可编辑续跑策略",
+    risk: "high",
+    run: "strict review",
+  },
 ];
 
-const packages = [
-  "@gitworklog/shared-types",
-  "@gitworklog/db",
-  "@gitworklog/core",
-  "@gitworklog/connectors",
-  "@gitworklog/evidence",
-  "@gitworklog/analyzers",
-  "@gitworklog/policy",
-  "@gitworklog/action-engine",
+const signals = [
+  { label: "Evidence", value: "1", caption: "来自 tool_result" },
+  { label: "Decision", value: "Suggest resume", caption: "基于失败输出" },
+  { label: "Action", value: "Pending", caption: "等待人工审核" },
+];
+
+const timeline = [
+  "Task created with conservative policy",
+  "Codex session bound to loop run",
+  "Tool result captured assertion failure",
+  "Analyzer generated resume suggestion",
+  "Manual review gate opened",
 ];
 
 export function App() {
   return (
-    <main className="shell">
+    <main className="app-shell">
       <section className="hero">
-        <p className="eyebrow">Loop Engineering Control Plane</p>
-        <h1>GitWorklog</h1>
-        <p className="lead">
-          当前仓库已切换为面向 AI 编码任务的 Loop 工程化产品。这个页面是 v1 工程骨架的起点，
-          目标是先把监督、决策、审核和续跑闭环打通。
-        </p>
+        <div>
+          <p className="eyebrow">Loop Engineering Console</p>
+          <h1>GitWorklog</h1>
+          <p className="lead">
+            把 AI 编码会话变成可监督、可审核、可续跑的工程化闭环。v1 控制台先固定产品骨架：
+            任务是中心，证据驱动判断，策略决定动作边界。
+          </p>
+        </div>
+        <div className="hero-card">
+          <span className="pulse" />
+          <strong>Local control plane online</strong>
+          <p>SQLite first · Review gated · Codex local discovery</p>
+        </div>
       </section>
 
-      <section className="panel">
-        <h2>当前阶段</h2>
-        <p>已经完成架构总纲、开发任务拆解、数据库草案、首批 API / IPC 契约以及 Monorepo 基础骨架。</p>
+      <section className="metrics">
+        {signals.map((signal) => (
+          <article className="metric-card" key={signal.label}>
+            <span>{signal.label}</span>
+            <strong>{signal.value}</strong>
+            <p>{signal.caption}</p>
+          </article>
+        ))}
       </section>
 
-      <section className="grid">
-        <article className="panel">
-          <h2>v1 主线</h2>
-          <ul>
-            {milestones.map((item) => (
-              <li key={item}>{item}</li>
+      <section className="workspace-grid">
+        <article className="panel task-panel">
+          <div className="section-heading">
+            <p className="eyebrow">Tasks</p>
+            <h2>任务队列</h2>
+          </div>
+          <div className="task-list">
+            {taskCards.map((task) => (
+              <button className="task-card" key={task.title}>
+                <span className="status-pill">{task.status}</span>
+                <strong>{task.title}</strong>
+                <p>{task.goal}</p>
+                <small>
+                  {task.run} · risk {task.risk}
+                </small>
+              </button>
             ))}
-          </ul>
+          </div>
         </article>
 
-        <article className="panel">
-          <h2>核心包</h2>
-          <ul>
-            {packages.map((item) => (
-              <li key={item}>{item}</li>
+        <article className="panel detail-panel">
+          <div className="section-heading">
+            <p className="eyebrow">LoopRun</p>
+            <h2>当前闭环</h2>
+          </div>
+          <div className="run-map">
+            {timeline.map((item, index) => (
+              <div className="run-step" key={item}>
+                <span>{index + 1}</span>
+                <p>{item}</p>
+              </div>
             ))}
-          </ul>
+          </div>
         </article>
+
+        <aside className="panel review-panel">
+          <div className="section-heading">
+            <p className="eyebrow">Review Gate</p>
+            <h2>待审核动作</h2>
+          </div>
+          <div className="review-card">
+            <strong>Resume with prompt</strong>
+            <p>保守策略不允许直接自动续跑，需要人工确认后再发送下一步提示。</p>
+            <button>查看证据链</button>
+          </div>
+          <div className="policy-card">
+            <span>Active policy</span>
+            <strong>Conservative</strong>
+            <p>高风险和自动续跑默认进入人工审核。</p>
+          </div>
+        </aside>
       </section>
     </main>
   );
