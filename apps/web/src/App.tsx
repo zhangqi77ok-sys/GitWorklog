@@ -1,32 +1,6 @@
-const taskCards = [
-  {
-    title: "Repair failing desktop test",
-    status: "Needs review",
-    goal: "恢复测试并留下可回放证据",
-    risk: "medium",
-    run: "conservative loop",
-  },
-  {
-    title: "Codex session discovery",
-    status: "Watching",
-    goal: "扫描本地会话并绑定到任务",
-    risk: "low",
-    run: "assist loop",
-  },
-  {
-    title: "Auto-resume policy pack",
-    status: "Draft",
-    goal: "内置可编辑续跑策略",
-    risk: "high",
-    run: "strict review",
-  },
-];
+import { useEffect, useState } from "react";
 
-const signals = [
-  { label: "Evidence", value: "1", caption: "来自 tool_result" },
-  { label: "Decision", value: "Suggest resume", caption: "基于失败输出" },
-  { label: "Action", value: "Pending", caption: "等待人工审核" },
-];
+import { fixtureConsoleData, loadConsoleData, type ConsoleData } from "./desktop-data";
 
 const timeline = [
   "Task created with conservative policy",
@@ -37,6 +11,30 @@ const timeline = [
 ];
 
 export function App() {
+  const [consoleData, setConsoleData] = useState<ConsoleData>(fixtureConsoleData);
+
+  useEffect(() => {
+    let active = true;
+    void loadConsoleData(window.gitWorklog).then((data) => {
+      if (active) {
+        setConsoleData(data);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const signals = [
+    { label: "Evidence", value: "1", caption: "来自 tool_result" },
+    { label: "Decision", value: consoleData.pendingReviewCount > 0 ? "Suggest resume" : "Observe", caption: "基于失败输出" },
+    {
+      label: "Action",
+      value: consoleData.pendingReviewCount > 0 ? "Pending" : "Ready",
+      caption: consoleData.pendingReviewCount > 0 ? "等待人工审核" : "暂无待审核动作",
+    },
+  ];
+
   return (
     <main className="app-shell">
       <section className="hero">
@@ -51,7 +49,9 @@ export function App() {
         <div className="hero-card">
           <span className="pulse" />
           <strong>Local control plane online</strong>
-          <p>SQLite first · Review gated · Codex local discovery</p>
+          <p>
+            {consoleData.source === "desktop" ? "Desktop bridge connected" : "Browser fixture preview"} · Review gated
+          </p>
         </div>
       </section>
 
@@ -70,9 +70,12 @@ export function App() {
           <div className="section-heading">
             <p className="eyebrow">Tasks</p>
             <h2>任务队列</h2>
+            <span className="source-badge">
+              {consoleData.source === "desktop" ? "Desktop data" : "Fixture preview"}
+            </span>
           </div>
           <div className="task-list">
-            {taskCards.map((task) => (
+            {consoleData.tasks.length ? consoleData.tasks.map((task) => (
               <button className="task-card" key={task.title}>
                 <span className="status-pill">{task.status}</span>
                 <strong>{task.title}</strong>
@@ -81,7 +84,7 @@ export function App() {
                   {task.run} · risk {task.risk}
                 </small>
               </button>
-            ))}
+            )) : <p className="empty-state">还没有任务。下一步会接入创建任务表单。</p>}
           </div>
         </article>
 
@@ -107,7 +110,9 @@ export function App() {
           </div>
           <div className="review-card">
             <strong>Resume with prompt</strong>
-            <p>保守策略不允许直接自动续跑，需要人工确认后再发送下一步提示。</p>
+            <p>
+              当前有 {consoleData.pendingReviewCount} 个待审核动作。保守策略不允许直接自动续跑，需要人工确认后再发送下一步提示。
+            </p>
             <button>查看证据链</button>
           </div>
           <div className="policy-card">

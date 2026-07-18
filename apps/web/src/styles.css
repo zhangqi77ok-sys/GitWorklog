@@ -165,7 +165,24 @@ h2 {
 }
 
 .section-heading {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: center;
   margin-bottom: 18px;
+}
+
+.section-heading .eyebrow {
+  width: 100%;
+}
+
+.source-badge {
+  border-radius: 999px;
+  padding: 5px 10px;
+  background: rgba(189, 93, 18, 0.12);
+  color: var(--amber);
+  font-size: 12px;
+  font-weight: 900;
 }
 
 .task-list,
@@ -187,6 +204,13 @@ h2 {
     transform 160ms ease,
     border-color 160ms ease,
     box-shadow 160ms ease;
+}
+
+.empty-state {
+  border: 1px dashed rgba(85, 107, 47, 0.35);
+  border-radius: 18px;
+  padding: 18px;
+  background: rgba(85, 107, 47, 0.08);
 }
 
 .task-card:hover {
@@ -307,4 +331,3 @@ h2 {
     position: static;
   }
 }
-
