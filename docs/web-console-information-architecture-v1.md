@@ -56,6 +56,18 @@ Implemented bridge-backed slices:
 - Session event import calls `sessions:ingestEvents`.
 - Loop analysis calls `analysis:run`.
 
+## Visual Redesign v2
+
+The current console is a functional prototype. The next visual iteration follows `docs/web-console-visual-redesign-v2.md`.
+
+Decision:
+
+- Use **Engineering Mission Control** as the visual direction.
+- Keep the three-region desktop model, but make the selected LoopRun the dominant cockpit.
+- Replace the warm paper-like theme with a dark graphite control-plane system.
+- Convert large generic cards into queue rows, signal chips, timeline entries, and inspector panels.
+- Preserve existing bridge-backed behavior while redesigning hierarchy and component presentation.
+
 Next implementation slices:
 
 - Add Replay & Audit view for event/evidence/decision/action history.

@@ -135,6 +135,68 @@ packages/
 
 ## 5. 任务清单
 
+## 5.0 UX 重设计：Engineering Mission Control
+
+### T0UX1 定义 Web Console v2 视觉系统
+
+任务内容：
+
+- 以 `docs/web-console-visual-redesign-v2.md` 为 UI v2 规格
+- 将当前暖色 demo dashboard 改为 Engineering Mission Control 方向
+- 建立设计 tokens：
+  - dark graphite background
+  - elevated surfaces
+  - signal colors
+  - monospaced event metadata
+- 明确状态色：
+  - running
+  - failed
+  - waiting/review
+  - success/completed
+
+完成标准：
+
+- 新视觉系统不再像通用 SaaS 卡片墙
+- 当前任务和 LoopRun 成为页面视觉中心
+- 状态、风险、审核和失败信号有清晰区分
+
+### T0UX2 重构控制台布局层级
+
+任务内容：
+
+- 保留三栏结构，但调整为：
+  - left rail: navigation and workspace status
+  - center mission area: selected LoopRun cockpit and timeline
+  - right inspector: session discovery, review queue, policy gate
+- 将大 metric cards 改为 compact signal chips
+- 将最近 session events 提升为中心时间线
+- 将“运行分析”作为 Loop cockpit 主操作
+
+完成标准：
+
+- 用户能按视觉主路径完成：
+  - select task
+  - bind session
+  - import events
+  - run analysis
+  - review action
+- 1280px 桌面宽度下仍保持可读
+
+### T0UX3 重做核心组件质感
+
+任务内容：
+
+- 重做 Task queue row
+- 重做 Loop cockpit header
+- 重做 Session source card
+- 重做 Review action card
+- 重做 Replay seed timeline entry
+
+完成标准：
+
+- 所有核心组件共享同一套 spacing、border、surface、status badge 规则
+- 组件视觉能延展到 Replay、Policy、Settings 页面
+
 ## 5.1 M0：项目初始化
 
 ### T001 初始化 Monorepo 结构
