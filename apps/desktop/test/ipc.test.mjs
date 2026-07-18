@@ -23,6 +23,9 @@ test("registers desktop IPC channels and forwards calls to the service", async (
     rejectReview(input) {
       return { reviewId: input.reviewId, result: "rejected" };
     },
+    ingestSessionEvents(input) {
+      return { importedCount: input.sessionId === "session-1" ? 2 : 0 };
+    },
   };
 
   registerDesktopIpcHandlers(ipcMain, service);
@@ -31,11 +34,15 @@ test("registers desktop IPC channels and forwards calls to the service", async (
   assert.equal(handlers.has("loopRuns:snapshot"), true);
   assert.equal(handlers.has("reviews:approve"), true);
   assert.equal(handlers.has("reviews:reject"), true);
+  assert.equal(handlers.has("sessions:ingestEvents"), true);
   assert.deepEqual(await handlers.get("tasks:list")(), service.listTasks());
   assert.deepEqual(await handlers.get("loopRuns:snapshot")({}, "run-1"), { loopRun: { loopRunId: "run-1" } });
   assert.deepEqual(await handlers.get("reviews:approve")({}, { reviewId: "review-1" }), {
     reviewId: "review-1",
     result: "approved",
+  });
+  assert.deepEqual(await handlers.get("sessions:ingestEvents")({}, { loopRunId: "run-1", sessionId: "session-1" }), {
+    importedCount: 2,
   });
 });
 
@@ -51,10 +58,12 @@ test("preload API invokes namespaced desktop IPC channels", async () => {
   const api = createDesktopIpcApi(ipcRenderer);
   const result = await api.tasks.createAndRun({ task: { title: "Demo", goal: "Ship" } });
   await api.reviews.approve({ reviewId: "review-1" });
+  await api.sessions.ingestEvents({ loopRunId: "run-1", sessionId: "session-1" });
 
   assert.deepEqual(calls, [
     ["tasks:createAndRun", { task: { title: "Demo", goal: "Ship" } }],
     ["reviews:approve", { reviewId: "review-1" }],
+    ["sessions:ingestEvents", { loopRunId: "run-1", sessionId: "session-1" }],
   ]);
   assert.deepEqual(result, {
     channel: "tasks:createAndRun",

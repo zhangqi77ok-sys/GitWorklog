@@ -81,6 +81,7 @@ CREATE TABLE IF NOT EXISTS sessions (
   source_type TEXT NOT NULL DEFAULT 'codex_local',
   status TEXT NOT NULL,
   project_path TEXT,
+  source_path TEXT,
   last_event_at TEXT,
   FOREIGN KEY (loop_run_id) REFERENCES loop_runs(loop_run_id) ON DELETE CASCADE
 );
@@ -276,6 +277,7 @@ export function openGitWorklogDatabase(path = ":memory:"): GitWorklogDatabase {
 
   const database = new DatabaseSync(path);
   database.exec(SCHEMA_SQL);
+  ensureColumn(database, "sessions", "source_path", "TEXT");
 
   return {
     database,
@@ -477,6 +479,7 @@ type SessionRow = {
   source_type: SessionMeta["sourceType"];
   status: string;
   project_path: string | null;
+  source_path: string | null;
   last_event_at: string | null;
 };
 
@@ -549,14 +552,15 @@ export class SessionRepository {
       sourceType: input.sourceType ?? "codex_local",
       status: input.status ?? "discovered",
       projectPath: input.projectPath?.trim(),
+      sourcePath: input.sourcePath?.trim(),
       lastEventAt: input.lastEventAt,
     };
 
     this.database
       .prepare(
         `INSERT INTO sessions (
-          session_id, loop_run_id, thread_id, window_id, title, source_type, status, project_path, last_event_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          session_id, loop_run_id, thread_id, window_id, title, source_type, status, project_path, source_path, last_event_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(session_id) DO UPDATE SET
           loop_run_id = excluded.loop_run_id,
           thread_id = excluded.thread_id,
@@ -565,6 +569,7 @@ export class SessionRepository {
           source_type = excluded.source_type,
           status = excluded.status,
           project_path = excluded.project_path,
+          source_path = excluded.source_path,
           last_event_at = excluded.last_event_at`,
       )
       .run(
@@ -576,6 +581,7 @@ export class SessionRepository {
         session.sourceType,
         session.status,
         session.projectPath ?? null,
+        session.sourcePath ?? null,
         session.lastEventAt ?? null,
       );
 
@@ -908,6 +914,7 @@ function toSession(row: SessionRow): SessionMeta {
     sourceType: row.source_type,
     status: row.status,
     projectPath: row.project_path ?? undefined,
+    sourcePath: row.source_path ?? undefined,
     lastEventAt: row.last_event_at ?? undefined,
   };
 }
@@ -980,4 +987,11 @@ function toReview(row: ReviewRow): Review {
 
 export function describeDatabaseScope(): string {
   return `SQLite first schema covering ${CORE_TABLES.length} core tables.`;
+}
+
+function ensureColumn(database: DatabaseSync, tableName: string, columnName: string, columnType: string): void {
+  const columns = database.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{ name: string }>;
+  if (!columns.some((column) => column.name === columnName)) {
+    database.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnType}`);
+  }
 }

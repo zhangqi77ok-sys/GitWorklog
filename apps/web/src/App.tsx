@@ -4,6 +4,7 @@ import {
   bindSessionToLoopRun,
   decideReview,
   discoverSessions,
+  ingestSessionEvents,
   fixtureConsoleData,
   loadConsoleData,
   loadLoopSnapshot,
@@ -103,6 +104,24 @@ export function App() {
     const snapshot = await loadLoopSnapshot(window.gitWorklog, selectedTask.loopRunId);
     setLoopSnapshot(snapshot);
     setNotice(`已绑定会话：${session.title}`);
+    setIsBusy(false);
+  }
+
+  async function handleIngestSession(session: ConsoleSessionItem) {
+    if (!selectedTask?.loopRunId) {
+      setNotice("当前任务没有可导入事件的 LoopRun");
+      return;
+    }
+
+    setIsBusy(true);
+    const result = await ingestSessionEvents(window.gitWorklog, selectedTask.loopRunId, session.sessionId);
+    const snapshot = await loadLoopSnapshot(window.gitWorklog, selectedTask.loopRunId);
+    setLoopSnapshot(snapshot);
+    const importedCount =
+      typeof result === "object" && result !== null && "importedCount" in result
+        ? Number(result.importedCount)
+        : 0;
+    setNotice(importedCount ? `已导入 ${importedCount} 条会话事件` : "没有导入新的会话事件");
     setIsBusy(false);
   }
 
@@ -287,6 +306,9 @@ export function App() {
                   <small>{session.lastEventAt ?? "未知活跃时间"}</small>
                   <button disabled={isBusy} onClick={() => void handleBindSession(session)}>
                     绑定到当前 Loop
+                  </button>
+                  <button disabled={isBusy} onClick={() => void handleIngestSession(session)}>
+                    导入事件到时间线
                   </button>
                 </article>
               ))

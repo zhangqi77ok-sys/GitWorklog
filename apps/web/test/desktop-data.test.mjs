@@ -5,6 +5,7 @@ import {
   bindSessionToLoopRun,
   decideReview,
   discoverSessions,
+  ingestSessionEvents,
   loadConsoleData,
   loadLoopSnapshot,
   submitTaskDraft,
@@ -183,4 +184,23 @@ test("discovers sessions and binds a selected session to a loop run", async () =
 
   assert.equal(sessions[0].title, "Codex session");
   assert.deepEqual(calls, [["run-1", "session-1"]]);
+});
+
+test("ingests session events for a selected loop run through the desktop bridge", async () => {
+  const calls = [];
+  const bridge = {
+    api: {
+      sessions: {
+        ingestEvents: async (input) => {
+          calls.push([input.loopRunId, input.sessionId]);
+          return { importedCount: 2 };
+        },
+      },
+    },
+  };
+
+  const result = await ingestSessionEvents(bridge, "run-1", "session-1");
+
+  assert.deepEqual(calls, [["run-1", "session-1"]]);
+  assert.deepEqual(result, { importedCount: 2 });
 });

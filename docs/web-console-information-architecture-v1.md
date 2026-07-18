@@ -34,6 +34,7 @@ Interaction rules:
 - Selecting a task loads its latest LoopRun snapshot when `loopRunId` exists.
 - Binding a session refreshes task data and the selected LoopRun snapshot.
 - Session events in the selected snapshot render newest first and use short readable summaries.
+- Session cards expose an explicit import action that reads bound Codex JSONL events and refreshes the selected snapshot.
 - Risk and policy language stays visible near destructive or automation-related actions.
 
 ## Wiring Plan
@@ -48,8 +49,9 @@ Implemented bridge-backed slices:
 - Selected task snapshot calls `loopRuns:snapshot`.
 - Session Discovery calls `sessions:discover` and `sessions:bind`.
 - Loop Detail renders `sessionEvents` from `loopRuns:snapshot` as the first Replay/Audit surface.
+- Session event import calls `sessions:ingestEvents`.
 
 Next implementation slices:
 
 - Add Replay & Audit view for event/evidence/decision/action history.
-- Expand Session timeline ingestion from appended test events to real Codex transcript parsing.
+- Add a dedicated Replay & Audit page that combines session events, evidence, decisions, actions, and review results.

@@ -80,6 +80,7 @@ export interface GitWorklogBridgeLike {
     sessions?: {
       discover(): Promise<unknown>;
       bind(input: { loopRunId: string; session: ConsoleSessionItem }): Promise<unknown>;
+      ingestEvents?(input: { loopRunId: string; sessionId: string }): Promise<unknown>;
     };
   };
 }
@@ -229,6 +230,18 @@ export async function bindSessionToLoopRun(
   }
 
   return bridge.api.sessions.bind({ loopRunId, session });
+}
+
+export async function ingestSessionEvents(
+  bridge: GitWorklogBridgeLike | undefined,
+  loopRunId: string | undefined,
+  sessionId: string | undefined,
+): Promise<unknown> {
+  if (!loopRunId || !sessionId || !bridge?.api?.sessions?.ingestEvents) {
+    return undefined;
+  }
+
+  return bridge.api.sessions.ingestEvents({ loopRunId, sessionId });
 }
 
 function toConsoleTaskItem(item: unknown): ConsoleTaskItem | undefined {

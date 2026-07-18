@@ -2,6 +2,7 @@ import type {
   BindDiscoveredSessionInput,
   CreateTaskAndRunInput,
   DesktopAppService,
+  IngestSessionEventsInput,
   ReviewDecisionInput,
 } from "./local-service.js";
 import type { CreateSessionEventInput } from "@gitworklog/shared-types";
@@ -22,6 +23,7 @@ export interface DesktopIpcApi {
   sessions: {
     discover(): Promise<unknown>;
     bind(input: BindDiscoveredSessionInput): Promise<unknown>;
+    ingestEvents(input: IngestSessionEventsInput): Promise<unknown>;
   };
   sessionEvents: {
     append(input: CreateSessionEventInput): Promise<unknown>;
@@ -46,6 +48,7 @@ type DesktopIpcService = Pick<
   | "createTaskAndRun"
   | "discoverSessions"
   | "getLoopRunSnapshot"
+  | "ingestSessionEvents"
   | "listPendingReviews"
   | "approveReview"
   | "rejectReview"
@@ -58,6 +61,7 @@ export function registerDesktopIpcHandlers(ipcMain: IpcMainLike, service: Deskto
   ipcMain.handle("tasks:createAndRun", (_event, input) => service.createTaskAndRun(input as CreateTaskAndRunInput));
   ipcMain.handle("sessions:discover", () => service.discoverSessions());
   ipcMain.handle("sessions:bind", (_event, input) => service.bindDiscoveredSession(input as BindDiscoveredSessionInput));
+  ipcMain.handle("sessions:ingestEvents", (_event, input) => service.ingestSessionEvents(input as IngestSessionEventsInput));
   ipcMain.handle("sessionEvents:append", (_event, input) => service.appendSessionEvent(input as CreateSessionEventInput));
   ipcMain.handle("analysis:run", (_event, loopRunId) => service.runAnalysis(String(loopRunId)));
   ipcMain.handle("loopRuns:snapshot", (_event, loopRunId) => service.getLoopRunSnapshot(String(loopRunId)));
@@ -75,6 +79,7 @@ export function createDesktopIpcApi(ipcRenderer: IpcRendererLike): DesktopIpcApi
     sessions: {
       discover: () => ipcRenderer.invoke("sessions:discover"),
       bind: (input) => ipcRenderer.invoke("sessions:bind", input),
+      ingestEvents: (input) => ipcRenderer.invoke("sessions:ingestEvents", input),
     },
     sessionEvents: {
       append: (input) => ipcRenderer.invoke("sessionEvents:append", input),

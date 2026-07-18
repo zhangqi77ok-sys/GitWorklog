@@ -85,6 +85,7 @@ export interface SessionMeta {
   sourceType: "codex_local" | "codex_app_server";
   status: string;
   projectPath?: string;
+  sourcePath?: string;
   lastEventAt?: string;
 }
 
@@ -97,6 +98,7 @@ export interface CreateSessionInput {
   sourceType?: SessionMeta["sourceType"];
   status?: string;
   projectPath?: string;
+  sourcePath?: string;
   lastEventAt?: string;
 }
 

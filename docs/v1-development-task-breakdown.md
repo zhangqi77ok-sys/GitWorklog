@@ -293,12 +293,15 @@ packages/
 - 创建 `session_events` 表
 - 采集并保存最近消息、错误、工具调用、状态变化
 - 支持按 LoopRun 查询最近 session events，并返回给 snapshot
+- 从绑定 session 的 `sourcePath` 读取 Codex JSONL 并导入事件
+- 在 UI 上提供“导入事件到时间线”的显式操作
 
 完成标准：
 
 - 能按时间顺序存储最近事件
 - 能从数据库读取时间线
 - Loop Detail 能看到当前 LoopRun 的最近 session events
+- 导入后 snapshot 刷新，Replay Seed 能显示最新事件摘要
 
 ### T204 实现基础状态识别
 

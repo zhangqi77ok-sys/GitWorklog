@@ -14,10 +14,17 @@ export interface DiscoveredSession {
   lastEventAt?: string;
 }
 
+export interface ParsedSessionEvent {
+  eventType: string;
+  payload: Record<string, unknown>;
+  createdAt?: string;
+}
+
 export interface SessionConnector {
   connectorId: string;
   displayName: string;
   discoverSessions(): Promise<DiscoveredSession[]>;
+  readSessionEvents?(session: DiscoveredSession, limit?: number): Promise<ParsedSessionEvent[]>;
 }
 
 export interface CodexLocalConnectorOptions {
@@ -60,6 +67,30 @@ export class CodexLocalConnector implements SessionConnector {
     );
 
     return sessions.filter((session) => Boolean(session.sessionId));
+  }
+
+  async readSessionEvents(session: DiscoveredSession, limit = 100): Promise<ParsedSessionEvent[]> {
+    const events: ParsedSessionEvent[] = [];
+
+    try {
+      const stream = createReadStream(session.sourcePath, { encoding: "utf8" });
+      const lines = createInterface({ input: stream, crlfDelay: Infinity });
+
+      for await (const line of lines) {
+        const event = parseSessionEventLine(line);
+        if (event) {
+          events.push(event);
+        }
+        if (events.length >= limit) {
+          lines.close();
+          break;
+        }
+      }
+    } catch {
+      return events;
+    }
+
+    return events;
   }
 }
 
@@ -148,6 +179,30 @@ function mergeJsonLine(metadata: Partial<DiscoveredSession>, line: string): void
   } catch {
     // JSONL files can contain partial or evolving event shapes; discovery should stay best-effort.
   }
+}
+
+function parseSessionEventLine(line: string): ParsedSessionEvent | undefined {
+  try {
+    const event = JSON.parse(line) as Record<string, unknown>;
+    const payload = typeof event.payload === "object" && event.payload ? (event.payload as Record<string, unknown>) : event;
+    const eventType =
+      readString(event, ["type", "event_type", "eventType"]) ??
+      readString(payload, ["type", "event_type", "eventType"]) ??
+      inferMessageEventType(payload);
+
+    return {
+      eventType: eventType ?? "session_event",
+      payload,
+      createdAt: readString(event, ["timestamp", "created_at", "createdAt"]) ?? readString(payload, ["timestamp", "created_at", "createdAt"]),
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+function inferMessageEventType(payload: Record<string, unknown>): string | undefined {
+  const role = readString(payload, ["role"]);
+  return role ? `${role}_message` : undefined;
 }
 
 function readString(source: Record<string, unknown>, keys: string[]): string | undefined {

@@ -11,6 +11,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test \"test/*.test.mjs\"",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   }
 }

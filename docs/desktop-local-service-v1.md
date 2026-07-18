@@ -14,6 +14,8 @@ v1 operations:
 - List tasks with their latest loop run.
 - Discover local Codex sessions.
 - Bind a discovered session to a loop run.
+- Persist discovered session `sourcePath` for later transcript ingestion.
+- Ingest session events from the bound Codex JSONL source.
 - Append session events for analysis.
 - Run loop analysis and read the loop snapshot.
 - List pending manual reviews.
@@ -35,5 +37,5 @@ flowchart LR
 - The service is orchestration only; domain decisions stay in `packages/core`, `packages/analyzers`, and `packages/policy`.
 - The default database path is local to the user's home directory, but tests can inject `:memory:`.
 - Review gates are visible in snapshots so the UI can show why an action cannot auto-run.
+- Session event ingestion is connector-owned; the service validates LoopRun/session binding and persists normalized events.
 - Actual auto-resume transport is out of scope for this slice.
-

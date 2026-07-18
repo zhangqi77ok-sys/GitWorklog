@@ -39,6 +39,12 @@ export interface BindDiscoveredSessionInput {
   session: DiscoveredSession;
 }
 
+export interface IngestSessionEventsInput {
+  loopRunId: string;
+  sessionId: string;
+  limit?: number;
+}
+
 export interface LoopRunSnapshot {
   task: Task;
   loopRun: LoopRun;
@@ -97,8 +103,47 @@ export class DesktopAppService {
       sourceType: "codex_local",
       status: "bound",
       projectPath: input.session.projectPath,
+      sourcePath: input.session.sourcePath,
       lastEventAt: input.session.lastEventAt,
     });
+  }
+
+  async ingestSessionEvents(input: IngestSessionEventsInput): Promise<{ importedCount: number }> {
+    this.requireLoopRun(input.loopRunId);
+    const session = this.store.sessions.get(input.sessionId);
+    if (!session) {
+      throw new Error(`Session not found: ${input.sessionId}`);
+    }
+    if (session.loopRunId !== input.loopRunId) {
+      throw new Error(`Session ${input.sessionId} is not bound to LoopRun ${input.loopRunId}`);
+    }
+    if (!session.sourcePath || !this.connector.readSessionEvents) {
+      return { importedCount: 0 };
+    }
+
+    const events = await this.connector.readSessionEvents(
+      {
+        sessionId: session.sessionId,
+        threadId: session.threadId,
+        title: session.title,
+        projectPath: session.projectPath,
+        sourcePath: session.sourcePath,
+        lastEventAt: session.lastEventAt,
+      },
+      input.limit,
+    );
+
+    for (const event of events) {
+      this.store.sessionEvents.create({
+        loopRunId: input.loopRunId,
+        sessionId: session.sessionId,
+        eventType: event.eventType,
+        payload: event.payload,
+        createdAt: event.createdAt,
+      });
+    }
+
+    return { importedCount: events.length };
   }
 
   appendSessionEvent(input: CreateSessionEventInput) {

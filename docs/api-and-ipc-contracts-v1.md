@@ -134,23 +134,34 @@ v1 建议采用：
 - `windowId`
 - `title`
 - `projectPath`
+- `sourcePath`
 - `sourceType`
 - `lastEventAt`
 
-### `sessions:bindToLoopRun`
+### `sessions:bind`
+
+输入：
+- `loopRunId`
+- `session`
+
+用途：
+- 将发现到的会话绑定到当前 LoopRun
+- 持久化 `sourcePath`，供后续导入原始 JSONL 事件
+
+### `sessions:ingestEvents`
 
 输入：
 - `loopRunId`
 - `sessionId`
-
-### `sessions:getTimeline`
-
-输入：
-- `sessionId`
-- `limit`
+- `limit` 可选
 
 返回：
-- 最近事件时间线
+- `importedCount`
+
+用途：
+- 从绑定 session 的 `sourcePath` 读取 Codex JSONL
+- 将解析后的事件写入 `session_events`
+- 导入后可通过 `loopRuns:snapshot` 查看 Replay Seed 时间线
 
 ### `sessions:refresh`
 
@@ -336,13 +347,14 @@ v1 建议采用：
 1. `tasks:*`
 2. `loopRuns:*`
 3. `sessions:discover`
-4. `sessions:bindToLoopRun`
-5. `documents:*`
-6. `planSteps:*`
-7. `analysis:*`
-8. `actions:*`
-9. `reviews:*`
-10. `policies:*`
+4. `sessions:bind`
+5. `sessions:ingestEvents`
+6. `documents:*`
+7. `planSteps:*`
+8. `analysis:*`
+9. `actions:*`
+10. `reviews:*`
+11. `policies:*`
 
 ## 13. 说明
 

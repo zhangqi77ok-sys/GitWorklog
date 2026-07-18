@@ -151,3 +151,50 @@ test("desktop service includes recent session events in loop run snapshots", asy
     service.close();
   }
 });
+
+test("desktop service ingests events from a bound discovered session source", async () => {
+  const service = createDesktopAppService({
+    databasePath: ":memory:",
+    connector: {
+      connectorId: "fake",
+      displayName: "Fake connector",
+      discoverSessions: async () => [],
+      readSessionEvents: async () => [
+        {
+          eventType: "assistant_message",
+          payload: { text: "Continuing the loop." },
+          createdAt: "2026-07-18T02:00:00.000Z",
+        },
+      ],
+    },
+  });
+
+  try {
+    const created = service.createTaskAndRun({
+      task: {
+        title: "Ingest real session events",
+        goal: "Import Codex transcript events into the LoopRun timeline",
+      },
+    });
+    const session = service.bindDiscoveredSession({
+      loopRunId: created.loopRun.loopRunId,
+      session: {
+        sessionId: "ingest-session-1",
+        title: "Ingest session",
+        sourcePath: "C:/tmp/ingest.jsonl",
+      },
+    });
+
+    const result = await service.ingestSessionEvents({
+      loopRunId: created.loopRun.loopRunId,
+      sessionId: session.sessionId,
+    });
+    const snapshot = service.getLoopRunSnapshot(created.loopRun.loopRunId);
+
+    assert.equal(session.sourcePath, "C:/tmp/ingest.jsonl");
+    assert.equal(result.importedCount, 1);
+    assert.equal(snapshot.sessionEvents[0].eventType, "assistant_message");
+  } finally {
+    service.close();
+  }
+});
