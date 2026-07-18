@@ -74,6 +74,13 @@ Implemented Phase 1:
 - The desktop shell, rail, workbench, inspector, panels, task rows, signal chips, timeline entries, and review cards now share the same control-plane surface system.
 - Existing bridge-backed behavior remains unchanged.
 
+Implemented Phase 2:
+
+- Loop Detail is now the first and dominant panel in the center workspace.
+- The selected LoopRun has a cockpit header with loop state, risk, policy, and primary analysis command.
+- Task queue is visually secondary to the active mission area.
+- The mission timeline is promoted above session status and control-flow explanation.
+
 Next implementation slices:
 
 - Add Replay & Audit view for event/evidence/decision/action history.

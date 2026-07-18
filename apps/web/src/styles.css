@@ -29,7 +29,7 @@
 
 body {
   margin: 0;
-  min-width: 1040px;
+  min-width: 960px;
   background:
     linear-gradient(rgba(88, 166, 255, 0.035) 1px, transparent 1px),
     linear-gradient(90deg, rgba(88, 166, 255, 0.035) 1px, transparent 1px),
@@ -60,9 +60,9 @@ button:disabled {
 .desktop-shell {
   display: grid;
   min-height: 100vh;
-  grid-template-columns: 232px minmax(620px, 1fr) 344px;
-  gap: 14px;
-  padding: 14px;
+  grid-template-columns: 190px minmax(0, 1fr) 260px;
+  gap: 12px;
+  padding: 12px;
 }
 
 .side-rail,
@@ -76,7 +76,7 @@ button:disabled {
 
 .side-rail {
   display: flex;
-  min-height: calc(100vh - 28px);
+  min-height: calc(100vh - 24px);
   flex-direction: column;
   border: 1px solid var(--line);
   border-radius: 22px;
@@ -218,7 +218,7 @@ p {
 
 h1 {
   margin-bottom: 0;
-  font-size: clamp(28px, 3.2vw, 46px);
+  font-size: clamp(28px, 3vw, 40px);
   line-height: 1.02;
   letter-spacing: -0.045em;
 }
@@ -312,7 +312,7 @@ h3 {
 
 .workspace-layout {
   display: grid;
-  grid-template-columns: minmax(300px, 0.86fr) minmax(400px, 1.28fr);
+  grid-template-columns: minmax(460px, 1.36fr) minmax(280px, 0.72fr);
   gap: 14px;
   align-items: start;
 }
@@ -456,6 +456,40 @@ textarea {
   box-shadow: var(--shadow);
 }
 
+.cockpit-header {
+  display: grid;
+  gap: 12px;
+  align-items: start;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 14px;
+}
+
+.cockpit-header h2 {
+  max-width: 760px;
+  font-size: clamp(22px, 1.9vw, 28px);
+  line-height: 1.12;
+}
+
+.cockpit-signals {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 7px;
+}
+
+.risk-signal {
+  border-color: rgba(210, 153, 34, 0.34);
+  background: rgba(210, 153, 34, 0.1);
+  color: var(--warning);
+}
+
+.policy-signal {
+  border-color: rgba(188, 140, 255, 0.34);
+  background: rgba(188, 140, 255, 0.1);
+  color: var(--review);
+}
+
 .loop-goal {
   margin-bottom: 12px;
   border: 1px solid var(--line);
@@ -466,6 +500,22 @@ textarea {
 
 .analysis-button {
   margin-bottom: 16px;
+}
+
+.primary-command {
+  border-color: rgba(88, 166, 255, 0.58);
+  background:
+    linear-gradient(135deg, rgba(88, 166, 255, 0.95), rgba(88, 166, 255, 0.72)),
+    var(--accent);
+  color: #07111f;
+  box-shadow: 0 14px 38px rgba(88, 166, 255, 0.18);
+}
+
+.primary-command:hover {
+  background:
+    linear-gradient(135deg, rgba(123, 190, 255, 1), rgba(88, 166, 255, 0.86)),
+    var(--accent);
+  color: #07111f;
 }
 
 .bound-sessions {
@@ -507,6 +557,13 @@ textarea {
   margin-bottom: 16px;
   padding: 13px;
   background: rgba(11, 13, 16, 0.5);
+}
+
+.mission-timeline {
+  border-color: rgba(88, 166, 255, 0.26);
+  background:
+    linear-gradient(180deg, rgba(11, 13, 16, 0.72), rgba(17, 21, 27, 0.64)),
+    radial-gradient(circle at 0% 0%, rgba(88, 166, 255, 0.11), transparent 32%);
 }
 
 .event-card {
@@ -663,13 +720,13 @@ textarea {
   }
 }
 
-@media (max-width: 1120px) {
+@media (max-width: 1600px) {
   body {
     min-width: 760px;
   }
 
   .desktop-shell {
-    grid-template-columns: 220px minmax(0, 1fr);
+    grid-template-columns: 190px minmax(0, 1fr);
   }
 
   .inspector {

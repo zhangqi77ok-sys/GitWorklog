@@ -16,15 +16,50 @@ import {
   type ConsoleTaskItem,
 } from "./desktop-data";
 
-const navItems = ["Tasks", "Loop Detail", "Review Queue", "Policy Center", "Replay"];
+const navItems = ["任务", "循环详情", "审核队列", "策略中心", "回放审计"];
 
 const timeline = [
-  { title: "Task", detail: "目标和约束进入本地控制面" },
-  { title: "Session", detail: "Codex 会话绑定到当前 LoopRun" },
-  { title: "Evidence", detail: "工具结果、错误和停顿信号被归档" },
-  { title: "Decision", detail: "分析器生成风险判断和下一步建议" },
-  { title: "Review", detail: "策略决定是否需要人工确认" },
+  { title: "任务建档", detail: "目标和约束进入本地控制面" },
+  { title: "会话绑定", detail: "Codex 会话绑定到当前循环" },
+  { title: "证据归档", detail: "工具结果、错误和停顿信号被归档" },
+  { title: "风险判断", detail: "分析器生成风险判断和下一步建议" },
+  { title: "人工审核", detail: "策略决定是否需要人工确认" },
 ];
+
+const riskLabels: Record<string, string> = {
+  low: "低风险",
+  medium: "中风险",
+  high: "高风险",
+};
+
+const statusLabels: Record<string, string> = {
+  created: "已创建",
+  running: "运行中",
+  needs_review: "待审核",
+  approved: "已批准",
+  rejected: "已拒绝",
+  failed: "失败",
+  completed: "已完成",
+  watching: "观察中",
+  draft: "草稿",
+  pending: "待处理",
+};
+
+const policyLabels: Record<string, string> = {
+  conservative_loop: "保守续跑",
+  conservative: "保守策略",
+  assist_loop: "辅助续跑",
+  strict_review: "严格审核",
+};
+
+function labelFromMap(map: Record<string, string>, value?: string, fallback = "暂无") {
+  if (!value) {
+    return fallback;
+  }
+
+  const normalizedValue = value.toLowerCase().replace(/[\s-]+/g, "_");
+  return map[normalizedValue] ?? value.replace(/_/g, " ");
+}
 
 export function App() {
   const [consoleData, setConsoleData] = useState<ConsoleData>(fixtureConsoleData);
@@ -95,7 +130,7 @@ export function App() {
 
   async function handleBindSession(session: ConsoleSessionItem) {
     if (!selectedTask?.loopRunId) {
-      setNotice("当前任务没有可绑定的 LoopRun");
+      setNotice("当前任务没有可绑定的循环");
       return;
     }
 
@@ -110,7 +145,7 @@ export function App() {
 
   async function handleIngestSession(session: ConsoleSessionItem) {
     if (!selectedTask?.loopRunId) {
-      setNotice("当前任务没有可导入事件的 LoopRun");
+      setNotice("当前任务没有可导入事件的循环");
       return;
     }
 
@@ -128,7 +163,7 @@ export function App() {
 
   async function handleRunAnalysis() {
     if (!selectedTask?.loopRunId) {
-      setNotice("当前任务没有可分析的 LoopRun");
+      setNotice("当前任务没有可分析的循环");
       return;
     }
 
@@ -152,8 +187,8 @@ export function App() {
     setNotice(
       data.source === "desktop"
         ? result === "approved"
-          ? "审核已批准，Action 状态已更新"
-          : "审核已拒绝，Action 状态已更新"
+          ? "审核已批准，动作状态已更新"
+          : "审核已拒绝，动作状态已更新"
         : "当前是浏览器预览，审核动作不会写入本地数据库",
     );
     setIsBusy(false);
@@ -166,11 +201,11 @@ export function App() {
           <span>GW</span>
           <div>
             <strong>GitWorklog</strong>
-            <small>Loop Control Plane</small>
+            <small>循环工程控制台</small>
           </div>
         </div>
 
-        <nav className="nav-stack" aria-label="Primary">
+        <nav className="nav-stack" aria-label="主导航">
           {navItems.map((item, index) => (
             <button className={index === 0 ? "nav-item active" : "nav-item"} key={item}>
               <span>{String(index + 1).padStart(2, "0")}</span>
@@ -181,7 +216,7 @@ export function App() {
 
         <div className="rail-card">
           <span className="rail-dot" />
-          <strong>{consoleData.source === "desktop" ? "Desktop bridge connected" : "Fixture preview"}</strong>
+          <strong>{consoleData.source === "desktop" ? "桌面桥接已连接" : "预览数据模式"}</strong>
           <p>{notice}</p>
         </div>
       </aside>
@@ -189,8 +224,8 @@ export function App() {
       <section className="workbench">
         <header className="top-bar">
           <div>
-            <p className="eyebrow">Desktop UX Phase</p>
-            <h1>任务驱动的 Loop 工作台</h1>
+            <p className="eyebrow">桌面体验阶段</p>
+            <h1>任务驱动的循环工作台</h1>
           </div>
           <button className="ghost-button" disabled={isBusy} onClick={() => void refreshConsoleData()}>
             刷新本地状态
@@ -198,15 +233,92 @@ export function App() {
         </header>
 
         <section className="summary-strip">
-          <Metric label="Tasks" value={String(consoleData.tasks.length)} caption="当前任务队列" />
-          <Metric label="Reviews" value={String(consoleData.pendingReviewCount)} caption="待人工审核" />
-          <Metric label="Sessions" value={String(loopSnapshot?.sessionsCount ?? 0)} caption="当前 Loop 绑定" />
+          <Metric label="任务" value={String(consoleData.tasks.length)} caption="当前任务队列" />
+          <Metric label="审核" value={String(consoleData.pendingReviewCount)} caption="待人工审核" />
+          <Metric label="会话" value={String(loopSnapshot?.sessionsCount ?? 0)} caption="当前循环绑定" />
         </section>
 
         <section className="workspace-layout">
+          <article className="panel loop-zone">
+            <div className="cockpit-header">
+              <div>
+                <p className="eyebrow">当前循环</p>
+                <h2>{selectedTask?.title ?? "等待选择任务"}</h2>
+              </div>
+              <div className="cockpit-signals">
+                <span className="status-pill">
+                  {labelFromMap(statusLabels, loopSnapshot?.status ?? selectedTask?.status, "未启动")}
+                </span>
+                <span className="status-pill risk-signal">{labelFromMap(riskLabels, selectedTask?.risk, "未评估风险")}</span>
+                <span className="status-pill policy-signal">{labelFromMap(policyLabels, selectedTask?.run, "未设置策略")}</span>
+              </div>
+            </div>
+            <p className="loop-goal">{selectedTask?.goal ?? "选择左侧任务后，这里会展示目标、证据链和下一步动作。"}</p>
+            <button className="ghost-button analysis-button primary-command" disabled={isBusy} onClick={() => void handleRunAnalysis()}>
+              运行当前循环分析
+            </button>
+
+            <div className="snapshot-grid">
+              <Metric label="事件" value={String(loopSnapshot?.eventsCount ?? 0)} caption="会话事件" />
+              <Metric label="证据" value={String(loopSnapshot?.evidencesCount ?? 0)} caption="证据条目" />
+              <Metric label="决策" value={String(loopSnapshot?.decisionsCount ?? 0)} caption="决策记录" />
+              <Metric label="动作" value={String(loopSnapshot?.actionsCount ?? 0)} caption="动作记录" />
+            </div>
+
+            <div className="event-timeline mission-timeline">
+              <div className="section-heading compact">
+                <p className="eyebrow">任务时间线</p>
+                <h3>最近会话事件</h3>
+              </div>
+              {loopSnapshot?.timeline.length ? (
+                loopSnapshot.timeline.map((event) => (
+                  <article className="event-card" key={event.id}>
+                    <span>{event.createdAt ?? "未知时间"}</span>
+                    <strong>{event.title}</strong>
+                    <p>{event.detail}</p>
+                  </article>
+                ))
+              ) : (
+                <p className="empty-state">绑定会话并写入事件后，这里会形成可回放的 Loop 时间线。</p>
+              )}
+            </div>
+
+            <div className="bound-sessions">
+              <div className="section-heading compact">
+                <p className="eyebrow">会话状态</p>
+                <h3>绑定会话状态</h3>
+              </div>
+              {loopSnapshot?.sessions.length ? (
+                loopSnapshot.sessions.map((session) => (
+                  <article className="bound-session-card" key={session.sessionId}>
+                    <span className={`status-pill status-${session.status}`}>
+                      {labelFromMap(statusLabels, session.status, "未知状态")}
+                    </span>
+                    <strong>{session.title}</strong>
+                    <p>{session.projectPath ?? "未识别项目路径"}</p>
+                  </article>
+                ))
+              ) : (
+                <p className="empty-state">绑定并导入会话后，这里会显示运行中、失败等基础状态。</p>
+              )}
+            </div>
+
+            <div className="run-map">
+              {timeline.map((step, index) => (
+                <div className="run-step" key={step.title}>
+                  <span>{index + 1}</span>
+                  <div>
+                    <strong>{step.title}</strong>
+                    <p>{step.detail}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </article>
+
           <article className="panel task-zone">
             <div className="section-heading">
-              <p className="eyebrow">Task Runs</p>
+              <p className="eyebrow">任务运行</p>
               <h2>任务队列</h2>
             </div>
 
@@ -222,7 +334,7 @@ export function App() {
               <label>
                 成功目标
                 <textarea
-                  placeholder="描述这个 Loop 完成后应该达成什么"
+                  placeholder="描述这个循环完成后应该达成什么"
                   value={draft.goal}
                   onChange={(event) => setDraft((current) => ({ ...current, goal: event.target.value }))}
                 />
@@ -234,13 +346,13 @@ export function App() {
                     value={draft.risk}
                     onChange={(event) => setDraft((current) => ({ ...current, risk: event.target.value }))}
                   >
-                    <option value="low">low</option>
-                    <option value="medium">medium</option>
-                    <option value="high">high</option>
+                    <option value="low">低风险</option>
+                    <option value="medium">中风险</option>
+                    <option value="high">高风险</option>
                   </select>
                 </label>
                 <button disabled={isBusy} type="submit">
-                  创建 Task + LoopRun
+                  创建任务并启动循环
                 </button>
               </div>
             </form>
@@ -260,79 +372,13 @@ export function App() {
               )}
             </div>
           </article>
-
-          <article className="panel loop-zone">
-            <div className="section-heading">
-              <p className="eyebrow">Loop Detail</p>
-              <h2>{selectedTask?.title ?? "等待选择任务"}</h2>
-            </div>
-            <p className="loop-goal">{selectedTask?.goal ?? "选择左侧任务后，这里会展示目标、证据链和下一步动作。"}</p>
-            <button className="ghost-button analysis-button" disabled={isBusy} onClick={() => void handleRunAnalysis()}>
-              运行当前 Loop 分析
-            </button>
-
-            <div className="snapshot-grid">
-              <Metric label="Events" value={String(loopSnapshot?.eventsCount ?? 0)} caption="会话事件" />
-              <Metric label="Evidence" value={String(loopSnapshot?.evidencesCount ?? 0)} caption="证据条目" />
-              <Metric label="Decision" value={String(loopSnapshot?.decisionsCount ?? 0)} caption="决策记录" />
-              <Metric label="Action" value={String(loopSnapshot?.actionsCount ?? 0)} caption="动作记录" />
-            </div>
-
-            <div className="bound-sessions">
-              <div className="section-heading compact">
-                <p className="eyebrow">Session State</p>
-                <h3>绑定会话状态</h3>
-              </div>
-              {loopSnapshot?.sessions.length ? (
-                loopSnapshot.sessions.map((session) => (
-                  <article className="bound-session-card" key={session.sessionId}>
-                    <span className={`status-pill status-${session.status}`}>{session.status}</span>
-                    <strong>{session.title}</strong>
-                    <p>{session.projectPath ?? "未识别项目路径"}</p>
-                  </article>
-                ))
-              ) : (
-                <p className="empty-state">绑定并导入会话后，这里会显示 running / failed 等基础状态。</p>
-              )}
-            </div>
-
-            <div className="event-timeline">
-              <div className="section-heading compact">
-                <p className="eyebrow">Replay Seed</p>
-                <h3>最近会话事件</h3>
-              </div>
-              {loopSnapshot?.timeline.length ? (
-                loopSnapshot.timeline.map((event) => (
-                  <article className="event-card" key={event.id}>
-                    <span>{event.createdAt ?? "未知时间"}</span>
-                    <strong>{event.title}</strong>
-                    <p>{event.detail}</p>
-                  </article>
-                ))
-              ) : (
-                <p className="empty-state">绑定会话并写入事件后，这里会形成可回放的 Loop 时间线。</p>
-              )}
-            </div>
-
-            <div className="run-map">
-              {timeline.map((step, index) => (
-                <div className="run-step" key={step.title}>
-                  <span>{index + 1}</span>
-                  <div>
-                    <strong>{step.title}</strong>
-                    <p>{step.detail}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </article>
         </section>
       </section>
 
       <aside className="inspector">
         <section className="panel sessions-panel">
           <div className="section-heading">
-            <p className="eyebrow">Session Discovery</p>
+            <p className="eyebrow">会话发现</p>
             <h2>Codex 会话</h2>
           </div>
           <button className="ghost-button full-width" disabled={isBusy} onClick={() => void handleDiscoverSessions()}>
@@ -346,7 +392,7 @@ export function App() {
                   <p>{session.projectPath ?? "未识别项目路径"}</p>
                   <small>{session.lastEventAt ?? "未知活跃时间"}</small>
                   <button disabled={isBusy} onClick={() => void handleBindSession(session)}>
-                    绑定到当前 Loop
+                    绑定到当前循环
                   </button>
                   <button disabled={isBusy} onClick={() => void handleIngestSession(session)}>
                     导入事件到时间线
@@ -361,7 +407,7 @@ export function App() {
 
         <section className="panel review-panel">
           <div className="section-heading">
-            <p className="eyebrow">Review Queue</p>
+            <p className="eyebrow">审核队列</p>
             <h2>待审核动作</h2>
           </div>
 
@@ -369,8 +415,8 @@ export function App() {
             <div className="review-list">
               {consoleData.reviews.map((review) => (
                 <article className="review-card" key={review.reviewId}>
-                  <span className="status-pill">{review.result}</span>
-                  <strong>Action {review.actionId.slice(0, 8)}</strong>
+                  <span className="status-pill">{labelFromMap(statusLabels, review.result, "待处理")}</span>
+                  <strong>动作 {review.actionId.slice(0, 8)}</strong>
                   <p>{review.comment ?? "策略要求人工确认后再继续。"}</p>
                   <div className="review-actions">
                     <button disabled={isBusy} onClick={() => void handleReview(review.reviewId, "approved")}>
@@ -389,9 +435,9 @@ export function App() {
         </section>
 
         <section className="panel policy-panel">
-          <p className="eyebrow">Policy</p>
-          <h2>Conservative</h2>
-          <p>默认不直接自动续跑。涉及恢复提示或高风险动作时，先进入 Review Queue。</p>
+          <p className="eyebrow">策略</p>
+          <h2>保守续跑</h2>
+          <p>默认不直接自动续跑。涉及恢复提示或高风险动作时，先进入审核队列。</p>
         </section>
       </aside>
     </main>
@@ -415,7 +461,7 @@ function TaskCard(props: { task: ConsoleTaskItem; isSelected: boolean; onSelect(
       <strong>{props.task.title}</strong>
       <p>{props.task.goal}</p>
       <small>
-        {props.task.run} · risk {props.task.risk}
+        {labelFromMap(policyLabels, props.task.run, "未设置策略")} · {labelFromMap(riskLabels, props.task.risk, "未评估风险")}
       </small>
     </button>
   );

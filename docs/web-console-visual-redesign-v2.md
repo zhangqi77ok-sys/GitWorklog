@@ -323,6 +323,8 @@ The redesigned console is acceptable when:
 - Status, risk, review, and failure states are visually distinct.
 - The UI remains readable at desktop widths around 1280px.
 - The visual system can be extended to Replay, Policy, and Settings without another redesign.
+- Each completed UI phase is launched in the Electron desktop app for visual review before commit/push.
+- The desktop UI uses Chinese-first labels for navigation, status, metrics, buttons, and policy language; product names and necessary technical nouns may remain in English.
 
 ## Non-Goals
 

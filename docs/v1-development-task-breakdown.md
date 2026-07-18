@@ -160,6 +160,7 @@ packages/
 - 当前任务和 LoopRun 成为页面视觉中心
 - 状态、风险、审核和失败信号有清晰区分
 - Phase 1 已实现 graphite tokens、dark shell、queue row、signal chip 和 timeline 基础视觉
+- 每完成一个 UI 阶段，都必须启动 Electron 桌面端查看实际窗口效果
 
 ### T0UX2 重构控制台布局层级
 
@@ -182,6 +183,12 @@ packages/
   - run analysis
   - review action
 - 1280px 桌面宽度下仍保持可读
+- Phase 2 已实现 Loop cockpit header、中心 mission timeline 和辅助 task queue 层级
+- Phase 2 视觉验收后收紧桌面三栏宽度，统一 Electron 启动背景为深色，并让窗口按当前屏幕工作区自动收敛居中
+- Phase 2 默认 1280px 左右窗口采用“导航 + 主工作台”二栏布局，避免 inspector 横向溢出；宽屏再展开三栏
+- Phase 2 文案修正为中文优先：导航、状态、指标、按钮和策略标签均使用中文，产品名与必要技术名词除外
+- Phase 2 Electron 原生菜单改为中文，并扩大二栏断点以适配 Windows 缩放下的默认桌面窗口
+- Phase 2 桌面端默认最大化启动，保证控制台信息在 Windows 缩放环境下完整可见
 
 ### T0UX3 重做核心组件质感
 

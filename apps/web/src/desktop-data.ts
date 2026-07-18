@@ -101,36 +101,36 @@ export const fixtureConsoleData: ConsoleData = {
       reviewId: "fixture-review",
       actionId: "fixture-action",
       result: "pending",
-      comment: "Conservative policy requires manual approval.",
+      comment: "保守策略要求人工确认后再继续。",
     },
   ],
   tasks: [
     {
       id: "fixture-repair",
       loopRunId: "fixture-run-repair",
-      title: "Repair failing desktop test",
-      status: "Needs review",
+      title: "修复失败的桌面端测试",
+      status: "needs_review",
       goal: "恢复测试并留下可回放证据",
       risk: "medium",
-      run: "conservative loop",
+      run: "conservative_loop",
     },
     {
       id: "fixture-discovery",
       loopRunId: "fixture-run-discovery",
-      title: "Codex session discovery",
-      status: "Watching",
+      title: "发现并绑定 Codex 会话",
+      status: "watching",
       goal: "扫描本地会话并绑定到任务",
       risk: "low",
-      run: "assist loop",
+      run: "assist_loop",
     },
     {
       id: "fixture-policy",
       loopRunId: "fixture-run-policy",
-      title: "Auto-resume policy pack",
-      status: "Draft",
+      title: "内置自动续跑策略包",
+      status: "draft",
       goal: "内置可编辑续跑策略",
       risk: "high",
-      run: "strict review",
+      run: "strict_review",
     },
   ],
 };
@@ -214,8 +214,8 @@ export async function discoverSessions(bridge: GitWorklogBridgeLike | undefined)
     return [
       {
         sessionId: "fixture-session",
-        title: "Fixture Codex session",
-        projectPath: "browser-preview",
+        title: "预览 Codex 会话",
+        projectPath: "浏览器预览",
       },
     ];
   }
@@ -418,7 +418,7 @@ function summarizeEventPayload(eventType: string, payload: Record<string, unknow
   const command = readString(payload.command);
   const exitCode = typeof payload.exitCode === "number" ? payload.exitCode : undefined;
   if (command && exitCode !== undefined) {
-    return `${command} exited with code ${exitCode}`;
+    return `${command} 退出码 ${exitCode}`;
   }
 
   const output = readString(payload.output);
@@ -431,5 +431,5 @@ function summarizeEventPayload(eventType: string, payload: Record<string, unknow
     return text.slice(0, 140);
   }
 
-  return `${eventType} event captured`;
+  return `已捕获 ${eventType} 事件`;
 }

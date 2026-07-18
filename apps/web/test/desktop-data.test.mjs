@@ -157,7 +157,7 @@ test("loads selected loop snapshot counts through the desktop bridge", async () 
   assert.equal(snapshot.actionsCount, 1);
   assert.equal(snapshot.eventsCount, 1);
   assert.equal(snapshot.timeline[0].title, "tool_result");
-  assert.equal(snapshot.timeline[0].detail, "npm test exited with code 1");
+  assert.equal(snapshot.timeline[0].detail, "npm test 退出码 1");
   assert.equal(snapshot.pendingReviewsCount, 1);
 });
 
