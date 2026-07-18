@@ -393,6 +393,7 @@ packages/
 任务内容：
 
 - 基于最近错误和工具结果识别失败类型
+- Web Loop Detail 提供“运行当前 Loop 分析”入口
 
 完成标准：
 
@@ -400,6 +401,7 @@ packages/
   - 错误分类
   - 可能根因
   - 优先修复方向
+- 用户可以从选中的 LoopRun 手动触发分析，并刷新 evidence / decision / action / review 计数
 
 ### T402 实现 Progress Analyzer
 

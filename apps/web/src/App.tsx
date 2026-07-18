@@ -8,6 +8,7 @@ import {
   fixtureConsoleData,
   loadConsoleData,
   loadLoopSnapshot,
+  runLoopAnalysis,
   submitTaskDraft,
   type ConsoleData,
   type ConsoleLoopSnapshot,
@@ -122,6 +123,25 @@ export function App() {
         ? Number(result.importedCount)
         : 0;
     setNotice(importedCount ? `已导入 ${importedCount} 条会话事件` : "没有导入新的会话事件");
+    setIsBusy(false);
+  }
+
+  async function handleRunAnalysis() {
+    if (!selectedTask?.loopRunId) {
+      setNotice("当前任务没有可分析的 LoopRun");
+      return;
+    }
+
+    setIsBusy(true);
+    const result = await runLoopAnalysis(window.gitWorklog, selectedTask.loopRunId);
+    await refreshConsoleData();
+    const snapshot = await loadLoopSnapshot(window.gitWorklog, selectedTask.loopRunId);
+    setLoopSnapshot(snapshot);
+    const requiresReview =
+      typeof result === "object" && result !== null && "requiresReview" in result
+        ? Boolean(result.requiresReview)
+        : false;
+    setNotice(requiresReview ? "分析完成，已生成待审核动作" : "分析完成，已更新证据和动作");
     setIsBusy(false);
   }
 
@@ -247,6 +267,9 @@ export function App() {
               <h2>{selectedTask?.title ?? "等待选择任务"}</h2>
             </div>
             <p className="loop-goal">{selectedTask?.goal ?? "选择左侧任务后，这里会展示目标、证据链和下一步动作。"}</p>
+            <button className="ghost-button analysis-button" disabled={isBusy} onClick={() => void handleRunAnalysis()}>
+              运行当前 Loop 分析
+            </button>
 
             <div className="snapshot-grid">
               <Metric label="Events" value={String(loopSnapshot?.eventsCount ?? 0)} caption="会话事件" />

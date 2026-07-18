@@ -27,6 +27,7 @@ The next console iteration uses a desktop-oriented control surface instead of a 
 - Session Discovery: the right inspector can scan local Codex sessions and bind one to the selected LoopRun.
 - Replay seed timeline: Loop Detail shows recent session events from the selected LoopRun so users can see the beginning of an audit trail before the full Replay page exists.
 - Bound session state: Loop Detail shows normalized session state such as `running` and `failed` for the selected LoopRun.
+- Analysis trigger: Loop Detail exposes an explicit action to run analysis for the selected LoopRun and refresh evidence, actions, and Review Queue.
 
 Interaction rules:
 
@@ -37,6 +38,7 @@ Interaction rules:
 - Session events in the selected snapshot render newest first and use short readable summaries.
 - Session cards expose an explicit import action that reads bound Codex JSONL events and refreshes the selected snapshot.
 - Importing events refreshes normalized bound session status so failure signals are visible without opening the raw transcript.
+- Running analysis refreshes task data, selected snapshot counts, and pending review state.
 - Risk and policy language stays visible near destructive or automation-related actions.
 
 ## Wiring Plan
@@ -52,6 +54,7 @@ Implemented bridge-backed slices:
 - Session Discovery calls `sessions:discover` and `sessions:bind`.
 - Loop Detail renders `sessionEvents` from `loopRuns:snapshot` as the first Replay/Audit surface.
 - Session event import calls `sessions:ingestEvents`.
+- Loop analysis calls `analysis:run`.
 
 Next implementation slices:
 

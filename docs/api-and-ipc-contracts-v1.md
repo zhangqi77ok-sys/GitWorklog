@@ -228,6 +228,13 @@ v1 建议采用：
 - 最新分析摘要
 - 决策结果
 
+已实现 IPC：
+- `analysis:run`
+
+渲染端行为：
+- Loop Detail 可对当前选中 LoopRun 手动触发分析
+- 分析后刷新 `loopRuns:snapshot`、任务列表和 `reviews:listPending`
+
 ### `analysis:getLatest`
 
 输入：

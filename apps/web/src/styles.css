@@ -469,6 +469,11 @@ textarea {
   background: rgba(255, 248, 232, 0.7);
 }
 
+.analysis-button {
+  margin-bottom: 18px;
+  width: 100%;
+}
+
 .run-step {
   display: grid;
   grid-template-columns: 38px 1fr;

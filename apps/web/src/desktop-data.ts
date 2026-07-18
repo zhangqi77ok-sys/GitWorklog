@@ -82,6 +82,9 @@ export interface GitWorklogBridgeLike {
     loopRuns?: {
       snapshot(loopRunId: string): Promise<unknown>;
     };
+    analysis?: {
+      run(loopRunId: string): Promise<unknown>;
+    };
     sessions?: {
       discover(): Promise<unknown>;
       bind(input: { loopRunId: string; session: ConsoleSessionItem }): Promise<unknown>;
@@ -247,6 +250,17 @@ export async function ingestSessionEvents(
   }
 
   return bridge.api.sessions.ingestEvents({ loopRunId, sessionId });
+}
+
+export async function runLoopAnalysis(
+  bridge: GitWorklogBridgeLike | undefined,
+  loopRunId: string | undefined,
+): Promise<unknown> {
+  if (!loopRunId || !bridge?.api?.analysis?.run) {
+    return undefined;
+  }
+
+  return bridge.api.analysis.run(loopRunId);
 }
 
 function toConsoleTaskItem(item: unknown): ConsoleTaskItem | undefined {

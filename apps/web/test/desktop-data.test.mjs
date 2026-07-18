@@ -8,6 +8,7 @@ import {
   ingestSessionEvents,
   loadConsoleData,
   loadLoopSnapshot,
+  runLoopAnalysis,
   submitTaskDraft,
 } from "../build/test/desktop-data.js";
 
@@ -205,4 +206,23 @@ test("ingests session events for a selected loop run through the desktop bridge"
 
   assert.deepEqual(calls, [["run-1", "session-1"]]);
   assert.deepEqual(result, { importedCount: 2 });
+});
+
+test("runs analysis for a selected loop run through the desktop bridge", async () => {
+  const calls = [];
+  const bridge = {
+    api: {
+      analysis: {
+        run: async (loopRunId) => {
+          calls.push(loopRunId);
+          return { decisionId: "decision-1", actionId: "action-1", requiresReview: true };
+        },
+      },
+    },
+  };
+
+  const result = await runLoopAnalysis(bridge, "run-1");
+
+  assert.deepEqual(calls, ["run-1"]);
+  assert.deepEqual(result, { decisionId: "decision-1", actionId: "action-1", requiresReview: true });
 });
