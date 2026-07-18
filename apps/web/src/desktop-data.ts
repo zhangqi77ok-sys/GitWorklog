@@ -1,10 +1,28 @@
 export interface ConsoleTaskItem {
   id: string;
+  loopRunId?: string;
   title: string;
   status: string;
   goal: string;
   risk: string;
   run: string;
+}
+
+export interface ConsoleSessionItem {
+  sessionId: string;
+  title: string;
+  projectPath?: string;
+  lastEventAt?: string;
+}
+
+export interface ConsoleLoopSnapshot {
+  loopRunId: string;
+  status: string;
+  sessionsCount: number;
+  evidencesCount: number;
+  decisionsCount: number;
+  actionsCount: number;
+  pendingReviewsCount: number;
 }
 
 export interface ConsoleReviewItem {
@@ -47,6 +65,13 @@ export interface GitWorklogBridgeLike {
       approve?(input: { reviewId: string; reviewer?: string; comment?: string }): Promise<unknown>;
       reject?(input: { reviewId: string; reviewer?: string; comment?: string }): Promise<unknown>;
     };
+    loopRuns?: {
+      snapshot(loopRunId: string): Promise<unknown>;
+    };
+    sessions?: {
+      discover(): Promise<unknown>;
+      bind(input: { loopRunId: string; session: ConsoleSessionItem }): Promise<unknown>;
+    };
   };
 }
 
@@ -64,6 +89,7 @@ export const fixtureConsoleData: ConsoleData = {
   tasks: [
     {
       id: "fixture-repair",
+      loopRunId: "fixture-run-repair",
       title: "Repair failing desktop test",
       status: "Needs review",
       goal: "恢复测试并留下可回放证据",
@@ -72,6 +98,7 @@ export const fixtureConsoleData: ConsoleData = {
     },
     {
       id: "fixture-discovery",
+      loopRunId: "fixture-run-discovery",
       title: "Codex session discovery",
       status: "Watching",
       goal: "扫描本地会话并绑定到任务",
@@ -80,6 +107,7 @@ export const fixtureConsoleData: ConsoleData = {
     },
     {
       id: "fixture-policy",
+      loopRunId: "fixture-run-policy",
       title: "Auto-resume policy pack",
       status: "Draft",
       goal: "内置可编辑续跑策略",
@@ -147,6 +175,53 @@ export async function decideReview(
   return undefined;
 }
 
+export async function loadLoopSnapshot(
+  bridge: GitWorklogBridgeLike | undefined,
+  loopRunId: string | undefined,
+): Promise<ConsoleLoopSnapshot | undefined> {
+  if (!loopRunId || !bridge?.api?.loopRuns?.snapshot) {
+    return undefined;
+  }
+
+  try {
+    const rawSnapshot = await bridge.api.loopRuns.snapshot(loopRunId);
+    return toConsoleLoopSnapshot(rawSnapshot);
+  } catch {
+    return undefined;
+  }
+}
+
+export async function discoverSessions(bridge: GitWorklogBridgeLike | undefined): Promise<ConsoleSessionItem[]> {
+  if (!bridge?.api?.sessions?.discover) {
+    return [
+      {
+        sessionId: "fixture-session",
+        title: "Fixture Codex session",
+        projectPath: "browser-preview",
+      },
+    ];
+  }
+
+  try {
+    const rawSessions = await bridge.api.sessions.discover();
+    return Array.isArray(rawSessions) ? rawSessions.map(toConsoleSessionItem).filter(isConsoleSessionItem) : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function bindSessionToLoopRun(
+  bridge: GitWorklogBridgeLike | undefined,
+  loopRunId: string | undefined,
+  session: ConsoleSessionItem | undefined,
+): Promise<unknown> {
+  if (!loopRunId || !session || !bridge?.api?.sessions?.bind) {
+    return undefined;
+  }
+
+  return bridge.api.sessions.bind({ loopRunId, session });
+}
+
 function toConsoleTaskItem(item: unknown): ConsoleTaskItem | undefined {
   if (!isRecord(item) || !isRecord(item.task)) {
     return undefined;
@@ -163,11 +238,52 @@ function toConsoleTaskItem(item: unknown): ConsoleTaskItem | undefined {
 
   return {
     id: taskId,
+    loopRunId: readString(latestLoopRun?.loopRunId),
     title,
     status: readString(latestLoopRun?.status) ?? "No run",
     goal,
     risk: readString(task.riskProfile) ?? "medium",
     run: readString(latestLoopRun?.mode) ?? "no loop",
+  };
+}
+
+function toConsoleLoopSnapshot(item: unknown): ConsoleLoopSnapshot | undefined {
+  if (!isRecord(item) || !isRecord(item.loopRun)) {
+    return undefined;
+  }
+
+  const loopRunId = readString(item.loopRun.loopRunId);
+  if (!loopRunId) {
+    return undefined;
+  }
+
+  return {
+    loopRunId,
+    status: readString(item.loopRun.status) ?? "unknown",
+    sessionsCount: readArray(item.sessions).length,
+    evidencesCount: readArray(item.evidences).length,
+    decisionsCount: readArray(item.decisions).length,
+    actionsCount: readArray(item.actions).length,
+    pendingReviewsCount: readArray(item.pendingReviews).length,
+  };
+}
+
+function toConsoleSessionItem(item: unknown): ConsoleSessionItem | undefined {
+  if (!isRecord(item)) {
+    return undefined;
+  }
+
+  const sessionId = readString(item.sessionId);
+  const title = readString(item.title);
+  if (!sessionId || !title) {
+    return undefined;
+  }
+
+  return {
+    sessionId,
+    title,
+    projectPath: readString(item.projectPath),
+    lastEventAt: readString(item.lastEventAt),
   };
 }
 
@@ -199,8 +315,16 @@ function isConsoleReviewItem(value: ConsoleReviewItem | undefined): value is Con
   return Boolean(value);
 }
 
+function isConsoleSessionItem(value: ConsoleSessionItem | undefined): value is ConsoleSessionItem {
+  return Boolean(value);
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
+}
+
+function readArray(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
 }
 
 function readString(value: unknown): string | undefined {

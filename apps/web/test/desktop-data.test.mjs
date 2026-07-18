@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { decideReview, loadConsoleData, submitTaskDraft } from "../build/test/desktop-data.js";
+import {
+  bindSessionToLoopRun,
+  decideReview,
+  discoverSessions,
+  loadConsoleData,
+  loadLoopSnapshot,
+  submitTaskDraft,
+} from "../build/test/desktop-data.js";
 
 test("loads task and review data from the desktop bridge when available", async () => {
   const bridge = {
@@ -37,6 +44,7 @@ test("loads task and review data from the desktop bridge when available", async 
   assert.equal(data.source, "desktop");
   assert.equal(data.tasks[0].title, "Real desktop task");
   assert.equal(data.tasks[0].status, "needs_review");
+  assert.equal(data.tasks[0].loopRunId, "run-1");
   assert.equal(data.pendingReviewCount, 1);
   assert.equal(data.reviews[0].comment, "Policy gate");
 });
@@ -110,4 +118,58 @@ test("approves and rejects reviews through the desktop bridge", async () => {
     ["approve", "review-1"],
     ["reject", "review-2"],
   ]);
+});
+
+test("loads selected loop snapshot counts through the desktop bridge", async () => {
+  const bridge = {
+    api: {
+      loopRuns: {
+        snapshot: async (loopRunId) => ({
+          loopRun: { loopRunId, status: "needs_review" },
+          sessions: [{ sessionId: "session-1" }],
+          evidences: [{ evidenceId: "evidence-1" }, { evidenceId: "evidence-2" }],
+          decisions: [{ decisionId: "decision-1" }],
+          actions: [{ actionId: "action-1" }],
+          pendingReviews: [{ reviewId: "review-1" }],
+        }),
+      },
+    },
+  };
+
+  const snapshot = await loadLoopSnapshot(bridge, "run-1");
+
+  assert.equal(snapshot.loopRunId, "run-1");
+  assert.equal(snapshot.sessionsCount, 1);
+  assert.equal(snapshot.evidencesCount, 2);
+  assert.equal(snapshot.decisionsCount, 1);
+  assert.equal(snapshot.actionsCount, 1);
+  assert.equal(snapshot.pendingReviewsCount, 1);
+});
+
+test("discovers sessions and binds a selected session to a loop run", async () => {
+  const calls = [];
+  const bridge = {
+    api: {
+      sessions: {
+        discover: async () => [
+          {
+            sessionId: "session-1",
+            title: "Codex session",
+            projectPath: "C:/repo",
+            lastEventAt: "2026-07-18T00:00:00.000Z",
+          },
+        ],
+        bind: async (input) => {
+          calls.push([input.loopRunId, input.session.sessionId]);
+          return { sessionId: input.session.sessionId, loopRunId: input.loopRunId };
+        },
+      },
+    },
+  };
+
+  const sessions = await discoverSessions(bridge);
+  await bindSessionToLoopRun(bridge, "run-1", sessions[0]);
+
+  assert.equal(sessions[0].title, "Codex session");
+  assert.deepEqual(calls, [["run-1", "session-1"]]);
 });

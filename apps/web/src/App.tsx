@@ -1,11 +1,16 @@
 import { FormEvent, useEffect, useState } from "react";
 
 import {
+  bindSessionToLoopRun,
   decideReview,
+  discoverSessions,
   fixtureConsoleData,
   loadConsoleData,
+  loadLoopSnapshot,
   submitTaskDraft,
   type ConsoleData,
+  type ConsoleLoopSnapshot,
+  type ConsoleSessionItem,
   type ConsoleTaskItem,
 } from "./desktop-data";
 
@@ -22,6 +27,8 @@ const timeline = [
 export function App() {
   const [consoleData, setConsoleData] = useState<ConsoleData>(fixtureConsoleData);
   const [selectedTaskId, setSelectedTaskId] = useState<string>(fixtureConsoleData.tasks[0]?.id ?? "");
+  const [loopSnapshot, setLoopSnapshot] = useState<ConsoleLoopSnapshot | undefined>();
+  const [discoveredSessions, setDiscoveredSessions] = useState<ConsoleSessionItem[]>([]);
   const [draft, setDraft] = useState({ title: "", goal: "", risk: "medium" });
   const [isBusy, setIsBusy] = useState(false);
   const [notice, setNotice] = useState("桌面控制台已就绪");
@@ -48,6 +55,18 @@ export function App() {
 
   const selectedTask = consoleData.tasks.find((task) => task.id === selectedTaskId) ?? consoleData.tasks[0];
 
+  useEffect(() => {
+    let active = true;
+    void loadLoopSnapshot(window.gitWorklog, selectedTask?.loopRunId).then((snapshot) => {
+      if (active) {
+        setLoopSnapshot(snapshot);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [selectedTask?.loopRunId]);
+
   async function handleCreateTask(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!draft.title.trim() || !draft.goal.trim()) {
@@ -61,6 +80,29 @@ export function App() {
     setSelectedTaskId(data.tasks[0]?.id ?? "");
     setDraft({ title: "", goal: "", risk: "medium" });
     setNotice(data.source === "desktop" ? "任务已创建并写入本地数据库" : "当前是浏览器预览，未写入本地数据库");
+    setIsBusy(false);
+  }
+
+  async function handleDiscoverSessions() {
+    setIsBusy(true);
+    const sessions = await discoverSessions(window.gitWorklog);
+    setDiscoveredSessions(sessions);
+    setNotice(sessions.length ? `发现 ${sessions.length} 个 Codex 会话` : "没有发现可绑定的 Codex 会话");
+    setIsBusy(false);
+  }
+
+  async function handleBindSession(session: ConsoleSessionItem) {
+    if (!selectedTask?.loopRunId) {
+      setNotice("当前任务没有可绑定的 LoopRun");
+      return;
+    }
+
+    setIsBusy(true);
+    await bindSessionToLoopRun(window.gitWorklog, selectedTask.loopRunId, session);
+    await refreshConsoleData();
+    const snapshot = await loadLoopSnapshot(window.gitWorklog, selectedTask.loopRunId);
+    setLoopSnapshot(snapshot);
+    setNotice(`已绑定会话：${session.title}`);
     setIsBusy(false);
   }
 
@@ -119,7 +161,7 @@ export function App() {
         <section className="summary-strip">
           <Metric label="Tasks" value={String(consoleData.tasks.length)} caption="当前任务队列" />
           <Metric label="Reviews" value={String(consoleData.pendingReviewCount)} caption="待人工审核" />
-          <Metric label="Policy" value="Conservative" caption="默认安全策略" />
+          <Metric label="Sessions" value={String(loopSnapshot?.sessionsCount ?? 0)} caption="当前 Loop 绑定" />
         </section>
 
         <section className="workspace-layout">
@@ -187,6 +229,12 @@ export function App() {
             </div>
             <p className="loop-goal">{selectedTask?.goal ?? "选择左侧任务后，这里会展示目标、证据链和下一步动作。"}</p>
 
+            <div className="snapshot-grid">
+              <Metric label="Evidence" value={String(loopSnapshot?.evidencesCount ?? 0)} caption="证据条目" />
+              <Metric label="Decision" value={String(loopSnapshot?.decisionsCount ?? 0)} caption="决策记录" />
+              <Metric label="Action" value={String(loopSnapshot?.actionsCount ?? 0)} caption="动作记录" />
+            </div>
+
             <div className="run-map">
               {timeline.map((step, index) => (
                 <div className="run-step" key={step.title}>
@@ -203,6 +251,32 @@ export function App() {
       </section>
 
       <aside className="inspector">
+        <section className="panel sessions-panel">
+          <div className="section-heading">
+            <p className="eyebrow">Session Discovery</p>
+            <h2>Codex 会话</h2>
+          </div>
+          <button className="ghost-button full-width" disabled={isBusy} onClick={() => void handleDiscoverSessions()}>
+            扫描本地会话
+          </button>
+          <div className="session-list">
+            {discoveredSessions.length ? (
+              discoveredSessions.map((session) => (
+                <article className="session-card" key={session.sessionId}>
+                  <strong>{session.title}</strong>
+                  <p>{session.projectPath ?? "未识别项目路径"}</p>
+                  <small>{session.lastEventAt ?? "未知活跃时间"}</small>
+                  <button disabled={isBusy} onClick={() => void handleBindSession(session)}>
+                    绑定到当前 Loop
+                  </button>
+                </article>
+              ))
+            ) : (
+              <p className="empty-state">点击扫描后，这里会显示本机可发现的 Codex 会话。</p>
+            )}
+          </div>
+        </section>
+
         <section className="panel review-panel">
           <div className="section-heading">
             <p className="eyebrow">Review Queue</p>

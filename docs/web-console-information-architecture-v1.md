@@ -23,19 +23,30 @@ The next console iteration uses a desktop-oriented control surface instead of a 
 - Right inspector: review queue, approve/reject actions, and active policy explanation.
 - Task creation: inline form for creating a task and its first conservative LoopRun through the desktop bridge.
 - Empty states: each region must explain what the user can do next instead of showing blank panels.
+- Selected LoopRun snapshot: the main workspace shows live counts for sessions, evidences, decisions, actions, and pending reviews.
+- Session Discovery: the right inspector can scan local Codex sessions and bind one to the selected LoopRun.
 
 Interaction rules:
 
 - Desktop bridge data is preferred; browser preview uses fixture data.
 - Create/approve/reject actions refresh visible console state after completion.
+- Selecting a task loads its latest LoopRun snapshot when `loopRunId` exists.
+- Binding a session refreshes task data and the selected LoopRun snapshot.
 - Risk and policy language stays visible near destructive or automation-related actions.
 
 ## Wiring Plan
 
 The current UI reads task and review data from `window.gitWorklog.api` when running in Electron, with fixture fallback for browser-only previews.
 
+Implemented bridge-backed slices:
+
+- Task list and Review Queue load from `window.gitWorklog.api`.
+- Task creation calls `tasks:createAndRun`.
+- Review approve/reject calls `reviews:approve` and `reviews:reject`.
+- Selected task snapshot calls `loopRuns:snapshot`.
+- Session Discovery calls `sessions:discover` and `sessions:bind`.
+
 Next implementation slices:
 
-- Wire selected task to `loopRuns:snapshot`.
-- Add Session Discovery and binding UI.
 - Add Replay & Audit view for event/evidence/decision/action history.
+- Add Session timeline ingestion and display.

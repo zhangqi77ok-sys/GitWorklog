@@ -259,6 +259,8 @@ packages/
 - 扫描本地 Codex 会话
 - 读取会话元数据
 - 建立 Session 数据模型
+- 在桌面控制台 inspector 中提供扫描入口
+- 展示发现到的会话标题、项目路径、最后活跃时间
 
 完成标准：
 
@@ -268,6 +270,7 @@ packages/
   - threadId
   - projectPath
   - 最后活跃时间
+- 没有发现会话时必须展示空状态和下一步提示
 
 ### T202 实现 Session 绑定到 LoopRun
 
@@ -275,10 +278,13 @@ packages/
 
 - 支持将一个 Session 绑定到某个 LoopRun
 - 保存绑定关系
+- 从当前选中任务的最新 LoopRun 发起绑定
+- 绑定成功后刷新任务列表和 LoopRun snapshot
 
 完成标准：
 
 - 在 Task Detail 中可以选择会话进行绑定
+- 绑定后 Loop Detail 能看到 sessions 数量变化
 
 ### T203 实现 Session Event Store
 
@@ -510,10 +516,17 @@ v1 先用规则实现
   - 决策
   - 动作
   - 审核结果
+- 在正式 Replay 页之前，Loop Detail 先展示 snapshot 级别计数：
+  - sessions
+  - evidences
+  - decisions
+  - actions
+  - pendingReviews
 
 完成标准：
 
 - 可完整回放一次“异常 -> 分析 -> 建议/审核 -> 动作”的流程
+- 选中任务时可以读取其最新 LoopRun snapshot
 
 ## 6. v1 验收标准
 

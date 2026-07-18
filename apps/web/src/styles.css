@@ -214,10 +214,21 @@ h2 {
   font-weight: 900;
 }
 
+.full-width {
+  width: 100%;
+}
+
 .summary-strip {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px;
+}
+
+.snapshot-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 20px;
 }
 
 .metric-card,
@@ -326,7 +337,8 @@ textarea {
 
 .task-list,
 .run-map,
-.review-list {
+.review-list,
+.session-list {
   display: grid;
   gap: 12px;
 }
@@ -353,7 +365,8 @@ textarea {
 }
 
 .task-card strong,
-.review-card strong {
+.review-card strong,
+.session-card strong {
   display: block;
   margin: 10px 0 8px;
 }
@@ -433,6 +446,46 @@ textarea {
 
 .review-actions button:last-child {
   background: var(--danger);
+}
+
+.sessions-panel {
+  background:
+    linear-gradient(180deg, rgba(255, 251, 241, 0.92), rgba(247, 238, 218, 0.86)),
+    radial-gradient(circle at 100% 0%, rgba(83, 103, 46, 0.16), transparent 38%);
+}
+
+.session-list {
+  margin-top: 12px;
+}
+
+.session-card {
+  border: 1px solid rgba(83, 103, 46, 0.18);
+  border-radius: 22px;
+  padding: 16px;
+  background: rgba(255, 248, 232, 0.72);
+}
+
+.session-card p {
+  margin: 8px 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.session-card small {
+  display: block;
+  color: var(--moss);
+  font-weight: 800;
+}
+
+.session-card button {
+  width: 100%;
+  margin-top: 12px;
+  border: 0;
+  border-radius: 14px;
+  padding: 11px 12px;
+  background: var(--moss);
+  color: #fff8ea;
+  font-weight: 900;
 }
 
 .policy-panel {
