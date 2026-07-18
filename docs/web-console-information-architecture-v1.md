@@ -88,15 +88,19 @@ Implemented Phase 2.1:
 - Review Queue is represented as a top message reminder and expands into an in-window review panel when needed.
 - Task, Review, and Session counts are compact top status capsules rather than large dashboard cards, so the active loop remains the primary focus.
 
-Next implementation slices:
-
 Implemented Phase 3.1:
 
 - Left navigation now switches between the active task workspace and the Replay & Audit module.
 - Replay & Audit reads the selected LoopRun snapshot and renders a unified audit trail from session events, evidence, decisions, actions, and pending reviews.
 - Non-implemented navigation items use in-window placeholders instead of popups or dropdowns, preserving the one-window rule.
 
+Implemented Phase 3.2:
+
+- Policy Center now exposes the built-in policy set in the same desktop window.
+- Users can choose the default policy, toggle policy availability, and adjust auto-resume settings locally.
+- Default review rules are visible with enable/disable and priority controls so the audit gate can be tuned without leaving the workspace.
+
 Next implementation slices:
 
 - Expand Replay & Audit with filters and linked detail inspection.
-- Add dedicated Policy Center rule management.
+- Wire Policy Center selection into backend policy persistence and review gating.

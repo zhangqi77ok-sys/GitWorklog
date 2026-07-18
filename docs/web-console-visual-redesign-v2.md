@@ -314,6 +314,12 @@ The current UI supports these operations, but the redesign should make them feel
 - Show events, evidence, decisions, actions, and reviews in one chain.
 - Phase 4.1 starts with a single-window Replay & Audit module that uses compact summary chips and an internally scrollable audit chain.
 
+### Phase 5: Policy Center
+
+- Add a desktop-first Policy Center that keeps built-in policies visible in one window.
+- Default policy choice, policy enable/disable, and rule priority controls should be calm, dense, and inspectable.
+- Policy editing should feel like configuration inside the control plane, not a separate settings site.
+
 ## Acceptance Criteria
 
 The redesigned console is acceptable when:

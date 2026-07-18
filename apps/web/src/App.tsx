@@ -16,6 +16,16 @@ import {
   type ConsoleSessionItem,
   type ConsoleTaskItem,
 } from "./desktop-data";
+import {
+  loadPolicyCenterState,
+  savePolicyCenterState,
+  selectPolicy,
+  setRulePriority,
+  togglePolicyEnabled,
+  toggleRuleEnabled,
+  updatePolicyAutoResume,
+  type PolicyCenterState,
+} from "./policy-center-state";
 
 const navItems = ["任务", "循环详情", "审核队列", "策略中心", "回放审计"];
 type NavItem = (typeof navItems)[number];
@@ -81,6 +91,7 @@ export function App() {
   const [notice, setNotice] = useState("桌面控制台已就绪");
   const [isReviewPanelOpen, setIsReviewPanelOpen] = useState(false);
   const [activeNavItem, setActiveNavItem] = useState<NavItem>(() => navItemFromHash(window.location.hash));
+  const [policyState, setPolicyState] = useState<PolicyCenterState>(() => loadPolicyState());
 
   async function refreshConsoleData() {
     const data = await loadConsoleData(window.gitWorklog);
@@ -120,6 +131,10 @@ export function App() {
       active = false;
     };
   }, [selectedTask?.loopRunId]);
+
+  useEffect(() => {
+    savePolicyCenterState(window.localStorage, policyState);
+  }, [policyState]);
 
   async function handleCreateTask(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -211,6 +226,33 @@ export function App() {
     setIsBusy(false);
   }
 
+  function handleSelectPolicy(policyId: string) {
+    setPolicyState((current) => {
+      const next = selectPolicy(current, policyId);
+      setNotice(`已切换默认策略：${policyLabelFromState(next, policyId)}`);
+      return next;
+    });
+  }
+
+  function handleTogglePolicy(policyId: string) {
+    setPolicyState((current) => togglePolicyEnabled(current, policyId));
+  }
+
+  function handleToggleRule(ruleId: string) {
+    setPolicyState((current) => toggleRuleEnabled(current, ruleId));
+  }
+
+  function handleRulePriority(ruleId: string, delta: number) {
+    setPolicyState((current) => {
+      const rule = current.rules.find((candidate) => candidate.ruleId === ruleId);
+      return rule ? setRulePriority(current, ruleId, rule.priority + delta) : current;
+    });
+  }
+
+  function handlePolicyAutoResume(policyId: string, enabled: boolean, limit: number) {
+    setPolicyState((current) => updatePolicyAutoResume(current, policyId, enabled, limit));
+  }
+
   return (
     <main className="desktop-shell">
       <aside className="side-rail">
@@ -274,6 +316,15 @@ export function App() {
 
         {activeNavItem === "回放审计" ? (
           <ReplayAuditView auditTrail={loopSnapshot?.auditTrail ?? []} selectedTask={selectedTask} snapshot={loopSnapshot} />
+        ) : activeNavItem === "策略中心" ? (
+          <PolicyCenterView
+            onPolicyAutoResume={handlePolicyAutoResume}
+            onSelectPolicy={handleSelectPolicy}
+            onTogglePolicy={handleTogglePolicy}
+            onToggleRule={handleToggleRule}
+            onRulePriority={handleRulePriority}
+            policyState={policyState}
+          />
         ) : activeNavItem === "任务" || activeNavItem === "循环详情" ? (
           <section className="workbench-canvas">
             <article className="panel loop-zone">
@@ -568,6 +619,119 @@ function WorkbenchPlaceholder(props: { activeNavItem: NavItem }) {
   );
 }
 
+function PolicyCenterView(props: {
+  policyState: PolicyCenterState;
+  onSelectPolicy(policyId: string): void;
+  onTogglePolicy(policyId: string): void;
+  onPolicyAutoResume(policyId: string, enabled: boolean, limit: number): void;
+  onToggleRule(ruleId: string): void;
+  onRulePriority(ruleId: string, delta: number): void;
+}) {
+  const selectedPolicy = props.policyState.policies.find((policy) => policy.policyId === props.policyState.selectedPolicyId);
+  const enabledRuleCount = props.policyState.rules.filter((rule) => rule.enabled).length;
+  return (
+    <section className="policy-workbench">
+      <article className="panel policy-hero">
+        <div>
+          <p className="eyebrow">策略中心</p>
+          <h2>默认策略与审核规则</h2>
+          <p>把默认使用的策略、自动续跑上限和审核规则都收在一个窗口里，避免跑到别的页面里找设置。</p>
+        </div>
+        <div className="policy-summary">
+          <Metric label="策略" value={String(props.policyState.policies.length)} caption="内置策略" />
+          <Metric label="规则" value={String(props.policyState.rules.length)} caption="内置规则" />
+          <Metric label="启用" value={String(enabledRuleCount)} caption="当前启用规则" />
+          <Metric label="默认" value={selectedPolicy?.name ?? "未知"} caption="当前选中策略" />
+        </div>
+      </article>
+
+      <article className="panel policy-grid">
+        <div className="section-heading">
+          <p className="eyebrow">内置策略</p>
+          <h2>选择默认使用哪个</h2>
+        </div>
+        <div className="policy-card-grid">
+          {props.policyState.policies.map((policy) => (
+            <article className={policy.policyId === props.policyState.selectedPolicyId ? "policy-card selected" : "policy-card"} key={policy.policyId}>
+              <div className="policy-card-head">
+                <div>
+                  <strong>{policy.name}</strong>
+                  <p>{policy.description}</p>
+                </div>
+                <span className={policy.enabled ? "status-pill" : "status-pill status-failed"}>{policy.enabled ? "启用" : "停用"}</span>
+              </div>
+              <div className="policy-card-meta">
+                <span>模式：{policy.mode}</span>
+                <span>自动续跑：{policy.autoResumeEnabled ? `开 / ${policy.autoResumeLimit}` : "关"}</span>
+              </div>
+              <div className="policy-card-actions">
+                <button onClick={() => props.onSelectPolicy(policy.policyId)} type="button">
+                  设为默认
+                </button>
+                <button onClick={() => props.onTogglePolicy(policy.policyId)} type="button">
+                  {policy.enabled ? "停用" : "启用"}
+                </button>
+              </div>
+              <div className="policy-card-footer">
+                <label>
+                  自动续跑
+                  <button onClick={() => props.onPolicyAutoResume(policy.policyId, !policy.autoResumeEnabled, policy.autoResumeLimit)} type="button">
+                    {policy.autoResumeEnabled ? "关闭" : "开启"}
+                  </button>
+                </label>
+                <label>
+                  上限
+                  <input
+                    min="0"
+                    max="9"
+                    type="number"
+                    value={policy.autoResumeLimit}
+                    onChange={(event) =>
+                      props.onPolicyAutoResume(policy.policyId, policy.autoResumeEnabled, Number(event.target.value))
+                    }
+                  />
+                </label>
+              </div>
+            </article>
+          ))}
+        </div>
+      </article>
+
+      <article className="panel policy-rules">
+        <div className="section-heading">
+          <p className="eyebrow">审核规则</p>
+          <h2>管理默认规则</h2>
+        </div>
+        <div className="policy-rule-list">
+          {props.policyState.rules.map((rule) => (
+            <article className="policy-rule-card" key={rule.ruleId}>
+              <div>
+                <strong>{rule.title}</strong>
+                <p>{rule.description}</p>
+              </div>
+              <div className="policy-rule-meta">
+                <span>{rule.severity === "high" ? "高风险" : rule.severity === "medium" ? "中风险" : "低风险"}</span>
+                <span>优先级 {rule.priority}</span>
+              </div>
+              <div className="policy-rule-actions">
+                <button onClick={() => props.onToggleRule(rule.ruleId)} type="button">
+                  {rule.enabled ? "停用" : "启用"}
+                </button>
+                <button onClick={() => props.onRulePriority(rule.ruleId, -5)} type="button">
+                  上移
+                </button>
+                <button onClick={() => props.onRulePriority(rule.ruleId, 5)} type="button">
+                  下移
+                </button>
+              </div>
+            </article>
+          ))}
+        </div>
+      </article>
+    </section>
+  );
+}
+
 const auditKindLabels: Record<ConsoleAuditTrailItem["kind"], string> = {
   event: "事件",
   evidence: "证据",
@@ -579,4 +743,12 @@ const auditKindLabels: Record<ConsoleAuditTrailItem["kind"], string> = {
 function navItemFromHash(hash: string): NavItem {
   const normalizedHash = hash.replace(/^#/, "");
   return navItems.find((item) => navHashMap[item] === normalizedHash) ?? "任务";
+}
+
+function loadPolicyState(): PolicyCenterState {
+  return loadPolicyCenterState(typeof window === "undefined" ? undefined : window.localStorage);
+}
+
+function policyLabelFromState(state: PolicyCenterState, policyId: string): string {
+  return state.policies.find((policy) => policy.policyId === policyId)?.name ?? policyId;
 }

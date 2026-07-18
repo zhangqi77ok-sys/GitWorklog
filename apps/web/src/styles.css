@@ -455,7 +455,18 @@ h3 {
   overflow: hidden;
 }
 
+.policy-workbench {
+  display: grid;
+  min-height: 0;
+  gap: 10px;
+  overflow: hidden;
+}
+
 .replay-workbench {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.policy-workbench {
   grid-template-rows: auto minmax(0, 1fr);
 }
 
@@ -492,6 +503,162 @@ h3 {
 
 .replay-summary .metric-card {
   padding: 10px;
+}
+
+.policy-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 0.74fr) minmax(360px, 1fr);
+  gap: 14px;
+  align-items: center;
+  background:
+    linear-gradient(180deg, rgba(23, 28, 36, 0.96), rgba(17, 21, 27, 0.92)),
+    radial-gradient(circle at 100% 0%, rgba(88, 166, 255, 0.12), transparent 36%);
+}
+
+.policy-hero h2 {
+  margin-bottom: 8px;
+  font-size: clamp(23px, 2.1vw, 31px);
+}
+
+.policy-hero p {
+  margin-bottom: 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.policy-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.policy-summary .metric-card {
+  padding: 10px;
+}
+
+.policy-grid,
+.policy-rules {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.policy-card-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  max-height: 100%;
+  overflow: auto;
+}
+
+.policy-card {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 13px;
+  background: rgba(11, 13, 16, 0.46);
+}
+
+.policy-card.selected {
+  border-color: rgba(88, 166, 255, 0.4);
+  box-shadow: inset 0 0 0 1px rgba(88, 166, 255, 0.24);
+}
+
+.policy-card-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+}
+
+.policy-card-head strong,
+.policy-rule-card strong {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.policy-card-head p,
+.policy-rule-card p {
+  margin-bottom: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.policy-card-meta,
+.policy-rule-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--faint);
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+.policy-card-actions,
+.policy-card-footer,
+.policy-rule-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.policy-card-actions button,
+.policy-card-footer button,
+.policy-rule-actions button {
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-control);
+  padding: 8px 11px;
+  background: rgba(23, 28, 36, 0.88);
+  color: var(--ink);
+  font-weight: 760;
+}
+
+.policy-card-footer {
+  align-items: end;
+}
+
+.policy-card-footer label {
+  min-width: 0;
+  flex: 1 1 0;
+}
+
+.policy-card-footer input {
+  min-width: 0;
+}
+
+.policy-rule-list {
+  display: grid;
+  gap: 10px;
+  max-height: 100%;
+  overflow: auto;
+}
+
+.policy-rule-card {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 13px;
+  background: rgba(11, 13, 16, 0.46);
+}
+
+.policy-grid {
+  background:
+    linear-gradient(180deg, rgba(17, 21, 27, 0.96), rgba(14, 18, 24, 0.96)),
+    radial-gradient(circle at 100% 0%, rgba(88, 166, 255, 0.12), transparent 38%);
+}
+
+.policy-rules {
+  background:
+    linear-gradient(180deg, rgba(17, 21, 27, 0.95), rgba(14, 18, 24, 0.95)),
+    radial-gradient(circle at 0% 0%, rgba(188, 140, 255, 0.12), transparent 38%);
+}
+
+.policy-card-footer button:hover,
+.policy-card-actions button:hover,
+.policy-rule-actions button:hover {
+  border-color: rgba(88, 166, 255, 0.5);
+  color: var(--accent);
 }
 
 .replay-chain {
@@ -1096,6 +1263,14 @@ textarea {
   .replay-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .policy-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .policy-card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 1120px) {
@@ -1146,5 +1321,13 @@ textarea {
 
   .replay-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .policy-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .policy-card-grid {
+    grid-template-columns: 1fr;
   }
 }
