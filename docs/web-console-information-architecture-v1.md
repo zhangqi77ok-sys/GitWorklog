@@ -81,6 +81,13 @@ Implemented Phase 2:
 - Task queue is visually secondary to the active mission area.
 - The mission timeline is promoted above session status and control-flow explanation.
 
+Implemented Phase 2.1:
+
+- The permanent right inspector was removed from the default desktop layout.
+- Session discovery and policy explanation now live as modules inside the main workbench.
+- Review Queue is represented as a top message reminder and expands into an in-window review panel when needed.
+- Task, Review, and Session counts are compact top status capsules rather than large dashboard cards, so the active loop remains the primary focus.
+
 Next implementation slices:
 
 - Add Replay & Audit view for event/evidence/decision/action history.

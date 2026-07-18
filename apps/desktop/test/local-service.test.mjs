@@ -99,10 +99,11 @@ test("desktop service approves and rejects pending reviews with action status up
     const nextPending = service.listPendingReviews();
     const rejected = service.rejectReview({ reviewId: nextPending[0].reviewId, comment: "Needs a human" });
     const rejectedSnapshot = service.getLoopRunSnapshot(created.loopRun.loopRunId);
+    const rejectedAction = rejectedSnapshot.actions.find((action) => action.actionId === rejected.actionId);
 
     assert.equal(rejected.result, "rejected");
-    assert.equal(rejectedSnapshot.actions[0].status, "rejected");
-    assert.equal(rejectedSnapshot.actions[0].reviewStatus, "rejected");
+    assert.equal(rejectedAction.status, "rejected");
+    assert.equal(rejectedAction.reviewStatus, "rejected");
   } finally {
     service.close();
   }

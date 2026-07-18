@@ -325,6 +325,11 @@ The redesigned console is acceptable when:
 - The visual system can be extended to Replay, Policy, and Settings without another redesign.
 - Each completed UI phase is launched in the Electron desktop app for visual review before commit/push.
 - The desktop UI uses Chinese-first labels for navigation, status, metrics, buttons, and policy language; product names and necessary technical nouns may remain in English.
+- The desktop console should prefer one-window modular coverage: avoid permanent side inspectors and repeated popup/dropdown windows unless a workflow truly needs isolation.
+- Review approvals behave like message notifications first; users can expand the review panel inside the same window or navigate to a future dedicated review page.
+- A single navigation item should fit inside the desktop window. The page shell should not rely on full-page vertical scrolling; dense content should scroll inside its own module.
+- Notification UI must stay secondary to the active task. Review alerts should be compact badges or lightweight panels, not hero-size content blocks.
+- Top-level metrics such as task count, review count, and bound session count should be compact status capsules near the top of the workbench, not large cards inside the main task canvas.
 
 ## Non-Goals
 

@@ -69,6 +69,7 @@ export function App() {
   const [draft, setDraft] = useState({ title: "", goal: "", risk: "medium" });
   const [isBusy, setIsBusy] = useState(false);
   const [notice, setNotice] = useState("桌面控制台已就绪");
+  const [isReviewPanelOpen, setIsReviewPanelOpen] = useState(false);
 
   async function refreshConsoleData() {
     const data = await loadConsoleData(window.gitWorklog);
@@ -232,13 +233,25 @@ export function App() {
           </button>
         </header>
 
-        <section className="summary-strip">
+        <section className="summary-strip top-summary">
           <Metric label="任务" value={String(consoleData.tasks.length)} caption="当前任务队列" />
           <Metric label="审核" value={String(consoleData.pendingReviewCount)} caption="待人工审核" />
           <Metric label="会话" value={String(loopSnapshot?.sessionsCount ?? 0)} caption="当前循环绑定" />
         </section>
 
-        <section className="workspace-layout">
+        <div className="status-strip">
+          <button
+            className={consoleData.pendingReviewCount ? "review-alert" : "review-alert quiet"}
+            onClick={() => setIsReviewPanelOpen((current) => !current)}
+            type="button"
+          >
+            <span>{consoleData.pendingReviewCount}</span>
+            <strong>{consoleData.pendingReviewCount ? "待审核" : "无审核"}</strong>
+          </button>
+          <p>{notice}</p>
+        </div>
+
+        <section className="workbench-canvas">
           <article className="panel loop-zone">
             <div className="cockpit-header">
               <div>
@@ -372,74 +385,73 @@ export function App() {
               )}
             </div>
           </article>
+ 
+          <section className="panel sessions-panel">
+            <div className="section-heading">
+              <p className="eyebrow">会话发现</p>
+              <h2>Codex 会话</h2>
+            </div>
+            <button className="ghost-button full-width" disabled={isBusy} onClick={() => void handleDiscoverSessions()}>
+              扫描本地会话
+            </button>
+            <div className="session-list">
+              {discoveredSessions.length ? (
+                discoveredSessions.map((session) => (
+                  <article className="session-card" key={session.sessionId}>
+                    <strong>{session.title}</strong>
+                    <p>{session.projectPath ?? "未识别项目路径"}</p>
+                    <small>{session.lastEventAt ?? "未知活跃时间"}</small>
+                    <button disabled={isBusy} onClick={() => void handleBindSession(session)}>
+                      绑定到当前循环
+                    </button>
+                    <button disabled={isBusy} onClick={() => void handleIngestSession(session)}>
+                      导入事件到时间线
+                    </button>
+                  </article>
+                ))
+              ) : (
+                <p className="empty-state">点击扫描后，这里会显示本机可发现的 Codex 会话。</p>
+              )}
+            </div>
+          </section>
+
+          <section className="panel policy-panel">
+            <p className="eyebrow">策略</p>
+            <h2>保守续跑</h2>
+            <p>默认不直接自动续跑。涉及恢复提示或高风险动作时，先通过顶部消息提醒进入审核。</p>
+          </section>
+
+          {isReviewPanelOpen ? (
+            <section className="panel review-drawer" id="review-center">
+              <div className="section-heading">
+                <p className="eyebrow">审核提醒</p>
+                <h2>待审核动作</h2>
+              </div>
+              {consoleData.reviews.length ? (
+                <div className="review-list">
+                  {consoleData.reviews.map((review) => (
+                    <article className="review-card" key={review.reviewId}>
+                      <span className="status-pill">{labelFromMap(statusLabels, review.result, "待处理")}</span>
+                      <strong>动作 {review.actionId.slice(0, 8)}</strong>
+                      <p>{review.comment ?? "策略要求人工确认后再继续。"}</p>
+                      <div className="review-actions">
+                        <button disabled={isBusy} onClick={() => void handleReview(review.reviewId, "approved")}>
+                          批准
+                        </button>
+                        <button disabled={isBusy} onClick={() => void handleReview(review.reviewId, "rejected")}>
+                          拒绝
+                        </button>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <p className="empty-state">当前没有待审核动作。高风险动作会先在这里提醒你确认。</p>
+              )}
+            </section>
+          ) : null}
         </section>
       </section>
-
-      <aside className="inspector">
-        <section className="panel sessions-panel">
-          <div className="section-heading">
-            <p className="eyebrow">会话发现</p>
-            <h2>Codex 会话</h2>
-          </div>
-          <button className="ghost-button full-width" disabled={isBusy} onClick={() => void handleDiscoverSessions()}>
-            扫描本地会话
-          </button>
-          <div className="session-list">
-            {discoveredSessions.length ? (
-              discoveredSessions.map((session) => (
-                <article className="session-card" key={session.sessionId}>
-                  <strong>{session.title}</strong>
-                  <p>{session.projectPath ?? "未识别项目路径"}</p>
-                  <small>{session.lastEventAt ?? "未知活跃时间"}</small>
-                  <button disabled={isBusy} onClick={() => void handleBindSession(session)}>
-                    绑定到当前循环
-                  </button>
-                  <button disabled={isBusy} onClick={() => void handleIngestSession(session)}>
-                    导入事件到时间线
-                  </button>
-                </article>
-              ))
-            ) : (
-              <p className="empty-state">点击扫描后，这里会显示本机可发现的 Codex 会话。</p>
-            )}
-          </div>
-        </section>
-
-        <section className="panel review-panel">
-          <div className="section-heading">
-            <p className="eyebrow">审核队列</p>
-            <h2>待审核动作</h2>
-          </div>
-
-          {consoleData.reviews.length ? (
-            <div className="review-list">
-              {consoleData.reviews.map((review) => (
-                <article className="review-card" key={review.reviewId}>
-                  <span className="status-pill">{labelFromMap(statusLabels, review.result, "待处理")}</span>
-                  <strong>动作 {review.actionId.slice(0, 8)}</strong>
-                  <p>{review.comment ?? "策略要求人工确认后再继续。"}</p>
-                  <div className="review-actions">
-                    <button disabled={isBusy} onClick={() => void handleReview(review.reviewId, "approved")}>
-                      批准
-                    </button>
-                    <button disabled={isBusy} onClick={() => void handleReview(review.reviewId, "rejected")}>
-                      拒绝
-                    </button>
-                  </div>
-                </article>
-              ))}
-            </div>
-          ) : (
-            <p className="empty-state">暂无待审核动作。系统会在高风险或保守策略触发时把动作放到这里。</p>
-          )}
-        </section>
-
-        <section className="panel policy-panel">
-          <p className="eyebrow">策略</p>
-          <h2>保守续跑</h2>
-          <p>默认不直接自动续跑。涉及恢复提示或高风险动作时，先进入审核队列。</p>
-        </section>
-      </aside>
     </main>
   );
 }
@@ -457,7 +469,7 @@ function Metric(props: { label: string; value: string; caption: string }) {
 function TaskCard(props: { task: ConsoleTaskItem; isSelected: boolean; onSelect(): void }) {
   return (
     <button className={props.isSelected ? "task-card selected" : "task-card"} onClick={props.onSelect}>
-      <span className="status-pill">{props.task.status}</span>
+      <span className="status-pill">{labelFromMap(statusLabels, props.task.status, "未知状态")}</span>
       <strong>{props.task.title}</strong>
       <p>{props.task.goal}</p>
       <small>
