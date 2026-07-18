@@ -15,9 +15,14 @@ export interface ConsoleSessionItem {
   lastEventAt?: string;
 }
 
+export interface ConsoleBoundSessionItem extends ConsoleSessionItem {
+  status: string;
+}
+
 export interface ConsoleLoopSnapshot {
   loopRunId: string;
   status: string;
+  sessions: ConsoleBoundSessionItem[];
   sessionsCount: number;
   eventsCount: number;
   evidencesCount: number;
@@ -282,6 +287,7 @@ function toConsoleLoopSnapshot(item: unknown): ConsoleLoopSnapshot | undefined {
   return {
     loopRunId,
     status: readString(item.loopRun.status) ?? "unknown",
+    sessions: readArray(item.sessions).map(toConsoleBoundSessionItem).filter(isConsoleBoundSessionItem),
     sessionsCount: readArray(item.sessions).length,
     eventsCount: readArray(item.sessionEvents).length,
     evidencesCount: readArray(item.evidences).length,
@@ -289,6 +295,18 @@ function toConsoleLoopSnapshot(item: unknown): ConsoleLoopSnapshot | undefined {
     actionsCount: readArray(item.actions).length,
     pendingReviewsCount: readArray(item.pendingReviews).length,
     timeline: readArray(item.sessionEvents).map(toConsoleTimelineItem).filter(isConsoleTimelineItem),
+  };
+}
+
+function toConsoleBoundSessionItem(item: unknown): ConsoleBoundSessionItem | undefined {
+  const session = toConsoleSessionItem(item);
+  if (!session || !isRecord(item)) {
+    return undefined;
+  }
+
+  return {
+    ...session,
+    status: readString(item.status) ?? "unknown",
   };
 }
 
@@ -359,6 +377,10 @@ function isConsoleReviewItem(value: ConsoleReviewItem | undefined): value is Con
 }
 
 function isConsoleSessionItem(value: ConsoleSessionItem | undefined): value is ConsoleSessionItem {
+  return Boolean(value);
+}
+
+function isConsoleBoundSessionItem(value: ConsoleBoundSessionItem | undefined): value is ConsoleBoundSessionItem {
   return Boolean(value);
 }
 

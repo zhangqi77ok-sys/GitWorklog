@@ -601,6 +601,16 @@ export class SessionRepository {
       .get(sessionId) as SessionRow | undefined;
     return row ? toSession(row) : null;
   }
+
+  updateStatus(sessionId: string, status: string): SessionMeta {
+    this.database.prepare("UPDATE sessions SET status = ? WHERE session_id = ?").run(status, sessionId);
+
+    const updated = this.get(sessionId);
+    if (!updated) {
+      throw new Error(`Session not found: ${sessionId}`);
+    }
+    return updated;
+  }
 }
 
 export class SessionEventRepository {

@@ -146,6 +146,7 @@ export class DesktopAppService {
         importedCount += 1;
       }
     }
+    this.store.sessions.updateStatus(session.sessionId, normalizeSessionStatus(events, session.status));
 
     return { importedCount };
   }
@@ -222,6 +223,25 @@ export class DesktopAppService {
     }
     return loopRun;
   }
+}
+
+function normalizeSessionStatus(
+  events: Array<{ eventType: string; payload: Record<string, unknown> }>,
+  fallback: string,
+): string {
+  if (events.some(isFailureEvent)) {
+    return "failed";
+  }
+  return events.length ? "running" : fallback;
+}
+
+function isFailureEvent(event: { eventType: string; payload: Record<string, unknown> }): boolean {
+  if (["tool_error", "error", "exception"].includes(event.eventType)) {
+    return true;
+  }
+
+  const exitCode = event.payload.exitCode;
+  return typeof exitCode === "number" && exitCode !== 0;
 }
 
 export function createDesktopAppService(options: DesktopAppServiceOptions = {}): DesktopAppService {

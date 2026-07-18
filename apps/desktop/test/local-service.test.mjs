@@ -249,3 +249,48 @@ test("desktop service skips duplicate events when ingesting the same session sou
     service.close();
   }
 });
+
+test("desktop service marks a bound session as failed when ingested events contain a failing tool result", async () => {
+  const service = createDesktopAppService({
+    databasePath: ":memory:",
+    connector: {
+      connectorId: "fake",
+      displayName: "Fake connector",
+      discoverSessions: async () => [],
+      readSessionEvents: async () => [
+        {
+          eventType: "tool_result",
+          payload: { command: "npm test", exitCode: 1 },
+          createdAt: "2026-07-18T04:00:00.000Z",
+        },
+      ],
+    },
+  });
+
+  try {
+    const created = service.createTaskAndRun({
+      task: {
+        title: "Normalize session status",
+        goal: "Failed tool results should make session state obvious",
+      },
+    });
+    const session = service.bindDiscoveredSession({
+      loopRunId: created.loopRun.loopRunId,
+      session: {
+        sessionId: "failed-session-1",
+        title: "Failed session",
+        sourcePath: "C:/tmp/failed.jsonl",
+      },
+    });
+
+    await service.ingestSessionEvents({
+      loopRunId: created.loopRun.loopRunId,
+      sessionId: session.sessionId,
+    });
+    const snapshot = service.getLoopRunSnapshot(created.loopRun.loopRunId);
+
+    assert.equal(snapshot.sessions[0].status, "failed");
+  } finally {
+    service.close();
+  }
+});

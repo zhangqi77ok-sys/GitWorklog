@@ -255,6 +255,24 @@ export function App() {
               <Metric label="Action" value={String(loopSnapshot?.actionsCount ?? 0)} caption="动作记录" />
             </div>
 
+            <div className="bound-sessions">
+              <div className="section-heading compact">
+                <p className="eyebrow">Session State</p>
+                <h3>绑定会话状态</h3>
+              </div>
+              {loopSnapshot?.sessions.length ? (
+                loopSnapshot.sessions.map((session) => (
+                  <article className="bound-session-card" key={session.sessionId}>
+                    <span className={`status-pill status-${session.status}`}>{session.status}</span>
+                    <strong>{session.title}</strong>
+                    <p>{session.projectPath ?? "未识别项目路径"}</p>
+                  </article>
+                ))
+              ) : (
+                <p className="empty-state">绑定并导入会话后，这里会显示 running / failed 等基础状态。</p>
+              )}
+            </div>
+
             <div className="event-timeline">
               <div className="section-heading compact">
                 <p className="eyebrow">Replay Seed</p>

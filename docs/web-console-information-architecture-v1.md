@@ -26,6 +26,7 @@ The next console iteration uses a desktop-oriented control surface instead of a 
 - Selected LoopRun snapshot: the main workspace shows live counts for sessions, evidences, decisions, actions, and pending reviews.
 - Session Discovery: the right inspector can scan local Codex sessions and bind one to the selected LoopRun.
 - Replay seed timeline: Loop Detail shows recent session events from the selected LoopRun so users can see the beginning of an audit trail before the full Replay page exists.
+- Bound session state: Loop Detail shows normalized session state such as `running` and `failed` for the selected LoopRun.
 
 Interaction rules:
 
@@ -35,6 +36,7 @@ Interaction rules:
 - Binding a session refreshes task data and the selected LoopRun snapshot.
 - Session events in the selected snapshot render newest first and use short readable summaries.
 - Session cards expose an explicit import action that reads bound Codex JSONL events and refreshes the selected snapshot.
+- Importing events refreshes normalized bound session status so failure signals are visible without opening the raw transcript.
 - Risk and policy language stays visible near destructive or automation-related actions.
 
 ## Wiring Plan

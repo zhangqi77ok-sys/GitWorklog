@@ -127,7 +127,7 @@ test("loads selected loop snapshot counts through the desktop bridge", async () 
       loopRuns: {
         snapshot: async (loopRunId) => ({
           loopRun: { loopRunId, status: "needs_review" },
-          sessions: [{ sessionId: "session-1" }],
+          sessions: [{ sessionId: "session-1", title: "Failed session", status: "failed" }],
           evidences: [{ evidenceId: "evidence-1" }, { evidenceId: "evidence-2" }],
           decisions: [{ decisionId: "decision-1" }],
           actions: [{ actionId: "action-1" }],
@@ -149,6 +149,8 @@ test("loads selected loop snapshot counts through the desktop bridge", async () 
 
   assert.equal(snapshot.loopRunId, "run-1");
   assert.equal(snapshot.sessionsCount, 1);
+  assert.equal(snapshot.sessions[0].title, "Failed session");
+  assert.equal(snapshot.sessions[0].status, "failed");
   assert.equal(snapshot.evidencesCount, 2);
   assert.equal(snapshot.decisionsCount, 1);
   assert.equal(snapshot.actionsCount, 1);

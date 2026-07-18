@@ -315,10 +315,15 @@ packages/
   - failed
   - interrupted
   - idle
+- v1 首批状态识别先落地：
+  - 导入到工具失败结果时标记为 `failed`
+  - 导入到正常事件且无失败信号时标记为 `running`
+  - Loop Detail 展示绑定会话的状态卡片
 
 完成标准：
 
 - Session 列表页能看到基础状态
+- 在独立 Session 列表页完成前，Loop Detail 先展示当前 LoopRun 的绑定会话状态
 
 ## 5.4 M3：上下文绑定与证据系统
 
