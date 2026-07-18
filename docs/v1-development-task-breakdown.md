@@ -209,6 +209,8 @@ packages/
 
 - 所有核心组件共享同一套 spacing、border、surface、status badge 规则
 - 组件视觉能延展到 Replay、Policy、Settings 页面
+- Phase 3.1 已让左侧导航具备基础切换能力，并新增“回放审计”模块作为第一个独立导航页
+- Phase 3.1 回放审计页在单窗口内展示当前 Loop 的事件、证据、决策、动作和审核链路，内容超出时仅模块内部滚动
 
 ## 5.1 M0：项目初始化
 
@@ -616,12 +618,19 @@ v1 先用规则实现
   - 最新事件排在前面
   - 工具结果优先摘要 command 和 exitCode
   - assistant/user 文本事件摘要前 140 字符
+- Web 控制台提供“回放审计”导航页，基于当前选中 LoopRun snapshot 生成统一 audit trail：
+  - event
+  - evidence
+  - decision
+  - action
+  - review
 
 完成标准：
 
 - 可完整回放一次“异常 -> 分析 -> 建议/审核 -> 动作”的流程
 - 选中任务时可以读取其最新 LoopRun snapshot
 - 选中任务时可以看到最近 session event 时间线
+- Phase 3.1 已完成第一版 Replay & Audit 页面：在同一桌面窗口内按时间倒序展示 audit trail，并提供空状态引导
 
 ## 6. v1 验收标准
 

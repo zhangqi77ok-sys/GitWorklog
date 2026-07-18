@@ -90,5 +90,13 @@ Implemented Phase 2.1:
 
 Next implementation slices:
 
-- Add Replay & Audit view for event/evidence/decision/action history.
-- Add a dedicated Replay & Audit page that combines session events, evidence, decisions, actions, and review results.
+Implemented Phase 3.1:
+
+- Left navigation now switches between the active task workspace and the Replay & Audit module.
+- Replay & Audit reads the selected LoopRun snapshot and renders a unified audit trail from session events, evidence, decisions, actions, and pending reviews.
+- Non-implemented navigation items use in-window placeholders instead of popups or dropdowns, preserving the one-window rule.
+
+Next implementation slices:
+
+- Expand Replay & Audit with filters and linked detail inspection.
+- Add dedicated Policy Center rule management.

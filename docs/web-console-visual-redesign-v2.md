@@ -312,6 +312,7 @@ The current UI supports these operations, but the redesign should make them feel
 
 - Add dedicated Replay & Audit page using the same timeline system.
 - Show events, evidence, decisions, actions, and reviews in one chain.
+- Phase 4.1 starts with a single-window Replay & Audit module that uses compact summary chips and an internally scrollable audit chain.
 
 ## Acceptance Criteria
 

@@ -30,12 +30,22 @@ export interface ConsoleLoopSnapshot {
   actionsCount: number;
   pendingReviewsCount: number;
   timeline: ConsoleTimelineItem[];
+  auditTrail: ConsoleAuditTrailItem[];
 }
 
 export interface ConsoleTimelineItem {
   id: string;
   title: string;
   detail: string;
+  createdAt?: string;
+}
+
+export interface ConsoleAuditTrailItem {
+  id: string;
+  kind: "event" | "evidence" | "decision" | "action" | "review";
+  title: string;
+  detail: string;
+  meta?: string;
   createdAt?: string;
 }
 
@@ -309,6 +319,122 @@ function toConsoleLoopSnapshot(item: unknown): ConsoleLoopSnapshot | undefined {
     actionsCount: readArray(item.actions).length,
     pendingReviewsCount: readArray(item.pendingReviews).length,
     timeline: readArray(item.sessionEvents).map(toConsoleTimelineItem).filter(isConsoleTimelineItem),
+    auditTrail: buildAuditTrail(item),
+  };
+}
+
+function buildAuditTrail(snapshot: Record<string, unknown>): ConsoleAuditTrailItem[] {
+  return [
+    ...readArray(snapshot.sessionEvents).map(toAuditEvent),
+    ...readArray(snapshot.evidences).map(toAuditEvidence),
+    ...readArray(snapshot.decisions).map(toAuditDecision),
+    ...readArray(snapshot.actions).map(toAuditAction),
+    ...readArray(snapshot.pendingReviews).map(toAuditReview),
+  ]
+    .filter(isConsoleAuditTrailItem)
+    .sort((left, right) => readTimestamp(right.createdAt) - readTimestamp(left.createdAt));
+}
+
+function toAuditEvent(item: unknown): ConsoleAuditTrailItem | undefined {
+  const timelineItem = toConsoleTimelineItem(item);
+  if (!timelineItem) {
+    return undefined;
+  }
+
+  return {
+    id: timelineItem.id,
+    kind: "event",
+    title: `事件 ${timelineItem.title}`,
+    detail: timelineItem.detail,
+    createdAt: timelineItem.createdAt,
+  };
+}
+
+function toAuditEvidence(item: unknown): ConsoleAuditTrailItem | undefined {
+  if (!isRecord(item)) {
+    return undefined;
+  }
+
+  const id = readString(item.evidenceId);
+  const evidenceType = readString(item.evidenceType);
+  const snippet = readString(item.snippet);
+  if (!id || !evidenceType || !snippet) {
+    return undefined;
+  }
+
+  const confidence = typeof item.confidence === "number" ? `${Math.round(item.confidence * 100)}%` : undefined;
+  return {
+    id,
+    kind: "evidence",
+    title: `证据 ${evidenceType}`,
+    detail: snippet,
+    meta: confidence ? `置信度 ${confidence}` : undefined,
+    createdAt: readString(item.createdAt),
+  };
+}
+
+function toAuditDecision(item: unknown): ConsoleAuditTrailItem | undefined {
+  if (!isRecord(item)) {
+    return undefined;
+  }
+
+  const id = readString(item.decisionId);
+  const decisionType = readString(item.decisionType);
+  const reason = readString(item.reason);
+  if (!id || !decisionType || !reason) {
+    return undefined;
+  }
+
+  const riskLevel = readString(item.riskLevel);
+  return {
+    id,
+    kind: "decision",
+    title: `决策 ${decisionType}`,
+    detail: reason,
+    meta: riskLevel ? `风险 ${riskLevel}` : undefined,
+    createdAt: readString(item.createdAt),
+  };
+}
+
+function toAuditAction(item: unknown): ConsoleAuditTrailItem | undefined {
+  if (!isRecord(item)) {
+    return undefined;
+  }
+
+  const id = readString(item.actionId);
+  const actionType = readString(item.actionType);
+  if (!id || !actionType) {
+    return undefined;
+  }
+
+  return {
+    id,
+    kind: "action",
+    title: `动作 ${actionType}`,
+    detail: readString(item.message) ?? readString(item.status) ?? "已记录动作",
+    meta: readString(item.status),
+    createdAt: readString(item.createdAt),
+  };
+}
+
+function toAuditReview(item: unknown): ConsoleAuditTrailItem | undefined {
+  if (!isRecord(item)) {
+    return undefined;
+  }
+
+  const id = readString(item.reviewId);
+  const result = readString(item.result);
+  if (!id || !result) {
+    return undefined;
+  }
+
+  return {
+    id,
+    kind: "review",
+    title: `审核 ${result}`,
+    detail: readString(item.comment) ?? "等待人工审核",
+    meta: readString(item.actionId),
+    createdAt: readString(item.createdAt),
   };
 }
 
@@ -402,6 +528,10 @@ function isConsoleTimelineItem(value: ConsoleTimelineItem | undefined): value is
   return Boolean(value);
 }
 
+function isConsoleAuditTrailItem(value: ConsoleAuditTrailItem | undefined): value is ConsoleAuditTrailItem {
+  return Boolean(value);
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
@@ -412,6 +542,15 @@ function readArray(value: unknown): unknown[] {
 
 function readString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value : undefined;
+}
+
+function readTimestamp(value: string | undefined): number {
+  if (!value) {
+    return 0;
+  }
+
+  const timestamp = Date.parse(value);
+  return Number.isNaN(timestamp) ? 0 : timestamp;
 }
 
 function summarizeEventPayload(eventType: string, payload: Record<string, unknown>): string {

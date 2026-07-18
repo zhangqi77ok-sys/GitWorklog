@@ -161,6 +161,78 @@ test("loads selected loop snapshot counts through the desktop bridge", async () 
   assert.equal(snapshot.pendingReviewsCount, 1);
 });
 
+test("builds a replay audit trail from loop snapshot records", async () => {
+  const bridge = {
+    api: {
+      loopRuns: {
+        snapshot: async (loopRunId) => ({
+          loopRun: { loopRunId, status: "needs_review" },
+          sessions: [],
+          sessionEvents: [
+            {
+              eventId: "event-1",
+              eventType: "tool_result",
+              payload: { command: "npm test", exitCode: 1 },
+              createdAt: "2026-07-18T01:00:00.000Z",
+            },
+          ],
+          evidences: [
+            {
+              evidenceId: "evidence-1",
+              evidenceType: "tool_error",
+              snippet: "npm test failed",
+              confidence: 0.92,
+              createdAt: "2026-07-18T01:01:00.000Z",
+            },
+          ],
+          decisions: [
+            {
+              decisionId: "decision-1",
+              decisionType: "failure_detected",
+              reason: "工具命令失败，需要先修复测试",
+              riskLevel: "medium",
+              confidence: 0.81,
+              createdAt: "2026-07-18T01:02:00.000Z",
+            },
+          ],
+          actions: [
+            {
+              actionId: "action-1",
+              actionType: "suggest",
+              message: "先检查失败测试输出",
+              status: "pending_review",
+              requiresReview: true,
+              createdAt: "2026-07-18T01:03:00.000Z",
+            },
+          ],
+          pendingReviews: [
+            {
+              reviewId: "review-1",
+              actionId: "action-1",
+              result: "pending",
+              comment: "保守策略要求人工确认",
+              createdAt: "2026-07-18T01:04:00.000Z",
+            },
+          ],
+        }),
+      },
+    },
+  };
+
+  const snapshot = await loadLoopSnapshot(bridge, "run-1");
+
+  assert.deepEqual(
+    snapshot.auditTrail.map((entry) => [entry.kind, entry.title, entry.detail]),
+    [
+      ["review", "审核 pending", "保守策略要求人工确认"],
+      ["action", "动作 suggest", "先检查失败测试输出"],
+      ["decision", "决策 failure_detected", "工具命令失败，需要先修复测试"],
+      ["evidence", "证据 tool_error", "npm test failed"],
+      ["event", "事件 tool_result", "npm test 退出码 1"],
+    ],
+  );
+});
+
 test("discovers sessions and binds a selected session to a loop run", async () => {
   const calls = [];
   const bridge = {

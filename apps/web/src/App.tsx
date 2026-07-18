@@ -10,6 +10,7 @@ import {
   loadLoopSnapshot,
   runLoopAnalysis,
   submitTaskDraft,
+  type ConsoleAuditTrailItem,
   type ConsoleData,
   type ConsoleLoopSnapshot,
   type ConsoleSessionItem,
@@ -17,6 +18,15 @@ import {
 } from "./desktop-data";
 
 const navItems = ["任务", "循环详情", "审核队列", "策略中心", "回放审计"];
+type NavItem = (typeof navItems)[number];
+
+const navHashMap: Record<NavItem, string> = {
+  任务: "tasks",
+  循环详情: "loop-detail",
+  审核队列: "review-queue",
+  策略中心: "policy-center",
+  回放审计: "replay-audit",
+};
 
 const timeline = [
   { title: "任务建档", detail: "目标和约束进入本地控制面" },
@@ -70,6 +80,7 @@ export function App() {
   const [isBusy, setIsBusy] = useState(false);
   const [notice, setNotice] = useState("桌面控制台已就绪");
   const [isReviewPanelOpen, setIsReviewPanelOpen] = useState(false);
+  const [activeNavItem, setActiveNavItem] = useState<NavItem>(() => navItemFromHash(window.location.hash));
 
   async function refreshConsoleData() {
     const data = await loadConsoleData(window.gitWorklog);
@@ -92,6 +103,11 @@ export function App() {
   }, []);
 
   const selectedTask = consoleData.tasks.find((task) => task.id === selectedTaskId) ?? consoleData.tasks[0];
+
+  function handleSelectNavItem(item: NavItem) {
+    setActiveNavItem(item);
+    window.history.replaceState(null, "", `#${navHashMap[item]}`);
+  }
 
   useEffect(() => {
     let active = true;
@@ -208,7 +224,12 @@ export function App() {
 
         <nav className="nav-stack" aria-label="主导航">
           {navItems.map((item, index) => (
-            <button className={index === 0 ? "nav-item active" : "nav-item"} key={item}>
+            <button
+              className={item === activeNavItem ? "nav-item active" : "nav-item"}
+              key={item}
+              onClick={() => handleSelectNavItem(item)}
+              type="button"
+            >
               <span>{String(index + 1).padStart(2, "0")}</span>
               {item}
             </button>
@@ -251,8 +272,11 @@ export function App() {
           <p>{notice}</p>
         </div>
 
-        <section className="workbench-canvas">
-          <article className="panel loop-zone">
+        {activeNavItem === "回放审计" ? (
+          <ReplayAuditView auditTrail={loopSnapshot?.auditTrail ?? []} selectedTask={selectedTask} snapshot={loopSnapshot} />
+        ) : activeNavItem === "任务" || activeNavItem === "循环详情" ? (
+          <section className="workbench-canvas">
+            <article className="panel loop-zone">
             <div className="cockpit-header">
               <div>
                 <p className="eyebrow">当前循环</p>
@@ -329,7 +353,7 @@ export function App() {
             </div>
           </article>
 
-          <article className="panel task-zone">
+            <article className="panel task-zone">
             <div className="section-heading">
               <p className="eyebrow">任务运行</p>
               <h2>任务队列</h2>
@@ -386,7 +410,7 @@ export function App() {
             </div>
           </article>
  
-          <section className="panel sessions-panel">
+            <section className="panel sessions-panel">
             <div className="section-heading">
               <p className="eyebrow">会话发现</p>
               <h2>Codex 会话</h2>
@@ -415,7 +439,7 @@ export function App() {
             </div>
           </section>
 
-          <section className="panel policy-panel">
+            <section className="panel policy-panel">
             <p className="eyebrow">策略</p>
             <h2>保守续跑</h2>
             <p>默认不直接自动续跑。涉及恢复提示或高风险动作时，先通过顶部消息提醒进入审核。</p>
@@ -450,7 +474,10 @@ export function App() {
               )}
             </section>
           ) : null}
-        </section>
+          </section>
+        ) : (
+          <WorkbenchPlaceholder activeNavItem={activeNavItem} />
+        )}
       </section>
     </main>
   );
@@ -477,4 +504,79 @@ function TaskCard(props: { task: ConsoleTaskItem; isSelected: boolean; onSelect(
       </small>
     </button>
   );
+}
+
+function ReplayAuditView(props: {
+  auditTrail: ConsoleAuditTrailItem[];
+  selectedTask: ConsoleTaskItem | undefined;
+  snapshot: ConsoleLoopSnapshot | undefined;
+}) {
+  return (
+    <section className="replay-workbench">
+      <article className="panel replay-hero">
+        <div>
+          <p className="eyebrow">回放审计</p>
+          <h2>{props.selectedTask?.title ?? "等待选择任务"}</h2>
+          <p>把当前 Loop 的会话事件、证据、决策、动作和审核结果串成一条可检查链路。</p>
+        </div>
+        <div className="replay-summary">
+          <Metric label="事件" value={String(props.snapshot?.eventsCount ?? 0)} caption="会话输入" />
+          <Metric label="证据" value={String(props.snapshot?.evidencesCount ?? 0)} caption="结构化依据" />
+          <Metric label="决策" value={String(props.snapshot?.decisionsCount ?? 0)} caption="分析判断" />
+          <Metric label="动作" value={String(props.snapshot?.actionsCount ?? 0)} caption="建议/执行" />
+        </div>
+      </article>
+
+      <article className="panel replay-chain">
+        <div className="section-heading">
+          <p className="eyebrow">审计链路</p>
+          <h2>最近记录</h2>
+        </div>
+        {props.auditTrail.length ? (
+          <div className="audit-list">
+            {props.auditTrail.map((entry) => (
+              <article className={`audit-entry audit-${entry.kind}`} key={`${entry.kind}-${entry.id}`}>
+                <span className="audit-kind">{auditKindLabels[entry.kind]}</span>
+                <div>
+                  <strong>{entry.title}</strong>
+                  <p>{entry.detail}</p>
+                  <small>
+                    {entry.createdAt ?? "未知时间"}
+                    {entry.meta ? ` · ${entry.meta}` : ""}
+                  </small>
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <p className="empty-state">还没有可回放记录。先绑定 Codex 会话、导入事件，然后运行当前循环分析。</p>
+        )}
+      </article>
+    </section>
+  );
+}
+
+function WorkbenchPlaceholder(props: { activeNavItem: NavItem }) {
+  return (
+    <section className="placeholder-workbench">
+      <article className="panel placeholder-panel">
+        <p className="eyebrow">模块规划中</p>
+        <h2>{props.activeNavItem}</h2>
+        <p>这个导航项会在后续阶段扩展为独立模块。当前窗口先保持单页覆盖，不用弹出额外窗口。</p>
+      </article>
+    </section>
+  );
+}
+
+const auditKindLabels: Record<ConsoleAuditTrailItem["kind"], string> = {
+  event: "事件",
+  evidence: "证据",
+  decision: "决策",
+  action: "动作",
+  review: "审核",
+};
+
+function navItemFromHash(hash: string): NavItem {
+  const normalizedHash = hash.replace(/^#/, "");
+  return navItems.find((item) => navHashMap[item] === normalizedHash) ?? "任务";
 }
