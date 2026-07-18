@@ -26,6 +26,8 @@ test("loads task and review data from the desktop bridge when available", async 
       },
       reviews: {
         listPending: async () => [{ reviewId: "review-1", actionId: "action-1", result: "pending" }],
+        approve: async (input) => ({ ...input, result: "approved" }),
+        reject: async (input) => ({ ...input, result: "rejected" }),
       },
     },
   };

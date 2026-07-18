@@ -100,5 +100,6 @@ export type {
   CreateTaskAndRunInput,
   DesktopAppServiceOptions,
   LoopRunSnapshot,
+  ReviewDecisionInput,
   TaskListItem,
 } from "./local-service.js";

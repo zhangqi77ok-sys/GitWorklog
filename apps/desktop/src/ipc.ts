@@ -1,4 +1,9 @@
-import type { BindDiscoveredSessionInput, CreateTaskAndRunInput, DesktopAppService } from "./local-service.js";
+import type {
+  BindDiscoveredSessionInput,
+  CreateTaskAndRunInput,
+  DesktopAppService,
+  ReviewDecisionInput,
+} from "./local-service.js";
 import type { CreateSessionEventInput } from "@gitworklog/shared-types";
 
 export interface IpcMainLike {
@@ -29,6 +34,8 @@ export interface DesktopIpcApi {
   };
   reviews: {
     listPending(): Promise<unknown>;
+    approve(input: ReviewDecisionInput): Promise<unknown>;
+    reject(input: ReviewDecisionInput): Promise<unknown>;
   };
 }
 
@@ -40,6 +47,8 @@ type DesktopIpcService = Pick<
   | "discoverSessions"
   | "getLoopRunSnapshot"
   | "listPendingReviews"
+  | "approveReview"
+  | "rejectReview"
   | "listTasks"
   | "runAnalysis"
 >;
@@ -53,6 +62,8 @@ export function registerDesktopIpcHandlers(ipcMain: IpcMainLike, service: Deskto
   ipcMain.handle("analysis:run", (_event, loopRunId) => service.runAnalysis(String(loopRunId)));
   ipcMain.handle("loopRuns:snapshot", (_event, loopRunId) => service.getLoopRunSnapshot(String(loopRunId)));
   ipcMain.handle("reviews:listPending", () => service.listPendingReviews());
+  ipcMain.handle("reviews:approve", (_event, input) => service.approveReview(input as ReviewDecisionInput));
+  ipcMain.handle("reviews:reject", (_event, input) => service.rejectReview(input as ReviewDecisionInput));
 }
 
 export function createDesktopIpcApi(ipcRenderer: IpcRendererLike): DesktopIpcApi {
@@ -76,7 +87,8 @@ export function createDesktopIpcApi(ipcRenderer: IpcRendererLike): DesktopIpcApi
     },
     reviews: {
       listPending: () => ipcRenderer.invoke("reviews:listPending"),
+      approve: (input) => ipcRenderer.invoke("reviews:approve", input),
+      reject: (input) => ipcRenderer.invoke("reviews:reject", input),
     },
   };
 }
-

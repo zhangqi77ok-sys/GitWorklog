@@ -55,3 +55,55 @@ test("desktop service creates a task, binds a session, analyzes it, and exposes 
   }
 });
 
+test("desktop service approves and rejects pending reviews with action status updates", async () => {
+  const service = createDesktopAppService({ databasePath: ":memory:" });
+
+  try {
+    const created = service.createTaskAndRun({
+      task: {
+        title: "Review flow",
+        goal: "Exercise review decisions",
+      },
+      loopRun: {
+        policyId: "conservative",
+      },
+    });
+    const session = service.bindDiscoveredSession({
+      loopRunId: created.loopRun.loopRunId,
+      session: {
+        sessionId: "review-session-1",
+        title: "Review session",
+        sourcePath: "C:/tmp/review.jsonl",
+      },
+    });
+    service.appendSessionEvent({
+      loopRunId: created.loopRun.loopRunId,
+      sessionId: session.sessionId,
+      eventType: "tool_result",
+      payload: {
+        output: "command failed",
+        exitCode: 1,
+      },
+    });
+    service.runAnalysis(created.loopRun.loopRunId);
+
+    const pending = service.listPendingReviews();
+    const approved = service.approveReview({ reviewId: pending[0].reviewId, comment: "Looks safe" });
+    const approvedSnapshot = service.getLoopRunSnapshot(created.loopRun.loopRunId);
+
+    assert.equal(approved.result, "approved");
+    assert.equal(approvedSnapshot.actions[0].status, "approved");
+    assert.equal(approvedSnapshot.actions[0].reviewStatus, "approved");
+
+    service.runAnalysis(created.loopRun.loopRunId);
+    const nextPending = service.listPendingReviews();
+    const rejected = service.rejectReview({ reviewId: nextPending[0].reviewId, comment: "Needs a human" });
+    const rejectedSnapshot = service.getLoopRunSnapshot(created.loopRun.loopRunId);
+
+    assert.equal(rejected.result, "rejected");
+    assert.equal(rejectedSnapshot.actions[0].status, "rejected");
+    assert.equal(rejectedSnapshot.actions[0].reviewStatus, "rejected");
+  } finally {
+    service.close();
+  }
+});

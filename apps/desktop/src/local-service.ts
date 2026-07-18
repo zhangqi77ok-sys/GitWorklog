@@ -48,6 +48,12 @@ export interface LoopRunSnapshot {
   pendingReviews: Review[];
 }
 
+export interface ReviewDecisionInput {
+  reviewId: string;
+  reviewer?: string;
+  comment?: string;
+}
+
 export class DesktopAppService {
   private readonly runtime: LoopRuntimeService;
 
@@ -135,8 +141,26 @@ export class DesktopAppService {
     return this.store.reviews.listPending();
   }
 
+  approveReview(input: ReviewDecisionInput): Review {
+    return this.decideReview(input, "approved");
+  }
+
+  rejectReview(input: ReviewDecisionInput): Review {
+    return this.decideReview(input, "rejected");
+  }
+
   close(): void {
     this.store.close();
+  }
+
+  private decideReview(input: ReviewDecisionInput, result: "approved" | "rejected"): Review {
+    const review = this.store.reviews.updateResult(input.reviewId, {
+      result,
+      reviewer: input.reviewer,
+      comment: input.comment,
+    });
+    this.store.actions.updateReviewResult(review.actionId, result);
+    return review;
   }
 
   private requireLoopRun(loopRunId: string): LoopRun {
@@ -152,4 +176,3 @@ export function createDesktopAppService(options: DesktopAppServiceOptions = {}):
   const databasePath = options.databasePath ?? join(homedir(), ".gitworklog", DATABASE_FILE_NAME);
   return new DesktopAppService(openGitWorklogDatabase(databasePath), options.connector);
 }
-

@@ -773,6 +773,21 @@ export class ActionRepository {
       .all(loopRunId) as ActionRow[];
     return rows.map(toAction);
   }
+
+  updateReviewResult(actionId: string, result: "approved" | "rejected"): Action {
+    const status: Action["status"] = result === "approved" ? "approved" : "rejected";
+    this.database
+      .prepare("UPDATE actions SET status = ?, review_status = ? WHERE action_id = ?")
+      .run(status, result, actionId);
+
+    const row = this.database
+      .prepare("SELECT * FROM actions WHERE action_id = ?")
+      .get(actionId) as ActionRow | undefined;
+    if (!row) {
+      throw new Error(`Action not found: ${actionId}`);
+    }
+    return toAction(row);
+  }
 }
 
 export class ReviewRepository {
@@ -820,6 +835,29 @@ export class ReviewRepository {
       .prepare("SELECT * FROM reviews WHERE result = 'pending' ORDER BY created_at DESC")
       .all() as ReviewRow[];
     return rows.map(toReview);
+  }
+
+  updateResult(
+    reviewId: string,
+    input: { result: "approved" | "rejected"; reviewer?: string; comment?: string },
+  ): Review {
+    this.database
+      .prepare(
+        `UPDATE reviews SET
+          result = ?,
+          reviewer = COALESCE(?, reviewer),
+          comment = COALESCE(?, comment)
+        WHERE review_id = ?`,
+      )
+      .run(input.result, input.reviewer ?? null, input.comment ?? null, reviewId);
+
+    const row = this.database
+      .prepare("SELECT * FROM reviews WHERE review_id = ?")
+      .get(reviewId) as ReviewRow | undefined;
+    if (!row) {
+      throw new Error(`Review not found: ${reviewId}`);
+    }
+    return toReview(row);
   }
 }
 

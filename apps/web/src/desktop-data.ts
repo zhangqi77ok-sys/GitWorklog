@@ -20,6 +20,8 @@ export interface GitWorklogBridgeLike {
     };
     reviews?: {
       listPending(): Promise<unknown>;
+      approve?(input: { reviewId: string; reviewer?: string; comment?: string }): Promise<unknown>;
+      reject?(input: { reviewId: string; reviewer?: string; comment?: string }): Promise<unknown>;
     };
   };
 }
