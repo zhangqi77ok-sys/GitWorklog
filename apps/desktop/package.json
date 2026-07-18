@@ -3,9 +3,9 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "main": "src/main.ts",
+  "main": "dist/main.js",
   "scripts": {
-    "dev": "echo \"desktop app shell placeholder\"",
+    "dev": "npm run build:packages --prefix ../.. && npm run build --workspace @gitworklog/web --prefix ../.. && npm run build && electron dist/main.js",
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "npm run build:packages --prefix ../.. && npm run build && node --experimental-sqlite --test test/*.test.mjs"
@@ -16,5 +16,8 @@
     "@gitworklog/db": "0.1.0",
     "@gitworklog/policy": "0.1.0",
     "@gitworklog/shared-types": "0.1.0"
+  },
+  "devDependencies": {
+    "electron": "^33.4.11"
   }
 }

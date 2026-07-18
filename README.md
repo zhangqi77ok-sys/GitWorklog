@@ -39,14 +39,22 @@ packages/
 
 ## 本地开发
 
-当前仓库已经具备 Monorepo 基础骨架，后续只需要安装依赖并逐步实现模块。
+当前仓库已经具备 Monorepo 基础骨架。默认推荐一键启动桌面端，它会先构建 packages、构建 Web 控制台，再打开 Electron 窗口。
 
 ```bash
 npm install
+npm run dev
+```
+
+仓库内置了 Electron 下载镜像配置，避免桌面端依赖在国内网络下长时间卡在 postinstall。
+
+如果只想运行 Web 控制台：
+
+```bash
 npm run dev:web
 ```
 
-桌面端和包级构建脚本已经预留，但当前仍属于第一阶段骨架，不代表功能已全部实现。
+桌面端当前会加载本地构建后的 Web 控制台；后续再把 `DesktopAppService` 挂到真实 IPC 通道。
 
 ## 开发优先级
 
