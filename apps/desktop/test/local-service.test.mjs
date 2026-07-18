@@ -107,3 +107,47 @@ test("desktop service approves and rejects pending reviews with action status up
     service.close();
   }
 });
+
+test("desktop service includes recent session events in loop run snapshots", async () => {
+  const service = createDesktopAppService({ databasePath: ":memory:" });
+
+  try {
+    const created = service.createTaskAndRun({
+      task: {
+        title: "Replay timeline",
+        goal: "Show recent session events in Loop Detail",
+      },
+    });
+    const session = service.bindDiscoveredSession({
+      loopRunId: created.loopRun.loopRunId,
+      session: {
+        sessionId: "timeline-session-1",
+        title: "Timeline session",
+        sourcePath: "C:/tmp/timeline.jsonl",
+      },
+    });
+
+    service.appendSessionEvent({
+      loopRunId: created.loopRun.loopRunId,
+      sessionId: session.sessionId,
+      eventType: "assistant_message",
+      payload: { text: "I will inspect the failing test." },
+      createdAt: "2026-07-18T01:00:00.000Z",
+    });
+    service.appendSessionEvent({
+      loopRunId: created.loopRun.loopRunId,
+      sessionId: session.sessionId,
+      eventType: "tool_result",
+      payload: { command: "npm test", exitCode: 1 },
+      createdAt: "2026-07-18T01:05:00.000Z",
+    });
+
+    const snapshot = service.getLoopRunSnapshot(created.loopRun.loopRunId);
+
+    assert.equal(snapshot.sessionEvents.length, 2);
+    assert.equal(snapshot.sessionEvents[0].eventType, "tool_result");
+    assert.equal(snapshot.sessionEvents[1].eventType, "assistant_message");
+  } finally {
+    service.close();
+  }
+});

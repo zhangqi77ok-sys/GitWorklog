@@ -19,10 +19,19 @@ export interface ConsoleLoopSnapshot {
   loopRunId: string;
   status: string;
   sessionsCount: number;
+  eventsCount: number;
   evidencesCount: number;
   decisionsCount: number;
   actionsCount: number;
   pendingReviewsCount: number;
+  timeline: ConsoleTimelineItem[];
+}
+
+export interface ConsoleTimelineItem {
+  id: string;
+  title: string;
+  detail: string;
+  createdAt?: string;
 }
 
 export interface ConsoleReviewItem {
@@ -261,10 +270,31 @@ function toConsoleLoopSnapshot(item: unknown): ConsoleLoopSnapshot | undefined {
     loopRunId,
     status: readString(item.loopRun.status) ?? "unknown",
     sessionsCount: readArray(item.sessions).length,
+    eventsCount: readArray(item.sessionEvents).length,
     evidencesCount: readArray(item.evidences).length,
     decisionsCount: readArray(item.decisions).length,
     actionsCount: readArray(item.actions).length,
     pendingReviewsCount: readArray(item.pendingReviews).length,
+    timeline: readArray(item.sessionEvents).map(toConsoleTimelineItem).filter(isConsoleTimelineItem),
+  };
+}
+
+function toConsoleTimelineItem(item: unknown): ConsoleTimelineItem | undefined {
+  if (!isRecord(item)) {
+    return undefined;
+  }
+
+  const id = readString(item.eventId);
+  const title = readString(item.eventType);
+  if (!id || !title) {
+    return undefined;
+  }
+
+  return {
+    id,
+    title,
+    detail: summarizeEventPayload(title, isRecord(item.payload) ? item.payload : {}),
+    createdAt: readString(item.createdAt),
   };
 }
 
@@ -319,6 +349,10 @@ function isConsoleSessionItem(value: ConsoleSessionItem | undefined): value is C
   return Boolean(value);
 }
 
+function isConsoleTimelineItem(value: ConsoleTimelineItem | undefined): value is ConsoleTimelineItem {
+  return Boolean(value);
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
@@ -329,4 +363,24 @@ function readArray(value: unknown): unknown[] {
 
 function readString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value : undefined;
+}
+
+function summarizeEventPayload(eventType: string, payload: Record<string, unknown>): string {
+  const command = readString(payload.command);
+  const exitCode = typeof payload.exitCode === "number" ? payload.exitCode : undefined;
+  if (command && exitCode !== undefined) {
+    return `${command} exited with code ${exitCode}`;
+  }
+
+  const output = readString(payload.output);
+  if (output) {
+    return output.slice(0, 140);
+  }
+
+  const text = readString(payload.text);
+  if (text) {
+    return text.slice(0, 140);
+  }
+
+  return `${eventType} event captured`;
 }

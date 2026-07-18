@@ -634,6 +634,13 @@ export class SessionEventRepository {
       .all(sessionId, limit) as SessionEventRow[];
     return rows.map(toSessionEvent);
   }
+
+  listByLoopRun(loopRunId: string, limit = 100): SessionEvent[] {
+    const rows = this.database
+      .prepare("SELECT * FROM session_events WHERE loop_run_id = ? ORDER BY created_at DESC LIMIT ?")
+      .all(loopRunId, limit) as SessionEventRow[];
+    return rows.map(toSessionEvent);
+  }
 }
 
 export class EvidenceRepository {

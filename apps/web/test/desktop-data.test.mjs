@@ -130,6 +130,14 @@ test("loads selected loop snapshot counts through the desktop bridge", async () 
           evidences: [{ evidenceId: "evidence-1" }, { evidenceId: "evidence-2" }],
           decisions: [{ decisionId: "decision-1" }],
           actions: [{ actionId: "action-1" }],
+          sessionEvents: [
+            {
+              eventId: "event-1",
+              eventType: "tool_result",
+              payload: { command: "npm test", exitCode: 1 },
+              createdAt: "2026-07-18T01:05:00.000Z",
+            },
+          ],
           pendingReviews: [{ reviewId: "review-1" }],
         }),
       },
@@ -143,6 +151,9 @@ test("loads selected loop snapshot counts through the desktop bridge", async () 
   assert.equal(snapshot.evidencesCount, 2);
   assert.equal(snapshot.decisionsCount, 1);
   assert.equal(snapshot.actionsCount, 1);
+  assert.equal(snapshot.eventsCount, 1);
+  assert.equal(snapshot.timeline[0].title, "tool_result");
+  assert.equal(snapshot.timeline[0].detail, "npm test exited with code 1");
   assert.equal(snapshot.pendingReviewsCount, 1);
 });
 

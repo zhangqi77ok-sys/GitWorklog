@@ -230,9 +230,28 @@ export function App() {
             <p className="loop-goal">{selectedTask?.goal ?? "选择左侧任务后，这里会展示目标、证据链和下一步动作。"}</p>
 
             <div className="snapshot-grid">
+              <Metric label="Events" value={String(loopSnapshot?.eventsCount ?? 0)} caption="会话事件" />
               <Metric label="Evidence" value={String(loopSnapshot?.evidencesCount ?? 0)} caption="证据条目" />
               <Metric label="Decision" value={String(loopSnapshot?.decisionsCount ?? 0)} caption="决策记录" />
               <Metric label="Action" value={String(loopSnapshot?.actionsCount ?? 0)} caption="动作记录" />
+            </div>
+
+            <div className="event-timeline">
+              <div className="section-heading compact">
+                <p className="eyebrow">Replay Seed</p>
+                <h3>最近会话事件</h3>
+              </div>
+              {loopSnapshot?.timeline.length ? (
+                loopSnapshot.timeline.map((event) => (
+                  <article className="event-card" key={event.id}>
+                    <span>{event.createdAt ?? "未知时间"}</span>
+                    <strong>{event.title}</strong>
+                    <p>{event.detail}</p>
+                  </article>
+                ))
+              ) : (
+                <p className="empty-state">绑定会话并写入事件后，这里会形成可回放的 Loop 时间线。</p>
+              )}
             </div>
 
             <div className="run-map">

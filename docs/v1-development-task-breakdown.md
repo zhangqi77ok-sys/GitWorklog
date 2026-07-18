@@ -292,11 +292,13 @@ packages/
 
 - 创建 `session_events` 表
 - 采集并保存最近消息、错误、工具调用、状态变化
+- 支持按 LoopRun 查询最近 session events，并返回给 snapshot
 
 完成标准：
 
 - 能按时间顺序存储最近事件
 - 能从数据库读取时间线
+- Loop Detail 能看到当前 LoopRun 的最近 session events
 
 ### T204 实现基础状态识别
 
@@ -518,15 +520,21 @@ v1 先用规则实现
   - 审核结果
 - 在正式 Replay 页之前，Loop Detail 先展示 snapshot 级别计数：
   - sessions
+  - session events
   - evidences
   - decisions
   - actions
   - pendingReviews
+- Loop Detail 先展示最近 session events 作为 Replay Seed：
+  - 最新事件排在前面
+  - 工具结果优先摘要 command 和 exitCode
+  - assistant/user 文本事件摘要前 140 字符
 
 完成标准：
 
 - 可完整回放一次“异常 -> 分析 -> 建议/审核 -> 动作”的流程
 - 选中任务时可以读取其最新 LoopRun snapshot
+- 选中任务时可以看到最近 session event 时间线
 
 ## 6. v1 验收标准
 

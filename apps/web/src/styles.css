@@ -226,7 +226,7 @@ h2 {
 
 .snapshot-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
   margin-bottom: 20px;
 }
@@ -282,6 +282,14 @@ h2 {
   display: grid;
   gap: 4px;
   margin-bottom: 18px;
+}
+
+.section-heading.compact {
+  margin-bottom: 10px;
+}
+
+.section-heading.compact h3 {
+  margin: 0;
 }
 
 .task-form {
@@ -341,6 +349,39 @@ textarea {
 .session-list {
   display: grid;
   gap: 12px;
+}
+
+.event-timeline {
+  background: rgba(255, 255, 255, 0.58);
+  border: 1px solid rgba(37, 50, 70, 0.1);
+  border-radius: 24px;
+  margin-bottom: 18px;
+  padding: 16px;
+}
+
+.event-card {
+  border-left: 3px solid var(--accent);
+  padding: 2px 0 12px 12px;
+}
+
+.event-card + .event-card {
+  margin-top: 10px;
+}
+
+.event-card span {
+  color: var(--muted);
+  display: block;
+  font-size: 0.72rem;
+  margin-bottom: 4px;
+}
+
+.event-card strong {
+  display: block;
+}
+
+.event-card p {
+  color: var(--muted);
+  margin: 4px 0 0;
 }
 
 .task-card {

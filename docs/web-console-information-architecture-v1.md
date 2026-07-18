@@ -25,6 +25,7 @@ The next console iteration uses a desktop-oriented control surface instead of a 
 - Empty states: each region must explain what the user can do next instead of showing blank panels.
 - Selected LoopRun snapshot: the main workspace shows live counts for sessions, evidences, decisions, actions, and pending reviews.
 - Session Discovery: the right inspector can scan local Codex sessions and bind one to the selected LoopRun.
+- Replay seed timeline: Loop Detail shows recent session events from the selected LoopRun so users can see the beginning of an audit trail before the full Replay page exists.
 
 Interaction rules:
 
@@ -32,6 +33,7 @@ Interaction rules:
 - Create/approve/reject actions refresh visible console state after completion.
 - Selecting a task loads its latest LoopRun snapshot when `loopRunId` exists.
 - Binding a session refreshes task data and the selected LoopRun snapshot.
+- Session events in the selected snapshot render newest first and use short readable summaries.
 - Risk and policy language stays visible near destructive or automation-related actions.
 
 ## Wiring Plan
@@ -45,8 +47,9 @@ Implemented bridge-backed slices:
 - Review approve/reject calls `reviews:approve` and `reviews:reject`.
 - Selected task snapshot calls `loopRuns:snapshot`.
 - Session Discovery calls `sessions:discover` and `sessions:bind`.
+- Loop Detail renders `sessionEvents` from `loopRuns:snapshot` as the first Replay/Audit surface.
 
 Next implementation slices:
 
 - Add Replay & Audit view for event/evidence/decision/action history.
-- Add Session timeline ingestion and display.
+- Expand Session timeline ingestion from appended test events to real Codex transcript parsing.

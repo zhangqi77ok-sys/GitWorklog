@@ -14,6 +14,7 @@ import type {
   Evidence,
   LoopRun,
   Review,
+  SessionEvent,
   SessionMeta,
   Task,
 } from "@gitworklog/shared-types";
@@ -42,6 +43,7 @@ export interface LoopRunSnapshot {
   task: Task;
   loopRun: LoopRun;
   sessions: SessionMeta[];
+  sessionEvents: SessionEvent[];
   evidences: Evidence[];
   decisions: Decision[];
   actions: Action[];
@@ -128,6 +130,7 @@ export class DesktopAppService {
       task,
       loopRun,
       sessions: this.store.sessions.listByLoopRun(loopRunId),
+      sessionEvents: this.store.sessionEvents.listByLoopRun(loopRunId),
       evidences: this.store.evidences.listByLoopRun(loopRunId),
       decisions: this.store.decisions.listByLoopRun(loopRunId),
       actions,
