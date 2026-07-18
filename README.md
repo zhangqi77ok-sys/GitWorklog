@@ -46,7 +46,12 @@ npm install
 npm run dev
 ```
 
-仓库内置了 Electron 下载镜像配置，避免桌面端依赖在国内网络下长时间卡在 postinstall。
+如果 Electron 下载很慢，可以在 PowerShell 里使用镜像安装：
+
+```powershell
+$env:ELECTRON_MIRROR='https://npmmirror.com/mirrors/electron/'
+npm install
+```
 
 如果只想运行 Web 控制台：
 

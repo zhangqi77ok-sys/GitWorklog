@@ -8,7 +8,7 @@
     "dev": "npm run build:packages --prefix ../.. && npm run build --workspace @gitworklog/web --prefix ../.. && npm run build && electron dist/main.js",
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "npm run build:packages --prefix ../.. && npm run build && node --experimental-sqlite --test test/*.test.mjs"
+    "test": "npm run build:packages --prefix ../.. && npm run build && node --experimental-sqlite --test \"test/*.test.mjs\""
   },
   "dependencies": {
     "@gitworklog/connectors": "0.1.0",

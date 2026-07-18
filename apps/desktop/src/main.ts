@@ -2,7 +2,10 @@ import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { BrowserWindow, app } from "electron";
+import { BrowserWindow, app, ipcMain } from "electron";
+
+import { createDesktopIpcApi, registerDesktopIpcHandlers } from "./ipc.js";
+import { createDesktopAppService } from "./local-service.js";
 
 export type DesktopLifecycleState =
   | "booting"
@@ -30,8 +33,15 @@ export function startDesktopRuntime(runtime: DesktopRuntime): DesktopRuntime {
   };
 }
 
+let ipcHandlersRegistered = false;
+
 export async function startElectronApp(): Promise<void> {
   await app.whenReady();
+
+  if (!ipcHandlersRegistered) {
+    registerDesktopIpcHandlers(ipcMain, createDesktopAppService());
+    ipcHandlersRegistered = true;
+  }
 
   const window = new BrowserWindow({
     width: 1280,
@@ -84,6 +94,7 @@ if (process.versions.electron) {
 }
 
 export { createDesktopAppService, DesktopAppService } from "./local-service.js";
+export { createDesktopIpcApi, registerDesktopIpcHandlers } from "./ipc.js";
 export type {
   BindDiscoveredSessionInput,
   CreateTaskAndRunInput,
