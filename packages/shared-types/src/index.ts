@@ -21,6 +21,28 @@ export interface Task {
   updatedAt: string;
 }
 
+export interface CreateTaskInput {
+  title: string;
+  description?: string;
+  goal: string;
+  constraints?: string[];
+  successCriteria?: string[];
+  riskProfile?: RiskLevel;
+  templateType?: TaskTemplateType;
+  projectPath?: string;
+}
+
+export interface UpdateTaskInput {
+  title?: string;
+  description?: string;
+  goal?: string;
+  constraints?: string[];
+  successCriteria?: string[];
+  riskProfile?: RiskLevel;
+  templateType?: TaskTemplateType;
+  projectPath?: string;
+}
+
 export type LoopRunStatus =
   | "initialized"
   | "binding_context"
@@ -46,8 +68,17 @@ export interface LoopRun {
   summary?: string;
 }
 
+export type LoopRunMode = LoopRun["mode"];
+
+export interface CreateLoopRunInput {
+  taskId: string;
+  mode?: LoopRunMode;
+  policyId?: string;
+}
+
 export interface SessionMeta {
   sessionId: string;
+  loopRunId?: string;
   threadId?: string;
   windowId?: string;
   title: string;
@@ -55,4 +86,33 @@ export interface SessionMeta {
   status: string;
   projectPath?: string;
   lastEventAt?: string;
+}
+
+export interface CreateSessionInput {
+  loopRunId: string;
+  sessionId?: string;
+  threadId?: string;
+  windowId?: string;
+  title: string;
+  sourceType?: SessionMeta["sourceType"];
+  status?: string;
+  projectPath?: string;
+  lastEventAt?: string;
+}
+
+export interface SessionEvent {
+  eventId: string;
+  loopRunId: string;
+  sessionId: string;
+  eventType: string;
+  payload: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface CreateSessionEventInput {
+  loopRunId: string;
+  sessionId: string;
+  eventType: string;
+  payload: Record<string, unknown>;
+  createdAt?: string;
 }

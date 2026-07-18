@@ -1,3 +1,6 @@
+import type { CreateLoopRunInput, CreateTaskInput, LoopRun, LoopRunStatus, Task } from "@gitworklog/shared-types";
+import type { GitWorklogDatabase } from "@gitworklog/db";
+
 export const LOOP_RUNTIME_STATES = [
   "initialized",
   "binding_context",
@@ -40,4 +43,37 @@ export function canTransition(from: LoopRuntimeState, to: LoopRuntimeState): boo
   };
 
   return transitions[from].includes(to);
+}
+
+export class LoopRuntimeService {
+  constructor(private readonly store: GitWorklogDatabase) {}
+
+  createTask(input: CreateTaskInput): Task {
+    if (!input.title.trim()) {
+      throw new Error("Task title is required.");
+    }
+    if (!input.goal.trim()) {
+      throw new Error("Task goal is required.");
+    }
+    return this.store.tasks.create(input);
+  }
+
+  listTasks(): Task[] {
+    return this.store.tasks.list();
+  }
+
+  createLoopRun(input: CreateLoopRunInput): LoopRun {
+    return this.store.loopRuns.create(input);
+  }
+
+  transitionLoopRun(loopRunId: string, nextStatus: LoopRunStatus): LoopRun {
+    const current = this.store.loopRuns.get(loopRunId);
+    if (!current) {
+      throw new Error(`LoopRun not found: ${loopRunId}`);
+    }
+    if (!canTransition(current.status, nextStatus)) {
+      throw new Error(`Invalid LoopRun transition: ${current.status} -> ${nextStatus}`);
+    }
+    return this.store.loopRuns.updateStatus(loopRunId, nextStatus);
+  }
 }
