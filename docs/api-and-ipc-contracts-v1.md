@@ -128,6 +128,8 @@ v1 建议采用：
 用途：
 - 扫描本地 Codex 会话
 - 当前桌面端实现从 `~/.codex/sessions/**/*.jsonl` 递归读取，按文件修改时间取最近会话
+- 当前桌面端也读取 `~/.codex/state_5.sqlite` 的 `threads` 表，用于发现 Codex Desktop 当前/最近线程
+- 对 `codex-state://<threadId>` 来源，事件导入读取 `~/.codex/logs_2.sqlite` 中同一 `thread_id` 的日志记录
 
 返回字段建议：
 - `sessionId`

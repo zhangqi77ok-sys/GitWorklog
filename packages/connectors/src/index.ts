@@ -4,6 +4,7 @@ import { readdir, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import { createInterface } from "node:readline";
+import { DatabaseSync } from "node:sqlite";
 
 export interface DiscoveredSession {
   sessionId: string;
@@ -29,6 +30,8 @@ export interface SessionConnector {
 
 export interface CodexLocalConnectorOptions {
   sessionsDir?: string;
+  stateDbPath?: string;
+  logsDbPath?: string;
   maxFiles?: number;
 }
 
@@ -37,20 +40,25 @@ export class CodexLocalConnector implements SessionConnector {
   displayName = "Codex Local Session Reader";
 
   private readonly sessionsDir: string;
+  private readonly stateDbPath: string;
+  private readonly logsDbPath: string;
   private readonly maxFiles: number;
 
   constructor(options: CodexLocalConnectorOptions = {}) {
     this.sessionsDir = options.sessionsDir ?? join(homedir(), ".codex", "sessions");
+    this.stateDbPath = options.stateDbPath ?? join(homedir(), ".codex", "state_5.sqlite");
+    this.logsDbPath = options.logsDbPath ?? join(homedir(), ".codex", "logs_2.sqlite");
     this.maxFiles = options.maxFiles ?? 200;
   }
 
   async discoverSessions(): Promise<DiscoveredSession[]> {
+    const stateSessions = readDesktopStateSessions(this.stateDbPath, this.maxFiles);
     const files = await findJsonlFiles(this.sessionsDir);
     const newestFiles = files
       .sort((left, right) => right.lastModifiedMs - left.lastModifiedMs)
       .slice(0, this.maxFiles);
 
-    const sessions = await Promise.all(
+    const jsonlSessions = await Promise.all(
       newestFiles.map(async (file) => {
         const filenameMeta = parseSessionFilename(file.path);
         const contentMeta = await readSessionHeader(file.path);
@@ -66,10 +74,17 @@ export class CodexLocalConnector implements SessionConnector {
       }),
     );
 
-    return sessions.filter((session) => Boolean(session.sessionId));
+    return dedupeSessions([...stateSessions, ...jsonlSessions.filter((session) => Boolean(session.sessionId))]).slice(
+      0,
+      this.maxFiles,
+    );
   }
 
   async readSessionEvents(session: DiscoveredSession, limit = 100): Promise<ParsedSessionEvent[]> {
+    if (session.sourcePath.startsWith("codex-state://")) {
+      return readDesktopLogEvents(this.logsDbPath, session.threadId ?? session.sessionId, limit);
+    }
+
     const events: ParsedSessionEvent[] = [];
 
     try {
@@ -93,6 +108,27 @@ export class CodexLocalConnector implements SessionConnector {
     return events;
   }
 }
+
+type ThreadRow = {
+  id: string;
+  title: string | null;
+  preview: string | null;
+  cwd: string | null;
+  rollout_path: string | null;
+  created_at?: number | null;
+  created_at_ms?: number | null;
+  updated_at: number | null;
+  updated_at_ms: number | null;
+};
+
+type LogRow = {
+  id: number;
+  ts: number | null;
+  level: string | null;
+  target: string | null;
+  feedback_log_body: string | null;
+  thread_id: string | null;
+};
 
 interface SessionFile {
   path: string;
@@ -133,6 +169,128 @@ async function findJsonlFiles(root: string): Promise<SessionFile[]> {
 
   await walk(root);
   return files;
+}
+
+function readDesktopStateSessions(stateDbPath: string, limit: number): DiscoveredSession[] {
+  let database: DatabaseSync | undefined;
+  try {
+    database = new DatabaseSync(stateDbPath, { readOnly: true });
+    const rows = database
+      .prepare(
+        `SELECT *
+        FROM threads`,
+      )
+      .all() as ThreadRow[];
+
+    return rows
+      .sort((left, right) => threadTimestampMs(right) - threadTimestampMs(left))
+      .slice(0, limit)
+      .map(toDiscoveredDesktopSession)
+      .filter(isDiscoveredSession);
+  } catch {
+    return [];
+  } finally {
+    database?.close();
+  }
+}
+
+function readDesktopLogEvents(logsDbPath: string, threadId: string, limit: number): ParsedSessionEvent[] {
+  let database: DatabaseSync | undefined;
+  try {
+    database = new DatabaseSync(logsDbPath, { readOnly: true });
+    const rows = database
+      .prepare(
+        `SELECT id, ts, level, target, feedback_log_body, thread_id
+        FROM logs
+        WHERE thread_id = ?
+        ORDER BY id DESC
+        LIMIT ?`,
+      )
+      .all(threadId, limit) as LogRow[];
+
+    return rows.reverse().map(toDesktopLogEvent);
+  } catch {
+    return [];
+  } finally {
+    database?.close();
+  }
+}
+
+function toDiscoveredDesktopSession(row: ThreadRow): DiscoveredSession | undefined {
+  if (!row.id) {
+    return undefined;
+  }
+
+  return {
+    sessionId: row.id,
+    threadId: row.id,
+    title: trimText(row.title) ?? trimText(row.preview) ?? `Codex thread ${row.id}`,
+    projectPath: normalizeWindowsExtendedPath(trimText(row.cwd)),
+    sourcePath: `codex-state://${row.id}`,
+    lastEventAt: timestampFromThreadRow(row),
+  };
+}
+
+function toDesktopLogEvent(row: LogRow): ParsedSessionEvent {
+  return {
+    eventType: trimText(row.target) ?? trimText(row.level) ?? "codex_log",
+    payload: {
+      logId: row.id,
+      level: trimText(row.level),
+      target: trimText(row.target),
+      message: trimText(row.feedback_log_body),
+    },
+    createdAt: typeof row.ts === "number" ? new Date(row.ts * 1000).toISOString() : undefined,
+  };
+}
+
+function dedupeSessions(sessions: DiscoveredSession[]): DiscoveredSession[] {
+  const seen = new Set<string>();
+  return sessions.filter((session) => {
+    if (seen.has(session.sessionId)) {
+      return false;
+    }
+    seen.add(session.sessionId);
+    return true;
+  });
+}
+
+function isDiscoveredSession(session: DiscoveredSession | undefined): session is DiscoveredSession {
+  return Boolean(session);
+}
+
+function timestampFromThreadRow(row: ThreadRow): string | undefined {
+  if (typeof row.updated_at_ms === "number") {
+    return new Date(row.updated_at_ms).toISOString();
+  }
+  if (typeof row.updated_at === "number") {
+    return new Date(row.updated_at * 1000).toISOString();
+  }
+  return undefined;
+}
+
+function threadTimestampMs(row: ThreadRow): number {
+  if (typeof row.updated_at_ms === "number") {
+    return row.updated_at_ms;
+  }
+  if (typeof row.updated_at === "number") {
+    return row.updated_at * 1000;
+  }
+  if (typeof row.created_at_ms === "number") {
+    return row.created_at_ms;
+  }
+  if (typeof row.created_at === "number") {
+    return row.created_at * 1000;
+  }
+  return 0;
+}
+
+function normalizeWindowsExtendedPath(value: string | undefined): string | undefined {
+  return value?.replace(/^\\\\\?\\/, "");
+}
+
+function trimText(value: string | null | undefined): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
 function parseSessionFilename(path: string): Pick<DiscoveredSession, "sessionId" | "title"> {

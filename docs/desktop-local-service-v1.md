@@ -40,6 +40,7 @@ flowchart LR
 - Review gates are visible in snapshots so the UI can show why an action cannot auto-run.
 - `createTaskAndRun` resolves the selected Policy Center policy when the renderer does not pass a policy id.
 - Session event ingestion is connector-owned; the service validates LoopRun/session binding and persists normalized events.
+- Codex discovery supports both legacy JSONL transcripts and current Codex Desktop SQLite thread state.
 - Repeated ingestion is idempotent. Duplicate events are skipped, and `importedCount` reports only newly stored events.
 - Policy Center state is stored as JSON in the `policies` table using the `policy-center-state` row, keeping v1 schema stable.
 - Actual auto-resume transport is out of scope for this slice.
