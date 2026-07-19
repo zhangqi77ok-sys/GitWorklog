@@ -26,6 +26,7 @@ import {
   updatePolicyAutoResume,
   type PolicyCenterState,
 } from "./policy-center-state";
+import { buildReviewQueueState, selectReview, type ReviewQueueState } from "./review-queue-state";
 
 const navItems = ["任务", "循环详情", "审核队列", "策略中心", "回放审计"];
 type NavItem = (typeof navItems)[number];
@@ -92,6 +93,9 @@ export function App() {
   const [isReviewPanelOpen, setIsReviewPanelOpen] = useState(false);
   const [activeNavItem, setActiveNavItem] = useState<NavItem>(() => navItemFromHash(window.location.hash));
   const [policyState, setPolicyState] = useState<PolicyCenterState>(() => loadPolicyState());
+  const [reviewState, setReviewState] = useState<ReviewQueueState>(() =>
+    buildReviewQueueState(fixtureConsoleData.reviews, []),
+  );
 
   async function refreshConsoleData() {
     const data = await loadConsoleData(window.gitWorklog);
@@ -135,6 +139,10 @@ export function App() {
   useEffect(() => {
     savePolicyCenterState(window.localStorage, policyState);
   }, [policyState]);
+
+  useEffect(() => {
+    setReviewState(buildReviewQueueState(consoleData.reviews, loopSnapshot?.actions ?? []));
+  }, [consoleData.reviews, loopSnapshot?.actions]);
 
   async function handleCreateTask(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -216,6 +224,10 @@ export function App() {
     setIsBusy(true);
     await decideReview(window.gitWorklog, reviewId, result);
     const data = await refreshConsoleData();
+    const snapshot = await loadLoopSnapshot(window.gitWorklog, selectedTask?.loopRunId);
+    if (snapshot) {
+      setLoopSnapshot(snapshot);
+    }
     setNotice(
       data.source === "desktop"
         ? result === "approved"
@@ -224,6 +236,10 @@ export function App() {
         : "当前是浏览器预览，审核动作不会写入本地数据库",
     );
     setIsBusy(false);
+  }
+
+  function handleSelectReview(reviewId: string) {
+    setReviewState((current) => selectReview(current, reviewId));
   }
 
   function handleSelectPolicy(policyId: string) {
@@ -316,6 +332,16 @@ export function App() {
 
         {activeNavItem === "回放审计" ? (
           <ReplayAuditView auditTrail={loopSnapshot?.auditTrail ?? []} selectedTask={selectedTask} snapshot={loopSnapshot} />
+        ) : activeNavItem === "审核队列" ? (
+          <ReviewQueueView
+            isBusy={isBusy}
+            onApprove={(reviewId) => void handleReview(reviewId, "approved")}
+            onReject={(reviewId) => void handleReview(reviewId, "rejected")}
+            onSelectReview={handleSelectReview}
+            reviewState={reviewState}
+            selectedTask={selectedTask}
+            snapshot={loopSnapshot}
+          />
         ) : activeNavItem === "策略中心" ? (
           <PolicyCenterView
             onPolicyAutoResume={handlePolicyAutoResume}
@@ -726,6 +752,92 @@ function PolicyCenterView(props: {
               </div>
             </article>
           ))}
+        </div>
+      </article>
+    </section>
+  );
+}
+
+function ReviewQueueView(props: {
+  reviewState: ReviewQueueState;
+  snapshot: ConsoleLoopSnapshot | undefined;
+  selectedTask: ConsoleTaskItem | undefined;
+  isBusy: boolean;
+  onSelectReview(reviewId: string): void;
+  onApprove(reviewId: string): void;
+  onReject(reviewId: string): void;
+}) {
+  const selectedReview =
+    props.reviewState.items.find((item) => item.reviewId === props.reviewState.selectedReviewId) ?? props.reviewState.items[0];
+  return (
+    <section className="review-workbench">
+      <article className="panel review-hero-panel">
+        <div>
+          <p className="eyebrow">审核队列</p>
+          <h2>待人工确认动作</h2>
+          <p>这里把当前 Loop 的待审核动作单独拉出来，方便你逐条处理，不用在别的页面里找。</p>
+        </div>
+        <div className="review-hero-summary">
+          <Metric label="待审" value={String(props.reviewState.items.length)} caption="当前队列" />
+          <Metric label="循环" value={props.selectedTask?.title ?? "未选择"} caption="当前任务" />
+          <Metric label="事件" value={String(props.snapshot?.eventsCount ?? 0)} caption="链路上下文" />
+          <Metric label="规则" value={String(props.snapshot?.pendingReviewsCount ?? 0)} caption="待审动作" />
+        </div>
+      </article>
+
+      <article className="panel review-queue-layout">
+        <div className="review-queue-list">
+          <div className="section-heading">
+            <p className="eyebrow">队列</p>
+            <h2>最新审核项</h2>
+          </div>
+          {props.reviewState.items.length ? (
+            props.reviewState.items.map((item) => (
+              <button
+                className={item.reviewId === selectedReview?.reviewId ? "review-queue-card selected" : "review-queue-card"}
+                key={item.reviewId}
+                onClick={() => props.onSelectReview(item.reviewId)}
+                type="button"
+              >
+                <span className="status-pill">{labelFromMap(statusLabels, item.result, "待处理")}</span>
+                <strong>{item.actionTitle}</strong>
+                <p>{item.comment ?? item.actionMessage}</p>
+                <small>
+                  {item.actionStatus} · {item.requiresReview ? "需要审核" : "可直接通过"}
+                </small>
+              </button>
+            ))
+          ) : (
+            <p className="empty-state">当前没有待审核动作。分析器触发审核后，这里会出现条目。</p>
+          )}
+        </div>
+
+        <div className="review-queue-detail">
+          <div className="section-heading">
+            <p className="eyebrow">详情</p>
+            <h2>审核说明</h2>
+          </div>
+          {selectedReview ? (
+            <article className="review-detail-card">
+              <strong>{selectedReview.actionTitle}</strong>
+              <p>{selectedReview.comment ?? "策略要求人工确认后再继续。"}</p>
+              <div className="review-detail-meta">
+                <span>动作状态：{selectedReview.actionStatus}</span>
+                <span>动作编号：{selectedReview.actionId}</span>
+                <span>{selectedReview.requiresReview ? "当前需要人工审核" : "当前可直接通过"}</span>
+              </div>
+              <div className="review-actions">
+                <button disabled={props.isBusy} onClick={() => props.onApprove(selectedReview.reviewId)} type="button">
+                  批准
+                </button>
+                <button disabled={props.isBusy} onClick={() => props.onReject(selectedReview.reviewId)} type="button">
+                  拒绝
+                </button>
+              </div>
+            </article>
+          ) : (
+            <p className="empty-state">选中一条审核记录后，这里会展示动作、原因和处理按钮。</p>
+          )}
         </div>
       </article>
     </section>

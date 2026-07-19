@@ -320,6 +320,12 @@ The current UI supports these operations, but the redesign should make them feel
 - Default policy choice, policy enable/disable, and rule priority controls should be calm, dense, and inspectable.
 - Policy editing should feel like configuration inside the control plane, not a separate settings site.
 
+### Phase 6: Review Queue
+
+- Add a dedicated Review Queue workbench with a list-and-detail layout.
+- Show pending reviews with their related action context, not as isolated approvals.
+- Keep approve/reject actions compact and high-signal so the page stays focused on review decisions.
+
 ## Acceptance Criteria
 
 The redesigned console is acceptable when:

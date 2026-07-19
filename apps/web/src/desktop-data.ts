@@ -30,7 +30,16 @@ export interface ConsoleLoopSnapshot {
   actionsCount: number;
   pendingReviewsCount: number;
   timeline: ConsoleTimelineItem[];
+  actions: ConsoleActionItem[];
   auditTrail: ConsoleAuditTrailItem[];
+}
+
+export interface ConsoleActionItem {
+  actionId: string;
+  actionType: string;
+  status: string;
+  message?: string;
+  requiresReview?: boolean;
 }
 
 export interface ConsoleTimelineItem {
@@ -319,6 +328,7 @@ function toConsoleLoopSnapshot(item: unknown): ConsoleLoopSnapshot | undefined {
     actionsCount: readArray(item.actions).length,
     pendingReviewsCount: readArray(item.pendingReviews).length,
     timeline: readArray(item.sessionEvents).map(toConsoleTimelineItem).filter(isConsoleTimelineItem),
+    actions: readArray(item.actions).map(toConsoleActionItem).filter(isConsoleActionItem),
     auditTrail: buildAuditTrail(item),
   };
 }
@@ -414,6 +424,27 @@ function toAuditAction(item: unknown): ConsoleAuditTrailItem | undefined {
     detail: readString(item.message) ?? readString(item.status) ?? "已记录动作",
     meta: readString(item.status),
     createdAt: readString(item.createdAt),
+  };
+}
+
+function toConsoleActionItem(item: unknown): ConsoleActionItem | undefined {
+  if (!isRecord(item)) {
+    return undefined;
+  }
+
+  const id = readString(item.actionId);
+  const actionType = readString(item.actionType);
+  const status = readString(item.status);
+  if (!id || !actionType || !status) {
+    return undefined;
+  }
+
+  return {
+    actionId: id,
+    actionType,
+    status,
+    message: readString(item.message),
+    requiresReview: typeof item.requiresReview === "boolean" ? item.requiresReview : undefined,
   };
 }
 
@@ -525,6 +556,10 @@ function isConsoleBoundSessionItem(value: ConsoleBoundSessionItem | undefined): 
 }
 
 function isConsoleTimelineItem(value: ConsoleTimelineItem | undefined): value is ConsoleTimelineItem {
+  return Boolean(value);
+}
+
+function isConsoleActionItem(value: ConsoleActionItem | undefined): value is ConsoleActionItem {
   return Boolean(value);
 }
 

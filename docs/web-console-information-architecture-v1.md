@@ -100,7 +100,14 @@ Implemented Phase 3.2:
 - Users can choose the default policy, toggle policy availability, and adjust auto-resume settings locally.
 - Default review rules are visible with enable/disable and priority controls so the audit gate can be tuned without leaving the workspace.
 
+Implemented Phase 3.3:
+
+- Review Queue is now a dedicated workbench page that shows the pending review list on one side and the selected review details on the other.
+- Review items are linked to their related action summaries so approvals and rejections stay grounded in context.
+- The review workspace stays inside the same desktop window and preserves the one-window rule.
+
 Next implementation slices:
 
 - Expand Replay & Audit with filters and linked detail inspection.
 - Wire Policy Center selection into backend policy persistence and review gating.
+- Connect Review Queue selection to richer action/evidence detail inspection.
