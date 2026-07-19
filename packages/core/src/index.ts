@@ -2,7 +2,7 @@ import type { CreateLoopRunInput, CreateTaskInput, LoopRun, LoopRunStatus, Task 
 import type { GitWorklogDatabase } from "@gitworklog/db";
 import { buildResumePrompt } from "@gitworklog/action-engine";
 import { analyzeErrors, analyzeProgress, analyzeRisk, type AnalyzerEvent } from "@gitworklog/analyzers";
-import { DEFAULT_POLICIES, evaluateReviewGate } from "@gitworklog/policy";
+import { evaluateReviewGate } from "@gitworklog/policy";
 
 export const LOOP_RUNTIME_STATES = [
   "initialized",
@@ -146,7 +146,7 @@ export class LoopRuntimeService {
       evidenceIds: evidences.map((evidence) => evidence.evidenceId),
     });
 
-    const policy = DEFAULT_POLICIES.find((item) => item.policyId === loopRun.policyId) ?? DEFAULT_POLICIES[1]!;
+    const policy = this.store.policyCenter.resolvePolicy(loopRun.policyId);
     const gate = evaluateReviewGate({
       policy,
       riskLevel: decision.riskLevel,

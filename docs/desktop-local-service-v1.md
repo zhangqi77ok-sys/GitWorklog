@@ -19,6 +19,7 @@ v1 operations:
 - Append session events for analysis.
 - Run loop analysis and read the loop snapshot.
 - List pending manual reviews.
+- Read and save Policy Center state through SQLite-backed repositories.
 
 ## Data Flow
 
@@ -37,6 +38,8 @@ flowchart LR
 - The service is orchestration only; domain decisions stay in `packages/core`, `packages/analyzers`, and `packages/policy`.
 - The default database path is local to the user's home directory, but tests can inject `:memory:`.
 - Review gates are visible in snapshots so the UI can show why an action cannot auto-run.
+- `createTaskAndRun` resolves the selected Policy Center policy when the renderer does not pass a policy id.
 - Session event ingestion is connector-owned; the service validates LoopRun/session binding and persists normalized events.
 - Repeated ingestion is idempotent. Duplicate events are skipped, and `importedCount` reports only newly stored events.
+- Policy Center state is stored as JSON in the `policies` table using the `policy-center-state` row, keeping v1 schema stable.
 - Actual auto-resume transport is out of scope for this slice.

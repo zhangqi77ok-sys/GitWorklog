@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { mkdtempSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import test from "node:test";
 
 import { createDesktopAppService } from "../dist/local-service.js";
@@ -293,5 +296,70 @@ test("desktop service marks a bound session as failed when ingested events conta
     assert.equal(snapshot.sessions[0].status, "failed");
   } finally {
     service.close();
+  }
+});
+
+test("desktop service persists policy center state and uses the selected policy for gating", async () => {
+  const workspaceDir = mkdtempSync(join(tmpdir(), "gitworklog-policy-"));
+  const databasePath = join(workspaceDir, "gitworklog.sqlite3");
+
+  try {
+    const firstService = createDesktopAppService({ databasePath });
+    const currentState = firstService.getPolicyCenterState();
+    const balancedState = {
+      ...currentState,
+      selectedPolicyId: "balanced",
+      policies: currentState.policies.map((policy) =>
+        policy.policyId === "balanced" ? { ...policy, autoResumeEnabled: true, autoResumeLimit: 9 } : policy,
+      ),
+    };
+
+    firstService.savePolicyCenterState(balancedState);
+    firstService.close();
+
+    const secondService = createDesktopAppService({ databasePath });
+
+    try {
+      const restoredState = secondService.getPolicyCenterState();
+
+      assert.equal(restoredState.selectedPolicyId, "balanced");
+      assert.equal(restoredState.policies.find((policy) => policy.policyId === "balanced").autoResumeLimit, 9);
+
+      const created = secondService.createTaskAndRun({
+        task: {
+          title: "Balanced gating",
+          goal: "Low-risk recovery should not require review when balanced policy is selected",
+        },
+      });
+      const session = secondService.bindDiscoveredSession({
+        loopRunId: created.loopRun.loopRunId,
+        session: {
+          sessionId: "balanced-session",
+          title: "Balanced session",
+          sourcePath: "C:/tmp/balanced.jsonl",
+        },
+      });
+
+      secondService.appendSessionEvent({
+        loopRunId: created.loopRun.loopRunId,
+        sessionId: session.sessionId,
+        eventType: "tool_result",
+        payload: {
+          command: "npm test",
+          exitCode: 1,
+        },
+      });
+
+      const analysis = secondService.runAnalysis(created.loopRun.loopRunId);
+      const pendingReviews = secondService.listPendingReviews();
+
+      assert.equal(created.loopRun.policyId, "balanced");
+      assert.equal(analysis.requiresReview, false);
+      assert.equal(pendingReviews.length, 0);
+    } finally {
+      secondService.close();
+    }
+  } finally {
+    void workspaceDir;
   }
 });

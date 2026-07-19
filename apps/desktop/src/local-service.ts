@@ -3,8 +3,14 @@ import { join } from "node:path";
 
 import { CodexLocalConnector, type DiscoveredSession, type SessionConnector } from "@gitworklog/connectors";
 import { LoopRuntimeService } from "@gitworklog/core";
-import { DATABASE_FILE_NAME, openGitWorklogDatabase, type GitWorklogDatabase } from "@gitworklog/db";
-import { DEFAULT_POLICIES } from "@gitworklog/policy";
+import {
+  DATABASE_FILE_NAME,
+  openGitWorklogDatabase,
+  type GitWorklogDatabase,
+  type PolicyCenterPolicyRecord,
+  type PolicyCenterRuleRecord,
+  type PolicyCenterStateRecord,
+} from "@gitworklog/db";
 import type {
   Action,
   CreateLoopRunInput,
@@ -62,6 +68,10 @@ export interface ReviewDecisionInput {
   comment?: string;
 }
 
+export type PolicyCenterState = PolicyCenterStateRecord;
+export type PolicyCenterPolicy = PolicyCenterPolicyRecord;
+export type PolicyCenterRule = PolicyCenterRuleRecord;
+
 export class DesktopAppService {
   private readonly runtime: LoopRuntimeService;
 
@@ -74,10 +84,11 @@ export class DesktopAppService {
 
   createTaskAndRun(input: CreateTaskAndRunInput): { task: Task; loopRun: LoopRun } {
     const task = this.runtime.createTask(input.task);
+    const selectedPolicy = this.store.policyCenter.resolvePolicy(input.loopRun?.policyId);
     const loopRun = this.runtime.createLoopRun({
       taskId: task.taskId,
       mode: input.loopRun?.mode,
-      policyId: input.loopRun?.policyId ?? DEFAULT_POLICIES[1]?.policyId,
+      policyId: selectedPolicy.policyId,
     });
     return { task, loopRun };
   }
@@ -166,6 +177,14 @@ export class DesktopAppService {
   runAnalysis(loopRunId: string): { decisionId: string; actionId: string; requiresReview: boolean } {
     this.requireLoopRun(loopRunId);
     return this.runtime.analyzeLoopRun(loopRunId);
+  }
+
+  getPolicyCenterState(): PolicyCenterState {
+    return this.store.policyCenter.getState();
+  }
+
+  savePolicyCenterState(state: PolicyCenterState): PolicyCenterState {
+    return this.store.policyCenter.saveState(state);
   }
 
   getLoopRunSnapshot(loopRunId: string): LoopRunSnapshot {

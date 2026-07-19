@@ -268,6 +268,32 @@ export interface GitWorklogDatabase {
   decisions: DecisionRepository;
   actions: ActionRepository;
   reviews: ReviewRepository;
+  policyCenter: PolicyCenterRepository;
+}
+
+export interface PolicyCenterPolicyRecord {
+  policyId: string;
+  name: string;
+  description: string;
+  mode: "read_only" | "conservative" | "balanced";
+  enabled: boolean;
+  autoResumeEnabled: boolean;
+  autoResumeLimit: number;
+}
+
+export interface PolicyCenterRuleRecord {
+  ruleId: string;
+  title: string;
+  description: string;
+  enabled: boolean;
+  priority: number;
+  severity: "low" | "medium" | "high";
+}
+
+export interface PolicyCenterStateRecord {
+  selectedPolicyId: string;
+  policies: PolicyCenterPolicyRecord[];
+  rules: PolicyCenterRuleRecord[];
 }
 
 export function openGitWorklogDatabase(path = ":memory:"): GitWorklogDatabase {
@@ -290,6 +316,7 @@ export function openGitWorklogDatabase(path = ":memory:"): GitWorklogDatabase {
     decisions: new DecisionRepository(database),
     actions: new ActionRepository(database),
     reviews: new ReviewRepository(database),
+    policyCenter: new PolicyCenterRepository(database),
   };
 }
 
@@ -919,6 +946,134 @@ export class ReviewRepository {
   }
 }
 
+const POLICY_CENTER_STATE_POLICY_ID = "policy-center-state";
+
+const defaultPolicyCenterState: PolicyCenterStateRecord = {
+  selectedPolicyId: "conservative",
+  policies: [
+    {
+      policyId: "read-only",
+      name: "只读观察",
+      description: "只记录、分析和提示，不自动生成续跑动作。",
+      mode: "read_only",
+      enabled: true,
+      autoResumeEnabled: false,
+      autoResumeLimit: 0,
+    },
+    {
+      policyId: "conservative",
+      name: "保守续跑",
+      description: "默认进入人工审核，适合当前桌面端早期阶段。",
+      mode: "conservative",
+      enabled: true,
+      autoResumeEnabled: false,
+      autoResumeLimit: 0,
+    },
+    {
+      policyId: "balanced",
+      name: "平衡辅助",
+      description: "允许少量低风险自动续跑，高风险动作仍必须审核。",
+      mode: "balanced",
+      enabled: true,
+      autoResumeEnabled: true,
+      autoResumeLimit: 2,
+    },
+  ],
+  rules: [
+    {
+      ruleId: "high-risk-review",
+      title: "高风险动作必须审核",
+      description: "涉及高风险、不可逆或跨项目操作时，先进入人工审核。",
+      enabled: true,
+      priority: 10,
+      severity: "high",
+    },
+    {
+      ruleId: "resume-limit",
+      title: "自动续跑次数限制",
+      description: "同一循环达到策略限制后，不再继续自动恢复。",
+      enabled: true,
+      priority: 20,
+      severity: "medium",
+    },
+    {
+      ruleId: "tool-failure-review",
+      title: "工具失败后进入审核",
+      description: "测试、构建或关键工具失败后，需要先检查证据再继续。",
+      enabled: true,
+      priority: 30,
+      severity: "medium",
+    },
+  ],
+};
+
+export class PolicyCenterRepository {
+  constructor(private readonly database: DatabaseSync) {}
+
+  getState(): PolicyCenterStateRecord {
+    const row = this.database
+      .prepare("SELECT config_json FROM policies WHERE policy_id = ?")
+      .get(POLICY_CENTER_STATE_POLICY_ID) as { config_json?: string } | undefined;
+
+    if (!row?.config_json) {
+      return clonePolicyCenterState(defaultPolicyCenterState);
+    }
+
+    try {
+      const persisted = JSON.parse(row.config_json) as Partial<PolicyCenterStateRecord>;
+      return normalizePolicyCenterState(persisted);
+    } catch {
+      return clonePolicyCenterState(defaultPolicyCenterState);
+    }
+  }
+
+  saveState(state: PolicyCenterStateRecord): PolicyCenterStateRecord {
+    const normalized = normalizePolicyCenterState(state);
+    const selectedPolicy = resolvePolicyRecord(normalized, normalized.selectedPolicyId);
+    const now = new Date().toISOString();
+
+    this.database
+      .prepare(
+        `INSERT INTO policies (
+          policy_id, name, scope_type, mode, risk_threshold, auto_resume_enabled,
+          auto_resume_limit, cooldown_seconds, requires_review_on_high_risk, config_json,
+          created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(policy_id) DO UPDATE SET
+          name = excluded.name,
+          scope_type = excluded.scope_type,
+          mode = excluded.mode,
+          risk_threshold = excluded.risk_threshold,
+          auto_resume_enabled = excluded.auto_resume_enabled,
+          auto_resume_limit = excluded.auto_resume_limit,
+          cooldown_seconds = excluded.cooldown_seconds,
+          requires_review_on_high_risk = excluded.requires_review_on_high_risk,
+          config_json = excluded.config_json,
+          updated_at = excluded.updated_at`,
+      )
+      .run(
+        POLICY_CENTER_STATE_POLICY_ID,
+        "Policy Center State",
+        "desktop",
+        selectedPolicy.mode,
+        selectedPolicy.mode === "read_only" ? "low" : "medium",
+        selectedPolicy.autoResumeEnabled ? 1 : 0,
+        selectedPolicy.autoResumeLimit,
+        0,
+        1,
+        JSON.stringify(normalized),
+        now,
+        now,
+      );
+
+    return normalized;
+  }
+
+  resolvePolicy(policyId?: string): PolicyCenterPolicyRecord {
+    return { ...resolvePolicyRecord(this.getState(), policyId) };
+  }
+}
+
 function toTask(row: TaskRow): Task {
   return {
     taskId: row.task_id,
@@ -1039,4 +1194,71 @@ function ensureColumn(database: DatabaseSync, tableName: string, columnName: str
   if (!columns.some((column) => column.name === columnName)) {
     database.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnType}`);
   }
+}
+
+function normalizePolicyCenterState(state: Partial<PolicyCenterStateRecord>): PolicyCenterStateRecord {
+  const policies = defaultPolicyCenterState.policies.map((policy) => {
+    const persisted = Array.isArray(state.policies)
+      ? state.policies.find((candidate) => candidate?.policyId === policy.policyId)
+      : undefined;
+
+    return {
+      ...policy,
+      enabled: typeof persisted?.enabled === "boolean" ? persisted.enabled : policy.enabled,
+      autoResumeEnabled:
+        typeof persisted?.autoResumeEnabled === "boolean" ? persisted.autoResumeEnabled : policy.autoResumeEnabled,
+      autoResumeLimit:
+        typeof persisted?.autoResumeLimit === "number"
+          ? Math.min(9, Math.max(0, Math.round(persisted.autoResumeLimit)))
+          : policy.autoResumeLimit,
+    };
+  });
+
+  const rules = defaultPolicyCenterState.rules.map((rule) => {
+    const persisted = Array.isArray(state.rules)
+      ? state.rules.find((candidate) => candidate?.ruleId === rule.ruleId)
+      : undefined;
+
+    return {
+      ...rule,
+      enabled: typeof persisted?.enabled === "boolean" ? persisted.enabled : rule.enabled,
+      priority:
+        typeof persisted?.priority === "number"
+          ? Math.min(99, Math.max(1, Math.round(persisted.priority)))
+          : rule.priority,
+    };
+  });
+
+  const selectedPolicyId =
+    typeof state.selectedPolicyId === "string" && policies.some((policy) => policy.policyId === state.selectedPolicyId)
+      ? state.selectedPolicyId
+      : policies.find((policy) => policy.enabled)?.policyId ?? policies[0]?.policyId ?? defaultPolicyCenterState.selectedPolicyId;
+
+  return {
+    selectedPolicyId,
+    policies,
+    rules,
+  };
+}
+
+function clonePolicyCenterState(state: PolicyCenterStateRecord): PolicyCenterStateRecord {
+  return {
+    selectedPolicyId: state.selectedPolicyId,
+    policies: state.policies.map((policy) => ({ ...policy })),
+    rules: state.rules.map((rule) => ({ ...rule })),
+  };
+}
+
+function resolvePolicyRecord(
+  state: PolicyCenterStateRecord,
+  policyId?: string,
+): PolicyCenterPolicyRecord {
+  const candidate =
+    (policyId ? state.policies.find((policy) => policy.policyId === policyId) : undefined) ??
+    state.policies.find((policy) => policy.policyId === state.selectedPolicyId && policy.enabled) ??
+    state.policies.find((policy) => policy.enabled) ??
+    state.policies[0] ??
+    clonePolicyCenterState(defaultPolicyCenterState).policies[1]!;
+
+  return { ...candidate };
 }

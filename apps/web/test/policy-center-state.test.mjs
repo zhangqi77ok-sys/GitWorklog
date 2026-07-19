@@ -5,6 +5,7 @@ import {
   createDefaultPolicyCenterState,
   loadPolicyCenterState,
   selectPolicy,
+  savePolicyCenterState,
   setRulePriority,
   togglePolicyEnabled,
   toggleRuleEnabled,
@@ -65,12 +66,17 @@ test("updates policy auto resume settings within a safe range", () => {
   assert.equal(updated.policies.find((policy) => policy.policyId === "balanced").autoResumeLimit, 9);
 });
 
-test("loads persisted policy center state while preserving built-in definitions", () => {
+test("loads persisted policy center state while preserving built-in definitions", async () => {
   const storage = new Map([
     [
       "gitworklog-policy-center-v1",
       JSON.stringify({
         selectedPolicyId: "balanced",
+        policies: [
+          { policyId: "read-only", enabled: true, autoResumeEnabled: false, autoResumeLimit: 0 },
+          { policyId: "conservative", enabled: false, autoResumeEnabled: false, autoResumeLimit: 0 },
+          { policyId: "balanced", enabled: true, autoResumeEnabled: true, autoResumeLimit: 4 },
+        ],
         rules: [
           { ruleId: "resume-limit", enabled: false, priority: 5 },
           { ruleId: "unknown", enabled: false, priority: 1 },
@@ -79,13 +85,36 @@ test("loads persisted policy center state while preserving built-in definitions"
     ],
   ]);
 
-  const state = loadPolicyCenterState({
+  const state = await loadPolicyCenterState(undefined, {
     getItem: (key) => storage.get(key) ?? null,
     setItem: (key, value) => storage.set(key, value),
   });
 
   assert.equal(state.selectedPolicyId, "balanced");
+  assert.equal(state.policies.find((policy) => policy.policyId === "balanced").autoResumeLimit, 4);
   assert.equal(state.rules.length, 3);
   assert.equal(state.rules.find((rule) => rule.ruleId === "resume-limit").enabled, false);
   assert.equal(state.rules.find((rule) => rule.ruleId === "resume-limit").priority, 5);
+});
+
+test("saves policy center state through the desktop bridge when available", async () => {
+  const saved = [];
+  const bridge = {
+    api: {
+      policyCenter: {
+        getState: async () => createDefaultPolicyCenterState(),
+        saveState: async (state) => {
+          saved.push(state);
+        },
+      },
+    },
+  };
+
+  await savePolicyCenterState(bridge, undefined, {
+    ...createDefaultPolicyCenterState(),
+    selectedPolicyId: "balanced",
+  });
+
+  assert.equal(saved.length, 1);
+  assert.equal(saved[0].selectedPolicyId, "balanced");
 });

@@ -61,6 +61,7 @@ test("falls back to fixture data when the desktop bridge is unavailable", async 
 
 test("creates a task through the desktop bridge and reloads console data", async () => {
   let created = false;
+  let submittedInput;
   const bridge = {
     api: {
       tasks: {
@@ -76,6 +77,7 @@ test("creates a task through the desktop bridge and reloads console data", async
         ],
         createAndRun: async (input) => {
           created = true;
+          submittedInput = input;
           return { task: { taskId: "task-created", ...input.task }, loopRun: { loopRunId: "run-created" } };
         },
       },
@@ -94,6 +96,68 @@ test("creates a task through the desktop bridge and reloads console data", async
   assert.equal(created, true);
   assert.equal(data.source, "desktop");
   assert.equal(data.tasks[0].title, "Created task");
+  assert.equal(submittedInput.loopRun, undefined);
+});
+
+test("loads and saves policy center state through the desktop bridge", async () => {
+  const saved = [];
+  const bridge = {
+    api: {
+      policyCenter: {
+        getState: async () => ({
+          selectedPolicyId: "balanced",
+          policies: [
+            {
+              policyId: "read-only",
+              name: "只读观察",
+              description: "只记录、分析和提示，不自动生成续跑动作。",
+              mode: "read_only",
+              enabled: true,
+              autoResumeEnabled: false,
+              autoResumeLimit: 0,
+            },
+            {
+              policyId: "conservative",
+              name: "保守续跑",
+              description: "默认进入人工审核，适合当前桌面端早期阶段。",
+              mode: "conservative",
+              enabled: false,
+              autoResumeEnabled: false,
+              autoResumeLimit: 0,
+            },
+            {
+              policyId: "balanced",
+              name: "平衡辅助",
+              description: "允许少量低风险自动续跑，高风险动作仍必须审核。",
+              mode: "balanced",
+              enabled: true,
+              autoResumeEnabled: true,
+              autoResumeLimit: 3,
+            },
+          ],
+          rules: [],
+        }),
+        saveState: async (state) => {
+          saved.push(state);
+        },
+      },
+      tasks: {
+        list: async () => [],
+      },
+      reviews: {
+        listPending: async () => [],
+      },
+    },
+  };
+
+  const { loadPolicyCenterState, savePolicyCenterState } = await import("../build/test/policy-center-state.js");
+  const state = await loadPolicyCenterState(bridge, undefined);
+  await savePolicyCenterState(bridge, undefined, state);
+
+  assert.equal(state.selectedPolicyId, "balanced");
+  assert.equal(state.policies.find((policy) => policy.policyId === "balanced").autoResumeLimit, 3);
+  assert.equal(saved.length, 1);
+  assert.equal(saved[0].selectedPolicyId, "balanced");
 });
 
 test("approves and rejects reviews through the desktop bridge", async () => {

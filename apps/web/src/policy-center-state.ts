@@ -1,3 +1,5 @@
+import type { GitWorklogBridgeLike } from "./desktop-data";
+
 export const POLICY_CENTER_STORAGE_KEY = "gitworklog-policy-center-v1";
 
 export interface PolicyCenterPolicy {
@@ -95,8 +97,21 @@ export function createDefaultPolicyCenterState(): PolicyCenterState {
   };
 }
 
-export function loadPolicyCenterState(storage: PolicyCenterStorageLike | undefined): PolicyCenterState {
+export async function loadPolicyCenterState(
+  bridge: GitWorklogBridgeLike | undefined,
+  storage: PolicyCenterStorageLike | undefined,
+): Promise<PolicyCenterState> {
   const defaultState = createDefaultPolicyCenterState();
+
+  if (bridge?.api?.policyCenter?.getState) {
+    try {
+      const rawValue = await bridge.api.policyCenter.getState();
+      return normalizePolicyCenterState(rawValue, defaultState);
+    } catch {
+      // Fall back to browser storage below.
+    }
+  }
+
   if (!storage) {
     return defaultState;
   }
@@ -114,22 +129,23 @@ export function loadPolicyCenterState(storage: PolicyCenterStorageLike | undefin
   }
 }
 
-export function savePolicyCenterState(storage: PolicyCenterStorageLike | undefined, state: PolicyCenterState): void {
-  if (!storage) {
-    return;
+export async function savePolicyCenterState(
+  bridge: GitWorklogBridgeLike | undefined,
+  storage: PolicyCenterStorageLike | undefined,
+  state: PolicyCenterState,
+): Promise<void> {
+  if (bridge?.api?.policyCenter?.saveState) {
+    try {
+      await bridge.api.policyCenter.saveState(state);
+      return;
+    } catch {
+      // Keep browser preview usable if the desktop bridge rejects the save.
+    }
   }
 
-  storage.setItem(
-    POLICY_CENTER_STORAGE_KEY,
-    JSON.stringify({
-      selectedPolicyId: state.selectedPolicyId,
-      rules: state.rules.map((rule) => ({
-        ruleId: rule.ruleId,
-        enabled: rule.enabled,
-        priority: rule.priority,
-      })),
-    }),
-  );
+  if (storage) {
+    storage.setItem(POLICY_CENTER_STORAGE_KEY, JSON.stringify(state));
+  }
 }
 
 export function selectPolicy(state: PolicyCenterState, policyId: string): PolicyCenterState {
@@ -190,19 +206,45 @@ export function setRulePriority(state: PolicyCenterState, ruleId: string, priori
 }
 
 function normalizePolicyCenterState(
-  persisted: Partial<PolicyCenterState>,
+  persisted: unknown,
   defaultState: PolicyCenterState,
 ): PolicyCenterState {
+  const persistedState =
+    typeof persisted === "object" && persisted !== null ? (persisted as Partial<PolicyCenterState>) : {};
   const selectedPolicyId =
-    typeof persisted.selectedPolicyId === "string" &&
-    defaultState.policies.some((policy) => policy.policyId === persisted.selectedPolicyId)
-      ? persisted.selectedPolicyId
+    typeof persistedState.selectedPolicyId === "string" &&
+    defaultState.policies.some((policy) => policy.policyId === persistedState.selectedPolicyId)
+      ? persistedState.selectedPolicyId
       : defaultState.selectedPolicyId;
-  const persistedRules: unknown[] = Array.isArray(persisted.rules) ? persisted.rules : [];
+  const persistedPolicies: unknown[] = Array.isArray(persistedState.policies) ? persistedState.policies : [];
+  const persistedRules: unknown[] = Array.isArray(persistedState.rules) ? persistedState.rules : [];
 
   return {
     ...defaultState,
     selectedPolicyId,
+    policies: defaultState.policies.map((policy) => {
+      const persistedPolicy = persistedPolicies.find(
+        (candidate) =>
+          typeof candidate === "object" &&
+          candidate !== null &&
+          "policyId" in candidate &&
+          typeof (candidate as { policyId?: unknown }).policyId === "string" &&
+          (candidate as { policyId?: string }).policyId === policy.policyId,
+      ) as { enabled?: unknown; autoResumeEnabled?: unknown; autoResumeLimit?: unknown } | undefined;
+
+      return {
+        ...policy,
+        enabled: typeof persistedPolicy?.enabled === "boolean" ? persistedPolicy.enabled : policy.enabled,
+        autoResumeEnabled:
+          typeof persistedPolicy?.autoResumeEnabled === "boolean"
+            ? persistedPolicy.autoResumeEnabled
+            : policy.autoResumeEnabled,
+        autoResumeLimit:
+          typeof persistedPolicy?.autoResumeLimit === "number"
+            ? Math.min(9, Math.max(0, Math.round(persistedPolicy.autoResumeLimit)))
+            : policy.autoResumeLimit,
+      };
+    }),
     rules: defaultState.rules.map((rule) => {
       const persistedRule = persistedRules.find(
         (candidate) =>

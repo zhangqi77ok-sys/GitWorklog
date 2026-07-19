@@ -99,6 +99,8 @@ Implemented Phase 3.2:
 - Policy Center now exposes the built-in policy set in the same desktop window.
 - Users can choose the default policy, toggle policy availability, and adjust auto-resume settings locally.
 - Default review rules are visible with enable/disable and priority controls so the audit gate can be tuned without leaving the workspace.
+- Policy Center now loads and saves through the desktop bridge when available, with browser preview falling back to localStorage.
+- The selected policy now flows into new LoopRuns and backend review gating instead of staying UI-only.
 
 Implemented Phase 3.3:
 
@@ -114,5 +116,4 @@ Implemented Phase 3.4:
 
 Next implementation slices:
 
-- Wire Policy Center selection into backend policy persistence and review gating.
 - Expand Replay & Audit detail inspection with richer evidence/action payloads.

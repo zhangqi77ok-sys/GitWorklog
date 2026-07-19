@@ -28,6 +28,7 @@ import {
 import {
   loadPolicyCenterState,
   savePolicyCenterState,
+  createDefaultPolicyCenterState,
   selectPolicy,
   setRulePriority,
   togglePolicyEnabled,
@@ -110,7 +111,8 @@ export function App() {
   const [notice, setNotice] = useState("桌面控制台已就绪");
   const [isReviewPanelOpen, setIsReviewPanelOpen] = useState(false);
   const [activeNavItem, setActiveNavItem] = useState<NavItem>(() => navItemFromHash(window.location.hash));
-  const [policyState, setPolicyState] = useState<PolicyCenterState>(() => loadPolicyState());
+  const [policyState, setPolicyState] = useState<PolicyCenterState>(() => createDefaultPolicyCenterState());
+  const [isPolicyStateReady, setIsPolicyStateReady] = useState(false);
   const [reviewState, setReviewState] = useState<ReviewQueueState>(() =>
     buildReviewQueueState(fixtureConsoleData.reviews, []),
   );
@@ -129,6 +131,19 @@ export function App() {
       if (active) {
         setConsoleData(data);
         setSelectedTaskId(data.tasks[0]?.id ?? "");
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    void loadPolicyCenterState(window.gitWorklog, window.localStorage).then((state) => {
+      if (active) {
+        setPolicyState(state);
+        setIsPolicyStateReady(true);
       }
     });
     return () => {
@@ -156,8 +171,12 @@ export function App() {
   }, [selectedTask?.loopRunId]);
 
   useEffect(() => {
-    savePolicyCenterState(window.localStorage, policyState);
-  }, [policyState]);
+    if (!isPolicyStateReady) {
+      return;
+    }
+
+    void savePolicyCenterState(window.gitWorklog, window.localStorage, policyState);
+  }, [isPolicyStateReady, policyState]);
 
   useEffect(() => {
     setReviewState(buildReviewQueueState(consoleData.reviews, loopSnapshot?.actions ?? []));
@@ -954,10 +973,6 @@ const auditKindLabels: Record<ConsoleAuditTrailItem["kind"], string> = {
 function navItemFromHash(hash: string): NavItem {
   const normalizedHash = hash.replace(/^#/, "");
   return navItems.find((item) => navHashMap[item] === normalizedHash) ?? "任务";
-}
-
-function loadPolicyState(): PolicyCenterState {
-  return loadPolicyCenterState(typeof window === "undefined" ? undefined : window.localStorage);
 }
 
 function policyLabelFromState(state: PolicyCenterState, policyId: string): string {

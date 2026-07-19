@@ -127,6 +127,7 @@ v1 建议采用：
 
 用途：
 - 扫描本地 Codex 会话
+- 当前桌面端实现从 `~/.codex/sessions/**/*.jsonl` 递归读取，按文件修改时间取最近会话
 
 返回字段建议：
 - `sessionId`
@@ -173,7 +174,30 @@ v1 建议采用：
 用途：
 - 触发一次主动同步
 
-## 7. 文档和计划绑定接口
+## 7. Policy Center 接口
+
+### `policyCenter:getState`
+
+用途：
+- 读取桌面端持久化的策略中心状态
+- 包含当前默认策略、内置策略可用状态、自动续跑设置和审核规则状态
+
+返回字段：
+- `selectedPolicyId`
+- `policies[]`
+- `rules[]`
+
+### `policyCenter:saveState`
+
+输入：
+- 完整 `PolicyCenterState`
+
+用途：
+- 将策略中心状态写入本地 SQLite
+- 当前实现复用 `policies` 表中的 `policy-center-state` 行保存完整 JSON
+- 默认策略无效时由后端标准化为可用的内置策略
+
+## 8. 文档和计划绑定接口
 
 ### `documents:bind`
 

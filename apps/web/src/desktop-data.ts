@@ -109,6 +109,10 @@ export interface GitWorklogBridgeLike {
       bind(input: { loopRunId: string; session: ConsoleSessionItem }): Promise<unknown>;
       ingestEvents?(input: { loopRunId: string; sessionId: string }): Promise<unknown>;
     };
+    policyCenter?: {
+      getState(): Promise<unknown>;
+      saveState(input: unknown): Promise<unknown>;
+    };
   };
 }
 
@@ -189,9 +193,6 @@ export async function submitTaskDraft(
       title: draft.title,
       goal: draft.goal,
       riskProfile: draft.risk,
-    },
-    loopRun: {
-      policyId: "conservative",
     },
   });
   return loadConsoleData(bridge);

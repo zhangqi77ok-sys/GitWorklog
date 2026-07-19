@@ -3,6 +3,7 @@ import type {
   CreateTaskAndRunInput,
   DesktopAppService,
   IngestSessionEventsInput,
+  PolicyCenterState,
   ReviewDecisionInput,
 } from "./local-service.js";
 import type { CreateSessionEventInput } from "@gitworklog/shared-types";
@@ -39,6 +40,10 @@ export interface DesktopIpcApi {
     approve(input: ReviewDecisionInput): Promise<unknown>;
     reject(input: ReviewDecisionInput): Promise<unknown>;
   };
+  policyCenter: {
+    getState(): Promise<unknown>;
+    saveState(input: PolicyCenterState): Promise<unknown>;
+  };
 }
 
 type DesktopIpcService = Pick<
@@ -50,7 +55,9 @@ type DesktopIpcService = Pick<
   | "getLoopRunSnapshot"
   | "ingestSessionEvents"
   | "listPendingReviews"
+  | "getPolicyCenterState"
   | "approveReview"
+  | "savePolicyCenterState"
   | "rejectReview"
   | "listTasks"
   | "runAnalysis"
@@ -66,6 +73,8 @@ export function registerDesktopIpcHandlers(ipcMain: IpcMainLike, service: Deskto
   ipcMain.handle("analysis:run", (_event, loopRunId) => service.runAnalysis(String(loopRunId)));
   ipcMain.handle("loopRuns:snapshot", (_event, loopRunId) => service.getLoopRunSnapshot(String(loopRunId)));
   ipcMain.handle("reviews:listPending", () => service.listPendingReviews());
+  ipcMain.handle("policyCenter:getState", () => service.getPolicyCenterState());
+  ipcMain.handle("policyCenter:saveState", (_event, input) => service.savePolicyCenterState(input as PolicyCenterState));
   ipcMain.handle("reviews:approve", (_event, input) => service.approveReview(input as ReviewDecisionInput));
   ipcMain.handle("reviews:reject", (_event, input) => service.rejectReview(input as ReviewDecisionInput));
 }
@@ -94,6 +103,10 @@ export function createDesktopIpcApi(ipcRenderer: IpcRendererLike): DesktopIpcApi
       listPending: () => ipcRenderer.invoke("reviews:listPending"),
       approve: (input) => ipcRenderer.invoke("reviews:approve", input),
       reject: (input) => ipcRenderer.invoke("reviews:reject", input),
+    },
+    policyCenter: {
+      getState: () => ipcRenderer.invoke("policyCenter:getState"),
+      saveState: (input) => ipcRenderer.invoke("policyCenter:saveState", input),
     },
   };
 }
