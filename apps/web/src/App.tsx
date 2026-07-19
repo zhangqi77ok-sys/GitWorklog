@@ -17,6 +17,15 @@ import {
   type ConsoleTaskItem,
 } from "./desktop-data";
 import {
+  buildReplayAuditState,
+  filterReplayAuditEntries,
+  selectReplayAuditEntry,
+  selectReplayAuditFilter,
+  selectReplayAuditRelatedEntry,
+  type ReplayAuditFilter,
+  type ReplayAuditState,
+} from "./replay-audit-state";
+import {
   loadPolicyCenterState,
   savePolicyCenterState,
   selectPolicy,
@@ -73,6 +82,15 @@ const policyLabels: Record<string, string> = {
   strict_review: "严格审核",
 };
 
+const replayAuditFilters: { filter: ReplayAuditFilter; label: string }[] = [
+  { filter: "all", label: "全部" },
+  { filter: "event", label: "事件" },
+  { filter: "evidence", label: "证据" },
+  { filter: "decision", label: "决策" },
+  { filter: "action", label: "动作" },
+  { filter: "review", label: "审核" },
+];
+
 function labelFromMap(map: Record<string, string>, value?: string, fallback = "暂无") {
   if (!value) {
     return fallback;
@@ -96,6 +114,7 @@ export function App() {
   const [reviewState, setReviewState] = useState<ReviewQueueState>(() =>
     buildReviewQueueState(fixtureConsoleData.reviews, []),
   );
+  const [replayState, setReplayState] = useState<ReplayAuditState>(() => buildReplayAuditState([]));
 
   async function refreshConsoleData() {
     const data = await loadConsoleData(window.gitWorklog);
@@ -143,6 +162,10 @@ export function App() {
   useEffect(() => {
     setReviewState(buildReviewQueueState(consoleData.reviews, loopSnapshot?.actions ?? []));
   }, [consoleData.reviews, loopSnapshot?.actions]);
+
+  useEffect(() => {
+    setReplayState((current) => selectReplayAuditFilter(current, current.filter, loopSnapshot?.auditTrail ?? []));
+  }, [loopSnapshot?.auditTrail]);
 
   async function handleCreateTask(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -242,6 +265,22 @@ export function App() {
     setReviewState((current) => selectReview(current, reviewId));
   }
 
+  function handleSelectReplayAuditFilter(filter: ReplayAuditFilter) {
+    setReplayState((current) => selectReplayAuditFilter(current, filter, loopSnapshot?.auditTrail ?? []));
+  }
+
+  function handleSelectReplayAuditEntry(entryId: string) {
+    setReplayState((current) => selectReplayAuditEntry(current, entryId, loopSnapshot?.auditTrail ?? []));
+  }
+
+  function handleInspectReviewContext(actionId: string) {
+    const auditTrail = loopSnapshot?.auditTrail ?? [];
+    setReplayState((current) => selectReplayAuditRelatedEntry(current, actionId, auditTrail));
+    setActiveNavItem("回放审计");
+    window.history.replaceState(null, "", `#${navHashMap["回放审计"]}`);
+    setNotice(auditTrail.length ? "已跳转到回放审计上下文" : "当前循环还没有可回放的审计记录");
+  }
+
   function handleSelectPolicy(policyId: string) {
     setPolicyState((current) => {
       const next = selectPolicy(current, policyId);
@@ -331,11 +370,19 @@ export function App() {
         </div>
 
         {activeNavItem === "回放审计" ? (
-          <ReplayAuditView auditTrail={loopSnapshot?.auditTrail ?? []} selectedTask={selectedTask} snapshot={loopSnapshot} />
+          <ReplayAuditView
+            auditTrail={loopSnapshot?.auditTrail ?? []}
+            onSelectEntry={handleSelectReplayAuditEntry}
+            onSelectFilter={handleSelectReplayAuditFilter}
+            replayState={replayState}
+            selectedTask={selectedTask}
+            snapshot={loopSnapshot}
+          />
         ) : activeNavItem === "审核队列" ? (
           <ReviewQueueView
             isBusy={isBusy}
             onApprove={(reviewId) => void handleReview(reviewId, "approved")}
+            onInspectContext={handleInspectReviewContext}
             onReject={(reviewId) => void handleReview(reviewId, "rejected")}
             onSelectReview={handleSelectReview}
             reviewState={reviewState}
@@ -585,9 +632,15 @@ function TaskCard(props: { task: ConsoleTaskItem; isSelected: boolean; onSelect(
 
 function ReplayAuditView(props: {
   auditTrail: ConsoleAuditTrailItem[];
+  replayState: ReplayAuditState;
   selectedTask: ConsoleTaskItem | undefined;
   snapshot: ConsoleLoopSnapshot | undefined;
+  onSelectEntry(entryId: string): void;
+  onSelectFilter(filter: ReplayAuditFilter): void;
 }) {
+  const visibleAuditTrail = filterReplayAuditEntries(props.auditTrail, props.replayState.filter);
+  const selectedEntry =
+    props.auditTrail.find((entry) => entry.id === props.replayState.selectedEntryId) ?? visibleAuditTrail[0];
   return (
     <section className="replay-workbench">
       <article className="panel replay-hero">
@@ -609,10 +662,31 @@ function ReplayAuditView(props: {
           <p className="eyebrow">审计链路</p>
           <h2>最近记录</h2>
         </div>
-        {props.auditTrail.length ? (
+        <div className="audit-filter-row" aria-label="审计筛选">
+          {replayAuditFilters.map((item) => (
+            <button
+              className={item.filter === props.replayState.filter ? "audit-filter active" : "audit-filter"}
+              key={item.filter}
+              onClick={() => props.onSelectFilter(item.filter)}
+              type="button"
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+        {visibleAuditTrail.length ? (
           <div className="audit-list">
-            {props.auditTrail.map((entry) => (
-              <article className={`audit-entry audit-${entry.kind}`} key={`${entry.kind}-${entry.id}`}>
+            {visibleAuditTrail.map((entry) => (
+              <button
+                className={
+                  entry.id === selectedEntry?.id
+                    ? `audit-entry audit-${entry.kind} selected`
+                    : `audit-entry audit-${entry.kind}`
+                }
+                key={`${entry.kind}-${entry.id}`}
+                onClick={() => props.onSelectEntry(entry.id)}
+                type="button"
+              >
                 <span className="audit-kind">{auditKindLabels[entry.kind]}</span>
                 <div>
                   <strong>{entry.title}</strong>
@@ -622,11 +696,32 @@ function ReplayAuditView(props: {
                     {entry.meta ? ` · ${entry.meta}` : ""}
                   </small>
                 </div>
-              </article>
+              </button>
             ))}
           </div>
         ) : (
-          <p className="empty-state">还没有可回放记录。先绑定 Codex 会话、导入事件，然后运行当前循环分析。</p>
+          <p className="empty-state">当前筛选下没有可回放记录。可以切回“全部”，或先导入事件并运行分析。</p>
+        )}
+      </article>
+
+      <article className="panel replay-detail-panel">
+        <div className="section-heading">
+          <p className="eyebrow">详情</p>
+          <h2>选中记录</h2>
+        </div>
+        {selectedEntry ? (
+          <div className={`replay-detail-card audit-${selectedEntry.kind}`}>
+            <span className="audit-kind">{auditKindLabels[selectedEntry.kind]}</span>
+            <strong>{selectedEntry.title}</strong>
+            <p>{selectedEntry.detail}</p>
+            <div className="replay-detail-meta">
+              <span>记录编号：{selectedEntry.id}</span>
+              <span>时间：{selectedEntry.createdAt ?? "未知时间"}</span>
+              <span>关联：{selectedEntry.meta ?? "暂无关联元数据"}</span>
+            </div>
+          </div>
+        ) : (
+          <p className="empty-state">选中一条审计记录后，这里会展示更完整的上下文。</p>
         )}
       </article>
     </section>
@@ -764,6 +859,7 @@ function ReviewQueueView(props: {
   selectedTask: ConsoleTaskItem | undefined;
   isBusy: boolean;
   onSelectReview(reviewId: string): void;
+  onInspectContext(actionId: string): void;
   onApprove(reviewId: string): void;
   onReject(reviewId: string): void;
 }) {
@@ -827,6 +923,9 @@ function ReviewQueueView(props: {
                 <span>{selectedReview.requiresReview ? "当前需要人工审核" : "当前可直接通过"}</span>
               </div>
               <div className="review-actions">
+                <button onClick={() => props.onInspectContext(selectedReview.actionId)} type="button">
+                  查看上下文
+                </button>
                 <button disabled={props.isBusy} onClick={() => props.onApprove(selectedReview.reviewId)} type="button">
                   批准
                 </button>

@@ -106,8 +106,13 @@ Implemented Phase 3.3:
 - Review items are linked to their related action summaries so approvals and rejections stay grounded in context.
 - The review workspace stays inside the same desktop window and preserves the one-window rule.
 
+Implemented Phase 3.4:
+
+- Replay & Audit now has in-window filters for events, evidence, decisions, actions, and reviews.
+- Selecting an audit record shows its detail panel in the same desktop workspace.
+- Review Queue can jump from a selected review action to the related Replay & Audit context without opening a popup.
+
 Next implementation slices:
 
-- Expand Replay & Audit with filters and linked detail inspection.
 - Wire Policy Center selection into backend policy persistence and review gating.
-- Connect Review Queue selection to richer action/evidence detail inspection.
+- Expand Replay & Audit detail inspection with richer evidence/action payloads.

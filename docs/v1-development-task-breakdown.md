@@ -634,6 +634,7 @@ v1 先用规则实现
 - 选中任务时可以读取其最新 LoopRun snapshot
 - 选中任务时可以看到最近 session event 时间线
 - Phase 3.1 已完成第一版 Replay & Audit 页面：在同一桌面窗口内按时间倒序展示 audit trail，并提供空状态引导
+- Phase 3.4 已增强 Replay & Audit：支持按类型筛选、选中记录详情，并可从 Review Queue 跳转到相关动作上下文
 
 ## 6. v1 验收标准
 
