@@ -140,9 +140,9 @@
 |---|---|---|---|
 | O-1 | 意图 L1 规则匹配 | ✅ | 按特异度择优（修掉顺序误判）+ 动宾插入正则；11 条覆盖用例 |
 | O-2 | 意图 L2 向量匹配（DashScope Embedding） | 🟡 | 匹配逻辑已测（mock embedding）；种子语料已就位，需 live 验证召回质量 |
-| O-3 | 意图 L3 LLM 兜底 | ⬜ | pipeline 留了注入点，无实现 |
+| O-3 | 意图 L3 LLM 兜底 | ✅ | FAST 模型结构化分类，解析宽松；无 Key/超时/解析失败一律退 NONE |
 | O-4 | intent-seed.yml 种子语料 | ✅ | 规则+向量种子外置，`INTENT_SEED_PATH` 可覆盖，损坏回退内置兜底 |
-| O-5 | 查询改写 Agent | ⬜ | 指代消解/上下文补全 |
+| O-5 | 查询改写 Agent | ✅ | 指代消解/上下文补全；needs_rewrite 门槛避免为自足问句白调模型 |
 | O-6 | Supervisor 路由（子 Agent as tool） | 🟡 | 领域级路由已通；子 Agent as tool 机制未做 |
 | O-7 | 单意图高置信直跳 | ✅ | 高置信直投领域 Agent；低置信不驱动领域 Agent 而发 SUGGESTIONS 澄清 |
 | O-8 | 结果聚合 + SSE 统一回传 | ✅ | chat 已接真实 DomainAgentFactory + Hook 链，替换掉恒降级的占位工厂 |
@@ -161,7 +161,7 @@
 
 ## 实施进度
 
-**当前规模**：224 tests passed，ruff / ruff format / mypy 全绿，97 源文件。编排框架 = LangGraph。
+**当前规模**：250 tests passed，ruff / ruff format / mypy 全绿，99 源文件。编排框架 = LangGraph。
 
 ### 本轮（Hook 体系 + 真实接线）
 
@@ -202,11 +202,24 @@
 | D-14 | 审计是旁路：sink 抛异常只记日志，用户查询照常返回 | `test_audit_failure_does_not_break_query` |
 | 工程 | `scripts/init_db.py` 与 `tests/conftest.py` 均靠显式 import 触发模型注册，新增 ORM 模块必须两处都补，否则表建不出来 | 实测 14 张表含 `sql_audit_log` |
 
+### 第四轮（L3 兜底 + 查询改写）
+
+| 项 | 内容 | 证据 |
+|---|---|---|
+| O-3 | L3 LLM 分类器：用 FAST 模型（意图判断不值得上强模型）。置信度由模型自报并夹到 [0,1]，**直跳判定对三层来源用同一套标准**，不为 LLM 单开规则。解析刻意宽松（模型常回 `travel_booking (0.8)` 或附带解释）。无 Key / 超时 / 解析失败一律退 NONE——兜底层挂了应静默退化 | 13 项 |
+| O-5 | 查询改写：「订去上海的机票」→「它多少钱」，第二句单独看毫无意图信号。`needs_rewrite` 三重门槛（有历史 + 短 + 含指代/省略）避免为自足问句白调模型；改写结果写进 `AGENT_SWITCH.rewritten_query`，否则用户看不懂为什么答的是另一个问题 | 13 项 |
+| 接线 | `chat.py` 组装 L1+L3+改写；已登录会话加载最近 6 轮作上文（匿名无历史可依）。两者在无模型 Key 时各自内部降级，不影响 L1 主路径 | 实跑验证 |
+| O-1 补 | 实测发现「机票多少钱」这类问价查询落到闲聊，补进 travel_booking 正则 | 参数化用例 |
+
+实跑复验（无模型 Key）：travel/data 规则路径正常直跳，「讲个笑话」得到
+`source:"none"` 而非报错——L3 正确降级；服务端日志无异常。
+
 ### 下一步建议（按性价比）
 
-1. **O-3 L3 LLM 兜底 / O-5 查询改写** —— 规则覆盖不到的长尾靠这两个接住。
-3. **T-5/T-6 → T-7~T-12** —— 先补跨城衔接与往返规划两个前置，再做 6 个子 Agent。
-4. **P1-A2 / P1-M4 / P1-M6** —— 踢人下线、中断续跑、HITL，都需要 Redis/checkpointer 接线。
+1. **T-5/T-6 → T-7~T-12** —— 先补跨城衔接与往返规划两个前置，再做 6 个子 Agent（当前最大空缺）。
+2. **P1-A2 / P1-M4 / P1-M6** —— 踢人下线、中断续跑、HITL，都需要 Redis/checkpointer 接线。
+3. **D-1/D-3** —— M-Schema 自省与缓存，是 data 域接 live 的前置。
+4. **T-1/T-2 HTTP 路由** —— 差旅 service 已全通但没有对外接口，目前只能由 Agent 工具触达。
 5. 需 live 环境的部分见 [NEEDS_LIVE.md](NEEDS_LIVE.md)。
 
 ---

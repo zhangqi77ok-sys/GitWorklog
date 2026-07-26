@@ -27,12 +27,15 @@ from app.core.db import session_scope
 from app.core.logging import get_logger
 from app.orchestrator.factory import DomainAgentFactory
 from app.orchestrator.intent.defaults import default_rule_matcher
+from app.orchestrator.intent.llm_classifier import LLMIntentClassifierImpl
 from app.orchestrator.pipeline import IntentPipeline
+from app.orchestrator.rewriter import LLMQueryRewriter
 from app.orchestrator.supervisor import Supervisor
 from app.platform.auth.security import decode_token
 from app.platform.hooks.base import HookChain, HookContext
 from app.platform.hooks.persistence import PersistenceHook
 from app.platform.hooks.progress import ProgressHook
+from app.platform.session.service import get_messages
 from app.platform.session.sink import DbMessageSink
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
@@ -119,6 +122,31 @@ def _build_hooks(persist: bool) -> HookChain:
     return HookChain(hooks=hooks)
 
 
+def _build_pipeline() -> IntentPipeline:
+    """L1 规则 + L3 LLM 兜底 + 查询改写。
+
+    L2 向量需 live embedding，暂不接（种子语料已在 intent-seed.yml 就位）。
+    L3 与改写器在无模型 Key 时各自内部降级为「不改写 / 返回 NONE」，
+    不影响 L1 规则这条主路径。
+    """
+    return IntentPipeline(
+        default_rule_matcher(),
+        llm_classifier=LLMIntentClassifierImpl(),
+        query_rewriter=LLMQueryRewriter(),
+    )
+
+
+def _load_history(conversation_id: str, limit: int = 6) -> list[dict[str, str]]:
+    """取最近几轮供指代消解。取不到就返回空——改写只是增强。"""
+    try:
+        with session_scope() as session:
+            msgs = get_messages(session, conversation_id)
+        return [{"role": m.role, "content": m.content} for m in msgs[-limit:]]
+    except Exception as exc:  # 宽捕获是刻意的：读历史失败不该阻断提问
+        logger.warning("load_history_failed", conversation_id=conversation_id, error=str(exc))
+        return []
+
+
 @router.post("")
 async def chat(
     req: ChatRequest,
@@ -129,6 +157,7 @@ async def chat(
 
     # 只有登录用户才落库：匿名会话没有归属，存了也无法回放
     persist = user_id is not None
+    history: list[dict[str, str]] = []
     if persist:
         from fastapi.concurrency import run_in_threadpool
 
@@ -139,6 +168,8 @@ async def chat(
                 get_or_create_conversation(session, user_id or 0, conversation_id)
 
         await run_in_threadpool(_ensure)
+        # 历史只对已落库的会话才有；匿名没有上文可参照
+        history = await run_in_threadpool(_load_history, conversation_id)
 
     ctx = HookContext(
         query=req.query,
@@ -147,14 +178,14 @@ async def chat(
     )
     provider = _RequestContext(user_id or 0)
     supervisor = Supervisor(
-        IntentPipeline(default_rule_matcher()),
+        _build_pipeline(),
         _ChatFactory(provider),
         hooks=_build_hooks(persist),
     )
 
     async def _gen():  # type: ignore[no-untyped-def]
         try:
-            async for evt in supervisor.handle(req.query, ctx=ctx):
+            async for evt in supervisor.handle(req.query, ctx=ctx, history=history):
                 yield evt.to_sse()
         finally:
             # 客户端提前断开时也要走到这里，避免 session 泄漏

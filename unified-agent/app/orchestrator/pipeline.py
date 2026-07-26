@@ -13,6 +13,7 @@ from typing import Protocol
 
 from app.orchestrator.intent.matchers import RuleMatcher, VectorMatcher
 from app.orchestrator.intent.models import IntentCategory, IntentResult, IntentSource
+from app.orchestrator.rewriter import QueryRewriter
 
 DIRECT_DISPATCH_THRESHOLD = 0.9
 
@@ -28,6 +29,7 @@ class RouteDecision:
     intent: IntentResult
     direct_dispatch: bool  # True 直跳目标 Agent；False 交 Supervisor
     target: IntentCategory
+    query: str = ""  # 实际用于识别的查询（可能已被改写）
 
 
 class IntentPipeline:
@@ -36,10 +38,12 @@ class IntentPipeline:
         rule_matcher: RuleMatcher,
         vector_matcher: VectorMatcher | None = None,
         llm_classifier: LLMIntentClassifier | None = None,
+        query_rewriter: QueryRewriter | None = None,
     ) -> None:
         self.rule_matcher = rule_matcher
         self.vector_matcher = vector_matcher
         self.llm_classifier = llm_classifier
+        self.query_rewriter = query_rewriter
 
     def recognize(self, query: str) -> IntentResult:
         """三层短路：L1 命中即返回，否则 L2，再否则 L3，最后 NONE。"""
@@ -54,11 +58,26 @@ class IntentPipeline:
             return self.llm_classifier.classify(query)
         return IntentResult.none()
 
-    def route(self, query: str) -> RouteDecision:
-        intent = self.recognize(query)
+    def rewrite(self, query: str, history: list[dict[str, str]] | None = None) -> str:
+        """O-5：借上文把指代/省略补全。未配改写器或无历史时原样返回。"""
+        if self.query_rewriter is None or not history:
+            return query
+        try:
+            return self.query_rewriter.rewrite(query, history)
+        except Exception:  # 宽捕获是刻意的：改写是增强，失败退回原句
+            return query
+
+    def route(self, query: str, history: list[dict[str, str]] | None = None) -> RouteDecision:
+        effective = self.rewrite(query, history)
+        intent = self.recognize(effective)
         direct = (
             intent.source != IntentSource.NONE
             and intent.confidence >= DIRECT_DISPATCH_THRESHOLD
             and intent.category != IntentCategory.GENERAL_CHAT
         )
-        return RouteDecision(intent=intent, direct_dispatch=direct, target=intent.category)
+        return RouteDecision(
+            intent=intent,
+            direct_dispatch=direct,
+            target=intent.category,
+            query=effective,
+        )

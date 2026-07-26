@@ -68,9 +68,14 @@ class Supervisor:
         self.hooks = hooks
 
     async def handle(
-        self, query: str, ctx: HookContext | None = None
+        self,
+        query: str,
+        ctx: HookContext | None = None,
+        history: list[dict[str, str]] | None = None,
     ) -> AsyncGenerator[SSEEvent, None]:
-        decision = self.pipeline.route(query)
+        decision = self.pipeline.route(query, history=history)
+        # 改写后的查询才是后续识别与执行的依据（O-5）
+        effective_query = decision.query or query
         domain = domain_of(decision.target)
         logger.info(
             "supervisor_route",
@@ -93,16 +98,17 @@ class Supervisor:
             domain = "general"
 
         # 告知前端路由到哪个领域，并带上路由依据便于 trace/回放
-        yield SSEEvent(
-            event=SSEEventType.AGENT_SWITCH,
-            data={
-                "domain": domain,
-                "intent": decision.target.value,
-                "direct": decision.direct_dispatch,
-                "confidence": decision.intent.confidence,
-                "source": decision.intent.source.value,
-            },
-        )
+        switch_data: dict[str, Any] = {
+            "domain": domain,
+            "intent": decision.target.value,
+            "direct": decision.direct_dispatch,
+            "confidence": decision.intent.confidence,
+            "source": decision.intent.source.value,
+        }
+        if effective_query != query:
+            # 改写过就如实告知，否则用户看不懂为什么答的是另一个问题
+            switch_data["rewritten_query"] = effective_query
+        yield SSEEvent(event=SSEEventType.AGENT_SWITCH, data=switch_data)
         if clarify:
             label = _INTENT_LABELS.get(decision.target)
             yield SSEEvent(
@@ -117,5 +123,5 @@ class Supervisor:
         hctx = ctx or HookContext(query=query)
         hctx.domain = domain
         agent = self.factory.build(domain)
-        async for e in resolve_stream(query, agent=agent, hooks=self.hooks, ctx=hctx):
+        async for e in resolve_stream(effective_query, agent=agent, hooks=self.hooks, ctx=hctx):
             yield e
