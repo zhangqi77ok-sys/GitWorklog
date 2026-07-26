@@ -120,15 +120,15 @@
 | T-1 | 差旅单业务（申请/审批/查询/取消） | 🟡 | service 全通（test_travel.py）；**无 HTTP 路由，仅 Agent 工具可达** |
 | T-2 | 审批记录 + 管理员审批接口 | 🟡 | approval_record + approve_order 已测；管理员审批接口未写 |
 | T-3 | 差旅政策规则引擎（职级×城市） | ✅ | PolicyCheckResult + `load_policy_engine` 从 DB 装规则，无规则时 fail-closed |
-| T-4 | 预订记录统一存储（机票/酒店/火车等） | 🟡 | booking_record ORM 已建；无 service/工具 |
-| T-5 | 行程冲突检测（时间重叠+跨城衔接） | 🟡 | 时间重叠已测；**CityTransit 跨城衔接未做** |
-| T-6 | 往返规划计算引擎 | ⬜ | plan_roundtrip |
-| T-7 | 子 Agent：行程管理 | ⬜ | `domains/travel/agents/` 为空包 |
-| T-8 | 子 Agent：行程规划 | ⬜ | 交通/酒店比价 |
-| T-9 | 子 Agent：行程审核（六维） | ⬜ | 完整性/预算/偏好等 |
-| T-10 | 子 Agent：预订执行 | ⬜ | 出票/订房 |
-| T-11 | 子 Agent：报销（发票识别） | ⬜ | gogo 中未完成，本项目补齐 |
-| T-12 | 子 Agent：信息（政策/景点/签证 RAG） | ⬜ | 3 知识库 |
+| T-4 | 预订记录统一存储（机票/酒店/火车等） | ✅ | 预订/确认/取消/汇总 service；仅已审批单可预订 |
+| T-5 | 行程冲突检测（时间重叠+跨城衔接） | ✅ | CityTransit 出行耗时表 + 相邻段衔接判定，未知城市对不静默放行 |
+| T-6 | 往返规划计算引擎 | ✅ | 夜数/去返程/政策预算；政策缺失显式标记而非按 0 处理 |
+| T-7 | 子 Agent：行程管理 | ✅ | 申请/查询/取消，注册表驱动装配 |
+| T-8 | 子 Agent：行程规划 | 🟡 | 往返方案+衔接可行性已通；真实交通/酒店比价需外部 API |
+| T-9 | 子 Agent：行程审核（六维） | ✅ | 完整性/政策/预算/冲突/衔接/偏好；不短路，一次报全 |
+| T-10 | 子 Agent：预订执行 | 🟡 | 预订记账全通；真实出票/订房需外部 API |
+| T-11 | 子 Agent：报销（发票识别） | 🟡 | 查重/日期/超额校验已通；发票 OCR 需多模态模型 |
+| T-12 | 子 Agent：信息（政策/景点/签证 RAG） | 🟡 | 政策问答已通；景点/签证知识库未接入，工具说明里明确拒答 |
 | T-13 | 差旅 Skills：tuniu-cli 等 5 个 | ⬜ | 凭证注入机制已就绪(P1-S4)，Skills 本身未写 |
 | T-14 | 外部数据：天气/新闻 | ⬜ | wttr.in/NewsData |
 
@@ -143,7 +143,7 @@
 | O-3 | 意图 L3 LLM 兜底 | ✅ | FAST 模型结构化分类，解析宽松；无 Key/超时/解析失败一律退 NONE |
 | O-4 | intent-seed.yml 种子语料 | ✅ | 规则+向量种子外置，`INTENT_SEED_PATH` 可覆盖，损坏回退内置兜底 |
 | O-5 | 查询改写 Agent | ✅ | 指代消解/上下文补全；needs_rewrite 门槛避免为自足问句白调模型 |
-| O-6 | Supervisor 路由（子 Agent as tool） | 🟡 | 领域级路由已通；子 Agent as tool 机制未做 |
+| O-6 | Supervisor 路由（子 Agent as tool） | ✅ | `platform/llm/delegation.as_tool` 把子 Agent 包成普通工具，两域通用 |
 | O-7 | 单意图高置信直跳 | ✅ | 高置信直投领域 Agent；低置信不驱动领域 Agent 而发 SUGGESTIONS 澄清 |
 | O-8 | 结果聚合 + SSE 统一回传 | ✅ | chat 已接真实 DomainAgentFactory + Hook 链，替换掉恒降级的占位工厂 |
 
@@ -161,7 +161,7 @@
 
 ## 实施进度
 
-**当前规模**：250 tests passed，ruff / ruff format / mypy 全绿，99 源文件。编排框架 = LangGraph。
+**当前规模**：334 tests passed，ruff / ruff format / mypy 全绿，107 源文件。编排框架 = LangGraph。
 
 ### 本轮（Hook 体系 + 真实接线）
 
@@ -214,13 +214,29 @@
 实跑复验（无模型 Key）：travel/data 规则路径正常直跳，「讲个笑话」得到
 `source:"none"` 而非报错——L3 正确降级；服务端日志无异常。
 
+### 第五轮（差旅子 Agent 体系）
+
+| 项 | 内容 | 证据 |
+|---|---|---|
+| T-5 | `CityTransit` 出行耗时表 + 相邻段衔接判定。原 `has_time_conflict` 只判日期重叠，会漏掉「10-02 还在北京、10-03 一早要在广州」这类真实冲突。未知城市对退默认值而非静默放行 | 9 项 |
+| T-6 | `plan_roundtrip`：夜数、去返程、按政策的预算上限。政策查不到时显式标 `policy_missing` 而非按 0 预算处理 | 7 项 |
+| T-4 | 预订 service（`booking_record` 此前有 ORM 无入口）。**只有已审批单可预订**——防止 Agent 拿草稿单去出票 | 8 项 |
+| T-11 | 发票校验：查重（含跨次提交）、开票日期是否在差旅期间、是否超已确认预订额。一次报全部问题 | 8 项 |
+| T-9 | 六维审核引擎，前五维硬约束、偏好软提示；不在第一个失败处短路 | 11 项 |
+| T-7~T-12 | 六个子 Agent，注册表驱动装配（只在 prompt/工具类/委派描述三处不同，写六遍只会改一处忘五处）。**工具即权限**：报销子 Agent 拿不到预订工具就不可能误下单，比在 prompt 里叮嘱可靠 | 41 项 |
+| O-6 | `platform/llm/delegation.as_tool` 把子 Agent 包成 `Callable[[str], str]`，于是能和普通工具混在同一列表装配，父 Agent 无需区别对待。两域通用 | 委派/异常/空回复用例 |
+| 主从形态 | `build_travel_supervisor_agent` 只挂委派工具、**刻意不挂基础工具**——否则主 Agent 会绕过子 Agent 直接操作，权限边界形同虚设 | 装配测试 |
+
+实跑验证：建单 → 未审批订票被拒 → 审批后订票成功 → 汇总，安全约束真实生效。
+
 ### 下一步建议（按性价比）
 
-1. **T-5/T-6 → T-7~T-12** —— 先补跨城衔接与往返规划两个前置，再做 6 个子 Agent（当前最大空缺）。
-2. **P1-A2 / P1-M4 / P1-M6** —— 踢人下线、中断续跑、HITL，都需要 Redis/checkpointer 接线。
+1. **P1-A2 / P1-M4 / P1-M6** —— 踢人下线、中断续跑、HITL，都需要 Redis/checkpointer 接线。
+2. **T-1/T-2 HTTP 路由** —— 差旅 service 已全通但没有对外接口，目前只能由 Agent 工具触达。
 3. **D-1/D-3** —— M-Schema 自省与缓存，是 data 域接 live 的前置。
-4. **T-1/T-2 HTTP 路由** —— 差旅 service 已全通但没有对外接口，目前只能由 Agent 工具触达。
-5. 需 live 环境的部分见 [NEEDS_LIVE.md](NEEDS_LIVE.md)。
+4. **T-13/T-14** —— 差旅 Skills 与天气/新闻外部数据（凭证注入机制 P1-S4 已就绪）。
+5. **主从形态接进 chat** —— 目前工厂仍装单体 travel Agent；子 Agent 委派要有模型才看得出效果，建议先配 Key 验证再切换。
+6. 需 live 环境的部分见 [NEEDS_LIVE.md](NEEDS_LIVE.md)。
 
 ---
 
