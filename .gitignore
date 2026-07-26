@@ -1,0 +1,38 @@
+# ---- Node / 前端 ----
+node_modules/
+dist/
+build/
+.next/
+.turbo/
+*.tsbuildinfo
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# 工具缓存
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ---- 环境变量与密钥（绝不入库）----
+.env
+.env.*
+!.env.example
+
+# ---- 日志与运行时产物 ----
+*.log
+/data/
+/uploads/
+
+# ---- IDE / OS ----
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
