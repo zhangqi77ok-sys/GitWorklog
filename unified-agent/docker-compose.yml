@@ -1,0 +1,55 @@
+# 本地开发基础设施：MySQL / Redis / PgVector / MinIO / mcp-echarts
+# 用法：docker compose up -d
+services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: unified_agent
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    command: --default-authentication-plugin=mysql_native_password
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  pgvector:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: vectors
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgvector_data:/var/lib/postgresql/data
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"   # API
+      - "9001:9001"   # 控制台
+    volumes:
+      - minio_data:/data
+
+  mcp-echarts:
+    image: node:20-alpine
+    working_dir: /app
+    command: sh -c "npx -y mcp-echarts --port 3033"
+    ports:
+      - "3033:3033"
+
+volumes:
+  mysql_data:
+  redis_data:
+  pgvector_data:
+  minio_data:

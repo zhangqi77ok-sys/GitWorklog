@@ -1,0 +1,70 @@
+"""Supervisor 编排：意图路由 → 选择领域 Agent（对应 gogo 的 MasterAgent）。
+
+只做「分发」，不含业务。用 IntentPipeline 的路由决策把请求导向 data / travel 域，
+再由 runtime 运行对应 Agent 并流式回传。
+
+Agent 构建是「按会话惰性装配」：接入层根据登录用户 + DB session 组装领域 context，
+传入 AgentFactory。未配置模型时 factory 返回 None → runtime 降级。
+"""
+
+from __future__ import annotations
+
+from collections.abc import AsyncGenerator
+from typing import Any, Protocol
+
+from app.core.logging import get_logger
+from app.orchestrator.intent.models import IntentCategory
+from app.orchestrator.pipeline import IntentPipeline
+from app.orchestrator.runtime import resolve_stream
+from app.platform.sse.events import SSEEvent, SSEEventType
+
+logger = get_logger(__name__)
+
+# 意图类别 → 领域 key
+_TRAVEL_INTENTS = {
+    IntentCategory.TRAVEL_MANAGE,
+    IntentCategory.TRAVEL_PLAN,
+    IntentCategory.TRAVEL_BOOKING,
+    IntentCategory.TRAVEL_REIMBURSE,
+    IntentCategory.TRAVEL_INFO,
+}
+
+
+def domain_of(category: IntentCategory) -> str:
+    if category == IntentCategory.DATA_ANALYSIS:
+        return "data"
+    if category in _TRAVEL_INTENTS:
+        return "travel"
+    return "general"
+
+
+class AgentFactory(Protocol):
+    """按领域 key 惰性构建 Agent。无模型/不支持返回 None（触发降级）。"""
+
+    def build(self, domain: str) -> Any | None: ...
+
+
+class Supervisor:
+    def __init__(self, pipeline: IntentPipeline, factory: AgentFactory) -> None:
+        self.pipeline = pipeline
+        self.factory = factory
+
+    async def handle(self, query: str) -> AsyncGenerator[SSEEvent, None]:
+        decision = self.pipeline.route(query)
+        domain = domain_of(decision.target)
+        logger.info(
+            "supervisor_route",
+            intent=decision.intent.category,
+            source=decision.intent.source,
+            confidence=decision.intent.confidence,
+            domain=domain,
+            direct=decision.direct_dispatch,
+        )
+        # 告知前端路由到哪个领域
+        yield SSEEvent(
+            event=SSEEventType.AGENT_SWITCH,
+            data={"domain": domain, "intent": decision.target.value},
+        )
+        agent = self.factory.build(domain)
+        async for e in resolve_stream(query, agent=agent):
+            yield e
