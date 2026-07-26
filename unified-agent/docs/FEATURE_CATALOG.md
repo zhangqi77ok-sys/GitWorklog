@@ -105,7 +105,7 @@
 | D-11 | 工具 describeTables | ✅ | 字段详情+示例值 |
 | D-12 | 工具 lookupGlossary | ✅ | 口径+SQL 片段+同义词 |
 | D-13 | 工具 validateSql | ✅ | 返回安全 SQL |
-| D-14 | 工具 executeSql（全编排） | 🟡 | guard→改写→**预检**→执行→脱敏 已通；审计落库未做 |
+| D-14 | 工具 executeSql（全编排） | ✅ | guard→改写→预检→执行→脱敏→审计 全链路；被拦尝试同样留痕 |
 | D-15 | 工具 calculate（表达式） | ✅ | 同环比/占比，聚合推给 SQL |
 | D-16 | data-analysis SKILL.md 编排流程 | ✅ | 拆题→探Schema→SQL→校验→报告 |
 | D-17 | 工具搜索/延迟工具（不塞满上下文） | ⬜ | 数据工具按需发现 |
@@ -161,7 +161,7 @@
 
 ## 实施进度
 
-**当前规模**：215 tests passed，ruff / ruff format / mypy 全绿，94 源文件。编排框架 = LangGraph。
+**当前规模**：224 tests passed，ruff / ruff format / mypy 全绿，97 源文件。编排框架 = LangGraph。
 
 ### 本轮（Hook 体系 + 真实接线）
 
@@ -194,10 +194,17 @@
 实跑复验：「帮我订去上海的机票」现路由到 `travel`（此前 `general`），
 事件为 `{"domain":"travel","intent":"travel_booking","direct":true,"confidence":0.9,"source":"rule"}`。
 
+### 第三轮（SQL 审计）
+
+| 项 | 内容 | 证据 |
+|---|---|---|
+| D-14 | `SqlAuditor` + `AuditSink` 协议 + `sql_audit_log` 表。**成功与被拦两条路径都留痕**——被 guard / 预检拒绝的越界尝试才是事后追责与调参的依据。SQL 与错误文本落库前截断，防单条巨型语句撑爆审计表 | test_sql_audit.py 9 项 |
+| D-14 | 审计是旁路：sink 抛异常只记日志，用户查询照常返回 | `test_audit_failure_does_not_break_query` |
+| 工程 | `scripts/init_db.py` 与 `tests/conftest.py` 均靠显式 import 触发模型注册，新增 ORM 模块必须两处都补，否则表建不出来 | 实测 14 张表含 `sql_audit_log` |
+
 ### 下一步建议（按性价比）
 
-1. **D-14 审计落库** —— executeSql 安全链路只差这一环（预检已补齐）。
-2. **O-3 L3 LLM 兜底 / O-5 查询改写** —— 规则覆盖不到的长尾靠这两个接住。
+1. **O-3 L3 LLM 兜底 / O-5 查询改写** —— 规则覆盖不到的长尾靠这两个接住。
 3. **T-5/T-6 → T-7~T-12** —— 先补跨城衔接与往返规划两个前置，再做 6 个子 Agent。
 4. **P1-A2 / P1-M4 / P1-M6** —— 踢人下线、中断续跑、HITL，都需要 Redis/checkpointer 接线。
 5. 需 live 环境的部分见 [NEEDS_LIVE.md](NEEDS_LIVE.md)。

@@ -13,6 +13,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 # 触发所有模型注册到 Base.metadata（新增模型模块时在此 import）
+import app.domains.data.models
 import app.domains.travel.business.models
 import app.platform.session.models
 import app.platform.skills.models

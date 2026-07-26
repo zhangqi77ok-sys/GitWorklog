@@ -12,7 +12,8 @@ from __future__ import annotations
 
 import sys
 
-# 导入所有模型模块，触发注册到 Base.metadata
+# 导入所有模型模块，触发注册到 Base.metadata（新增模型模块时在此 import）
+import app.domains.data.models
 import app.domains.travel.business.models
 import app.platform.session.models
 import app.platform.skills.models
