@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -28,10 +29,15 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 
 def create_token(user_id: int, *, extra: dict[str, Any] | None = None) -> str:
-    """签发 JWT。sub=user_id，exp 按配置。"""
+    """签发 JWT。sub=user_id，jti 唯一标识本次会话，exp 按配置。
+
+    jti 是踢人下线的抓手：JWT 无状态、签出去收不回，只有配合
+    session_store 里的 jti 记录才能在过期前吊销（见 auth/session_store.py）。
+    """
     now = datetime.now(UTC)
     payload: dict[str, Any] = {
         "sub": str(user_id),
+        "jti": uuid.uuid4().hex,
         "iat": now,
         "exp": now + timedelta(minutes=settings.auth.jwt_expire_minutes),
     }

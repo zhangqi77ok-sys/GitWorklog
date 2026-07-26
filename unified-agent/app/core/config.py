@@ -36,6 +36,11 @@ class AuthSettings(_Base):
     jwt_secret: str = "change-me"
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 43200
+    # 活跃会话（踢人下线）。关掉则退化为纯无状态 JWT，令牌无法提前吊销。
+    session_store_enabled: bool = True
+    # Redis 不可用时是否拒绝一切请求。默认 false（保可用性），
+    # 取舍见 platform/auth/session_store.py 模块文档。
+    revocation_fail_closed: bool = False
 
 
 class DBSettings(_Base):

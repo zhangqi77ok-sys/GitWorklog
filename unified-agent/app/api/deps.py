@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from app.core.db import get_session
 from app.core.exceptions import AuthError, NoPermissionError
 from app.platform.auth.security import decode_token
+from app.platform.auth.session_store import check_active
 from app.platform.user.models import SysUser
 from app.platform.user.service import get_user, has_role
 
@@ -37,9 +38,15 @@ def current_user(
         payload = decode_token(token)
     except jwt.InvalidTokenError as e:
         raise AuthError("令牌无效或已过期") from e
-    user = get_user(session, int(payload["sub"]))
+    user_id = int(payload["sub"])
+    # 令牌密码学有效 ≠ 会话仍有效：可能已被踢下线（P1-A2）
+    if not check_active(user_id, payload.get("jti")):
+        raise AuthError("会话已失效，请重新登录")
+    user = get_user(session, user_id)
     if user is None:
         raise AuthError("用户不存在")
+    if user.status != 1:
+        raise AuthError("账号已停用")
     return user
 
 

@@ -32,7 +32,7 @@
 | ID | 功能点 | 来源 | 状态 | 验收 |
 |---|---|---|---|---|
 | P1-A1 | JWT 签发/校验 | 新(替 Sa-Token) | ✅ | 登录返回 token，依赖校验；test_auth.py |
-| P1-A2 | Redis 活跃会话 + 踢人下线 | gogo | ⬜ | 会话可主动失效 |
+| P1-A2 | Redis 活跃会话 + 踢人下线 | gogo | ✅ | JWT 带 jti + Redis 活跃表；`/auth/logout` 单会话、`/auth/kick` 全部 |
 | P1-A3 | 角色 RBAC（登录/角色拦截） | dodo | ✅ | `require_role('admin')` 守卫 `/sys/*`；test_api_sys.py |
 | P1-A4 | 数据范围 DataScope 解析 | dodo | ✅ | 按 userId 算可见 dept，fail-closed |
 
@@ -71,9 +71,9 @@
 | P1-M1 | 短期上下文自动压缩 | 两者 | ✅ | `hooks/context_compact.py`：超阈值保 system+近 N 条，中段摘要 |
 | P1-M2 | PgVector 语义长期记忆（按 userId） | dodo | 🟡 | MemoryStore 协议 + 内存实现；PgVector 后端未写 |
 | P1-M3 | 会话管理 + 消息持久化 | 两者 | ✅ | ORM+service+`/session`；chat 已真实落库（test_api_chat_persist.py） |
-| P1-M4 | 中断/续跑快照 | dodo | ⬜ | 需 LangGraph checkpointer 接线 |
+| P1-M4 | 中断/续跑快照 | dodo | 🟡 | checkpointer 接线完成，thread_id=会话 id；内存实现进程重启即丢，跨进程需 Postgres 版 |
 | P1-M5 | 跨节点中断广播（Redis Pub/Sub） | gogo | 🟡 | 单机 SessionRegistry 已测；Redis Pub/Sub 与中断 API 均未做 |
-| P1-M6 | HITL 挂起/恢复 | gogo | ⬜ | 事件类型已定义，挂起/恢复逻辑未做 |
+| P1-M6 | HITL 挂起/恢复 | gogo | ✅ | interrupt 挂起 → USER_INTERACTION 事件 → `resume` 字段恢复，真实 LangGraph 图跑通 |
 
 ### MCP / Hook (platform/mcp, hooks)
 
@@ -161,7 +161,7 @@
 
 ## 实施进度
 
-**当前规模**：334 tests passed，ruff / ruff format / mypy 全绿，107 源文件。编排框架 = LangGraph。
+**当前规模**：372 tests passed，ruff / ruff format / mypy 全绿，109 源文件。编排框架 = LangGraph。
 
 ### 本轮（Hook 体系 + 真实接线）
 
@@ -229,13 +229,28 @@
 
 实跑验证：建单 → 未审批订票被拒 → 审批后订票成功 → 汇总，安全约束真实生效。
 
+### 第六轮（会话吊销 + 中断续跑 + HITL）
+
+| 项 | 内容 | 证据 |
+|---|---|---|
+| P1-A2 | JWT 加 `jti` + 活跃会话表（Redis / 内存两实现）。JWT 无状态、签出去收不回，配上 jti 记录才能在过期前吊销。`/auth/logout` 只杀当前会话（不影响其他设备），`/auth/kick/{id}` 管理员吊销该用户全部 | 19 项 |
+| P1-A2 取舍 | Redis 故障时 **fail-open（默认）**：令牌本身仍密码学有效且会过期，让全站因缓存故障瘫痪代价更大；对吊销敏感的部署可开 `AUTH_REVOCATION_FAIL_CLOSED`。这是真实取舍，给开关而不替使用者决定 | 两种模式各有用例 |
+| P1-M4 | LangGraph checkpointer 接线，`thread_id` = 会话 id。工厂与两域 agent 均接受 `checkpointer`，不传则行为不变 | 真实图跑通 |
+| P1-M6 | `interrupt()` 挂起 → 发 `USER_INTERACTION`（含 prompt 与业务字段）→ 前端带 `resume` 字段再请求 → `Command(resume=...)` 恢复。挂起时**照常发 DONE**：对前端这一轮就是结束了，只是结束在「等你回答」 | 真实 LangGraph 图端到端 |
+
+排查中修掉的三个问题：
+
+- `get_store()` 用 `None` 兼作「未初始化」与「不可用」，导致连接失败后**每个请求都重连并等超时**（测试从 11s 涨到 38s）。改用哨兵区分，恢复到 11.6s
+- 测试原本依赖「本机没跑 Redis」才能过——开发机上恰好起着 Redis 时，直接用 `create_token()` 造的令牌会被判失效。conftest 加 autouse 夹具显式关闭，测试与环境解耦
+- `has_snapshot` 按 `values` 判断，但图在首个节点挂起时 `values` 仍是空的，会把「正等用户回答」误判成「没跑过」。改看 `created_at`/`checkpoint_id`
+
 ### 下一步建议（按性价比）
 
-1. **P1-A2 / P1-M4 / P1-M6** —— 踢人下线、中断续跑、HITL，都需要 Redis/checkpointer 接线。
-2. **T-1/T-2 HTTP 路由** —— 差旅 service 已全通但没有对外接口，目前只能由 Agent 工具触达。
-3. **D-1/D-3** —— M-Schema 自省与缓存，是 data 域接 live 的前置。
-4. **T-13/T-14** —— 差旅 Skills 与天气/新闻外部数据（凭证注入机制 P1-S4 已就绪）。
-5. **主从形态接进 chat** —— 目前工厂仍装单体 travel Agent；子 Agent 委派要有模型才看得出效果，建议先配 Key 验证再切换。
+1. **T-1/T-2 HTTP 路由** —— 差旅 service 已全通但没有对外接口，目前只能由 Agent 工具触达。
+2. **D-1/D-3** —— M-Schema 自省与缓存，是 data 域接 live 的前置。
+3. **T-13/T-14** —— 差旅 Skills 与天气/新闻外部数据（凭证注入机制 P1-S4 已就绪）。
+4. **P1-M5 跨节点中断广播** —— 单机注册表已有，差 Redis Pub/Sub。
+5. **主从形态接进 chat** + **Postgres checkpointer** —— 都要有模型 Key / 实例才看得出效果，建议先配好环境再切换。
 6. 需 live 环境的部分见 [NEEDS_LIVE.md](NEEDS_LIVE.md)。
 
 ---

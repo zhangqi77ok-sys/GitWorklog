@@ -15,6 +15,7 @@ from collections.abc import AsyncGenerator
 from typing import Any
 
 from app.core.logging import get_logger
+from app.orchestrator.resume import extract_interrupt, resume_command, thread_config
 from app.platform.hooks.base import HookChain, HookContext
 from app.platform.sse import bridge, events
 from app.platform.sse.events import SSEEvent
@@ -27,20 +28,37 @@ async def run_agent_stream(
     query: str,
     hooks: HookChain | None = None,
     ctx: HookContext | None = None,
+    thread_id: str | None = None,
+    resume_value: Any = None,
 ) -> AsyncGenerator[SSEEvent, None]:
     """运行 LangGraph Agent，逐事件转成 SSEEvent，结束补发 DONE。
 
     agent: langgraph create_react_agent 返回的 compiled graph。
     hooks: 可选 Hook 链，观察事件并可插入额外事件（进度/持久化等）。
+    thread_id: 传入则带 checkpointer 配置运行，支持中断续跑（P1-M4）。
+    resume_value: 用户对上一次 HITL 提问的答复，传入则以恢复模式启动（P1-M6）。
+
+    HITL 挂起时发 USER_INTERACTION 事件后**正常收尾**（照发 DONE）——
+    对前端来说这一轮就是结束了，只是结束在「等你回答」而不是「答完了」。
     """
-    inputs = {"messages": [{"role": "user", "content": query}]}
     hctx = ctx or HookContext(query=query)
+    config = thread_config(thread_id) if thread_id else None
+
+    if resume_value is not None:
+        inputs: Any = resume_command(resume_value)
+    else:
+        inputs = {"messages": [{"role": "user", "content": query}]}
 
     if hooks is not None:
         for e in hooks.on_start(hctx):
             yield e
 
-    async for evt in agent.astream_events(inputs, version="v2"):
+    stream = (
+        agent.astream_events(inputs, version="v2", config=config)
+        if config is not None
+        else agent.astream_events(inputs, version="v2")
+    )
+    async for evt in stream:
         sse = bridge.convert(evt)
         if sse is not None:
             yield sse
@@ -48,10 +66,31 @@ async def run_agent_stream(
             for e in hooks.on_event(hctx, evt, sse):
                 yield e
 
+    # 事件流跑完后查一次状态：可能是停在 HITL 挂起而不是真的答完了
+    if thread_id:
+        pending = _pending_interrupt(agent, thread_id)
+        if pending is not None:
+            yield pending.to_event()
+
     if hooks is not None:
         for e in hooks.on_finish(hctx):
             yield e
     yield events.done()
+
+
+def _pending_interrupt(agent: Any, thread_id: str) -> Any:
+    """读取当前快照，判断是否停在中断点。探测失败按「没挂起」处理。"""
+    try:
+        state = agent.get_state(thread_config(thread_id))
+    except Exception as exc:  # 宽捕获是刻意的：探测不该拖垮正常回答
+        logger.warning("interrupt_probe_failed", thread_id=thread_id, error=str(exc))
+        return None
+    tasks = getattr(state, "tasks", None) or ()
+    for task in tasks:
+        interrupts = getattr(task, "interrupts", None) or ()
+        if interrupts:
+            return extract_interrupt({"__interrupt__": list(interrupts)}, thread_id)
+    return None
 
 
 async def mock_stream(
@@ -97,6 +136,8 @@ async def resolve_stream(
     agent: Any | None = None,
     hooks: HookChain | None = None,
     ctx: HookContext | None = None,
+    thread_id: str | None = None,
+    resume_value: Any = None,
 ) -> AsyncGenerator[SSEEvent, None]:
     """有 agent 走真实运行，否则降级。异常也降级为 error 事件，不抛 500。"""
     if agent is None:
@@ -104,7 +145,14 @@ async def resolve_stream(
             yield e
         return
     try:
-        async for e in run_agent_stream(agent, query, hooks=hooks, ctx=ctx):
+        async for e in run_agent_stream(
+            agent,
+            query,
+            hooks=hooks,
+            ctx=ctx,
+            thread_id=thread_id,
+            resume_value=resume_value,
+        ):
             yield e
     except Exception as exc:
         logger.exception("agent_run_failed", error=str(exc))

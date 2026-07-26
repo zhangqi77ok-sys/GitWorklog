@@ -72,6 +72,8 @@ class Supervisor:
         query: str,
         ctx: HookContext | None = None,
         history: list[dict[str, str]] | None = None,
+        thread_id: str | None = None,
+        resume_value: Any = None,
     ) -> AsyncGenerator[SSEEvent, None]:
         decision = self.pipeline.route(query, history=history)
         # 改写后的查询才是后续识别与执行的依据（O-5）
@@ -123,5 +125,12 @@ class Supervisor:
         hctx = ctx or HookContext(query=query)
         hctx.domain = domain
         agent = self.factory.build(domain)
-        async for e in resolve_stream(effective_query, agent=agent, hooks=self.hooks, ctx=hctx):
+        async for e in resolve_stream(
+            effective_query,
+            agent=agent,
+            hooks=self.hooks,
+            ctx=hctx,
+            thread_id=thread_id,
+            resume_value=resume_value,
+        ):
             yield e

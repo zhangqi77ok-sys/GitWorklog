@@ -47,14 +47,18 @@ def build_travel_tools(tools: TravelTools) -> list[Any]:
     return build_tools(tool_callables(tools))
 
 
-def build_travel_agent(tools: TravelTools, model: Any) -> Any:
-    """装配 travel 域 ReAct Agent（LangGraph，需 live 模型）。"""
+def build_travel_agent(tools: TravelTools, model: Any, checkpointer: Any = None) -> Any:
+    """装配 travel 域 ReAct Agent（LangGraph，需 live 模型）。
+
+    checkpointer 传入才支持中断续跑与 HITL（P1-M4/M6）；不传则行为不变。
+    """
     from langgraph.prebuilt import create_react_agent
 
     return create_react_agent(
         model=model,
         tools=build_travel_tools(tools),
         prompt=TRAVEL_AGENT_SYSTEM_PROMPT,
+        checkpointer=checkpointer,
     )
 
 

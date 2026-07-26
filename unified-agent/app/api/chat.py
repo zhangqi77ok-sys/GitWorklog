@@ -29,6 +29,7 @@ from app.orchestrator.factory import DomainAgentFactory
 from app.orchestrator.intent.defaults import default_rule_matcher
 from app.orchestrator.intent.llm_classifier import LLMIntentClassifierImpl
 from app.orchestrator.pipeline import IntentPipeline
+from app.orchestrator.resume import build_checkpointer
 from app.orchestrator.rewriter import LLMQueryRewriter
 from app.orchestrator.supervisor import Supervisor
 from app.platform.auth.security import decode_token
@@ -47,6 +48,8 @@ class ChatRequest(BaseModel):
     conversation_id: str | None = None
     online: bool = False
     file_ids: list[str] = []
+    # 对上一次 USER_INTERACTION 提问的答复；带上则恢复挂起的执行（P1-M6）
+    resume: str | None = None
 
 
 class _RequestContext:
@@ -89,8 +92,8 @@ class _RequestContext:
 class _ChatFactory:
     """包一层 DomainAgentFactory：data 域缺 live 依赖时安全降级而非 500。"""
 
-    def __init__(self, ctx: _RequestContext) -> None:
-        self._inner = DomainAgentFactory(ctx)
+    def __init__(self, ctx: _RequestContext, checkpointer: Any = None) -> None:
+        self._inner = DomainAgentFactory(ctx, checkpointer=checkpointer)
 
     def build(self, domain: str) -> Any | None:
         try:
@@ -136,6 +139,29 @@ def _build_pipeline() -> IntentPipeline:
     )
 
 
+_CHECKPOINTER: Any = None
+
+
+def _checkpointer() -> Any:
+    """进程内单例 checkpointer（P1-M4/M6）。
+
+    必须是单例：每请求新建一个 InMemorySaver 等于没有快照，
+    中断续跑与 HITL 恢复都会失效——下一次请求根本找不到上一次的 thread。
+
+    诚实边界：内存实现进程重启即丢，也不跨节点。生产要换 Postgres/Redis
+    版（见 NEEDS_LIVE.md）；build_checkpointer 对未实现的类型显式抛错，
+    不会静默退回内存让人误以为有持久化。
+    """
+    global _CHECKPOINTER
+    if _CHECKPOINTER is None:
+        try:
+            _CHECKPOINTER = build_checkpointer("memory")
+        except Exception as exc:  # 宽捕获是刻意的：没有快照也要能正常聊天
+            logger.error("checkpointer_unavailable", error=str(exc))
+            return None
+    return _CHECKPOINTER
+
+
 def _load_history(conversation_id: str, limit: int = 6) -> list[dict[str, str]]:
     """取最近几轮供指代消解。取不到就返回空——改写只是增强。"""
     try:
@@ -179,13 +205,19 @@ async def chat(
     provider = _RequestContext(user_id or 0)
     supervisor = Supervisor(
         _build_pipeline(),
-        _ChatFactory(provider),
+        _ChatFactory(provider, checkpointer=_checkpointer()),
         hooks=_build_hooks(persist),
     )
 
     async def _gen():  # type: ignore[no-untyped-def]
         try:
-            async for evt in supervisor.handle(req.query, ctx=ctx, history=history):
+            async for evt in supervisor.handle(
+                req.query,
+                ctx=ctx,
+                history=history,
+                thread_id=conversation_id,
+                resume_value=req.resume,
+            ):
                 yield evt.to_sse()
         finally:
             # 客户端提前断开时也要走到这里，避免 session 泄漏

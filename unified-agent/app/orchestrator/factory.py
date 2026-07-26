@@ -36,9 +36,12 @@ class DomainAgentFactory:
         self,
         ctx: DomainContextProvider,
         model_builder: Any = None,
+        checkpointer: Any = None,
     ) -> None:
         self.ctx = ctx
         self._model_builder = model_builder
+        # 传入才支持中断续跑 / HITL（P1-M4、P1-M6）
+        self.checkpointer = checkpointer
 
     def _build_model(self) -> Any | None:
         builder = self._model_builder
@@ -61,8 +64,8 @@ class DomainAgentFactory:
         if domain == "data":
             from app.domains.data.agent import build_data_agent
 
-            return build_data_agent(self.ctx.data_tools(), model)
+            return build_data_agent(self.ctx.data_tools(), model, self.checkpointer)
         # travel
         from app.domains.travel.agent import build_travel_agent
 
-        return build_travel_agent(self.ctx.travel_tools(), model)
+        return build_travel_agent(self.ctx.travel_tools(), model, self.checkpointer)
