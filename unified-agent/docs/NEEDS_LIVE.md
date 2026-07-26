@@ -29,6 +29,15 @@
 1. 配 `.env`（模型 Key、DB、Redis、PgVector、MinIO）
 2. `docker compose up -d` 起基础设施
 3. 实现各接口的 live 适配器（storage/index/mcp）
-4. chat 的降级工厂改为按 domain 调 build_data_agent / build_travel_agent（需模型 Key）
-5. 端到端冒烟：一条数据分析 + 一条差旅
+4. ~~chat 的降级工厂改为按 domain 调 build_data_agent / build_travel_agent~~
+   **已完成**：`api/chat.py` 已接真实 `DomainAgentFactory` + Hook 链。
+   填了模型 Key 即自动构建 travel 域真实 Agent；data 域仍需第 5 步。
+5. data 域接 live 只读 MySQL + M-Schema 自省，`_RequestContext.data_tools()`
+   目前显式抛 `NotImplementedError` 并由工厂降级（不假装可用）
 6. 端到端冒烟：一条数据分析 + 一条差旅
+
+## 已可离线验证的部分（无需 live）
+
+Hook 链路（进度/持久化/熔断/上下文压缩/凭证）全部离线可测且已接线，
+**降级态同样生效**——没有模型 Key 时会话照样落库、进度照样推送。
+见 `tests/platform/test_hooks.py` 与 `tests/test_api_chat_persist.py`。

@@ -49,6 +49,7 @@ dev = [
     "mypy>=1.13",
     "pytest>=8.3",
     "pytest-asyncio>=0.24",
+    "fakeredis>=2.25",
     "pre-commit>=4.0",
     "types-pyyaml",
 ]

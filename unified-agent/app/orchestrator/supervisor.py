@@ -16,6 +16,7 @@ from app.core.logging import get_logger
 from app.orchestrator.intent.models import IntentCategory
 from app.orchestrator.pipeline import IntentPipeline
 from app.orchestrator.runtime import resolve_stream
+from app.platform.hooks.base import HookChain, HookContext
 from app.platform.sse.events import SSEEvent, SSEEventType
 
 logger = get_logger(__name__)
@@ -45,11 +46,19 @@ class AgentFactory(Protocol):
 
 
 class Supervisor:
-    def __init__(self, pipeline: IntentPipeline, factory: AgentFactory) -> None:
+    def __init__(
+        self,
+        pipeline: IntentPipeline,
+        factory: AgentFactory,
+        hooks: HookChain | None = None,
+    ) -> None:
         self.pipeline = pipeline
         self.factory = factory
+        self.hooks = hooks
 
-    async def handle(self, query: str) -> AsyncGenerator[SSEEvent, None]:
+    async def handle(
+        self, query: str, ctx: HookContext | None = None
+    ) -> AsyncGenerator[SSEEvent, None]:
         decision = self.pipeline.route(query)
         domain = domain_of(decision.target)
         logger.info(
@@ -65,6 +74,9 @@ class Supervisor:
             event=SSEEventType.AGENT_SWITCH,
             data={"domain": domain, "intent": decision.target.value},
         )
+        # 路由结果回填进 Hook 上下文，供进度/持久化 Hook 记录实际领域
+        hctx = ctx or HookContext(query=query)
+        hctx.domain = domain
         agent = self.factory.build(domain)
-        async for e in resolve_stream(query, agent=agent):
+        async for e in resolve_stream(query, agent=agent, hooks=self.hooks, ctx=hctx):
             yield e

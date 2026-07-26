@@ -110,6 +110,17 @@ class LLMSettings(_Base):
     embedding_model: str = Field(default="text-embedding-v4", alias="LLM_EMBEDDING_MODEL")
 
 
+class HookSettings(_Base):
+    """Agent Hook 体系：熔断阈值、上下文压缩策略、持久化开关。"""
+
+    model_config = SettingsConfigDict(env_file=".env", env_prefix="HOOK_", extra="ignore")
+    breaker_failure_threshold: int = 5
+    breaker_cooldown_seconds: float = 30.0
+    context_max_chars: int = 8000
+    context_keep_recent: int = 6
+    persist_enabled: bool = True
+
+
 class Settings:
     """聚合各分组配置，供全项目引用的单例。"""
 
@@ -122,6 +133,7 @@ class Settings:
         self.pgvector = PgVectorSettings()
         self.minio = MinioSettings()
         self.llm = LLMSettings()
+        self.hooks = HookSettings()
 
 
 @lru_cache

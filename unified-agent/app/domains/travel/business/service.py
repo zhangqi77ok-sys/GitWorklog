@@ -5,7 +5,8 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.domains.travel.business.models import ApprovalRecord, TravelOrder
+from app.domains.travel.business.models import ApprovalRecord, TravelOrder, TravelPolicyRule
+from app.domains.travel.business.policy import PolicyKey, PolicyLimit, TravelPolicyEngine
 
 
 def create_order(
@@ -76,3 +77,18 @@ def has_time_conflict(session: Session, user_id: int, start_date: str, end_date:
         if start_date <= o.end_date and o.start_date <= end_date:
             return True
     return False
+
+
+def load_policy_engine(session: Session) -> TravelPolicyEngine:
+    """把 travel_policy_rule 表的规则装进政策引擎。
+
+    引擎本身是纯逻辑、规则靠外部注入（policy.py），这是它唯一的 DB 加载入口。
+    表为空时返回空规则引擎——check() 会如实报「无政策规则」而非放行，fail-closed。
+    """
+    rules: dict[PolicyKey, PolicyLimit] = {}
+    for r in session.execute(select(TravelPolicyRule)).scalars():
+        rules[PolicyKey(r.job_level, r.city_tier)] = PolicyLimit(
+            hotel_budget=r.hotel_budget,
+            flight_class=r.flight_class,
+        )
+    return TravelPolicyEngine(rules)
