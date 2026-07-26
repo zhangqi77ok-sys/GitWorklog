@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.orchestrator.intent.defaults import default_rule_matcher
-from app.orchestrator.intent.models import IntentCategory
+from app.orchestrator.intent.models import IntentCategory, IntentResult, IntentSource
 from app.orchestrator.pipeline import IntentPipeline
 from app.orchestrator.supervisor import Supervisor, domain_of
 from app.platform.sse.events import SSEEventType
@@ -67,3 +67,58 @@ async def test_supervisor_degrades_without_agent() -> None:
     events = await _collect(sup.handle("订酒店"))
     # 无 agent → 降级流，仍以 DONE 收尾
     assert events[-1].event == SSEEventType.DONE
+
+
+# ---------- O-7 direct_dispatch 接线 ----------
+
+
+class LowConfidenceMatcher:
+    """模拟 L2/L3 给出的弱猜测（低于 0.9 直跳阈值）。"""
+
+    def match(self, query: str) -> IntentResult:
+        return IntentResult(
+            category=IntentCategory.TRAVEL_BOOKING,
+            source=IntentSource.VECTOR,
+            confidence=0.5,
+        )
+
+
+async def test_high_confidence_dispatches_directly() -> None:
+    factory = FakeFactory(FakeAgent())
+    sup = Supervisor(IntentPipeline(default_rule_matcher()), factory)
+    events = await _collect(sup.handle("帮我订机票"))
+
+    switch = events[0]
+    assert switch.data["direct"] is True
+    assert switch.data["domain"] == "travel"
+    assert factory.built_domain == "travel"
+    # 高置信不打扰用户
+    assert not any(e.event == SSEEventType.SUGGESTIONS for e in events)
+
+
+async def test_low_confidence_does_not_drive_domain_agent() -> None:
+    """弱猜测不得驱动差旅 Agent——它能创建真实订单。"""
+    factory = FakeFactory(FakeAgent())
+    sup = Supervisor(IntentPipeline(LowConfidenceMatcher()), factory)  # type: ignore[arg-type]
+    events = await _collect(sup.handle("那个东西帮我弄一下"))
+
+    assert factory.built_domain == "general"  # 没有落到 travel
+    switch = events[0]
+    assert switch.data["direct"] is False
+    assert switch.data["domain"] == "general"
+    assert switch.data["intent"] == "travel_booking"  # 猜测本身仍如实上报
+
+    # 改为发澄清建议
+    suggestions = [e for e in events if e.event == SSEEventType.SUGGESTIONS]
+    assert len(suggestions) == 1
+    assert "预订机票/酒店" in suggestions[0].data["items"]
+
+
+async def test_switch_event_carries_routing_evidence() -> None:
+    """路由依据要可观测，否则线上无法排查为什么走错域。"""
+    sup = Supervisor(IntentPipeline(default_rule_matcher()), FakeFactory(None))
+    events = await _collect(sup.handle("统计各部门销售额"))
+    data = events[0].data
+    assert set(data) >= {"domain", "intent", "direct", "confidence", "source"}
+    assert data["source"] == "rule"
+    assert data["confidence"] >= 0.9

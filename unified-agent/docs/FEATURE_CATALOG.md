@@ -99,13 +99,13 @@
 | D-5 | **SqlSafetyGuard**（sqlglot AST） | ✅ | 白名单+强制LIMIT+危险函数/JOIN 拦截；21 用例 |
 | D-6 | **DataScopeRewriter**（数据权限改写） | ✅ | FROM/JOIN 注 WHERE/ON，CTE/UNION 递归；7 用例 |
 | D-7 | SensitiveFilter（列脱敏） | ✅ | 命中列整列掩码 |
-| D-8 | ExplainPrecheckService（EXPLAIN 预检） | ⬜ | 拦大表全扫，fail-open |
+| D-8 | ExplainPrecheckService（EXPLAIN 预检） | ✅ | 拦全表扫描/巨量扫描/未命中索引；EXPLAIN 自身故障 fail-open |
 | D-9 | ReadOnlyQueryRunner（只读+重试） | 🟡 | MySQLReadOnlyRunner 已实现（SQLite 测）；需真实只读库 |
 | D-10 | 工具 listTables | ✅ | 表清单+中文描述+外键 |
 | D-11 | 工具 describeTables | ✅ | 字段详情+示例值 |
 | D-12 | 工具 lookupGlossary | ✅ | 口径+SQL 片段+同义词 |
 | D-13 | 工具 validateSql | ✅ | 返回安全 SQL |
-| D-14 | 工具 executeSql（全编排） | 🟡 | guard→改写→执行→脱敏 已通；**EXPLAIN 预检与审计落库未做** |
+| D-14 | 工具 executeSql（全编排） | 🟡 | guard→改写→**预检**→执行→脱敏 已通；审计落库未做 |
 | D-15 | 工具 calculate（表达式） | ✅ | 同环比/占比，聚合推给 SQL |
 | D-16 | data-analysis SKILL.md 编排流程 | ✅ | 拆题→探Schema→SQL→校验→报告 |
 | D-17 | 工具搜索/延迟工具（不塞满上下文） | ⬜ | 数据工具按需发现 |
@@ -138,13 +138,13 @@
 
 | ID | 功能点 | 状态 | 验收 |
 |---|---|---|---|
-| O-1 | 意图 L1 规则匹配 | 🟡 | 规则匹配已测；**关键词覆盖偏窄**（如「订去上海的机票」漏判为 general） |
-| O-2 | 意图 L2 向量匹配（DashScope Embedding） | 🟡 | 匹配逻辑已测（mock embedding）；需 live 验证召回质量 |
+| O-1 | 意图 L1 规则匹配 | ✅ | 按特异度择优（修掉顺序误判）+ 动宾插入正则；11 条覆盖用例 |
+| O-2 | 意图 L2 向量匹配（DashScope Embedding） | 🟡 | 匹配逻辑已测（mock embedding）；种子语料已就位，需 live 验证召回质量 |
 | O-3 | 意图 L3 LLM 兜底 | ⬜ | pipeline 留了注入点，无实现 |
-| O-4 | intent-seed.yml 种子语料 | ⬜ | 外置可维护（可同时改善 O-1 覆盖） |
+| O-4 | intent-seed.yml 种子语料 | ✅ | 规则+向量种子外置，`INTENT_SEED_PATH` 可覆盖，损坏回退内置兜底 |
 | O-5 | 查询改写 Agent | ⬜ | 指代消解/上下文补全 |
 | O-6 | Supervisor 路由（子 Agent as tool） | 🟡 | 领域级路由已通；子 Agent as tool 机制未做 |
-| O-7 | 单意图高置信直跳 | ⬜ | `direct_dispatch` 已算出但**只 log 未使用** |
+| O-7 | 单意图高置信直跳 | ✅ | 高置信直投领域 Agent；低置信不驱动领域 Agent 而发 SUGGESTIONS 澄清 |
 | O-8 | 结果聚合 + SSE 统一回传 | ✅ | chat 已接真实 DomainAgentFactory + Hook 链，替换掉恒降级的占位工厂 |
 
 ---
@@ -161,7 +161,7 @@
 
 ## 实施进度
 
-**当前规模**：176 tests passed，ruff / ruff format / mypy 全绿，92 源文件。编排框架 = LangGraph。
+**当前规模**：215 tests passed，ruff / ruff format / mypy 全绿，94 源文件。编排框架 = LangGraph。
 
 ### 本轮（Hook 体系 + 真实接线）
 
@@ -181,12 +181,25 @@
 实跑确认：匿名请求返回 `phase:start` / `phase:finish` 进度事件且无 500；登录用户消息真实落进 `chat_message`；
 非法 token 降级为匿名而非报错。未配模型 Key 时全程优雅降级，**降级态 Hook 依然生效**。
 
+### 第二轮（意图覆盖 + 直跳 + EXPLAIN 预检）
+
+| 项 | 内容 | 证据 |
+|---|---|---|
+| O-1 | **修优先级误判**：原按规则列表顺序取首个命中，DATA_ANALYSIS 在前且含泛词「多少」，「订机票多少钱」被判成数据分析。改为按命中文本特异度择优 | test_intent_seed.py |
+| O-1 | **修漏判**：关键词是子串匹配，「订去上海的机票」匹配不到「订机票」→ 落 general，请求到不了差旅域。补动宾插入正则 | 11 条参数化覆盖用例 |
+| O-4 | `intent-seed.yml` 外置规则 + L2 向量种子；`INTENT_SEED_PATH` 可覆盖；YAML 损坏/类别未知均回退兜底不致整体失效 | test_intent_seed.py 7 项 |
+| O-7 | `direct_dispatch` 此前只 log 不用。高置信直投领域 Agent；**低置信不再拿弱猜测驱动领域 Agent**（差旅工具能创建真实订单），改发 SUGGESTIONS 澄清并走 general；AGENT_SWITCH 事件补齐 direct/confidence/source 便于排查路由 | test_supervisor.py 3 项 |
+| D-8 | `ExplainPrecheckService`：全表扫描/巨量扫描/未命中索引三类拦截，错误文本给出改写指引；EXPLAIN 自身故障 fail-open。接在**权限改写之后**（对改写前 SQL 预检会高估扫描量误拦） | test_explain_precheck.py 13 项 |
+
+实跑复验：「帮我订去上海的机票」现路由到 `travel`（此前 `general`），
+事件为 `{"domain":"travel","intent":"travel_booking","direct":true,"confidence":0.9,"source":"rule"}`。
+
 ### 下一步建议（按性价比）
 
-1. **O-1/O-4 意图覆盖** —— 当前漏判会让请求根本到不了领域 Agent，投入小、影响面最大。
-2. **O-7 直跳** —— `direct_dispatch` 已经算好，接上即可。
-3. **D-8 EXPLAIN 预检 + D-14 审计** —— 补完 executeSql 的安全铁律链路。
-4. **T-5/T-6 → T-7~T-12** —— 先补跨城衔接与往返规划两个前置，再做 6 个子 Agent。
+1. **D-14 审计落库** —— executeSql 安全链路只差这一环（预检已补齐）。
+2. **O-3 L3 LLM 兜底 / O-5 查询改写** —— 规则覆盖不到的长尾靠这两个接住。
+3. **T-5/T-6 → T-7~T-12** —— 先补跨城衔接与往返规划两个前置，再做 6 个子 Agent。
+4. **P1-A2 / P1-M4 / P1-M6** —— 踢人下线、中断续跑、HITL，都需要 Redis/checkpointer 接线。
 5. 需 live 环境的部分见 [NEEDS_LIVE.md](NEEDS_LIVE.md)。
 
 ---

@@ -24,7 +24,12 @@ class RuleEntry:
 
 
 class RuleMatcher:
-    """L1：关键词/正则匹配，最快（<50ms 级）。命中即高置信。"""
+    """L1：关键词/正则匹配，最快（<50ms 级）。命中即高置信。
+
+    按「特异度」择优而非按列表顺序取首个命中：命中越长的关键词说明越具体。
+    先前的首个命中即返回会误判——DATA_ANALYSIS 排在前且含泛词「多少」，
+    于是「订机票多少钱」会被判成数据分析，请求根本到不了差旅域。
+    """
 
     def __init__(self, entries: list[RuleEntry]) -> None:
         self.entries = entries
@@ -32,20 +37,26 @@ class RuleMatcher:
 
     def match(self, query: str) -> IntentResult | None:
         q = query.lower()
+        best: tuple[int, float, IntentCategory] | None = None  # (特异度, 置信度, 类别)
+
         for entry, regexes in self._compiled:
-            if any(kw.lower() in q for kw in entry.keywords):
-                return IntentResult(
-                    category=entry.category,
-                    source=IntentSource.RULE,
-                    confidence=0.95,
-                )
-            if any(rx.search(query) for rx in regexes):
-                return IntentResult(
-                    category=entry.category,
-                    source=IntentSource.RULE,
-                    confidence=0.9,
-                )
-        return None
+            hits = [kw for kw in entry.keywords if kw.lower() in q]
+            if hits:
+                # 最长命中关键词的长度作为特异度：「订机票」(3) 胜过「多少」(2)
+                score = max(len(kw) for kw in hits)
+                if best is None or score > best[0]:
+                    best = (score, 0.95, entry.category)
+                continue
+            matched = [rx for rx in regexes if rx.search(query)]
+            if matched:
+                # 正则通常比裸关键词更具体，特异度用实际匹配到的文本长度
+                score = max(len(m.group(0)) for m in (rx.search(query) for rx in matched) if m)
+                if best is None or score > best[0]:
+                    best = (score, 0.9, entry.category)
+
+        if best is None:
+            return None
+        return IntentResult(category=best[2], source=IntentSource.RULE, confidence=best[1])
 
 
 class EmbeddingProvider(Protocol):

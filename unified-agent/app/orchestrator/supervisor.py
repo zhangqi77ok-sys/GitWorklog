@@ -39,6 +39,17 @@ def domain_of(category: IntentCategory) -> str:
     return "general"
 
 
+# 意图 → 给用户看的中文说法（低置信时用于澄清建议）
+_INTENT_LABELS = {
+    IntentCategory.DATA_ANALYSIS: "查询/分析数据",
+    IntentCategory.TRAVEL_MANAGE: "管理差旅单",
+    IntentCategory.TRAVEL_PLAN: "规划行程",
+    IntentCategory.TRAVEL_BOOKING: "预订机票/酒店",
+    IntentCategory.TRAVEL_REIMBURSE: "差旅报销",
+    IntentCategory.TRAVEL_INFO: "查询差旅政策",
+}
+
+
 class AgentFactory(Protocol):
     """按领域 key 惰性构建 Agent。无模型/不支持返回 None（触发降级）。"""
 
@@ -69,11 +80,39 @@ class Supervisor:
             domain=domain,
             direct=decision.direct_dispatch,
         )
-        # 告知前端路由到哪个领域
+        # O-7：置信度不足时不拿弱猜测去驱动领域 Agent。
+        # 差旅工具能创建真实订单（create_travel_order），照着一个五五开的猜测
+        # 去写库风险太高；此时改发澄清建议并走 general 降级，让用户确认一次。
+        clarify = not decision.direct_dispatch and domain != "general"
+        if clarify:
+            logger.info(
+                "supervisor_low_confidence_clarify",
+                guess=decision.target.value,
+                confidence=decision.intent.confidence,
+            )
+            domain = "general"
+
+        # 告知前端路由到哪个领域，并带上路由依据便于 trace/回放
         yield SSEEvent(
             event=SSEEventType.AGENT_SWITCH,
-            data={"domain": domain, "intent": decision.target.value},
+            data={
+                "domain": domain,
+                "intent": decision.target.value,
+                "direct": decision.direct_dispatch,
+                "confidence": decision.intent.confidence,
+                "source": decision.intent.source.value,
+            },
         )
+        if clarify:
+            label = _INTENT_LABELS.get(decision.target)
+            yield SSEEvent(
+                event=SSEEventType.SUGGESTIONS,
+                data={
+                    "reason": "意图置信度不足，请确认你的需求",
+                    "items": [label] if label else [],
+                },
+            )
+
         # 路由结果回填进 Hook 上下文，供进度/持久化 Hook 记录实际领域
         hctx = ctx or HookContext(query=query)
         hctx.domain = domain
