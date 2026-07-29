@@ -117,8 +117,8 @@
 
 | ID | 功能点 | 状态 | 验收 |
 |---|---|---|---|
-| T-1 | 差旅单业务（申请/审批/查询/取消） | 🟡 | service 全通（test_travel.py）；**无 HTTP 路由，仅 Agent 工具可达** |
-| T-2 | 审批记录 + 管理员审批接口 | 🟡 | approval_record + approve_order 已测；管理员审批接口未写 |
+| T-1 | 差旅单业务（申请/审批/查询/取消） | ✅ | service + `/travel/order/*` HTTP 接口，逐个写操作校验归属 |
+| T-2 | 审批记录 + 管理员审批接口 | ✅ | `/travel/order/{id}/approve` + 待审列表，需 admin 且禁止自批 |
 | T-3 | 差旅政策规则引擎（职级×城市） | ✅ | PolicyCheckResult + `load_policy_engine` 从 DB 装规则，无规则时 fail-closed |
 | T-4 | 预订记录统一存储（机票/酒店/火车等） | ✅ | 预订/确认/取消/汇总 service；仅已审批单可预订 |
 | T-5 | 行程冲突检测（时间重叠+跨城衔接） | ✅ | CityTransit 出行耗时表 + 相邻段衔接判定，未知城市对不静默放行 |
@@ -161,7 +161,7 @@
 
 ## 实施进度
 
-**当前规模**：372 tests passed，ruff / ruff format / mypy 全绿，109 源文件。编排框架 = LangGraph。
+**当前规模**：398 tests passed，ruff / ruff format / mypy 全绿，110 源文件。编排框架 = LangGraph。
 
 ### 本轮（Hook 体系 + 真实接线）
 
@@ -244,12 +244,26 @@
 - 测试原本依赖「本机没跑 Redis」才能过——开发机上恰好起着 Redis 时，直接用 `create_token()` 造的令牌会被判失效。conftest 加 autouse 夹具显式关闭，测试与环境解耦
 - `has_snapshot` 按 `values` 判断，但图在首个节点挂起时 `values` 仍是空的，会把「正等用户回答」误判成「没跑过」。改看 `created_at`/`checkpoint_id`
 
+### 第七轮（差旅 HTTP 接口 + 越权修复）
+
+| 项 | 内容 | 证据 |
+|---|---|---|
+| T-1 | `/travel/order` 增查改：申请（含冲突拒绝）、我的列表、详情、取消 | test_api_travel.py |
+| T-2 | `/travel/order/{id}/approve` + `/order/pending`，需 admin 且**禁止自批自己的单**（否则审批形同虚设） | 审批用例 6 项 |
+| T-4 接口 | 预订登记/汇总/取消，全部校验归属 | 预订用例 5 项 |
+| 安全修复 | **`/session/{id}/messages` 与 `/title` 只验登录不验归属**——任何登录用户凭可猜的 conversation_id 就能读改他人聊天记录（IDOR）。补 `owns_conversation`，「不存在」与「无权」返回同一结果，不给探测存在性的机会 | 3 项回归 |
+| 路由顺序 | `/order/pending` 必须声明在 `/order/{order_id}` 之前，否则 "pending" 被当 int 解析成 422（测试暴露的真实 bug） | 待审列表用例 |
+| 测试性能 | 夹具每个测试重算 bcrypt（单次 0.33s，26 测试 × 3 用户）导致 setup 白烧。整模块算一次：**289s → 13s** | 全量计时 |
+
+越权路径是一等公民：差旅单涉及审批与花钱，「拿别人的 id 去操作」的每条路径都有用例
+（读他人单、取消他人单、给他人单下单、取消他人预订、非 admin 审批、自批）。
+
 ### 下一步建议（按性价比）
 
-1. **T-1/T-2 HTTP 路由** —— 差旅 service 已全通但没有对外接口，目前只能由 Agent 工具触达。
-2. **D-1/D-3** —— M-Schema 自省与缓存，是 data 域接 live 的前置。
-3. **T-13/T-14** —— 差旅 Skills 与天气/新闻外部数据（凭证注入机制 P1-S4 已就绪）。
-4. **P1-M5 跨节点中断广播** —— 单机注册表已有，差 Redis Pub/Sub。
+1. **D-1/D-3** —— M-Schema 自省与缓存，是 data 域接 live 的前置（data 域目前仍整体降级）。
+2. **T-13/T-14** —— 差旅 Skills 与天气/新闻外部数据（凭证注入机制 P1-S4 已就绪）。
+3. **P1-M5 跨节点中断广播** —— 单机注册表已有，差 Redis Pub/Sub；同时补 `/session/{id}/interrupt` 接口（目前中断能力无对外入口）。
+4. **F-2 trace/timeline 回放** —— 富事件已落 `extra`，缺渲染与接口。
 5. **主从形态接进 chat** + **Postgres checkpointer** —— 都要有模型 Key / 实例才看得出效果，建议先配好环境再切换。
 6. 需 live 环境的部分见 [NEEDS_LIVE.md](NEEDS_LIVE.md)。
 

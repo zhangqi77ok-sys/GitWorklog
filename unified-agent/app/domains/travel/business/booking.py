@@ -107,6 +107,13 @@ def cancel_booking(session: Session, booking_id: int) -> BookingRecord:
     return rec
 
 
+def get_booking(session: Session, booking_id: int) -> BookingRecord | None:
+    """按 id 取预订（不限归属；调用方负责校验 user_id）。"""
+    return session.execute(
+        select(BookingRecord).where(BookingRecord.id == booking_id)
+    ).scalar_one_or_none()
+
+
 def list_bookings(session: Session, order_id: int) -> list[BookingRecord]:
     stmt = (
         select(BookingRecord)

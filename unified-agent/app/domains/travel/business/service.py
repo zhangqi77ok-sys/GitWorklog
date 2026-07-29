@@ -34,6 +34,21 @@ def create_order(
     return order
 
 
+def get_order(session: Session, order_id: int) -> TravelOrder | None:
+    """按 id 取单（不限归属，供审批等跨用户场景使用——调用方自行把权限）。"""
+    return session.execute(
+        select(TravelOrder).where(TravelOrder.id == order_id)
+    ).scalar_one_or_none()
+
+
+def list_pending_orders(session: Session) -> list[TravelOrder]:
+    """待审批的单（跨用户，供管理员审批列表）。"""
+    stmt = (
+        select(TravelOrder).where(TravelOrder.status == "submitted").order_by(TravelOrder.id.desc())
+    )
+    return list(session.execute(stmt).scalars())
+
+
 def list_orders(session: Session, user_id: int) -> list[TravelOrder]:
     stmt = select(TravelOrder).where(TravelOrder.user_id == user_id).order_by(TravelOrder.id.desc())
     return list(session.execute(stmt).scalars())

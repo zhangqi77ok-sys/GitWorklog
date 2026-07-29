@@ -17,6 +17,10 @@ from app.platform.auth.datascope import DataScope
 from app.platform.auth.security import hash_password
 from app.platform.user.models import SysDept, SysRole, SysUser, SysUserRole
 
+# bcrypt 单次约 0.33s（故意慢）。夹具只需要一个合法哈希，整模块算一次即可，
+# 每个测试重算会让 setup 白烧大量时间。
+_PW_HASH = hash_password("pw")
+
 
 @pytest.fixture
 def client() -> Iterator[TestClient]:
@@ -30,8 +34,8 @@ def client() -> Iterator[TestClient]:
     factory = sessionmaker(bind=engine, expire_on_commit=False, future=True)
 
     s = factory()
-    s.add(SysUser(id=1, username="admin", password=hash_password("pw"), status=1))
-    s.add(SysUser(id=2, username="bob", password=hash_password("pw"), status=1))
+    s.add(SysUser(id=1, username="admin", password=_PW_HASH, status=1))
+    s.add(SysUser(id=2, username="bob", password=_PW_HASH, status=1))
     s.add(SysRole(id=1, code="admin", name="管理员", data_scope=int(DataScope.ALL)))
     s.add(SysRole(id=2, code="user", name="员工", data_scope=int(DataScope.DEPT)))
     s.add(SysUserRole(user_id=1, role_id=1))

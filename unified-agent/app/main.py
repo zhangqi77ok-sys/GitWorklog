@@ -14,7 +14,7 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api import auth, chat, health, session, skills, sys
+from app.api import auth, chat, health, session, skills, sys, travel
 from app.core.config import settings
 from app.core.exceptions import register_exception_handlers
 from app.core.logging import configure_logging, get_logger
@@ -46,6 +46,7 @@ app.include_router(chat.router)
 app.include_router(sys.router)
 app.include_router(session.router)
 app.include_router(skills.router)
+app.include_router(travel.router)
 
 # 静态前端：/static/* 资源 + / 首页
 _STATIC_DIR = Path(__file__).parent / "static"

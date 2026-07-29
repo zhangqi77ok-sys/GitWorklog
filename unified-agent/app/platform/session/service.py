@@ -10,6 +10,19 @@ from sqlalchemy.orm import Session
 from app.platform.session.models import ChatConversation, ChatMessage
 
 
+def owns_conversation(session: Session, user_id: int, conversation_id: str) -> bool:
+    """会话是否属于该用户。
+
+    读/改会话必须先过这道校验：conversation_id 是可猜的标识，
+    只验「已登录」不验「是本人的」等于任何登录用户都能翻别人的聊天记录。
+    不存在的会话同样返回 False，避免用响应差异探测 id 是否存在。
+    """
+    conv = session.execute(
+        select(ChatConversation).where(ChatConversation.conversation_id == conversation_id)
+    ).scalar_one_or_none()
+    return conv is not None and conv.user_id == user_id
+
+
 def get_or_create_conversation(
     session: Session, user_id: int, conversation_id: str | None = None
 ) -> ChatConversation:

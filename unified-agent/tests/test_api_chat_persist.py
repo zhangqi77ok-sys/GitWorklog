@@ -26,6 +26,10 @@ from app.platform.auth.security import create_token, hash_password
 from app.platform.session.service import get_messages
 from app.platform.user.models import SysUser
 
+# bcrypt 单次约 0.33s（故意慢）。夹具只需要一个合法哈希，整模块算一次即可，
+# 每个测试重算会让 setup 白烧大量时间。
+_PW_HASH = hash_password("pw")
+
 
 @pytest.fixture
 def factory() -> Iterator[sessionmaker[Session]]:
@@ -39,7 +43,7 @@ def factory() -> Iterator[sessionmaker[Session]]:
     f = sessionmaker(bind=engine, expire_on_commit=False, future=True)
 
     s = f()
-    s.add(SysUser(id=1, username="alice", password=hash_password("pw"), status=1))
+    s.add(SysUser(id=1, username="alice", password=_PW_HASH, status=1))
     s.commit()
     s.close()
 

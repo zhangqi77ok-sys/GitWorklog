@@ -32,6 +32,10 @@ from app.platform.auth.session_store import (
 )
 from app.platform.user.models import SysRole, SysUser, SysUserRole
 
+# bcrypt 单次约 0.33s（故意慢）。夹具只需要一个合法哈希，整模块算一次即可，
+# 每个测试重算会让 setup 白烧大量时间。
+_PW_HASH = hash_password("pw")
+
 
 @pytest.fixture
 def store() -> Iterator[InMemoryActiveSessionStore]:
@@ -168,8 +172,8 @@ def client(store: InMemoryActiveSessionStore) -> Iterator[TestClient]:
     factory = sessionmaker(bind=engine, expire_on_commit=False, future=True)
 
     s = factory()
-    s.add(SysUser(id=1, username="alice", password=hash_password("pw"), status=1))
-    s.add(SysUser(id=2, username="admin", password=hash_password("pw"), status=1))
+    s.add(SysUser(id=1, username="alice", password=_PW_HASH, status=1))
+    s.add(SysUser(id=2, username="admin", password=_PW_HASH, status=1))
     s.add(SysRole(id=1, code="admin", name="管理员", data_scope=int(DataScope.ALL)))
     s.add(SysUserRole(user_id=2, role_id=1))
     s.commit()
