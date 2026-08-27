@@ -83,6 +83,59 @@ def update_file(req: SaveFileRequest, _: CurrentUser) -> R[dict[str, str]]:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
 
+class CreateFileRequest(BaseModel):
+    project_path: str
+    file_path: str
+    initial_content: str = ""
+
+
+@router.post("/create-file")
+def create_file(req: CreateFileRequest, _: CurrentUser) -> R[dict[str, Any]]:
+    """在工程中创建新文件。"""
+    from app.platform.projects.service import create_project_file
+
+    try:
+        res = create_project_file(req.project_path, req.file_path, req.initial_content)
+        return R.ok(res)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+class DeleteFileRequest(BaseModel):
+    project_path: str
+    file_path: str
+
+
+@router.post("/delete-file")
+def delete_file(req: DeleteFileRequest, _: CurrentUser) -> R[dict[str, Any]]:
+    """删除工程中的指定文件或目录。"""
+    from app.platform.projects.service import delete_project_file
+
+    try:
+        res = delete_project_file(req.project_path, req.file_path)
+        return R.ok(res)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+class RunCommandRequest(BaseModel):
+    project_path: str
+    command: str
+    timeout_seconds: int = 30
+
+
+@router.post("/run-command")
+def run_command(req: RunCommandRequest, _: CurrentUser) -> R[dict[str, Any]]:
+    """在工程根目录下执行终端命令（如 pytest, uv run, python 等）。"""
+    from app.platform.projects.service import run_workspace_command
+
+    try:
+        res = run_workspace_command(req.project_path, req.command, req.timeout_seconds)
+        return R.ok(res)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
 class AddProjectRequest(BaseModel):
     name: str
     path: str

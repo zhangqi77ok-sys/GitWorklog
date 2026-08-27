@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter
 from pydantic import BaseModel
 
@@ -63,13 +65,10 @@ def _require_own(session: DbDep, user: SysUser, conversation_id: str) -> None:
 
 @router.get("/{conversation_id}")
 @router.get("/{conversation_id}/messages")
-def get_messages(conversation_id: str, session: DbDep, user: CurrentUser) -> R[dict[str, Any]]:
+def get_messages(conversation_id: str, session: DbDep, user: CurrentUser) -> R[list[MessageBrief]]:
     _require_own(session, user, conversation_id)
     msgs = service.get_messages(session, conversation_id)
-    return R.ok({
-        "conversation_id": conversation_id,
-        "messages": [MessageBrief(role=m.role, content=m.content, extra=m.extra) for m in msgs]
-    })
+    return R.ok([MessageBrief(role=m.role, content=m.content, extra=m.extra) for m in msgs])
 
 
 @router.put("/{conversation_id}/title")

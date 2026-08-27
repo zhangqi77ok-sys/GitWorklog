@@ -63,3 +63,50 @@ def test_projects_api():
     tree_resp = client.get(f"/api/projects/tree?project_path={proj_path}", headers=headers)
     assert tree_resp.status_code == 200
     assert isinstance(tree_resp.json()["data"], list)
+
+    # 4. 新建文件 API
+    create_resp = client.post(
+        "/api/projects/create-file",
+        headers=headers,
+        json={
+            "project_path": proj_path,
+            "file_path": "data/test_created_api.py",
+            "initial_content": "print('hello codex api')",
+        },
+    )
+    assert create_resp.status_code == 200
+    assert create_resp.json()["data"]["status"] == "created"
+
+    # 5. 读取新建的文件
+    file_resp = client.get(
+        f"/api/projects/file?project_path={proj_path}&file_path=data/test_created_api.py",
+        headers=headers,
+    )
+    assert file_resp.status_code == 200
+    assert "hello codex api" in file_resp.json()["data"]["content"]
+
+    # 6. 执行命令 API
+    run_resp = client.post(
+        "/api/projects/run-command",
+        headers=headers,
+        json={
+            "project_path": proj_path,
+            "command": "python data/test_created_api.py",
+        },
+    )
+    assert run_resp.status_code == 200
+    assert run_resp.json()["data"]["success"] is True
+    assert "hello codex api" in run_resp.json()["data"]["stdout"]
+
+    # 7. 删除文件 API
+    del_resp = client.post(
+        "/api/projects/delete-file",
+        headers=headers,
+        json={
+            "project_path": proj_path,
+            "file_path": "data/test_created_api.py",
+        },
+    )
+    assert del_resp.status_code == 200
+    assert del_resp.json()["data"]["status"] == "deleted"
+

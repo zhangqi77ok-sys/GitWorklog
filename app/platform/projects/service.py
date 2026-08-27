@@ -158,6 +158,100 @@ def save_project_file(project_path: str, rel_path: str, content: str) -> bool:
     return True
 
 
+def create_project_file(
+    project_path: str, rel_path: str, initial_content: str = "", overwrite: bool = True
+) -> dict[str, Any]:
+    """在指定工程路径下创建新文件（自动创建父目录）。"""
+    full_path = Path(project_path) / rel_path
+    if not str(full_path.resolve()).startswith(str(Path(project_path).resolve())):
+        raise PermissionError("禁止跨目录越权访问")
+
+    if full_path.exists() and not overwrite:
+        raise FileExistsError(f"文件已存在: {rel_path}")
+
+    full_path.parent.mkdir(parents=True, exist_ok=True)
+    full_path.write_text(initial_content, encoding="utf-8")
+    return {"file_path": rel_path, "size": len(initial_content), "status": "created"}
+
+
+def delete_project_file(project_path: str, rel_path: str) -> dict[str, Any]:
+    """删除工程内的指定文件。"""
+    full_path = Path(project_path) / rel_path
+    if not str(full_path.resolve()).startswith(str(Path(project_path).resolve())):
+        raise PermissionError("禁止跨目录越权访问")
+
+    if not full_path.exists():
+        raise FileNotFoundError(f"文件不存在: {rel_path}")
+    if full_path.is_file():
+        full_path.unlink()
+    elif full_path.is_dir():
+        import shutil
+
+        shutil.rmtree(full_path)
+    return {"file_path": rel_path, "status": "deleted"}
+
+
+def run_workspace_command(project_path: str, command: str, timeout_seconds: int = 30) -> dict[str, Any]:
+    """在工程根目录下执行终端命令（如 pytest, python, git, uv 等）。"""
+    p = Path(project_path).resolve()
+    if not p.exists() or not p.is_dir():
+        raise ValueError(f"工程路径无效: {project_path}")
+
+    import os
+    import sys
+    import time
+
+    start_time = time.time()
+    env = os.environ.copy()
+    py_dir = os.path.dirname(sys.executable)
+    py_scripts = os.path.join(py_dir, "Scripts")
+    path_additions = [py_dir, py_scripts]
+    local_app_data = os.environ.get("LOCALAPPDATA", "")
+    if local_app_data:
+        uv_path = os.path.join(local_app_data, "Programs", "uv")
+        if os.path.exists(uv_path):
+            path_additions.append(uv_path)
+    env["Path"] = ";".join(path_additions) + ";" + env.get("Path", "")
+
+    try:
+        proc = subprocess.run(
+            command,
+            shell=True,
+            cwd=str(p),
+            capture_output=True,
+            text=True,
+            timeout=timeout_seconds,
+            env=env,
+        )
+        elapsed = round(time.time() - start_time, 2)
+        return {
+            "command": command,
+            "returncode": proc.returncode,
+            "stdout": proc.stdout,
+            "stderr": proc.stderr,
+            "elapsed_seconds": elapsed,
+            "success": proc.returncode == 0,
+        }
+    except subprocess.TimeoutExpired:
+        return {
+            "command": command,
+            "returncode": -1,
+            "stdout": "",
+            "stderr": f"执行超时 ({timeout_seconds}s)",
+            "elapsed_seconds": timeout_seconds,
+            "success": False,
+        }
+    except Exception as exc:
+        return {
+            "command": command,
+            "returncode": -1,
+            "stdout": "",
+            "stderr": str(exc),
+            "elapsed_seconds": 0,
+            "success": False,
+        }
+
+
 def add_custom_project(name: str, path: str) -> dict[str, Any]:
     """添加或直接载入任意自定义本地工程目录。"""
     p = Path(path).resolve()
@@ -173,5 +267,6 @@ def add_custom_project(name: str, path: str) -> dict[str, Any]:
     entry = {"id": proj_id, "name": f"{proj_name} ({p.name})", "path": str(p)}
     DEFAULT_PROJECTS.append(entry)
     return {**entry, "git": get_git_info(str(p))}
+
 
 

@@ -300,7 +300,10 @@
                       <span>📁</span>
                       <span>工程文件目录</span>
                     </div>
-                    <button class="icon-refresh-btn" onclick="loadProjects()" title="刷新目录">🔄</button>
+                    <div style="display: flex; align-items: center; gap: 4px;">
+                      <button class="icon-refresh-btn" onclick="openNewFileModal()" title="新建文件">➕</button>
+                      <button class="icon-refresh-btn" onclick="loadProjects()" title="刷新目录">🔄</button>
+                    </div>
                   </div>
                   <div id="project-tree-list" class="project-tree-list">
                     <div class="empty-tip">加载工程目录树中...</div>
@@ -322,21 +325,21 @@
 
                   <!-- 顶部状态栏 -->
                   <div class="codex-stream-header">
-                    <span>💬 实时生成与交互流</span>
+                    <span>💬 实时生成与自主编程流</span>
                     <span id="codex-status-tag" class="status-badge ready">🟢 就绪</span>
                   </div>
 
-                  <!-- 对话流放上方 (主滚动区，实时渲染消息与代码) -->
+                  <!-- 对话流放上方 (主滚动区，实时渲染消息、代码与 Diff 交互卡片) -->
                   <div id="codex-messages" class="codex-messages-box">
-                    <div class="empty-tip">在下方输入开发指令，Codex 将基于当前工程与分支上下文生成代码并实时渲染。</div>
+                    <div class="empty-tip">在下方输入开发需求，Codex 智能体将自主生成、重构代码并支持一键写入当前工程与终端运行。</div>
                   </div>
 
                   <!-- 输入框放下面 (Antigravity 标准底部交互区) -->
                   <div class="codex-composer-bottom">
                     <div class="codex-quick-prompts" style="margin-bottom: 6px;">
+                      <button class="quick-chip" onclick="useCodexPrompt('请为当前工程创建并实现一个完整的新模块')">✨ 编写新模块</button>
                       <button class="quick-chip" onclick="useCodexPrompt('请为当前选中的代码文件编写完整的 PyTest 单元测试用例')">🧪 生成单测</button>
                       <button class="quick-chip" onclick="useCodexPrompt('请对当前代码进行性能优化与异常边界重构')">⚡ 优化重构</button>
-                      <button class="quick-chip" onclick="useCodexPrompt('请对当前模块进行架构分析与规范审查')">🔍 架构审查</button>
                     </div>
                     <textarea id="codex-query-input" placeholder="输入开发指令（支持 Enter 发送，Shift+Enter 换行）..." rows="3"></textarea>
                     <div class="codex-composer-footer" style="margin-top: 6px;">
@@ -346,17 +349,40 @@
                   </div>
                 </div>
 
-                <!-- 3. 代码编辑器与预览 -->
+                <!-- 3. 代码编辑器与集成终端 -->
                 <div class="code-editor-pane card-pane">
                   <div class="editor-tab-bar">
-                    <div class="active-file-tab">
-                      <span>📄</span>
-                      <span id="current-file-path">未选择文件</span>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                      <div class="active-file-tab">
+                        <span>📄</span>
+                        <span id="current-file-path">未选择文件</span>
+                      </div>
+                      <button class="ghost-tab-btn" onclick="openNewFileModal()" title="在工程中新建文件">➕ 新建</button>
                     </div>
-                    <button id="save-code-btn" class="editor-save-btn">💾 保存修改</button>
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                      <button id="run-code-btn" class="editor-action-btn" onclick="runActiveFileCode()" title="在工程环境下运行当前代码/测试">▶️ 运行代码</button>
+                      <button id="save-code-btn" class="editor-save-btn" onclick="saveActiveFileCode()" title="保存到磁盘 (Ctrl+S)">💾 保存修改</button>
+                      <button id="toggle-term-btn" class="editor-action-btn" onclick="toggleTerminalDrawer()" title="打开/收起控制台终端">📟 终端</button>
+                    </div>
                   </div>
                   <div class="editor-code-container">
-                    <textarea id="code-editor-area" class="monaco-like-editor" placeholder="从左侧文件树选择文件进行查看与编辑..."></textarea>
+                    <textarea id="code-editor-area" class="monaco-like-editor" placeholder="从左侧文件树选择文件，或点击 [+ 新建] 创建新文件进行编辑..."></textarea>
+                    
+                    <!-- 底部终端与测试运行抽屉 -->
+                    <div id="terminal-drawer" class="terminal-drawer hidden">
+                      <div class="terminal-drawer-header">
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                          <span>💻</span>
+                          <span style="font-weight: 600;">工程终端控制台</span>
+                          <span id="terminal-status-badge" class="status-badge ready">就绪</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                          <button class="icon-refresh-btn" onclick="clearTerminalOutput()" title="清空输出">🧹 清空</button>
+                          <button class="icon-refresh-btn" onclick="toggleTerminalDrawer()" title="收起终端">✕</button>
+                        </div>
+                      </div>
+                      <pre id="terminal-output" class="terminal-output-area">$ 等待执行代码或测试命令...</pre>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -857,6 +883,23 @@
           <input id="custom-model-id" placeholder="模型标识 ID（必填，如 deepseek-v3、qwen-max-latest、my-finetuned）" />
           <input id="custom-model-name" placeholder="展示名称（可选，如 DeepSeek V3 最新版）" />
           <button id="save-custom-model-btn" class="primary-btn" style="margin-top: 10px;">保 存 自 定 义 模 型</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal 13: 新建工程代码文件弹窗 -->
+    <div id="new-file-modal" class="modal hidden">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>➕ 在当前工程中新建文件</h2>
+          <button class="close-modal-btn ghost-btn">✕</button>
+        </div>
+        <div class="form-group" style="margin-top: 10px;">
+          <label style="font-size:12px; color:var(--text-sub);">相对工程路径（自动支持创建多层子目录）：</label>
+          <input id="new-file-relpath" placeholder="例如：app/api/webhook.py 或 tests/test_payment.py" />
+          <label style="font-size:12px; color:var(--text-sub); margin-top:8px;">初始文件内容（可选）：</label>
+          <textarea id="new-file-init-content" rows="4" placeholder="# 新建文件初始代码模板..." style="width:100%; background:var(--bg-input); border:1px solid var(--border); border-radius:6px; color:#fff; padding:8px; font-family:var(--font-mono); font-size:12px;"></textarea>
+          <button id="confirm-create-file-btn" class="primary-btn" style="margin-top: 12px;" onclick="confirmCreateNewFile()">创 建 文 件 并 开 启 编 辑</button>
         </div>
       </div>
     </div>

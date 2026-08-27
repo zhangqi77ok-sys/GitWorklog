@@ -142,7 +142,17 @@ function initEventListeners() {
 
   if ($("project-select")) $("project-select").onchange = (e) => switchProject(e.target.value);
   if ($("checkout-branch-btn")) $("checkout-branch-btn").onclick = checkoutCurrentBranch;
-  if ($("save-code-btn")) $("save-code-btn").onclick = saveCurrentFileCode;
+  if ($("save-code-btn")) $("save-code-btn").onclick = saveActiveFileCode;
+  if ($("run-code-btn")) $("run-code-btn").onclick = runActiveFileCode;
+  if ($("toggle-term-btn")) $("toggle-term-btn").onclick = toggleTerminalDrawer;
+  if ($("code-editor-area")) {
+    $("code-editor-area").addEventListener("keydown", (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+        e.preventDefault();
+        saveActiveFileCode();
+      }
+    });
+  }
   if ($("codex-send-btn")) $("codex-send-btn").onclick = sendCodexChat;
   if ($("codex-query-input")) {
     $("codex-query-input").onkeydown = (e) => {
@@ -1254,18 +1264,157 @@ async function selectProjectFile(filePath) {
   } catch (e) { $("code-editor-area").value = `// 读取文件失败: ${e.message}`; }
 }
 
-async function saveCurrentFileCode() {
-  if (!state.currentProject || !state.currentFilePath) return alert("未选择文件");
+function openNewFileModal() {
+  $("new-file-relpath").value = "";
+  $("new-file-init-content").value = "";
+  $("new-file-modal").classList.remove("hidden");
+}
+
+async function confirmCreateNewFile() {
+  const relPath = $("new-file-relpath").value.trim();
+  const initContent = $("new-file-init-content").value;
+  if (!relPath) return alert("请输入相对工程文件路径");
+  const projPath = state.currentProject || "e:\\pro\\agent-learning";
+  try {
+    const res = await apiFetch("/api/projects/create-file", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ project_path: projPath, file_path: relPath, initial_content: initContent }),
+    });
+    const json = await res.json();
+    if (json.code === 0) {
+      $("new-file-modal").classList.add("hidden");
+      state.currentFilePath = relPath;
+      $("current-file-path").textContent = relPath;
+      $("code-editor-area").value = initContent;
+      await loadProjects();
+      showToast(`🎉 文件 [${relPath}] 创建成功并已载入编辑器！`, "success");
+    } else {
+      alert("创建失败: " + json.message);
+    }
+  } catch (e) {
+    alert("创建异常: " + e.message);
+  }
+}
+
+async function saveActiveFileCode() {
+  if (!state.currentFilePath || state.currentFilePath === "未选择文件") {
+    return openNewFileModal();
+  }
   const content = $("code-editor-area").value;
+  const projPath = state.currentProject || "e:\\pro\\agent-learning";
   try {
     const res = await apiFetch("/api/projects/file", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ project_path: state.currentProject, file_path: state.currentFilePath, content }),
+      body: JSON.stringify({ project_path: projPath, file_path: state.currentFilePath, content }),
     });
     const json = await res.json();
-    if (json.code === 0) alert(`文件 [${state.currentFilePath}] 已成功保存到磁盘！`);
-  } catch (e) { alert("保存失败: " + e.message); }
+    if (json.code === 0) {
+      showToast(`💾 文件 [${state.currentFilePath}] 已成功保存到磁盘！`, "success");
+    } else {
+      alert("保存失败: " + json.message);
+    }
+  } catch (e) {
+    alert("保存失败: " + e.message);
+  }
+}
+
+function toggleTerminalDrawer(forceOpen) {
+  const drawer = $("terminal-drawer");
+  if (!drawer) return;
+  if (forceOpen === true) drawer.classList.remove("hidden");
+  else if (forceOpen === false) drawer.classList.add("hidden");
+  else drawer.classList.toggle("hidden");
+}
+
+function clearTerminalOutput() {
+  if ($("terminal-output")) $("terminal-output").textContent = "$ 控制台输出已清空\n";
+}
+
+async function runWorkspaceCommand(command) {
+  if (!command) return;
+  toggleTerminalDrawer(true);
+  const outEl = $("terminal-output");
+  const badge = $("terminal-status-badge");
+  if (badge) { badge.className = "status-badge"; badge.textContent = "⚡ 执行中..."; }
+  if (outEl) outEl.textContent = `$ ${command}\n\n[INFO] 正在本地工程环境执行指令，请稍候...\n`;
+  const projPath = state.currentProject || "e:\\pro\\agent-learning";
+  try {
+    const res = await apiFetch("/api/projects/run-command", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ project_path: projPath, command: command, timeout_seconds: 30 }),
+    });
+    const json = await res.json();
+    if (json.code === 0 && json.data) {
+      const d = json.data;
+      let text = `$ ${command}\n[完成] 耗时: ${d.elapsed_seconds}s | 退出码: ${d.returncode}\n\n`;
+      if (d.stdout) text += `${d.stdout}\n`;
+      if (d.stderr) text += `[STDERR / 输出]:\n${d.stderr}\n`;
+      if (!d.stdout && !d.stderr) text += `(命令执行完毕，无文本输出)\n`;
+      if (outEl) outEl.textContent = text;
+      if (badge) {
+        badge.className = d.success ? "status-badge ready" : "status-badge danger";
+        badge.textContent = d.success ? "✅ 成功" : "❌ 失败";
+      }
+    } else {
+      if (outEl) outEl.textContent += `\n[ERROR] 执行失败: ${json.message || '未知异常'}\n`;
+      if (badge) { badge.className = "status-badge danger"; badge.textContent = "❌ 异常"; }
+    }
+  } catch (e) {
+    if (outEl) outEl.textContent += `\n[ERROR] 网络异常: ${e.message}\n`;
+    if (badge) { badge.className = "status-badge danger"; badge.textContent = "❌ 异常"; }
+  }
+}
+
+async function runActiveFileCode() {
+  if (!state.currentFilePath || state.currentFilePath === "未选择文件") {
+    return alert("请先在左侧选择或新建一个代码文件");
+  }
+  const f = state.currentFilePath;
+  let cmd = "";
+  if (f.endsWith(".py")) {
+    if (f.startsWith("tests/") || f.includes("test_")) {
+      cmd = `uv run pytest ${f} -v`;
+    } else {
+      cmd = `uv run python ${f}`;
+    }
+  } else if (f.endsWith(".js") || f.endsWith(".ts")) {
+    cmd = `node ${f}`;
+  } else {
+    cmd = `git status`;
+  }
+  await runWorkspaceCommand(cmd);
+}
+
+async function applyAgentCodeToProject(relPath, codeBase64) {
+  try {
+    const content = decodeURIComponent(escape(atob(codeBase64)));
+    const projPath = state.currentProject || "e:\\pro\\agent-learning";
+    const res = await apiFetch("/api/projects/file", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ project_path: projPath, file_path: relPath, content }),
+    });
+    const json = await res.json();
+    if (json.code === 0) {
+      state.currentFilePath = relPath;
+      $("current-file-path").textContent = relPath;
+      $("code-editor-area").value = content;
+      await loadProjects();
+      showToast(`✨ 代码已直接写入工程文件 [${relPath}] 并载入编辑器！`, "success");
+    } else {
+      alert("写入失败: " + json.message);
+    }
+  } catch (e) {
+    alert("写入异常: " + e.message);
+  }
+}
+
+function renderCodexMarkdownWithActions(fullText) {
+  let html = window.marked ? marked.parse(fullText) : escapeHtml(fullText);
+  return html;
 }
 
 async function saveCustomProject() {
@@ -1354,13 +1503,15 @@ async function sendCodexChat() {
             const text = data.text !== undefined ? data.text : (data.chunk !== undefined ? data.chunk : (data.content !== undefined ? data.content : ""));
             if (text) {
               fullText += text;
-              targetEl.innerHTML = window.marked ? marked.parse(fullText) : escapeHtml(fullText);
+              targetEl.innerHTML = renderCodexMarkdownWithActions(fullText);
+              decorateCodexCodeBlocks(targetEl);
               box.scrollTop = box.scrollHeight;
             }
           } catch (e) {
             if (!raw.startsWith("{")) {
               fullText += raw;
-              targetEl.innerHTML = window.marked ? marked.parse(fullText) : escapeHtml(fullText);
+              targetEl.innerHTML = renderCodexMarkdownWithActions(fullText);
+              decorateCodexCodeBlocks(targetEl);
               box.scrollTop = box.scrollHeight;
             }
           }
@@ -1368,11 +1519,45 @@ async function sendCodexChat() {
       }
     }
     if (statusTag) statusTag.textContent = "✅ 就绪";
+    decorateCodexCodeBlocks(targetEl);
   } catch (e) {
     const targetEl = document.querySelector(`#${assistantMsgId} .codex-bubble-content`);
     if (targetEl) targetEl.innerHTML = `<span style="color:var(--accent-rose)">执行失败: ${e.message}</span>`;
     if (statusTag) statusTag.textContent = "❌ 异常";
   }
+}
+
+function decorateCodexCodeBlocks(container) {
+  if (!container) return;
+  const blocks = container.querySelectorAll("pre");
+  blocks.forEach((pre) => {
+    if (pre.previousElementSibling && pre.previousElementSibling.classList.contains("agent-code-action-bar")) return;
+    const codeEl = pre.querySelector("code");
+    if (!codeEl) return;
+    const codeText = codeEl.innerText || "";
+    if (codeText.length < 10) return;
+
+    let targetPath = state.currentFilePath && state.currentFilePath !== "未选择文件" ? state.currentFilePath : "app/main.py";
+    const prevText = pre.previousElementSibling ? (pre.previousElementSibling.innerText || "") : "";
+    const pathMatch = prevText.match(/([a-zA-Z0-9_\-\/\\\.]+\.(py|js|ts|json|html|css|md|yaml|yml))/);
+    if (pathMatch) targetPath = pathMatch[1].replace(/\\/g, "/");
+
+    let b64 = "";
+    try { b64 = btoa(unescape(encodeURIComponent(codeText))); } catch (e) { b64 = ""; }
+    if (!b64) return;
+
+    const bar = document.createElement("div");
+    bar.className = "agent-code-action-bar";
+    bar.innerHTML = `
+      <span class="agent-target-file">📝 目标文件: <code>${escapeHtml(targetPath)}</code></span>
+      <div class="agent-action-buttons">
+        <button class="action-pill-green" onclick="applyAgentCodeToProject('${escapeHtml(targetPath)}', '${b64}')">✨ 写入磁盘工程</button>
+        <button class="action-pill-cyan" onclick="selectProjectFile('${escapeHtml(targetPath)}')">👁️ 载入编辑器</button>
+        ${targetPath.endsWith('.py') ? `<button class="action-pill-amber" onclick="runWorkspaceCommand('uv run pytest ${escapeHtml(targetPath)} -v')">▶️ 运行单测</button>` : ''}
+      </div>
+    `;
+    pre.parentNode.insertBefore(bar, pre);
+  });
 }
 
 function launchDesktopClient() { alert("已向本地 AgentX 桌面运行时派发启动信号！\n独立原生多窗口 Studio 正在唤醒。"); }
