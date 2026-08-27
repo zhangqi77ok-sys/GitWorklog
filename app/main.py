@@ -12,6 +12,7 @@ from pathlib import Path
 
 from app.api.auth import router as auth_router
 from app.api.chat import router as chat_router
+from app.api.cockpit import router as cockpit_router
 from app.api.deps import get_session
 from app.api.files import router as files_router
 from app.api.gateway import router as gateway_router
@@ -68,6 +69,7 @@ app.include_router(mesh_router)
 app.include_router(memory_router)
 app.include_router(skills_router)
 app.include_router(mcp_router)
+app.include_router(cockpit_router)
 app.include_router(files_router)
 app.include_router(gateway_router)
 app.include_router(sys_router)

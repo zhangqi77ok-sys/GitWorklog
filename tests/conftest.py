@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session, sessionmaker
 import app.domains.data.models
 import app.platform.session.models
 import app.platform.skills.models
+import app.platform.token_meter.models
 import app.platform.user.models  # noqa: F401
 from app.core.db import Base
 from app.platform.auth.session_store import reset_store, set_store
