@@ -3,20 +3,20 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Vite Coding Platform - 桌面端多智能体全自主编程工作台</title>
+  <title>Vite Coding Platform - RunCabinet 暖色调桌面端编程工作台</title>
   <link rel="stylesheet" href="/static/app.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 </head>
-<body class="dark-theme">
+<body class="warm-theme">
   <!-- 登录覆盖层 -->
   <div id="login-modal" class="modal-overlay hidden">
     <div class="glass-card login-card">
       <div class="login-header">
         <div class="app-logo">⚡</div>
         <h2>Vite Coding Platform</h2>
-        <p class="subtitle">桌面端积木式多智能体自主编程操作系统</p>
+        <p class="subtitle">RunCabinet 暖色调多智能体全自主编程平台</p>
       </div>
       <form id="login-form" onsubmit="event.preventDefault(); login();">
         <div class="form-group">
@@ -34,34 +34,32 @@
 
   <!-- 全局桌面应用主框架 -->
   <div class="desktop-app-container">
-    <!-- 1. 最左侧积木式极窄功能导轨 (Icon Rail) -->
+    <!-- 1. 最左侧积木式极窄功能导轨 (Cabinet Rail) -->
     <aside class="desktop-icon-rail">
-      <div class="rail-logo">⚡</div>
+      <div class="rail-logo" title="Vite Coding">⚡</div>
       <nav class="rail-nav">
         <button class="rail-btn active" id="rail-btn-coding" onclick="switchMainView('coding')" title="多智能体代码工作台">💻</button>
         <button class="rail-btn" id="rail-btn-cockpit" onclick="switchMainView('cockpit')" title="LLM 管理与 Cockpit Tools 驾驶舱">🎛️</button>
         <button class="rail-btn" id="rail-btn-graph" onclick="switchMainView('graph')" title="Obsidian 动态知识图谱">🕸️</button>
-        <button class="rail-btn" id="rail-btn-memory" onclick="switchMainView('memory')" title="分层记忆中心 (短期/长期)">🧠</button>
+        <button class="rail-btn" id="rail-btn-memory" onclick="switchMainView('memory')" title="分层记忆中心">🧠</button>
       </nav>
       <div class="rail-bottom">
-        <div class="user-avatar-btn" id="current-user-badge" title="当前登录用户">👤</div>
+        <div class="user-avatar-btn" id="current-user-badge" title="当前登录用户">A</div>
       </div>
     </aside>
 
     <!-- 2. 会话历史与标签过滤器 (Session Sidebar) -->
     <aside class="desktop-sidebar" id="main-sidebar">
       <div class="sidebar-header">
-        <button class="btn btn-new-session full-width" onclick="createNewSession()">➕ 开启新会话</button>
+        <button class="btn-new-session" onclick="createNewSession()">➕ 开启新会话</button>
+        <button class="btn-manage-tags" onclick="openTagManagerModal()" title="自定义标签与颜色">🏷️</button>
       </div>
 
       <!-- 搜索与标签过滤器 -->
       <div class="session-filter-box">
         <input type="text" id="session-search-input" placeholder="🔍 搜索会话或标签..." oninput="onSessionSearchInput(this.value)">
         <div class="tag-filter-chips" id="tag-filter-chips">
-          <span class="tag-chip active" onclick="filterSessionsByTag('')">全部</span>
-          <span class="tag-chip tag-feat" onclick="filterSessionsByTag('feat')">#feat</span>
-          <span class="tag-chip tag-bug" onclick="filterSessionsByTag('bugfix')">#bugfix</span>
-          <span class="tag-chip tag-review" onclick="filterSessionsByTag('review')">#review</span>
+          <!-- 动态渲染自定义颜色标签 Filter -->
         </div>
       </div>
 
@@ -71,7 +69,7 @@
 
     <!-- 3. 主工作区：Coding 视图 -->
     <main class="desktop-workspace-main" id="view-coding">
-      <!-- 顶部状态与工程栏 (含实时 Token 消耗指示器) -->
+      <!-- 顶部状态与工程栏 (含实时 Token 消耗指示器 & 分享按钮) -->
       <header class="workspace-top-bar">
         <div class="top-bar-left">
           <div class="workspace-chip">📁 工程: <span id="current-project-label">e:\pro\agent-learning</span></div>
@@ -80,6 +78,7 @@
           <div class="workspace-chip token-meter-chip" id="token-meter-chip" title="当前会话消耗 Token">⚡ 1,280 Tokens</div>
         </div>
         <div class="top-bar-right">
+          <button class="ghost-btn share-btn" onclick="openShareSessionModal()">🔗 分享会话</button>
           <button class="ghost-btn" onclick="switchMainView('cockpit')">🎛️ LLM 驾驶舱</button>
           <button class="ghost-btn" onclick="toggleRightTab('graph')">🕸️ 切换图谱</button>
           <button class="ghost-btn" onclick="toggleRightTab('editor')">💻 切换编辑器</button>
@@ -124,12 +123,6 @@
           <!-- 消息流容器 -->
           <div class="agent-messages-container" id="agent-messages-box"></div>
 
-          <!-- 跨会话引用浮层 (Citation Popover) -->
-          <div id="citation-popover" class="citation-popover hidden">
-            <div class="popover-title">🔗 引用历史会话结论与代码</div>
-            <div class="popover-list" id="citation-items-list"></div>
-          </div>
-
           <!-- 底部输入指令区 -->
           <div class="agent-composer-area">
             <div class="composer-prompt-chips">
@@ -153,7 +146,6 @@
             <div class="wb-actions">
               <button class="btn-tool-pill" onclick="saveActiveFileCode()" title="保存 (Ctrl+S)">💾 保存</button>
               <button class="btn-tool-pill btn-run-pill" onclick="runActiveFileCode()" title="运行代码">▶️ 运行</button>
-              <button class="btn-tool-pill" onclick="toggleTerminalDrawer()" title="切换终端">📟 终端</button>
             </div>
           </div>
 
@@ -167,11 +159,11 @@
             <div class="graph-toolbar">
               <span class="graph-title">🕸️ 项目代码与变更知识图谱 (AST & Git 拓扑)</span>
               <div class="graph-legend">
-                <span class="dot-label"><span class="dot" style="background:#6366f1"></span> 项目</span>
+                <span class="dot-label"><span class="dot" style="background:#e06c3a"></span> 项目</span>
                 <span class="dot-label"><span class="dot" style="background:#38bdf8"></span> Python</span>
                 <span class="dot-label"><span class="dot" style="background:#10b981"></span> 函数</span>
                 <span class="dot-label"><span class="dot" style="background:#ec4899"></span> 类</span>
-                <span class="dot-label"><span class="dot" style="background:#e11d48"></span> Git提交</span>
+                <span class="dot-label"><span class="dot" style="background:#f59e0b"></span> Git提交</span>
               </div>
               <button class="btn-tool-pill" onclick="reloadObsidianGraph()">🔄 刷新图谱</button>
             </div>
@@ -184,37 +176,16 @@
           <div class="wb-tab-pane" id="pane-memory">
             <div class="memory-container">
               <div class="memory-section">
-                <h4>🧠 长期语义记忆与架构规范 (Long-Term Memory)</h4>
-                <div class="memory-search-row">
-                  <input type="text" id="memory-search-input" placeholder="🔍 搜索最佳实践与规范..." oninput="onMemorySearch(this.value)">
-                  <button class="btn-tool-pill" onclick="openAddMemoryModal()">➕ 新增规范</button>
-                </div>
+                <h4>🧠 长期语义记忆与架构规范</h4>
                 <div class="memory-cards-grid" id="long-term-memory-list"></div>
               </div>
-              <div class="memory-section">
-                <h4>⚡ 短期工作记忆上下文 (Short-Term Working Buffer)</h4>
-                <div class="short-term-buffer-box" id="short-term-buffer-display">暂无短期上下文缓存</div>
-              </div>
             </div>
-          </div>
-
-          <!-- 底部可收起集成终端抽屉 -->
-          <div class="integrated-terminal-drawer" id="terminal-drawer">
-            <div class="terminal-header">
-              <span>📟 集成控制台终端 (Vite Runner)</span>
-              <div class="term-actions">
-                <span class="term-status-badge" id="terminal-status-badge">就绪</span>
-                <button class="term-mini-btn" onclick="clearTerminalOutput()">🧹 清空</button>
-                <button class="term-mini-btn" onclick="toggleTerminalDrawer()">✕</button>
-              </div>
-            </div>
-            <pre class="terminal-body" id="terminal-output">// Vite Coding Terminal Ready.\n$ </pre>
           </div>
         </section>
       </div>
     </main>
 
-    <!-- 4. 主工作区：LLM 管理与 Cockpit Tools 驾驶舱视图 (Cockpit View) -->
+    <!-- 4. 主工作区：Cockpit 驾驶舱视图 -->
     <main class="desktop-workspace-main hidden" id="view-cockpit">
       <header class="workspace-top-bar">
         <div class="top-bar-left">
@@ -227,7 +198,6 @@
       </header>
 
       <div class="cockpit-dashboard-grid">
-        <!-- 模块 1: Token 计量与健康指标大屏 -->
         <section class="cockpit-card token-metrics-card">
           <div class="cockpit-card-header">
             <h3>⚡ Token 消耗与运行大盘</h3>
@@ -251,72 +221,85 @@
               <div class="kpi-label">活跃 Cockpit 工具</div>
             </div>
           </div>
-          <div class="token-breakdown-row" id="token-model-breakdown">
-            <!-- 动态渲染各模型 Token 消耗条 -->
-          </div>
+          <div class="token-breakdown-row" id="token-model-breakdown"></div>
         </section>
 
-        <!-- 模块 2: Cockpit Tools 驾驶舱工具操控台 (开关/Schema/在线调试) -->
         <section class="cockpit-card tools-management-card">
           <div class="cockpit-card-header">
             <h3>🛠️ Cockpit Tools 驾驶舱工具库</h3>
-            <div class="card-header-actions">
-              <button class="btn-tool-pill" onclick="loadCockpitTools()">🔄 刷新工具</button>
-            </div>
+            <button class="btn-tool-pill" onclick="loadCockpitTools()">🔄 刷新工具</button>
           </div>
-          <div class="cockpit-tools-grid" id="cockpit-tools-list">
-            <!-- 动态生成驾驶舱工具卡片 -->
-          </div>
+          <div class="cockpit-tools-grid" id="cockpit-tools-list"></div>
         </section>
 
-        <!-- 模块 3: LLM 厂商与模型配置管理 -->
         <section class="cockpit-card llm-provider-card">
           <div class="cockpit-card-header">
             <h3>🔮 LLM 厂商与模型接入</h3>
             <button class="btn-tool-pill" onclick="openAddCustomModelModal()">➕ 自定义模型</button>
           </div>
-          <div class="providers-list-scroll" id="llm-providers-container">
-            <!-- 动态生成厂商列表 -->
-          </div>
+          <div class="providers-list-scroll" id="llm-providers-container"></div>
         </section>
       </div>
     </main>
   </div>
 
+  <!-- 会话分享导出弹窗 (Share Session Modal) -->
+  <div id="share-session-modal" class="modal-overlay hidden">
+    <div class="glass-card modal-box" style="width: 520px;">
+      <h3>🔗 分享当前会话记录与代码成果</h3>
+      <div class="form-group">
+        <label>导出格式预览 (Markdown Transcription):</label>
+        <textarea id="share-export-content" rows="8" class="monaco-code-editor" style="height:160px;"></textarea>
+      </div>
+      <div class="modal-footer-btns">
+        <button class="ghost-btn" onclick="closeShareSessionModal()">关闭</button>
+        <button class="btn btn-primary" onclick="copyShareMarkdown()">📋 复制 Markdown 全文</button>
+        <button class="btn btn-primary" style="background:#d97706;" onclick="downloadSessionJson()">💾 导出 JSON 快照</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 标签与颜色管理弹窗 (Tag & Color Manager Modal) -->
+  <div id="tag-manager-modal" class="modal-overlay hidden">
+    <div class="glass-card modal-box">
+      <h3>🏷️ 自定义标签与颜色管理</h3>
+      <div class="form-group">
+        <label>标签名称 (Tag Name):</label>
+        <input type="text" id="custom-tag-name" placeholder="如: feat, bugfix, review, hotfix">
+      </div>
+      <div class="form-group">
+        <label>选择标签代表颜色 (Color Palette):</label>
+        <div class="color-picker-row" id="tag-color-palette">
+          <div class="color-dot-choice selected" style="background:#e06c3a;" data-color="#e06c3a" onclick="selectTagColor(this)"></div>
+          <div class="color-dot-choice" style="background:#f59e0b;" data-color="#f59e0b" onclick="selectTagColor(this)"></div>
+          <div class="color-dot-choice" style="background:#10b981;" data-color="#10b981" onclick="selectTagColor(this)"></div>
+          <div class="color-dot-choice" style="background:#38bdf8;" data-color="#38bdf8" onclick="selectTagColor(this)"></div>
+          <div class="color-dot-choice" style="background:#a855f7;" data-color="#a855f7" onclick="selectTagColor(this)"></div>
+          <div class="color-dot-choice" style="background:#f43f5e;" data-color="#f43f5e" onclick="selectTagColor(this)"></div>
+        </div>
+      </div>
+      <div class="modal-footer-btns">
+        <button class="ghost-btn" onclick="closeTagManagerModal()">取消</button>
+        <button class="btn btn-primary" onclick="saveCustomTag()">💾 保存标签</button>
+      </div>
+    </div>
+  </div>
+
   <!-- 在线调试工具沙箱弹窗 -->
   <div id="tool-debug-modal" class="modal-overlay hidden">
     <div class="glass-card modal-box">
-      <h3>🧪 Cockpit 工具在线调试沙箱: <span id="debug-tool-name" style="color:var(--accent-cyan);"></span></h3>
+      <h3>🧪 Cockpit 工具在线调试沙箱: <span id="debug-tool-name" style="color:var(--primary);"></span></h3>
       <div class="form-group">
         <label>调用参数 (JSON Format):</label>
         <textarea id="debug-tool-params" rows="5" class="monaco-code-editor" style="height:110px;"></textarea>
       </div>
       <div class="form-group">
         <label>执行回显输出 (Result):</label>
-        <pre class="terminal-body" id="debug-tool-result" style="height:100px; padding:6px;">// 点击「执行调用」运行...</pre>
+        <pre class="terminal-body" id="debug-tool-result" style="height:100px; padding:6px; color:#fb923c;">// 点击「执行调用」运行...</pre>
       </div>
       <div class="modal-footer-btns">
         <button class="ghost-btn" onclick="closeToolDebugModal()">关闭</button>
         <button class="btn btn-primary" onclick="confirmInvokeDebugTool()">🚀 执行调用</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- 自定义模型弹窗 -->
-  <div id="custom-model-modal" class="modal-overlay hidden">
-    <div class="glass-card modal-box">
-      <h3>➕ 添加自定义模型</h3>
-      <div class="form-group">
-        <label>模型代码 (Model ID)</label>
-        <input type="text" id="new-model-id" placeholder="如: deepseek-ai/DeepSeek-V3">
-      </div>
-      <div class="form-group">
-        <label>显示名称 (Display Name)</label>
-        <input type="text" id="new-model-name" placeholder="DeepSeek V3 (Custom)">
-      </div>
-      <div class="modal-footer-btns">
-        <button class="ghost-btn" onclick="closeCustomModelModal()">取消</button>
-        <button class="btn btn-primary" onclick="confirmAddCustomModel()">添加模型</button>
       </div>
     </div>
   </div>
@@ -326,43 +309,12 @@
     <div class="glass-card modal-box">
       <h3>➕ 新建工程文件</h3>
       <div class="form-group">
-        <label>文件相对路径 (例如: <code>app/utils/calc.py</code>)</label>
+        <label>文件相对路径</label>
         <input type="text" id="new-file-relpath" placeholder="app/services/example.py">
-      </div>
-      <div class="form-group">
-        <label>初始代码内容 (可选)</label>
-        <textarea id="new-file-init-content" rows="4" placeholder="# 新建文件初始代码..."></textarea>
       </div>
       <div class="modal-footer-btns">
         <button class="ghost-btn" onclick="closeNewFileModal()">取消</button>
         <button class="btn btn-primary" onclick="confirmCreateNewFile()">创建并打开</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- 新增长期记忆弹窗 -->
-  <div id="add-memory-modal" class="modal-overlay hidden">
-    <div class="glass-card modal-box">
-      <h3>➕ 新增长期语义记忆 / 规范</h3>
-      <div class="form-group">
-        <label>分类 (Category)</label>
-        <input type="text" id="new-mem-category" value="architecture">
-      </div>
-      <div class="form-group">
-        <label>标题 (Title)</label>
-        <input type="text" id="new-mem-title" placeholder="如：FastAPI 异常处理规范">
-      </div>
-      <div class="form-group">
-        <label>规范内容 (Content)</label>
-        <textarea id="new-mem-content" rows="4" placeholder="详细说明最佳实践或架构设计规则..."></textarea>
-      </div>
-      <div class="form-group">
-        <label>标签 (逗号分隔)</label>
-        <input type="text" id="new-mem-tags" placeholder="python, api, standard">
-      </div>
-      <div class="modal-footer-btns">
-        <button class="ghost-btn" onclick="closeAddMemoryModal()">取消</button>
-        <button class="btn btn-primary" onclick="confirmAddMemory()">保存记忆</button>
       </div>
     </div>
   </div>

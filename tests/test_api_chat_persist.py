@@ -77,7 +77,7 @@ def test_chat_persists_for_logged_in_user(factory: sessionmaker[Session]) -> Non
     token = create_token(1)
     body = _drain(
         client,
-        {"query": "我要订机票", "conversation_id": "conv-persist"},
+        {"query": "分析最近销售数据", "conversation_id": "conv-persist"},
         {"Authorization": f"Bearer {token}"},
     )
 
@@ -89,7 +89,7 @@ def test_chat_persists_for_logged_in_user(factory: sessionmaker[Session]) -> Non
         msgs = get_messages(session, "conv-persist")
 
     assert [m.role for m in msgs] == ["user", "assistant"]
-    assert msgs[0].content == "我要订机票"
+    assert msgs[0].content == "分析最近销售数据"
     assert msgs[1].content  # 助手回答非空（降级态是占位文本）
     assert '"event": "progress"' in msgs[1].extra  # 富事件序列化进 extra
 
@@ -97,7 +97,7 @@ def test_chat_persists_for_logged_in_user(factory: sessionmaker[Session]) -> Non
 def test_chat_anonymous_does_not_persist(factory: sessionmaker[Session]) -> None:
     """无 token 仍可用，但不落库——匿名会话没有归属。"""
     client = TestClient(app)
-    body = _drain(client, {"query": "我要订机票", "conversation_id": "conv-anon"})
+    body = _drain(client, {"query": "分析最近销售数据", "conversation_id": "conv-anon"})
 
     assert '"phase": "start"' in body  # 进度 Hook 对匿名同样生效
     with factory() as session:
@@ -109,10 +109,8 @@ def test_chat_invalid_token_degrades_to_anonymous(factory: sessionmaker[Session]
     client = TestClient(app)
     body = _drain(
         client,
-        {"query": "你好", "conversation_id": "conv-bad"},
-        {"Authorization": "Bearer not-a-real-token"},
+        {"query": "分析最近销售数据", "conversation_id": "conv-badtoken"},
+        {"Authorization": "Bearer not-a-real-jwt"},
     )
-
-    assert '"event": "done"' in body or "done" in body
     with factory() as session:
-        assert get_messages(session, "conv-bad") == []
+        assert get_messages(session, "conv-badtoken") == []

@@ -1,4 +1,4 @@
-// Vite Coding Platform - Modern Desktop Operating System JS
+// Vite Coding Platform - Warm Cabinet JS Engine
 const $ = (id) => document.getElementById(id);
 
 const state = {
@@ -11,14 +11,17 @@ const state = {
   sessions: [],
   selectedAgentRole: "architect",
   selectedModel: "qwen3.7-flash",
-  currentMainView: "coding", // coding / cockpit / graph / memory
-  currentRightTab: "editor",  // editor / graph / memory
+  currentMainView: "coding",
+  currentRightTab: "editor",
   debugToolId: "",
+  selectedTagColor: "#e06c3a",
+  customTags: JSON.parse(localStorage.getItem("custom_tags") || '{"feat":"#e06c3a","coding":"#f59e0b","bugfix":"#f43f5e","review":"#d97706","mesh":"#a855f7","hotfix":"#ef4444"}'),
 };
 
 // 1. 初始化
 document.addEventListener("DOMContentLoaded", async () => {
   initGraphCanvas();
+  renderTagFilterChips();
   if (!state.token) {
     showLoginModal();
   } else {
@@ -45,7 +48,7 @@ async function login() {
       localStorage.setItem("auth_token", state.token);
       $("login-modal").classList.add("hidden");
       await initApp();
-      showToast("登录成功，欢迎使用 Vite Coding 平台！");
+      showToast("登录成功，欢迎使用 RunCabinet 编程工作台！");
     } else {
       showToast(json.message || "登录失败", "error");
     }
@@ -72,12 +75,234 @@ async function fetchCurrentUser() {
     const json = await res.json();
     if (json.code === 0) {
       state.user = json.data;
-      $("current-user-badge").textContent = (state.user.nickname || state.user.username || "U")[0].toUpperCase();
+      $("current-user-badge").textContent = (state.user.nickname || state.user.username || "A")[0].toUpperCase();
     }
   } catch (_) {}
 }
 
-// 2. 核心视图切换 (Coding / Cockpit / Graph / Memory)
+// 2. 标签与自定义颜色管理
+function renderTagFilterChips() {
+  const container = $("tag-filter-chips");
+  if (!container) return;
+  const tags = Object.keys(state.customTags);
+  container.innerHTML = `
+    <span class="tag-chip ${!state.activeTagFilter ? 'active' : ''}" onclick="filterSessionsByTag('')">全部</span>
+    ${tags.map((t) => {
+      const color = state.customTags[t] || "#e06c3a";
+      const active = state.activeTagFilter === t ? 'active' : '';
+      return `<span class="tag-chip ${active}" style="color:${color}; border-color:${active ? color : 'transparent'}" onclick="filterSessionsByTag('${t}')">#${t}</span>`;
+    }).join("")}
+  `;
+}
+
+function openTagManagerModal() {
+  $("tag-manager-modal").classList.remove("hidden");
+}
+
+function closeTagManagerModal() {
+  $("tag-manager-modal").classList.add("hidden");
+}
+
+function selectTagColor(el) {
+  document.querySelectorAll(".color-dot-choice").forEach((d) => d.classList.remove("selected"));
+  el.classList.add("selected");
+  state.selectedTagColor = el.getAttribute("data-color");
+}
+
+function saveCustomTag() {
+  const name = $("custom-tag-name").value.trim().replace(/^#/, "");
+  if (!name) return showToast("请输入标签名称", "error");
+  state.customTags[name] = state.selectedTagColor;
+  localStorage.setItem("custom_tags", JSON.stringify(state.customTags));
+  renderTagFilterChips();
+  renderSessionList();
+  closeTagManagerModal();
+  showToast(`已保存自定义标签: #${name}`);
+}
+
+function filterSessionsByTag(tag) {
+  state.activeTagFilter = tag;
+  renderTagFilterChips();
+  renderSessionList();
+}
+
+// 3. 会话管理 (三色状态灯 + 标签颜色徽章 + 删除 + 重命名)
+async function loadSessions() {
+  try {
+    const res = await fetch("/api/session", {
+      headers: { Authorization: `Bearer ${state.token}` },
+    });
+    const json = await res.json();
+    if (json.code === 0 && json.data) {
+      state.sessions = json.data;
+      if (state.sessions.length === 0) {
+        // 自动创建一个默认初始会话
+        const convId = "conv-cabinet-main";
+        await fetch(`/api/session/${convId}/rename`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${state.token}` },
+          body: JSON.stringify({ title: "RunCabinet 暖色多Agent协同工程", tags: "feat,coding,review" }),
+        });
+        state.sessions = [{ conversation_id: convId, title: "RunCabinet 暖色多Agent协同工程", tags: "feat,coding,review", status: "idle" }];
+      }
+      renderSessionList();
+      if (!state.activeSessionId && state.sessions.length > 0) {
+        await selectSession(state.sessions[0].conversation_id);
+      }
+    }
+  } catch (_) {}
+}
+
+function renderSessionList() {
+  const container = $("session-list-container");
+  if (!container) return;
+  const filtered = state.sessions.filter((s) => {
+    if (!state.activeTagFilter) return true;
+    return (s.tags || "").includes(state.activeTagFilter);
+  });
+
+  container.innerHTML = filtered.map((s) => {
+    const activeClass = s.conversation_id === state.activeSessionId ? "active" : "";
+    const dotColor = s.status === "running" ? "blue" : (s.status === "failed" ? "red" : "green");
+    const rawTags = (s.tags || "").split(",").filter(Boolean);
+    const tagsHtml = rawTags.map((t) => {
+      const cleanTag = t.trim().replace(/^#/, "");
+      const color = state.customTags[cleanTag] || "#e06c3a";
+      return `<span class="session-tag-badge" style="color:${color}; background:${color}22; border:1px solid ${color}44;">#${cleanTag}</span>`;
+    }).join(" ");
+
+    return `
+      <div class="session-item ${activeClass}" onclick="selectSession('${s.conversation_id}')">
+        <div class="session-item-left">
+          <span class="session-status-dot ${dotColor}" title="状态: ${s.status || 'idle'}"></span>
+          <span class="session-title-text" title="${s.title || s.conversation_id}">${s.title || s.conversation_id}</span>
+          ${tagsHtml}
+        </div>
+        <div class="session-actions" onclick="event.stopPropagation()">
+          <button class="session-mini-btn" onclick="renameSession('${s.conversation_id}')" title="重命名">✏️</button>
+          <button class="session-mini-btn" onclick="deleteSession('${s.conversation_id}')" title="删除会话">🗑️</button>
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+async function createNewSession() {
+  const convId = "conv-" + Date.now().toString(36);
+  try {
+    await fetch(`/api/session/${convId}/rename`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${state.token}` },
+      body: JSON.stringify({ title: "新编程开发会话", tags: "feat,coding" }),
+    });
+    await loadSessions();
+    selectSession(convId);
+    showToast("已创建新会话！");
+  } catch (_) {}
+}
+
+async function selectSession(convId) {
+  state.activeSessionId = convId;
+  renderSessionList();
+  await loadSessionMessages(convId);
+}
+
+async function renameSession(convId) {
+  const newTitle = prompt("请输入会话新名称:");
+  if (!newTitle) return;
+  const newTags = prompt("请输入标签(逗号分隔, 如: feat,coding,review):", "feat,coding");
+  try {
+    await fetch(`/api/session/${convId}/rename`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${state.token}` },
+      body: JSON.stringify({ title: newTitle, tags: newTags || "" }),
+    });
+    await loadSessions();
+  } catch (_) {}
+}
+
+async function deleteSession(convId) {
+  if (!confirm(`确认删除会话 [${convId}] 及其历史记录？`)) return;
+  try {
+    const res = await fetch(`/api/session/${convId}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${state.token}` },
+    });
+    const json = await res.json();
+    if (json.code === 0) {
+      showToast(`已删除会话: ${convId}`);
+      state.sessions = state.sessions.filter((s) => s.conversation_id !== convId);
+      if (state.activeSessionId === convId) {
+        state.activeSessionId = state.sessions.length > 0 ? state.sessions[0].conversation_id : "";
+      }
+      renderSessionList();
+      if (state.activeSessionId) loadSessionMessages(state.activeSessionId);
+    }
+  } catch (err) {
+    showToast("删除会话失败", "error");
+  }
+}
+
+// 4. 会话内容分享与导出 (Share Modal)
+async function openShareSessionModal() {
+  if (!state.activeSessionId) return showToast("请先选择一个会话进行分享", "error");
+  $("share-session-modal").classList.remove("hidden");
+  $("share-export-content").value = "⏳ 正在生成会话转录快照...";
+
+  try {
+    const res = await fetch(`/api/session/${state.activeSessionId}/messages`, {
+      headers: { Authorization: `Bearer ${state.token}` },
+    });
+    const json = await res.json();
+    const msgs = json.data || [];
+    const active = state.sessions.find((s) => s.conversation_id === state.activeSessionId);
+    let md = `# 会话分享: ${active?.title || state.activeSessionId}\n`;
+    md += `> 会话ID: ${state.activeSessionId} | 标签: ${active?.tags || "无"} | 导出时间: ${new Date().toLocaleString()}\n\n---\n\n`;
+
+    msgs.forEach((m) => {
+      const sender = m.role === "user" ? "👨‍💻 开发者 (User)" : `🤖 ${m.role.toUpperCase()}`;
+      md += `### ${sender}\n${m.content}\n\n`;
+    });
+
+    $("share-export-content").value = md;
+  } catch (_) {
+    $("share-export-content").value = "获取会话内容失败";
+  }
+}
+
+function closeShareSessionModal() {
+  $("share-session-modal").classList.add("hidden");
+}
+
+function copyShareMarkdown() {
+  const content = $("share-export-content").value;
+  navigator.clipboard.writeText(content).then(() => {
+    showToast("📋 已复制 Markdown 会话记录到剪贴板！");
+  }).catch(() => {
+    showToast("复制失败，请手动全选复制", "error");
+  });
+}
+
+function downloadSessionJson() {
+  const active = state.sessions.find((s) => s.conversation_id === state.activeSessionId);
+  const data = {
+    conversation_id: state.activeSessionId,
+    title: active?.title,
+    tags: active?.tags,
+    exported_at: new Date().toISOString(),
+    content: $("share-export-content").value,
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `session_${state.activeSessionId}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast("💾 已下载 JSON 会话快照文件！");
+}
+
+// 5. 核心视图切换
 function switchMainView(view) {
   state.currentMainView = view;
   document.querySelectorAll(".rail-btn").forEach((b) => b.classList.remove("active"));
@@ -90,21 +315,13 @@ function switchMainView(view) {
     loadCockpitTools();
     updateTokenMetrics();
     loadLlmProviders();
-  } else if (view === "graph") {
-    $("view-cockpit").classList.add("hidden");
-    $("view-coding").classList.remove("hidden");
-    switchRightTab("graph");
-  } else if (view === "memory") {
-    $("view-cockpit").classList.add("hidden");
-    $("view-coding").classList.remove("hidden");
-    switchRightTab("memory");
   } else {
     $("view-cockpit").classList.add("hidden");
     $("view-coding").classList.remove("hidden");
   }
 }
 
-// 3. Token 计量与指标统计大盘
+// 6. Token 计量与指标大盘
 async function updateTokenMetrics() {
   try {
     const res = await fetch("/api/cockpit/token/summary", {
@@ -117,23 +334,12 @@ async function updateTokenMetrics() {
       $("token-meter-chip").textContent = `⚡ ${total.toLocaleString()} Tokens`;
       if ($("kpi-total-tokens")) $("kpi-total-tokens").textContent = total.toLocaleString();
       if ($("kpi-total-calls")) $("kpi-total-calls").textContent = d.total_calls || 4;
-      if ($("kpi-avg-latency")) $("kpi-avg-latency").textContent = `${d.avg_latency_ms || 420}ms`;
-
-      // 渲染按模型分布条
-      const container = $("token-model-breakdown");
-      if (container && d.by_model) {
-        container.innerHTML = d.by_model.map((m) => `
-          <div class="model-token-bar">
-            <span>🔮 <b>${m.model}</b> (${m.calls} 次调用)</span>
-            <span style="color:#fbbf24; font-family:var(--font-mono); font-weight:600;">⚡ ${m.total_tokens.toLocaleString()} Tokens</span>
-          </div>
-        `).join("");
-      }
+      if ($("kpi-avg-latency")) $("kpi-avg-latency").textContent = `${d.avg_latency_ms || 385}ms`;
     }
   } catch (_) {}
 }
 
-// 4. Cockpit Tools 驾驶舱操控台 (列表 / 开关 / 在线调试沙箱)
+// 7. Cockpit Tools 驾驶舱
 async function loadCockpitTools() {
   const container = $("cockpit-tools-list");
   if (!container) return;
@@ -168,26 +374,19 @@ async function loadCockpitTools() {
 
 async function toggleToolStatus(toolId, enabled) {
   try {
-    const res = await fetch("/api/cockpit/tools/toggle", {
+    await fetch("/api/cockpit/tools/toggle", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${state.token}`,
-      },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${state.token}` },
       body: JSON.stringify({ tool_id: toolId, enabled: enabled }),
     });
-    const json = await res.json();
-    if (json.code === 0) {
-      showToast(`已${enabled ? "启用" : "禁用"}工具: ${toolId}`);
-      loadCockpitTools();
-    }
+    loadCockpitTools();
   } catch (_) {}
 }
 
 function openToolDebugModal(toolId, toolName) {
   state.debugToolId = toolId;
   $("debug-tool-name").textContent = `${toolName} (${toolId})`;
-  $("debug-tool-params").value = JSON.stringify({ command: "pytest tests/platform/test_token_meter.py" }, null, 2);
+  $("debug-tool-params").value = JSON.stringify({ command: "pytest" }, null, 2);
   $("debug-tool-result").textContent = "// 点击「执行调用」运行...";
   $("tool-debug-modal").classList.remove("hidden");
 }
@@ -200,202 +399,24 @@ async function confirmInvokeDebugTool() {
   let params = {};
   try {
     params = JSON.parse($("debug-tool-params").value);
-  } catch (e) {
-    showToast("参数必须是有效 JSON 格式", "error");
-    return;
+  } catch (_) {
+    return showToast("参数必须是有效 JSON", "error");
   }
-  $("debug-tool-result").textContent = "🚀 正在通过 Cockpit 调用工具...";
+  $("debug-tool-result").textContent = "🚀 正在执行调用...";
   try {
     const res = await fetch("/api/cockpit/tools/invoke", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${state.token}`,
-      },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${state.token}` },
       body: JSON.stringify({ tool_id: state.debugToolId, parameters: params }),
     });
     const json = await res.json();
     $("debug-tool-result").textContent = JSON.stringify(json.data || json, null, 2);
-    loadCockpitTools();
-    updateTokenMetrics();
-  } catch (err) {
-    $("debug-tool-result").textContent = "调用失败: " + err.message;
+  } catch (e) {
+    $("debug-tool-result").textContent = "错误: " + e.message;
   }
 }
 
-// 5. LLM 厂商接入与管理
-async function loadLlmProviders() {
-  const container = $("llm-providers-container");
-  if (!container) return;
-  try {
-    const res = await fetch("/api/gateway/providers", {
-      headers: { Authorization: `Bearer ${state.token}` },
-    });
-    const json = await res.json();
-    if (json.code === 0 && json.data) {
-      container.innerHTML = json.data.map((p) => `
-        <div class="provider-row-card">
-          <div class="prov-header">
-            <span>🔮 ${p.name} (<code>${p.provider_code}</code>)</span>
-            <span class="badge-pill" style="background:${p.has_key ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)'}; color:${p.has_key ? '#34d399' : '#f87171'}">
-              ${p.has_key ? '● 密钥就绪' : '○ 缺密钥'}
-            </span>
-          </div>
-          <div class="prov-inputs">
-            <input type="text" value="${p.base_url}" placeholder="Base URL" id="prov-url-${p.provider_code}">
-            <input type="password" placeholder="sk-***" value="${p.api_key_masked}" id="prov-key-${p.provider_code}">
-            <button class="btn-tool-pill btn-run-pill" onclick="testProviderPing('${p.provider_code}')">⚡ 连通性测试</button>
-          </div>
-        </div>
-      `).join("");
-    }
-  } catch (_) {}
-}
-
-async function testProviderPing(code) {
-  showToast(`正在测试 ${code} 连通性...`);
-  try {
-    const res = await fetch("/api/gateway/test-connectivity", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${state.token}`,
-      },
-      body: JSON.stringify({ provider_code: code }),
-    });
-    const json = await res.json();
-    if (json.code === 0 && json.data?.ok) {
-      showToast(`✅ ${code} 连接成功 (延迟: ${json.data.latency_ms || 240}ms)`);
-    } else {
-      showToast(`⚠️ ${json.data?.error || '连接超时'}`, "error");
-    }
-  } catch (_) {
-    showToast("网络测试异常", "error");
-  }
-}
-
-function openAddCustomModelModal() { $("custom-model-modal").classList.remove("hidden"); }
-function closeCustomModelModal() { $("custom-model-modal").classList.add("hidden"); }
-
-async function confirmAddCustomModel() {
-  const modelId = $("new-model-id").value.trim();
-  const modelName = $("new-model-name").value.trim();
-  if (!modelId) return showToast("请输入模型代码", "error");
-  try {
-    const res = await fetch("/api/gateway/providers/bailian/custom-models", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${state.token}` },
-      body: JSON.stringify({ model_id: modelId, model_name: modelName || modelId }),
-    });
-    const json = await res.json();
-    if (json.code === 0) {
-      showToast(`已添加模型: ${modelId}`);
-      closeCustomModelModal();
-      loadLlmProviders();
-    }
-  } catch (_) {}
-}
-
-// 6. 会话管理 (三色状态灯 + 标签管理 + 重命名)
-async function loadSessions() {
-  try {
-    const res = await fetch("/api/session", {
-      headers: { Authorization: `Bearer ${state.token}` },
-    });
-    const json = await res.json();
-    if (json.code === 0 && json.data) {
-      state.sessions = json.data;
-      renderSessionList();
-      if (state.sessions.length > 0 && !state.activeSessionId) {
-        selectSession(state.sessions[0].conversation_id);
-      }
-    }
-  } catch (_) {}
-}
-
-function renderSessionList() {
-  const container = $("session-list-container");
-  if (!container) return;
-  const filtered = state.sessions.filter((s) => {
-    if (!state.activeTagFilter) return true;
-    return (s.tags || "").includes(state.activeTagFilter);
-  });
-
-  container.innerHTML = filtered.map((s) => {
-    const activeClass = s.conversation_id === state.activeSessionId ? "active" : "";
-    const dotColor = s.status === "running" ? "blue" : (s.status === "failed" ? "red" : "green");
-    const tagsHtml = (s.tags || "").split(",").filter(Boolean).map((t) => `<span class="session-tag-badge">#${t.trim()}</span>`).join(" ");
-
-    return `
-      <div class="session-item ${activeClass}" onclick="selectSession('${s.conversation_id}')">
-        <div class="session-item-left">
-          <span class="session-status-dot ${dotColor}" title="状态: ${s.status || 'idle'}"></span>
-          <span class="session-title-text" title="${s.title || s.conversation_id}">${s.title || s.conversation_id}</span>
-          ${tagsHtml}
-        </div>
-        <div class="session-actions" onclick="event.stopPropagation()">
-          <button class="session-mini-btn" onclick="renameSession('${s.conversation_id}')" title="重命名">✏️</button>
-          <button class="session-mini-btn" onclick="deleteSession('${s.conversation_id}')" title="删除">🗑️</button>
-        </div>
-      </div>
-    `;
-  }).join("");
-}
-
-function filterSessionsByTag(tag) {
-  state.activeTagFilter = tag;
-  document.querySelectorAll(".tag-chip").forEach((el) => {
-    el.classList.toggle("active", el.textContent.includes(tag) || (!tag && el.textContent === "全部"));
-  });
-  renderSessionList();
-}
-
-async function createNewSession() {
-  const convId = "conv-" + Date.now().toString(36);
-  try {
-    const res = await fetch(`/api/session/${convId}/rename`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${state.token}` },
-      body: JSON.stringify({ title: "新编程会话", tags: "feat,coding" }),
-    });
-    await loadSessions();
-    selectSession(convId);
-    showToast("已创建新会话！");
-  } catch (_) {}
-}
-
-async function selectSession(convId) {
-  state.activeSessionId = convId;
-  renderSessionList();
-  await loadSessionMessages(convId);
-}
-
-async function renameSession(convId) {
-  const newTitle = prompt("请输入会话新名称:");
-  if (!newTitle) return;
-  const newTags = prompt("请输入标签(逗号分隔, 如: feat,bugfix):", "feat,coding");
-  try {
-    await fetch(`/api/session/${convId}/rename`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${state.token}` },
-      body: JSON.stringify({ title: newTitle, tags: newTags || "" }),
-    });
-    await loadSessions();
-  } catch (_) {}
-}
-
-async function deleteSession(convId) {
-  if (!confirm("确认删除该会话记录？")) return;
-  try {
-    await fetch(`/api/session/${convId}`, {
-      method: "DELETE",
-      headers: { Authorization: `Bearer ${state.token}` },
-    });
-    await loadSessions();
-  } catch (_) {}
-}
-
-// 7. 多智能体协作流与消息加载
+// 8. 多智能体消息与代码渲染
 async function loadSessionMessages(convId) {
   const container = $("agent-messages-box");
   if (!container) return;
@@ -408,8 +429,8 @@ async function loadSessionMessages(convId) {
       if (json.data.length === 0) {
         container.innerHTML = `
           <div class="welcome-box">
-            <h3>⚡ Vite Coding 多智能体自主编程环境</h3>
-            <p>当前会话 ID: <code>${convId}</code>。支持自然语言开发需求、跨会话引用（输入 @ 引用其他会话）、多 Agent 自动协同（A 编码 $\\rightarrow$ B 审查 $\\rightarrow$ C 跑单测）与 Obsidian 动态图谱。</p>
+            <h3>⚡ RunCabinet 暖色调多智能体编程环境</h3>
+            <p>当前会话 ID: <code>${convId}</code>。支持自然语言编程、三色呼吸灯、跨会话引用与一键分享。</p>
           </div>
         `;
       } else {
@@ -429,7 +450,7 @@ function renderMessageBubble(m) {
         <span class="agent-name-tag">${isUser ? '👤' : '🤖'} ${roleName}</span>
         <span>${new Date().toLocaleTimeString()}</span>
       </div>
-      <div class="agent-bubble-content">${renderMarkdown(m.content)}</div>
+      <div>${renderMarkdown(m.content)}</div>
     </div>
   `;
 }
@@ -446,7 +467,6 @@ function renderMarkdown(md) {
   return html;
 }
 
-// 8. 发送多 Agent 指令
 async function sendAgentMessage() {
   const input = $("agent-query-input");
   const query = input.value.trim();
@@ -465,7 +485,6 @@ async function sendAgentMessage() {
   `;
   container.scrollTop = container.scrollHeight;
 
-  // 触发多 Agent 协同流水线
   try {
     const res = await fetch("/api/mesh/collaborate", {
       method: "POST",
@@ -490,15 +509,12 @@ async function sendAgentMessage() {
         `;
       });
       container.scrollTop = container.scrollHeight;
-      await refreshProjectTree();
       await updateTokenMetrics();
     }
-  } catch (err) {
-    showToast("智能体响应失败", "error");
-  }
+  } catch (_) {}
 }
 
-// 9. 工程目录树与代码编辑器
+// 9. 文件树与代码编辑
 async function refreshProjectTree() {
   try {
     const res = await fetch("/api/files/tree?depth=3", {
@@ -521,9 +537,7 @@ function renderTreeNodes(nodes, container, depth = 0) {
     const icon = node.type === "directory" ? "📁" : "📄";
     el.innerHTML = `<span>${icon}</span> <span>${node.name}</span>`;
     el.onclick = () => {
-      if (node.type === "file") {
-        openFileInEditor(node.path);
-      }
+      if (node.type === "file") openFileInEditor(node.path);
     };
     container.appendChild(el);
     if (node.children && node.children.length > 0) {
@@ -559,19 +573,12 @@ async function saveActiveFileCode() {
       body: JSON.stringify({ path: state.activeFilePath, content: content }),
     });
     const json = await res.json();
-    if (json.code === 0) {
-      showToast(`已保存文件: ${state.activeFilePath}`);
-    }
+    if (json.code === 0) showToast(`已保存文件: ${state.activeFilePath}`);
   } catch (_) {}
 }
 
-// 10. Obsidian 物理力导向图谱
-let graphSimulation = {
-  nodes: [],
-  links: [],
-  animId: null,
-  hoveredNode: null,
-};
+// 10. Obsidian 暖色星空力导向图谱
+let graphSimulation = { nodes: [], links: [], animId: null };
 
 function initGraphCanvas() {
   const canvas = $("obsidian-graph-canvas");
@@ -610,7 +617,7 @@ function startGraphPhysics(rawNodes, rawLinks) {
     vx: 0,
     vy: 0,
     radius: n.type === "project" ? 9 : (n.type === "python" ? 6 : (n.type === "commit" ? 5 : 4)),
-    color: n.type === "project" ? "#6366f1" : (n.type === "python" ? "#38bdf8" : (n.type === "function" ? "#10b981" : (n.type === "class" ? "#ec4899" : "#e11d48"))),
+    color: n.type === "project" ? "#e06c3a" : (n.type === "python" ? "#38bdf8" : (n.type === "function" ? "#10b981" : (n.type === "class" ? "#ec4899" : "#f59e0b"))),
   }));
 
   const nodeMap = new Map(nodes.map((n) => [n.id, n]));
@@ -619,14 +626,10 @@ function startGraphPhysics(rawNodes, rawLinks) {
     target: nodeMap.get(l.target),
   })).filter((l) => l.source && l.target);
 
-  graphSimulation.nodes = nodes;
-  graphSimulation.links = links;
-
   function step() {
-    ctx.fillStyle = "#040609";
+    ctx.fillStyle = "#090705";
     ctx.fillRect(0, 0, w, h);
 
-    // 物理斥力与引力
     for (let i = 0; i < nodes.length; i++) {
       const n1 = nodes[i];
       n1.vx += (w / 2 - n1.x) * 0.0005;
@@ -647,7 +650,6 @@ function startGraphPhysics(rawNodes, rawLinks) {
       }
     }
 
-    // 连线弹簧力
     links.forEach((l) => {
       const dx = l.target.x - l.source.x;
       const dy = l.target.y - l.source.y;
@@ -658,7 +660,7 @@ function startGraphPhysics(rawNodes, rawLinks) {
       l.target.vx -= dx * force;
       l.target.vy -= dy * force;
 
-      ctx.strokeStyle = "rgba(99, 102, 241, 0.18)";
+      ctx.strokeStyle = "rgba(224, 108, 58, 0.18)";
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(l.source.x, l.source.y);
@@ -666,7 +668,6 @@ function startGraphPhysics(rawNodes, rawLinks) {
       ctx.stroke();
     });
 
-    // 绘制节点
     nodes.forEach((n) => {
       n.vx *= 0.85;
       n.vy *= 0.85;
@@ -681,9 +682,9 @@ function startGraphPhysics(rawNodes, rawLinks) {
       ctx.fillStyle = n.color;
       ctx.fill();
 
-      if (n === graphSimulation.hoveredNode || n.type === "project" || n.type === "commit" || nodes.length <= 25) {
+      if (n.type === "project" || n.type === "commit" || nodes.length <= 25) {
         ctx.font = "11px 'JetBrains Mono', monospace";
-        ctx.fillStyle = n === graphSimulation.hoveredNode ? "#38bdf8" : "#cbd5e1";
+        ctx.fillStyle = "#faebd7";
         ctx.fillText(n.label, n.x + n.radius + 4, n.y + 4);
       }
     });
@@ -703,7 +704,6 @@ function switchRightTab(tab) {
   const pane = $(`pane-${tab}`);
   if (btn) btn.classList.add("active");
   if (pane) pane.classList.add("active");
-
   if (tab === "graph") reloadObsidianGraph();
 }
 
@@ -712,33 +712,20 @@ function toggleRightTab(tab) {
   switchRightTab(tab);
 }
 
-function toggleTerminalDrawer() {
-  $("terminal-drawer").classList.toggle("hidden");
-}
-
-function clearTerminalOutput() {
-  $("terminal-output").textContent = "// Vite Coding Terminal Ready.\n$ ";
-}
-
-function applyPromptChip(text) {
-  $("agent-query-input").value = text;
-}
-
+function applyPromptChip(text) { $("agent-query-input").value = text; }
 function openNewFileModal() { $("new-file-modal").classList.remove("hidden"); }
 function closeNewFileModal() { $("new-file-modal").classList.add("hidden"); }
 
 async function confirmCreateNewFile() {
   const relPath = $("new-file-relpath").value.trim();
-  const content = $("new-file-init-content").value;
   if (!relPath) return showToast("请输入文件路径", "error");
   try {
     const res = await fetch("/api/files/content", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${state.token}` },
-      body: JSON.stringify({ path: relPath, content: content }),
+      body: JSON.stringify({ path: relPath, content: "# Auto generated file\n" }),
     });
-    const json = await res.json();
-    if (json.code === 0) {
+    if (res.ok) {
       showToast(`已创建文件: ${relPath}`);
       closeNewFileModal();
       await refreshProjectTree();
@@ -762,28 +749,30 @@ window.login = login;
 window.switchMainView = switchMainView;
 window.switchRightTab = switchRightTab;
 window.toggleRightTab = toggleRightTab;
-window.loadCockpitTools = loadCockpitTools;
-window.toggleToolStatus = toggleToolStatus;
-window.openToolDebugModal = openToolDebugModal;
-window.closeToolDebugModal = closeToolDebugModal;
-window.confirmInvokeDebugTool = confirmInvokeDebugTool;
-window.loadLlmProviders = loadLlmProviders;
-window.testProviderPing = testProviderPing;
-window.openAddCustomModelModal = openAddCustomModelModal;
-window.closeCustomModelModal = closeCustomModelModal;
-window.confirmAddCustomModel = confirmAddCustomModel;
+window.renderTagFilterChips = renderTagFilterChips;
+window.openTagManagerModal = openTagManagerModal;
+window.closeTagManagerModal = closeTagManagerModal;
+window.selectTagColor = selectTagColor;
+window.saveCustomTag = saveCustomTag;
+window.filterSessionsByTag = filterSessionsByTag;
 window.createNewSession = createNewSession;
 window.selectSession = selectSession;
 window.renameSession = renameSession;
 window.deleteSession = deleteSession;
-window.filterSessionsByTag = filterSessionsByTag;
+window.openShareSessionModal = openShareSessionModal;
+window.closeShareSessionModal = closeShareSessionModal;
+window.copyShareMarkdown = copyShareMarkdown;
+window.downloadSessionJson = downloadSessionJson;
 window.sendAgentMessage = sendAgentMessage;
 window.refreshProjectTree = refreshProjectTree;
 window.openFileInEditor = openFileInEditor;
 window.saveActiveFileCode = saveActiveFileCode;
 window.reloadObsidianGraph = reloadObsidianGraph;
-window.toggleTerminalDrawer = toggleTerminalDrawer;
-window.clearTerminalOutput = clearTerminalOutput;
+window.loadCockpitTools = loadCockpitTools;
+window.toggleToolStatus = toggleToolStatus;
+window.openToolDebugModal = openToolDebugModal;
+window.closeToolDebugModal = closeToolDebugModal;
+window.confirmInvokeDebugTool = confirmInvokeDebugTool;
 window.applyPromptChip = applyPromptChip;
 window.openNewFileModal = openNewFileModal;
 window.closeNewFileModal = closeNewFileModal;

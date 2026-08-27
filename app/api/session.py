@@ -59,6 +59,13 @@ class InterruptResponse(BaseModel):
     conversation_id: str
 
 
+class RenameAndTagsRequest(BaseModel):
+    title: str = "新会话"
+    tags: str = ""
+
+
+@router.get("")
+@router.get("/")
 @router.get("/list")
 def list_sessions(session: DbDep, user: CurrentUser) -> R[list[ConversationBrief]]:
     convs = service.list_conversations(session, user.id)
@@ -126,6 +133,19 @@ def get_messages(conversation_id: str, session: DbDep, user: CurrentUser) -> R[l
     _require_own(session, user, conversation_id)
     msgs = service.get_messages(session, conversation_id)
     return R.ok([MessageBrief(role=m.role, content=m.content, extra=m.extra) for m in msgs])
+
+
+@router.post("/{conversation_id}/rename")
+def rename_with_tags(
+    conversation_id: str, req: RenameAndTagsRequest, session: DbDep, user: CurrentUser
+) -> R[dict[str, Any]]:
+    # 如果会话不存在则自动初始化
+    if not service.owns_conversation(session, user.id, conversation_id):
+        conv = service.get_or_create(session, conversation_id, user_id=user.id, title=req.title)
+    service.rename_conversation(session, conversation_id, req.title)
+    if req.tags:
+        service.update_conversation_tags(session, conversation_id, [t.strip() for t in req.tags.split(",") if t.strip()])
+    return R.ok({"conversation_id": conversation_id, "title": req.title, "tags": req.tags})
 
 
 @router.put("/{conversation_id}/title")

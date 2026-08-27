@@ -107,3 +107,12 @@ def get_short_term_memory() -> ShortTermMemory:
 
 def get_long_term_memory() -> LongTermMemory:
     return _long_term
+
+
+# 兼容历史 Hook 调用
+def get_user_persona_prompt(*args: Any, **kwargs: Any) -> str:
+    return ""
+
+
+def extract_user_traits_and_graph(*args: Any, **kwargs: Any) -> list[Any]:
+    return []

@@ -62,6 +62,7 @@ app.add_middleware(
 # 注册微内核积木式路由
 app.include_router(auth_router)
 app.include_router(session_router)
+app.include_router(session_router, prefix="/api")
 app.include_router(chat_router)
 app.include_router(projects_router)
 app.include_router(graph_router)
