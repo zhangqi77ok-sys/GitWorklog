@@ -362,3 +362,8 @@ html, body { width: 100%; height: 100%; font-family: var(--font-sans); backgroun
 .eco-subpane.active { display: block; }
 .subpane-toolbar-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
 .subpane-title { font-size: 14px; font-weight: 700; color: var(--text-main); }
+
+/* Toast Notification System */
+.toast-container { position: fixed; top: 20px; right: 20px; z-index: 99999; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+.toast-card { background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(16px); border: 1px solid rgba(99, 102, 241, 0.4); box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5); color: #fff; padding: 10px 16px; border-radius: 8px; font-size: 12.5px; line-height: 1.4; max-width: 360px; pointer-events: auto; animation: toastIn 0.25s ease-out; }
+@keyframes toastIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }

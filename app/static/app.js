@@ -1,5 +1,24 @@
 // AgentX Studio - Enterprise Autonomous Agent Operating System
 const $ = (id) => document.getElementById(id);
+function showToast(msg, type = "info") {
+  let c = $("toast-container");
+  if (!c) {
+    c = document.createElement("div");
+    c.id = "toast-container";
+    c.className = "toast-container";
+    document.body.appendChild(c);
+  }
+  const toast = document.createElement("div");
+  toast.className = `toast-card toast-${type}`;
+  toast.textContent = msg;
+  c.appendChild(toast);
+  setTimeout(() => {
+    toast.style.opacity = "0";
+    toast.style.transition = "opacity 0.3s";
+    setTimeout(() => toast.remove(), 300);
+  }, 3500);
+}
+window.alert = (msg) => showToast(msg);
 const state = {
   token: localStorage.getItem("token"),
   user: localStorage.getItem("user") || "admin",
@@ -395,6 +414,8 @@ async function send() {
 
   const kbFileIds = state.selectedKbFiles.map((f) => f.file_id);
   const kbIds = state.selectedKbIds.map((k) => k.id);
+  const chatProvider = state.selectedChatProvider || ($("chat-provider-select") ? $("chat-provider-select").value : "dashscope");
+  const chatModel = state.selectedChatModel || ($("chat-model-select") ? $("chat-model-select").value : "qwen3.7-flash");
 
   try {
     const res = await apiFetch("/api/chat/stream", {
@@ -406,22 +427,29 @@ async function send() {
         all_kb: state.allKbSelected,
         kb_ids: kbIds,
         file_ids: kbFileIds,
-        provider: state.selectedChatProvider,
-        model: state.selectedChatModel,
+        provider: chatProvider,
+        model: chatModel,
       }),
     });
+    if (!res.ok) {
+      const errBody = await res.text();
+      throw new Error(`服务异常 (${res.status}): ${errBody}`);
+    }
     const targetEl = document.querySelector(`#${assistantBubbleId} .message-content`);
     let fullText = "";
+    let buffer = "";
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     while (true) {
       const { value, done } = await reader.read();
       if (done) break;
-      const chunk = decoder.decode(value, { stream: true });
-      const lines = chunk.split("\n");
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
       for (const line of lines) {
-        if (line.startsWith("data: ")) {
-          const raw = line.slice(6).trim();
+        const trimmed = line.trim();
+        if (trimmed.startsWith("data: ")) {
+          const raw = trimmed.slice(6).trim();
           if (!raw || raw === "[DONE]") continue;
           try {
             const data = JSON.parse(raw);
@@ -432,9 +460,12 @@ async function send() {
               container.scrollTop = container.scrollHeight;
             }
           } catch (e) {
-            fullText += raw;
-            targetEl.innerHTML = window.marked ? marked.parse(fullText) : escapeHtml(fullText);
-            container.scrollTop = container.scrollHeight;
+            // raw string fallback
+            if (!raw.startsWith("{")) {
+              fullText += raw;
+              targetEl.innerHTML = window.marked ? marked.parse(fullText) : escapeHtml(fullText);
+              container.scrollTop = container.scrollHeight;
+            }
           }
         }
       }
@@ -1284,7 +1315,9 @@ async function sendCodexChat() {
   box.scrollTop = box.scrollHeight;
   $("codex-query-input").value = "";
 
-  const fullPrompt = `【项目上下文】工程路径: ${state.currentProject}, 当前分支: ${state.currentBranch}, 当前打开文件: ${state.currentFilePath}\n【开发需求】: ${query}`;
+  const codexProvider = state.selectedCodexProvider || ($("codex-provider-select") ? $("codex-provider-select").value : "dashscope");
+  const codexModel = state.selectedCodexModel || ($("codex-model-select") ? $("codex-model-select").value : "qwen3.7-flash");
+  const fullPrompt = `【项目上下文】工程路径: ${state.currentProject || "e:\\pro\\agent-learning"}, 当前分支: ${state.currentBranch || "main"}, 当前打开文件: ${state.currentFilePath || "未选择文件"}\n【开发需求】: ${query}`;
   try {
     const res = await apiFetch("/api/chat/stream", {
       method: "POST",
@@ -1292,22 +1325,29 @@ async function sendCodexChat() {
       body: JSON.stringify({
         query: fullPrompt,
         conversation_id: "codex-session",
-        provider: state.selectedCodexProvider,
-        model: state.selectedCodexModel,
+        provider: codexProvider,
+        model: codexModel,
       }),
     });
+    if (!res.ok) {
+      const errBody = await res.text();
+      throw new Error(`服务异常 (${res.status}): ${errBody}`);
+    }
     const targetEl = document.querySelector(`#${assistantMsgId} .codex-bubble-content`);
     let fullText = "";
+    let buffer = "";
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     while (true) {
       const { value, done } = await reader.read();
       if (done) break;
-      const chunk = decoder.decode(value, { stream: true });
-      const lines = chunk.split("\n");
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
       for (const line of lines) {
-        if (line.startsWith("data: ")) {
-          const raw = line.slice(6).trim();
+        const trimmed = line.trim();
+        if (trimmed.startsWith("data: ")) {
+          const raw = trimmed.slice(6).trim();
           if (!raw || raw === "[DONE]") continue;
           try {
             const data = JSON.parse(raw);
@@ -1318,9 +1358,11 @@ async function sendCodexChat() {
               box.scrollTop = box.scrollHeight;
             }
           } catch (e) {
-            fullText += raw;
-            targetEl.innerHTML = window.marked ? marked.parse(fullText) : escapeHtml(fullText);
-            box.scrollTop = box.scrollHeight;
+            if (!raw.startsWith("{")) {
+              fullText += raw;
+              targetEl.innerHTML = window.marked ? marked.parse(fullText) : escapeHtml(fullText);
+              box.scrollTop = box.scrollHeight;
+            }
           }
         }
       }

@@ -274,6 +274,7 @@ def _parse_slash_command(raw_query: str) -> tuple[str | None, str]:
 
 
 @router.post("")
+@router.post("/stream")
 async def chat(
     req: ChatRequest,
     authorization: Annotated[str | None, Header()] = None,

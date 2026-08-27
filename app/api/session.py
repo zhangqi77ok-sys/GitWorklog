@@ -61,11 +61,15 @@ def _require_own(session: DbDep, user: SysUser, conversation_id: str) -> None:
         raise NoPermissionError("会话不存在或无权访问")
 
 
+@router.get("/{conversation_id}")
 @router.get("/{conversation_id}/messages")
-def get_messages(conversation_id: str, session: DbDep, user: CurrentUser) -> R[list[MessageBrief]]:
+def get_messages(conversation_id: str, session: DbDep, user: CurrentUser) -> R[dict[str, Any]]:
     _require_own(session, user, conversation_id)
     msgs = service.get_messages(session, conversation_id)
-    return R.ok([MessageBrief(role=m.role, content=m.content, extra=m.extra) for m in msgs])
+    return R.ok({
+        "conversation_id": conversation_id,
+        "messages": [MessageBrief(role=m.role, content=m.content, extra=m.extra) for m in msgs]
+    })
 
 
 @router.put("/{conversation_id}/title")
