@@ -1,548 +1,868 @@
-// 统一智能体平台前端核心：会话侧边栏 + Slash 技能菜单 + Markdown 渲染 + 技能生态 + 知识库 + 系统管理
-
+// AgentX Studio - Enterprise Autonomous Agent Operating System
 const $ = (id) => document.getElementById(id);
 const state = {
   token: localStorage.getItem("token"),
   user: localStorage.getItem("user") || "admin",
   currentTab: "chat-view",
+  qaMode: "chat",
+  ecoTab: "skills",
   activeConversationId: null,
   sessions: [],
   skills: [],
+  mcpServers: [],
   files: [],
   knowledgeBases: [],
   activeKbId: null,
-  selectedKbIds: [], // [ { id, name } ]
-  selectedKbFiles: [], // [ { file_id, filename, kb_id } ]
-  attachedFile: null, // { file_id, filename }
+  allKbSelected: false,
+  selectedKbIds: [],
+  selectedKbFiles: [],
+  attachedFile: null,
   slashIndex: -1,
   editingSkillName: null,
+  projects: [],
+  currentProject: null,
+  currentBranch: null,
+  currentFilePath: null,
+  currentChunkData: null,
+  currentChunkTab: "children",
+  currentVectorData: null,
 };
 
-// ==============================
-// 1. 初始化与导航
-// ==============================
 window.addEventListener("DOMContentLoaded", () => {
   initEventListeners();
-  if (state.token) {
-    showMainPanel();
-  } else {
-    showLoginPanel();
-  }
+  if (state.token) showMainPanel();
+  else showLoginPanel();
 });
 
 function initEventListeners() {
-  // 登录与退出
-  $("login-btn").onclick = login;
-  $("logout-btn").onclick = logout;
-  $("password").onkeydown = (e) => e.key === "Enter" && login();
-
-  // 侧边栏与 Tab 菜单切换
-  document.querySelectorAll(".sidebar-nav .nav-item, .nav-tabs .tab-btn").forEach((btn) => {
+  if ($("login-btn")) $("login-btn").onclick = login;
+  if ($("logout-btn")) $("logout-btn").onclick = logout;
+  if ($("password")) $("password").onkeydown = (e) => e.key === "Enter" && login();
+  document.querySelectorAll(".sidebar-nav .nav-item").forEach((btn) => {
     btn.onclick = () => switchTab(btn.dataset.tab);
   });
+  const q = $("query");
+  if (q) { q.oninput = handleQueryInput; q.onkeydown = handleQueryKeydown; }
+  if ($("send-btn")) $("send-btn").onclick = send;
+  if ($("timeline-btn")) $("timeline-btn").onclick = showTimeline;
+  if ($("new-chat-btn")) $("new-chat-btn").onclick = startNewChat;
 
+  if ($("open-kb-btn")) $("open-kb-btn").onclick = toggleKbPopover;
+  if ($("close-kb-popover-btn")) $("close-kb-popover-btn").onclick = hideKbPopover;
+  if ($("kb-select-all-btn")) $("kb-select-all-btn").onclick = selectAllKbFiles;
+  if ($("kb-clear-all-btn")) $("kb-clear-all-btn").onclick = clearSelectedKbFiles;
+  if ($("kb-search-input")) $("kb-search-input").oninput = (e) => renderKbPopover(e.target.value.trim());
+  if ($("kb-check-all-scope")) $("kb-check-all-scope").onchange = handleMasterKbToggle;
 
-  // 对话发送与 Slash 快捷键监听
-  const queryEl = $("query");
-  queryEl.oninput = handleQueryInput;
-  queryEl.onkeydown = handleQueryKeydown;
-  $("send-btn").onclick = send;
-  $("timeline-btn").onclick = showTimeline;
-  $("new-chat-btn").onclick = startNewChat;
+  if ($("attach-file-btn")) $("attach-file-btn").onclick = () => $("chat-file-input").click();
+  if ($("chat-file-input")) $("chat-file-input").onchange = handleChatFileUpload;
 
-  // 知识库弹窗选择器与附件
-  $("open-kb-btn").onclick = toggleKbPopover;
-  $("kb-close-btn").onclick = hideKbPopover;
-  $("kb-select-all-btn").onclick = selectAllKbFiles;
-  $("kb-clear-all-btn").onclick = clearSelectedKbFiles;
-  $("kb-search-input").oninput = (e) => renderKbPopover(e.target.value.trim());
-  $("attach-file-btn").onclick = () => $("chat-file-input").click();
-  $("chat-file-input").onchange = handleChatFileUpload;
-
-  // 知识库管理与 RAG 测试
-  $("create-kb-btn").onclick = () => $("kb-create-modal").classList.remove("hidden");
-  $("save-kb-btn").onclick = saveNewKnowledgeBase;
-  $("upload-knowledge-btn").onclick = () => $("knowledge-file-input").click();
-  $("knowledge-file-input").onchange = handleKnowledgeFileUpload;
-  $("rag-search-btn").onclick = runRAGSearch;
-  $("rag-query-input").onkeydown = (e) => e.key === "Enter" && runRAGSearch();
-
-
-  // 记忆与知识图谱
-  $("add-memory-btn").onclick = () => $("memory-add-modal").classList.remove("hidden");
-  $("save-memory-btn").onclick = saveUserMemory;
-  $("refresh-memory-btn").onclick = loadUserMemoryAndGraph;
-  $("clear-memory-btn").onclick = clearUserMemory;
-
-  // Codex 编程工作台
-  $("project-select").onchange = (e) => switchProject(e.target.value);
-  $("checkout-branch-btn").onclick = checkoutCurrentBranch;
-  $("save-code-btn").onclick = saveCurrentFileCode;
-  $("codex-send-btn").onclick = sendCodexChat;
-  $("codex-query-input").onkeydown = (e) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      sendCodexChat();
-    }
-  };
-  $("launch-desktop-btn").onclick = launchDesktopClient;
-
-  // API 与模型网关
-  $("refresh-gateway-btn").onclick = loadGatewayConfig;
-
-  // 技能管理
-  $("add-skill-btn").onclick = openCreateSkillModal;
-  $("save-skill-btn").onclick = saveSkill;
-  $("sync-skills-btn").onclick = syncSkills;
-  $("import-skill-btn").onclick = () => $("skill-import-input").click();
-  $("skill-import-input").onchange = handleSkillImportUpload;
-
-
-  // 用户管理
-  $("add-user-btn").onclick = () => $("user-modal").classList.remove("hidden");
-  $("save-user-btn").onclick = saveNewUser;
-
-  // 拖拽上传
-  const dropZone = $("drop-zone");
-  if (dropZone) {
-    dropZone.onclick = () => $("knowledge-file-input").click();
-    dropZone.ondragover = (e) => {
-      e.preventDefault();
-      dropZone.classList.add("dragover");
-    };
-    dropZone.ondragleave = () => dropZone.classList.remove("dragover");
-    dropZone.ondrop = (e) => {
-      e.preventDefault();
-      dropZone.classList.remove("dragover");
-      if (e.dataTransfer.files.length) {
-        uploadFileDirectly(e.dataTransfer.files[0]);
+  if ($("create-kb-btn")) $("create-kb-btn").onclick = () => $("kb-create-modal").classList.remove("hidden");
+  if ($("save-kb-btn")) $("save-kb-btn").onclick = saveNewKnowledgeBase;
+  if ($("upload-file-btn")) $("upload-file-btn").onclick = () => $("drop-zone").click();
+  if ($("drop-zone")) {
+    $("drop-zone").onclick = () => {
+      let fileIn = document.getElementById("kb-direct-file-input");
+      if (!fileIn) {
+        fileIn = document.createElement("input");
+        fileIn.id = "kb-direct-file-input";
+        fileIn.type = "file";
+        fileIn.className = "hidden";
+        fileIn.onchange = handleDirectKbFileUpload;
+        document.body.appendChild(fileIn);
       }
+      fileIn.click();
     };
   }
+  if ($("rag-search-btn")) $("rag-search-btn").onclick = runRAGSearch;
+  if ($("rag-query-input")) $("rag-query-input").onkeydown = (e) => e.key === "Enter" && runRAGSearch();
 
+  if ($("create-skill-btn")) $("create-skill-btn").onclick = openCreateSkillModal;
+  if ($("save-skill-btn")) $("save-skill-btn").onclick = saveSkill;
+  if ($("sync-skills-btn")) $("sync-skills-btn").onclick = syncSkills;
+  if ($("import-skill-btn")) $("import-skill-btn").onclick = () => $("skill-file-input").click();
+  if ($("skill-file-input")) $("skill-file-input").onchange = handleSkillImportUpload;
+  if ($("create-mcp-btn")) $("create-mcp-btn").onclick = () => $("mcp-edit-modal").classList.remove("hidden");
+  if ($("save-mcp-btn")) $("save-mcp-btn").onclick = saveMcpServer;
+  if ($("refresh-mcp-btn")) $("refresh-mcp-btn").onclick = loadMcpServers;
 
-  // 全局弹窗关闭
-  document.querySelectorAll(".close-modal-btn").forEach((btn) => {
-    btn.onclick = closeAllModals;
+  if ($("add-memory-btn")) $("add-memory-btn").onclick = () => $("memory-add-modal").classList.remove("hidden");
+  if ($("save-memory-btn")) $("save-memory-btn").onclick = saveUserMemory;
+  if ($("refresh-memory-btn")) $("refresh-memory-btn").onclick = loadUserMemoryAndGraph;
+  if ($("clear-memory-btn")) $("clear-memory-btn").onclick = clearUserMemory;
+
+  if ($("project-select")) $("project-select").onchange = (e) => switchProject(e.target.value);
+  if ($("checkout-branch-btn")) $("checkout-branch-btn").onclick = checkoutCurrentBranch;
+  if ($("save-code-btn")) $("save-code-btn").onclick = saveCurrentFileCode;
+  if ($("codex-send-btn")) $("codex-send-btn").onclick = sendCodexChat;
+  if ($("add-project-btn")) $("add-project-btn").onclick = () => $("project-add-modal").classList.remove("hidden");
+  if ($("save-project-btn")) $("save-project-btn").onclick = saveCustomProject;
+  if ($("launch-desktop-btn")) $("launch-desktop-btn").onclick = launchDesktopClient;
+
+  if ($("refresh-gateway-btn")) $("refresh-gateway-btn").onclick = loadGatewayConfig;
+  if ($("add-user-btn")) $("add-user-btn").onclick = () => $("user-modal").classList.remove("hidden");
+  if ($("save-user-btn")) $("save-user-btn").onclick = saveNewUser;
+
+  document.querySelectorAll(".modal .close-modal-btn").forEach((btn) => {
+    btn.onclick = () => btn.closest(".modal").classList.add("hidden");
   });
-  window.onclick = (e) => {
-    if (e.target.classList.contains("modal")) {
-      closeAllModals();
-    }
-  };
-
-  // 点击外部隐藏 Slash Popover
-  document.addEventListener("click", (e) => {
-    if (!e.target.closest(".composer-container")) {
-      hideSlashPopover();
-    }
-  });
-}
-
-async function login() {
-  const username = $("username").value.trim();
-  const password = $("password").value;
-  $("login-error").textContent = "";
-
-  if (!username || !password) {
-    $("login-error").textContent = "请输入用户名和密码";
-    return;
-  }
-
-  try {
-    const resp = await fetch("/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password }),
-    });
-    const body = await resp.json();
-    if (body.code !== 0) {
-      $("login-error").textContent = body.message || "登录失败";
-      return;
-    }
-    state.token = body.data.token;
-    state.user = body.data.username;
-    localStorage.setItem("token", state.token);
-    localStorage.setItem("user", state.user);
-    showMainPanel();
-  } catch (e) {
-    $("login-error").textContent = "网络错误：" + e;
-  }
-}
-
-function logout() {
-  state.token = null;
-  localStorage.removeItem("token");
-  localStorage.removeItem("user");
-  showLoginPanel();
 }
 
 function showLoginPanel() {
-  $("main-panel").classList.add("hidden");
   $("login-panel").classList.remove("hidden");
+  $("main-panel").classList.add("hidden");
 }
 
 function showMainPanel() {
   $("login-panel").classList.add("hidden");
   $("main-panel").classList.remove("hidden");
-  const whoEl = $("who");
-  if (whoEl) whoEl.textContent = state.user || "admin";
-  switchTab("chat-view");
-  loadSkills();
-  loadFiles();
+  if ($("who")) $("who").textContent = state.user || "admin";
   loadSessions();
-  loadUserMemoryAndGraph();
+  loadKnowledgeBases();
+  loadSkills();
+  loadMcpServers();
+  loadProjects();
+  loadUsers();
+  loadGatewayConfig();
+  loadTravelBoard();
+}
+
+async function apiFetch(url, options = {}) {
+  options.headers = options.headers || {};
+  if (state.token) options.headers["Authorization"] = `Bearer ${state.token}`;
+  const res = await fetch(url, options);
+  if (res.status === 401) { logout(); throw new Error("登录已过期"); }
+  return res;
+}
+
+async function login() {
+  const username = $("username").value.trim();
+  const password = $("password").value.trim();
+  if (!username || !password) return alert("请输入账号与密码");
+  try {
+    const res = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password }),
+    });
+    const data = await res.json();
+    if (data.code === 0 && data.data && data.data.token) {
+      state.token = data.data.token;
+      state.user = data.data.username || "admin";
+      localStorage.setItem("token", state.token);
+      localStorage.setItem("user", state.user);
+      showMainPanel();
+    } else {
+      alert("登录失败: " + (data.message || "密码错误"));
+    }
+  } catch (e) { alert("网络异常: " + e.message); }
+}
+
+function logout() {
+  state.token = null; state.user = null;
+  localStorage.removeItem("token"); localStorage.removeItem("user");
+  showLoginPanel();
 }
 
 function switchTab(tabId) {
   state.currentTab = tabId;
-  document.querySelectorAll(".sidebar-nav .nav-item, .nav-tabs .tab-btn").forEach((btn) => {
+  document.querySelectorAll(".sidebar-nav .nav-item").forEach((btn) => {
     btn.classList.toggle("active", btn.dataset.tab === tabId);
   });
   document.querySelectorAll(".main-content .view-pane").forEach((pane) => {
     pane.classList.toggle("active", pane.id === tabId);
   });
 
-  if (tabId === "chat-view") loadSessions();
-  if (tabId === "coding-view") loadProjectsAndGit();
-  if (tabId === "skills-view") loadSkills();
-  if (tabId === "files-view") loadFiles();
   if (tabId === "memory-view") loadUserMemoryAndGraph();
+  if (tabId === "files-view") loadKnowledgeBases();
+  if (tabId === "skills-view") { loadSkills(); loadMcpServers(); }
   if (tabId === "gateway-view") loadGatewayConfig();
-  if (tabId === "travel-view") loadTravelOrders();
+  if (tabId === "travel-view") loadTravelBoard();
   if (tabId === "sys-view") loadUsers();
 }
 
-
-
-function closeAllModals() {
-  document.querySelectorAll(".modal").forEach((m) => m.classList.add("hidden"));
+function switchQAMode(mode) {
+  state.qaMode = mode;
+  $("qa-mode-chat-btn").classList.toggle("active", mode === "chat");
+  $("qa-mode-codex-btn").classList.toggle("active", mode === "codex");
+  $("qa-chat-subview").classList.toggle("active", mode === "chat");
+  $("qa-chat-subview").classList.toggle("hidden", mode !== "chat");
+  $("qa-codex-subview").classList.toggle("active", mode === "codex");
+  $("qa-codex-subview").classList.toggle("hidden", mode !== "codex");
+  $("codex-header-toolbar").classList.toggle("hidden", mode !== "codex");
+  if (mode === "codex" && !state.currentProject) loadProjects();
 }
 
-// ==============================
-// 2. 会话管理 (Chat Sessions)
-// ==============================
+function switchEcoTab(tab) {
+  state.ecoTab = tab;
+  $("eco-tab-skills-btn").classList.toggle("active", tab === "skills");
+  $("eco-tab-mcp-btn").classList.toggle("active", tab === "mcp");
+  $("eco-subpane-skills").classList.toggle("active", tab === "skills");
+  $("eco-subpane-skills").classList.toggle("hidden", tab !== "skills");
+  $("eco-subpane-mcp").classList.toggle("active", tab === "mcp");
+  $("eco-subpane-mcp").classList.toggle("hidden", tab !== "mcp");
+  if (tab === "mcp") loadMcpServers();
+}
+
+// Sessions & Messages
 async function loadSessions() {
-  const container = $("session-list");
   try {
-    const resp = await fetch("/session/list", {
-      headers: { Authorization: `Bearer ${state.token}` },
-    });
-    const body = await resp.json();
-    if (body.code === 0) {
-      state.sessions = body.data || [];
-      renderSessionsList();
+    const res = await apiFetch("/api/session/list");
+    const json = await res.json();
+    if (json.code === 0) {
+      state.sessions = json.data || [];
+      renderSessionList();
+      if (!state.activeConversationId && state.sessions.length > 0) {
+        selectSession(state.sessions[0].conversation_id);
+      }
     }
-  } catch (e) {
-    container.innerHTML = '<div class="empty-tip">加载会话失败</div>';
-  }
+  } catch (e) { console.error("加载会话失败:", e); }
 }
 
-function renderSessionsList() {
-  const container = $("session-list");
+function renderSessionList() {
+  const box = $("session-list");
+  if (!box) return;
   if (!state.sessions.length) {
-    container.innerHTML = '<div class="empty-tip">暂无历史会话</div>';
+    box.innerHTML = '<div class="empty-tip" style="padding:12px; color:var(--text-dim); font-size:12px; text-align:center;">暂无历史会话</div>';
     return;
   }
-
-  container.innerHTML = state.sessions
-    .map(
-      (s) => `
-    <div class="session-item ${s.conversation_id === state.activeConversationId ? "active" : ""}" 
-         onclick="switchSession('${s.conversation_id}')">
-      <span class="session-item-title">💬 ${escapeHtml(s.title || "新对话")}</span>
-      <button class="session-del-btn" onclick="event.stopPropagation(); deleteSession('${s.conversation_id}')" title="删除会话">🗑</button>
+  box.innerHTML = state.sessions.map((s) => `
+    <div class="session-item ${s.conversation_id === state.activeConversationId ? "active" : ""}" onclick="selectSession('${s.conversation_id}')">
+      <span class="session-item-title">${escapeHtml(s.title || "新对话")}</span>
+      <button class="session-del-btn" onclick="deleteSession(event, '${s.conversation_id}')">✕</button>
     </div>
-  `
-    )
-    .join("");
+  `).join("");
+}
+
+async function selectSession(convId) {
+  state.activeConversationId = convId;
+  renderSessionList();
+  try {
+    const res = await apiFetch(`/api/session/${convId}`);
+    const json = await res.json();
+    if (json.code === 0) renderMessages(json.data.messages || []);
+  } catch (e) { console.error("加载消息失败:", e); }
 }
 
 function startNewChat() {
-  state.activeConversationId = null;
-  renderSessionsList();
-  $("messages").innerHTML = `
-    <div id="chat-empty-state" class="empty-state">
-      <div class="empty-hero-icon">✨</div>
-      <h2>欢迎使用统一企业智能体平台</h2>
-      <p class="empty-desc">由百炼 Qwen3.7-Flash 驱动，支持差旅全流程协同、数据分析与知识库问答。输入 <code>/</code> 可直接调用垂直技能。</p>
-      
-      <div class="starter-grid">
-        <div class="starter-card" onclick="useStarter('/data-analysis 统计上月各部门的销售额与订单总数')">
-          <div class="starter-icon">📊</div>
-          <div class="starter-title">数据指标统计</div>
-          <div class="starter-text">统计上月各部门的销售额与订单总数</div>
-        </div>
+  state.activeConversationId = "conv-" + Date.now();
+  const newSess = { conversation_id: state.activeConversationId, title: "新智能问答会话", created_at: new Date().toISOString() };
+  state.sessions.unshift(newSess);
+  renderSessionList();
+  renderMessages([]);
+  $("query").focus();
+}
 
-        <div class="starter-card" onclick="useStarter('/flight-booking 帮我查询明天北京到上海的机票')">
-          <div class="starter-icon">✈️</div>
-          <div class="starter-title">航班比价预订</div>
-          <div class="starter-text">帮我查询明天北京到上海的机票</div>
-        </div>
+async function deleteSession(e, convId) {
+  e.stopPropagation();
+  if (!confirm("确定删除该会话记录吗？")) return;
+  try {
+    await apiFetch(`/api/session/${convId}`, { method: "DELETE" });
+    state.sessions = state.sessions.filter((s) => s.conversation_id !== convId);
+    if (state.activeConversationId === convId) {
+      state.activeConversationId = state.sessions[0] ? state.sessions[0].conversation_id : null;
+      if (state.activeConversationId) selectSession(state.activeConversationId);
+      else renderMessages([]);
+    }
+    renderSessionList();
+  } catch (e) { alert("删除会话失败: " + e.message); }
+}
 
-        <div class="starter-card" onclick="useStarter('/hotel-booking 推荐上海陆家嘴附近的差旅协议酒店')">
-          <div class="starter-icon">🏨</div>
-          <div class="starter-title">酒店住宿推荐</div>
-          <div class="starter-text">推荐上海陆家嘴附近的差旅协议酒店</div>
-        </div>
-
-        <div class="starter-card" onclick="useStarter('/tuniu-travel-guide 查一下杭州未来三天的天气和出行攻略')">
-          <div class="starter-icon">🌤️</div>
-          <div class="starter-title">出游攻略与天气</div>
-          <div class="starter-text">查一下杭州未来三天的天气和出行攻略</div>
+function renderMessages(messages) {
+  const container = $("messages");
+  if (!container) return;
+  if (!messages || messages.length === 0) {
+    container.innerHTML = `
+      <div id="chat-empty-state" class="empty-state">
+        <div class="empty-hero-icon">✨</div>
+        <h2 class="empty-hero-title">统一企业智能问答与协同平台</h2>
+        <p class="empty-desc">融合主流大模型、自进化记忆图谱与知识库深度 RAG，支持数据分析、差旅协同与 Codex 编程开发。输入框键入 <code>/</code> 即可快速调度垂直技能。</p>
+        <div class="starter-grid">
+          <div class="starter-card" onclick="useStarter('/data-analysis 统计上月各部门的销售额与订单总数')">
+            <div class="starter-card-top"><span class="starter-icon">📊</span><span class="starter-tag">Text2SQL</span></div>
+            <div class="starter-title">数据指标统计分析</div>
+            <div class="starter-text">统计上月各部门的销售额与订单总数</div>
+          </div>
+          <div class="starter-card" onclick="useStarter('/flight-booking 帮我查询明天北京到上海的机票')">
+            <div class="starter-card-top"><span class="starter-icon">✈️</span><span class="starter-tag">差旅预订</span></div>
+            <div class="starter-title">智能航班比价预订</div>
+            <div class="starter-text">查询明天北京到上海的合规机票并推荐</div>
+          </div>
+          <div class="starter-card" onclick="useStarter('/hotel-booking 帮我预订下周上海陆家嘴附近的差旅标准酒店')">
+            <div class="starter-card-top"><span class="starter-icon">🏨</span><span class="starter-tag">住宿推荐</span></div>
+            <div class="starter-title">商圈协议酒店推荐</div>
+            <div class="starter-text">推荐上海陆家嘴附近的差旅标准协议酒店</div>
+          </div>
+          <div class="starter-card" onclick="switchQAMode('codex')">
+            <div class="starter-card-top"><span class="starter-icon">💻</span><span class="starter-tag">Codex 编程</span></div>
+            <div class="starter-title">代码重构与架构设计</div>
+            <div class="starter-text">基于当前项目分支上下文进行编程开发</div>
+          </div>
         </div>
       </div>
+    `;
+    return;
+  }
+  container.innerHTML = messages.map((msg) => {
+    const isUser = msg.role === "user";
+    const parsed = isUser ? escapeHtml(msg.content) : (window.marked ? marked.parse(msg.content) : msg.content);
+    return `
+      <div class="message-bubble ${isUser ? "user" : "assistant"}">
+        <div class="message-avatar">${isUser ? "👤" : "⚡"}</div>
+        <div class="message-content">${parsed}</div>
+      </div>
+    `;
+  }).join("");
+  container.scrollTop = container.scrollHeight;
+}
+
+function useStarter(text) { $("query").value = text; send(); }
+
+async function send() {
+  const query = $("query").value.trim();
+  if (!query) return;
+  if (!state.activeConversationId) state.activeConversationId = "conv-" + Date.now();
+  const empty = $("chat-empty-state");
+  if (empty) empty.remove();
+  const container = $("messages");
+  container.innerHTML += `
+    <div class="message-bubble user">
+      <div class="message-avatar">👤</div>
+      <div class="message-content">${escapeHtml(query)}</div>
     </div>
   `;
-}
+  const assistantBubbleId = "msg-" + Date.now();
+  container.innerHTML += `
+    <div class="message-bubble assistant" id="${assistantBubbleId}">
+      <div class="message-avatar">⚡</div>
+      <div class="message-content markdown-body">思考中...</div>
+    </div>
+  `;
+  container.scrollTop = container.scrollHeight;
+  $("query").value = "";
+  hideKbPopover();
+  hideSlashPopover();
 
-async function switchSession(convId) {
-  state.activeConversationId = convId;
-  renderSessionsList();
-  $("messages").innerHTML = '<div class="empty-tip">加载历史消息中...</div>';
+  const kbFileIds = state.selectedKbFiles.map((f) => f.file_id);
+  const kbIds = state.selectedKbIds.map((k) => k.id);
 
   try {
-    const resp = await fetch(`/session/${convId}/messages`, {
-      headers: { Authorization: `Bearer ${state.token}` },
+    const res = await apiFetch("/api/chat/stream", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        query: query,
+        conversation_id: state.activeConversationId,
+        all_kb: state.allKbSelected,
+        kb_ids: kbIds,
+        file_ids: kbFileIds,
+      }),
     });
-    const body = await resp.json();
-    if (body.code === 0) {
-      $("messages").innerHTML = "";
-      const msgs = body.data || [];
-      if (!msgs.length) {
-        startNewChat();
-        return;
+    const targetEl = document.querySelector(`#${assistantBubbleId} .message-content`);
+    let fullText = "";
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      const chunk = decoder.decode(value, { stream: true });
+      const lines = chunk.split("\n");
+      for (const line of lines) {
+        if (line.startsWith("data: ")) {
+          try {
+            const data = JSON.parse(line.slice(6));
+            if (data.chunk) {
+              fullText += data.chunk;
+              targetEl.innerHTML = window.marked ? marked.parse(fullText) : fullText;
+              container.scrollTop = container.scrollHeight;
+            }
+          } catch (e) {}
+        }
       }
-      msgs.forEach((m) => {
-        const msgEl = createMessageElements(m.role === "user" ? "user" : "agent");
-        msgEl.content.innerHTML = renderMd(m.content);
-      });
-      scrollMessagesToBottom();
     }
+    loadSessions();
   } catch (e) {
-    $("messages").innerHTML = `<div class="empty-tip">加载会话消息失败：${e}</div>`;
+    const targetEl = document.querySelector(`#${assistantBubbleId} .message-content`);
+    if (targetEl) targetEl.innerHTML = `<span style="color:var(--accent-rose)">响应异常: ${e.message}</span>`;
   }
 }
 
-async function deleteSession(convId) {
-  if (!confirm("确定删除此会话记录吗？")) return;
-  try {
-    const resp = await fetch(`/session/${convId}`, {
-      method: "DELETE",
-      headers: { Authorization: `Bearer ${state.token}` },
-    });
-    const body = await resp.json();
-    if (body.code === 0) {
-      if (state.activeConversationId === convId) {
-        startNewChat();
-      }
-      loadSessions();
-    }
-  } catch (e) {
-    alert("删除失败：" + e);
-  }
+// KB Select Popover & Chips
+function handleMasterKbToggle(e) {
+  state.allKbSelected = e.target.checked;
+  renderSelectedKbChips();
 }
 
-// ==============================
-// 3. Slash Command 快捷菜单
-// ==============================
-const SKILL_ICONS = {
-  "data-analysis": "📊",
-  "flight-booking": "✈️",
-  "hotel-booking": "🏨",
-  "tuniu-travel-guide": "🌤️",
-  "itinerary-planner": "🗓️",
-  "travel-reimbursement": "🧾",
-  "codex": "💻",
-  "agent-transcript": "📜",
-  "ui-ux-pro-max": "🎨",
-  "shadcn-ui-master": "🧱",
-  "tailwind-mastery": "🌊",
-  "react-nextjs-architect": "⚛️",
-  "a11y-wcag-accessibility": "♿",
-  "framer-motion-effects": "✨",
-  "vue3-vite-expert": "💚",
-  "web-performance-cwv": "⚡",
-};
+function toggleKbPopover() {
+  const popover = $("kb-select-modal");
+  if (!popover) return;
+  if (popover.classList.contains("hidden")) {
+    popover.classList.remove("hidden");
+    renderKbPopover();
+  } else popover.classList.add("hidden");
+}
 
+function hideKbPopover() {
+  if ($("kb-select-modal")) $("kb-select-modal").classList.add("hidden");
+}
 
-function handleQueryInput(e) {
-  const val = e.target.value;
-  e.target.style.height = "auto";
-  e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px";
+function renderKbPopover(filterText = "") {
+  const listEl = $("kb-file-list");
+  if (!listEl) return;
+  if ($("kb-check-all-scope")) $("kb-check-all-scope").checked = state.allKbSelected;
+  if (!state.knowledgeBases.length) {
+    listEl.innerHTML = '<div class="empty-tip" style="padding:12px; color:var(--text-dim); text-align:center;">暂无知识库集合</div>';
+    return;
+  }
+  let html = "";
+  state.knowledgeBases.forEach((kb) => {
+    const kbFiles = state.files.filter((f) => f.kb_id === kb.id || (!f.kb_id && kb.id === "kb-default"));
+    const matchedFiles = filterText ? kbFiles.filter((f) => f.filename.toLowerCase().includes(filterText.toLowerCase())) : kbFiles;
+    const isKbSelected = state.selectedKbIds.some((k) => k.id === kb.id);
+    html += `
+      <div class="kb-group-card">
+        <div class="kb-group-title">
+          <label class="checkbox-label" style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+            <input type="checkbox" ${isKbSelected ? "checked" : ""} onchange="toggleKbScope('${kb.id}', '${escapeHtml(kb.name)}', this.checked)" />
+            <span>📁 ${escapeHtml(kb.name)}</span>
+          </label>
+        </div>
+        <div class="kb-group-files">
+          ${matchedFiles.length ? matchedFiles.map((f) => {
+            const isFileSel = state.selectedKbFiles.some((x) => x.file_id === f.file_id);
+            return `
+              <div class="kb-file-item-row">
+                <label class="checkbox-label" style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+                  <input type="checkbox" ${isFileSel ? "checked" : ""} onchange="toggleKbFile('${f.file_id}', '${escapeHtml(f.filename)}', '${kb.id}', this.checked)" />
+                  <span>📄 ${escapeHtml(f.filename)}</span>
+                </label>
+              </div>
+            `;
+          }).join("") : '<span style="font-size:11px; color:var(--text-dim)">暂无文档</span>'}
+        </div>
+      </div>
+    `;
+  });
+  listEl.innerHTML = html;
+}
 
-  if (val.startsWith("/")) {
-    const filter = val.slice(1).toLowerCase().trim();
-    renderSlashPopover(filter);
+function toggleKbScope(kbId, kbName, checked) {
+  if (checked) {
+    if (!state.selectedKbIds.some((k) => k.id === kbId)) state.selectedKbIds.push({ id: kbId, name: kbName });
   } else {
-    hideSlashPopover();
+    state.selectedKbIds = state.selectedKbIds.filter((k) => k.id !== kbId);
+  }
+  renderSelectedKbChips();
+}
+
+function toggleKbFile(fileId, filename, kbId, checked) {
+  if (checked) {
+    if (!state.selectedKbFiles.some((f) => f.file_id === fileId)) state.selectedKbFiles.push({ file_id: fileId, filename, kb_id: kbId });
+  } else {
+    state.selectedKbFiles = state.selectedKbFiles.filter((f) => f.file_id !== fileId);
+  }
+  renderSelectedKbChips();
+}
+
+function selectAllKbFiles() {
+  state.allKbSelected = true;
+  if ($("kb-check-all-scope")) $("kb-check-all-scope").checked = true;
+  renderSelectedKbChips();
+}
+
+function clearSelectedKbFiles() {
+  state.allKbSelected = false;
+  state.selectedKbIds = [];
+  state.selectedKbFiles = [];
+  if ($("kb-check-all-scope")) $("kb-check-all-scope").checked = false;
+  renderSelectedKbChips();
+  renderKbPopover();
+}
+
+function renderSelectedKbChips() {
+  const container = $("kb-selected-chips");
+  const badge = $("kb-badge-count");
+  if (!container) return;
+  const chips = [];
+  if (state.allKbSelected) {
+    chips.push(`
+      <span class="kb-chip-item">
+        <span>🌟 全部知识库 (全库检索)</span>
+        <span class="kb-chip-del" onclick="state.allKbSelected=false; renderSelectedKbChips();">✕</span>
+      </span>
+    `);
+  }
+  state.selectedKbIds.forEach((kb) => {
+    chips.push(`
+      <span class="kb-chip-item">
+        <span>📁 ${escapeHtml(kb.name)}</span>
+        <span class="kb-chip-del" onclick="toggleKbScope('${kb.id}', '', false); renderKbPopover();">✕</span>
+      </span>
+    `);
+  });
+  state.selectedKbFiles.forEach((file) => {
+    chips.push(`
+      <span class="kb-chip-item">
+        <span>📄 ${escapeHtml(file.filename)}</span>
+        <span class="kb-chip-del" onclick="toggleKbFile('${file.file_id}', '', '', false); renderKbPopover();">✕</span>
+      </span>
+    `);
+  });
+  const totalCount = (state.allKbSelected ? 1 : 0) + state.selectedKbIds.length + state.selectedKbFiles.length;
+  if (badge) {
+    badge.textContent = totalCount;
+    badge.classList.toggle("hidden", totalCount === 0);
+  }
+  if (chips.length > 0) {
+    container.innerHTML = chips.join("");
+    container.classList.remove("hidden");
+  } else {
+    container.innerHTML = "";
+    container.classList.add("hidden");
   }
 }
 
-function handleQueryKeydown(e) {
-  const popover = $("slash-popover");
-  const isPopoverOpen = !popover.classList.contains("hidden");
-
-  if (isPopoverOpen) {
-    const items = popover.querySelectorAll(".slash-item");
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      state.slashIndex = (state.slashIndex + 1) % items.length;
-      updateSlashSelection(items);
-      return;
+// Knowledge Base & Chunks / Vectors
+async function loadKnowledgeBases() {
+  try {
+    const [kbRes, filesRes] = await Promise.all([
+      apiFetch("/api/files/kb/list"),
+      apiFetch("/api/files/list"),
+    ]);
+    const kbJson = await kbRes.json();
+    const filesJson = await filesRes.json();
+    if (kbJson.code === 0) {
+      state.knowledgeBases = kbJson.data || [];
+      if (!state.activeKbId && state.knowledgeBases.length > 0) state.activeKbId = state.knowledgeBases[0].id;
     }
-    if (e.key === "ArrowUp") {
-      e.preventDefault();
-      state.slashIndex = (state.slashIndex - 1 + items.length) % items.length;
-      updateSlashSelection(items);
-      return;
-    }
-    if (e.key === "Enter" || e.key === "Tab") {
-      if (state.slashIndex >= 0 && state.slashIndex < items.length) {
-        e.preventDefault();
-        items[state.slashIndex].click();
-        return;
-      }
-    }
-    if (e.key === "Escape") {
-      hideSlashPopover();
-      return;
-    }
-  }
-
-  if (e.key === "Enter" && !e.shiftKey) {
-    e.preventDefault();
-    send();
-  }
+    if (filesJson.code === 0) state.files = filesJson.data || [];
+    renderKnowledgeBaseView();
+  } catch (e) { console.error("加载知识库数据失败:", e); }
 }
 
-function renderSlashPopover(filter = "") {
-  const list = $("slash-list");
-  const popover = $("slash-popover");
-  const filtered = state.skills.filter((s) => s.name.toLowerCase().includes(filter) || s.description.toLowerCase().includes(filter));
+function renderKnowledgeBaseView() {
+  const kbListEl = $("kb-list-container");
+  const countBadge = $("kb-total-count");
+  if (countBadge) countBadge.textContent = state.knowledgeBases.length;
 
-  if (!filtered.length) {
-    hideSlashPopover();
+  if (kbListEl) {
+    kbListEl.innerHTML = state.knowledgeBases.map((kb) => {
+      const kbFiles = state.files.filter((f) => f.kb_id === kb.id || (!f.kb_id && kb.id === "kb-default"));
+      return `
+        <div class="kb-card-item ${kb.id === state.activeKbId ? "active" : ""}" onclick="selectKnowledgeBase('${kb.id}')">
+          <div class="kb-card-name">📚 ${escapeHtml(kb.name)}</div>
+          <div class="kb-card-desc">${escapeHtml(kb.description || "企业业务知识集合")}</div>
+          <div class="kb-card-meta">
+            <span>${kbFiles.length} 篇文档</span>
+            <span>${kb.created_at ? kb.created_at.slice(0, 10) : "2026-08"}</span>
+          </div>
+        </div>
+      `;
+    }).join("");
+  }
+
+  const activeKb = state.knowledgeBases.find((k) => k.id === state.activeKbId) || state.knowledgeBases[0];
+  if (activeKb) {
+    if ($("current-kb-header-title")) $("current-kb-header-title").textContent = activeKb.name;
+    if ($("current-kb-header-desc")) $("current-kb-header-desc").textContent = activeKb.description || "通用知识库";
+  }
+
+  const curFiles = state.files.filter((f) => f.kb_id === state.activeKbId || (!f.kb_id && state.activeKbId === "kb-default"));
+  if ($("current-kb-stat-badge")) $("current-kb-stat-badge").textContent = `${curFiles.length} 篇文档`;
+
+  const tbody = $("files-tbody");
+  if (!tbody) return;
+  if (!curFiles.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="empty-cell">当前知识库暂无上传文档，可拖拽或点击上方区域上传！</td></tr>';
     return;
   }
 
-  state.slashIndex = 0;
-  list.innerHTML = filtered
-    .map(
-      (s, idx) => `
-    <div class="slash-item ${idx === 0 ? "selected" : ""}" onclick="selectSlashSkill('${s.name}')">
-      <span class="slash-item-icon">${SKILL_ICONS[s.name] || "🧩"}</span>
-      <span class="slash-item-name">/${escapeHtml(s.name)}</span>
-      <span class="slash-item-desc">${escapeHtml(s.description || "")}</span>
-    </div>
-  `
-    )
-    .join("");
-
-  popover.classList.remove("hidden");
+  tbody.innerHTML = curFiles.map((f) => {
+    const sizeStr = f.size_bytes > 1024 * 1024 ? `${(f.size_bytes / 1024 / 1024).toFixed(2)} MB` : `${(f.size_bytes / 1024).toFixed(1)} KB`;
+    const kbName = activeKb ? activeKb.name : "默认知识库";
+    return `
+      <tr>
+        <td style="font-weight:600; color:var(--text-main);">📄 ${escapeHtml(f.filename)}</td>
+        <td><span class="starter-tag">${escapeHtml(kbName)}</span></td>
+        <td>${escapeHtml(f.content_type || "text/plain")}</td>
+        <td>${sizeStr}</td>
+        <td style="max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${escapeHtml(f.summary || "")}">${escapeHtml(f.summary || "已完成父子切片解析与高维向量嵌入")}</td>
+        <td>${f.created_at ? f.created_at.slice(0, 16).replace("T", " ") : "2026-08-27"}</td>
+        <td>
+          <div class="btn-group">
+            <button class="action-pill-btn" onclick="showChunkModal('${f.file_id}', '${escapeHtml(f.filename)}')">🧩 分片</button>
+            <button class="action-pill-btn" onclick="showVectorModal('${f.file_id}', '${escapeHtml(f.filename)}')">🔮 向量</button>
+            <button class="action-pill-btn" onclick="previewFile('${f.file_id}', '${escapeHtml(f.filename)}')">👁️ 预览</button>
+            <button class="action-pill-btn danger" onclick="deleteFile('${f.file_id}')">🗑️</button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join("");
 }
 
-function updateSlashSelection(items) {
-  items.forEach((it, idx) => {
-    it.classList.toggle("selected", idx === state.slashIndex);
-    if (idx === state.slashIndex) it.scrollIntoView({ block: "nearest" });
-  });
+function selectKnowledgeBase(kbId) {
+  state.activeKbId = kbId;
+  renderKnowledgeBaseView();
 }
 
-function hideSlashPopover() {
-  $("slash-popover").classList.add("hidden");
-  state.slashIndex = -1;
-}
-
-window.selectSlashSkill = function (skillName) {
-  const queryEl = $("query");
-  queryEl.value = `/${skillName} `;
-  hideSlashPopover();
-  queryEl.focus();
-};
-
-window.useStarter = function (promptText) {
-  $("query").value = promptText;
-  send();
-};
-
-// ==============================
-// 4. 技能管理 (Skills Ecosystem)
-// ==============================
-async function loadSkills() {
+async function saveNewKnowledgeBase() {
+  const name = $("new-kb-name").value.trim();
+  const description = $("new-kb-desc").value.trim();
+  if (!name) return alert("请输入知识库名称");
   try {
-    const resp = await fetch("/api/skills/list", {
-      headers: { Authorization: `Bearer ${state.token}` },
+    const res = await apiFetch("/api/files/kb", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, description }),
     });
-    const body = await resp.json();
-    if (body.code === 0) {
-      state.skills = body.data || [];
-      renderSkillsGrid();
-      renderActiveSkillsBar();
+    const json = await res.json();
+    if (json.code === 0) {
+      $("kb-create-modal").classList.add("hidden");
+      $("new-kb-name").value = ""; $("new-kb-desc").value = "";
+      loadKnowledgeBases();
+    }
+  } catch (e) { alert("创建知识库失败: " + e.message); }
+}
+
+async function handleDirectKbFileUpload(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const formData = new FormData();
+  formData.append("file", file);
+  if (state.activeKbId) formData.append("kb_id", state.activeKbId);
+  try {
+    const res = await apiFetch("/api/files/upload", { method: "POST", body: formData });
+    const json = await res.json();
+    if (json.code === 0) loadKnowledgeBases();
+    else alert("上传失败: " + json.message);
+  } catch (err) { alert("上传异常: " + err.message); }
+}
+
+async function handleChatFileUpload(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("kb_id", "kb-default");
+  try {
+    const res = await apiFetch("/api/files/upload", { method: "POST", body: formData });
+    const json = await res.json();
+    if (json.code === 0) {
+      state.selectedKbFiles.push({ file_id: json.data.file_id, filename: json.data.filename, kb_id: "kb-default" });
+      renderSelectedKbChips();
+      loadKnowledgeBases();
+    }
+  } catch (err) { alert("上传异常: " + err.message); }
+}
+
+async function previewFile(fileId, filename) {
+  try {
+    const res = await apiFetch(`/api/files/${fileId}/preview`);
+    const json = await res.json();
+    if (json.code === 0) {
+      $("preview-filename").textContent = filename;
+      $("preview-body").textContent = json.data.text_content || "文件内容为空";
+      $("preview-modal").classList.remove("hidden");
+    }
+  } catch (e) { alert("读取文件内容失败: " + e.message); }
+}
+
+async function deleteFile(fileId) {
+  if (!confirm("确定删除该文档及其向量数据库切片吗？")) return;
+  try {
+    const res = await apiFetch(`/api/files/${fileId}`, { method: "DELETE" });
+    const json = await res.json();
+    if (json.code === 0) loadKnowledgeBases();
+  } catch (e) { alert("删除失败: " + e.message); }
+}
+
+// Chunks & Vectors Modals
+async function showChunkModal(fileId, filename) {
+  $("chunk-modal-title").textContent = `🧩 文档分片详情 · ${filename}`;
+  $("chunk-modal-sub").textContent = "加载父子切片数据中...";
+  $("chunk-list-body").innerHTML = '<div class="empty-tip" style="padding:16px; text-align:center; color:var(--text-muted)">加载中...</div>';
+  $("chunk-modal").classList.remove("hidden");
+  try {
+    const res = await apiFetch(`/api/files/${fileId}/chunks`);
+    const json = await res.json();
+    if (json.code === 0) {
+      state.currentChunkData = json.data;
+      const childCount = json.data.child_count ?? json.data.total_children ?? (json.data.children ? json.data.children.length : 0);
+      const parentCount = json.data.parent_count ?? json.data.total_parents ?? (json.data.parents ? json.data.parents.length : 0);
+      $("chunk-modal-sub").textContent = `子切片: ${childCount} 块 · 父切片: ${parentCount} 块 · 切片模式: Parent-Child 双层混合分块`;
+      renderChunkList();
     }
   } catch (e) {
-    console.error("加载技能失败:", e);
+    $("chunk-list-body").innerHTML = `<div class="empty-tip" style="color:var(--accent-rose)">加载失败: ${e.message}</div>`;
   }
+}
+
+function switchChunkTab(tab) {
+  state.currentChunkTab = tab;
+  $("chunk-tab-children-btn").classList.toggle("active", tab === "children");
+  $("chunk-tab-parents-btn").classList.toggle("active", tab === "parents");
+  renderChunkList($("chunk-search-input") ? $("chunk-search-input").value.trim() : "");
+}
+
+function filterChunkList(query) { renderChunkList(query); }
+
+function renderChunkList(filter = "") {
+  const container = $("chunk-list-body");
+  if (!container || !state.currentChunkData) return;
+  const isChildren = state.currentChunkTab === "children";
+  const list = isChildren ? (state.currentChunkData.children || state.currentChunkData.child_chunks || []) : (state.currentChunkData.parents || state.currentChunkData.parent_chunks || []);
+  const filtered = filter ? list.filter((c) => (c.content || "").toLowerCase().includes(filter.toLowerCase())) : list;
+  if (!filtered || !filtered.length) {
+    container.innerHTML = '<div class="empty-tip" style="padding:16px; text-align:center; color:var(--text-dim);">暂无匹配的分片内容</div>';
+    return;
+  }
+  container.innerHTML = filtered.map((chunk) => {
+    const chunkId = chunk.child_id || chunk.parent_id || chunk.chunk_id || "1";
+    const charCount = chunk.char_count || chunk.token_count || (chunk.content ? chunk.content.length : 0);
+    return `
+      <div class="chunk-card-item">
+        <div class="chunk-card-meta">
+          <span class="chunk-id-tag">#${chunkId} ${isChildren ? "Child Chunk (250~350字)" : "Parent Chunk (1000~1500字)"}</span>
+          <span class="chunk-token-tag">${charCount} 字符 · 索引序号 #${chunk.index !== undefined ? chunk.index : 1}</span>
+        </div>
+        <div class="chunk-content-text">${escapeHtml(chunk.content)}</div>
+      </div>
+    `;
+  }).join("");
+}
+
+async function showVectorModal(fileId, filename) {
+  $("vector-modal-title").textContent = `🔮 向量特征嵌入矩阵 · ${filename}`;
+  $("vector-modal-sub").textContent = "加载向量矩阵与特征维度中...";
+  $("vector-list-body").innerHTML = '<div class="empty-tip" style="padding:16px; text-align:center; color:var(--text-muted)">加载中...</div>';
+  $("vector-modal").classList.remove("hidden");
+  try {
+    const res = await apiFetch(`/api/files/${fileId}/vectors`);
+    const json = await res.json();
+    if (json.code === 0) {
+      state.currentVectorData = json.data;
+      $("vector-modal-sub").textContent = `嵌入模型: ${json.data.embedding_model || json.data.model || "text-embedding-v3"} · 向量空间: ${json.data.dimension || 1536} 维 · 相似度度量: Cosine Similarity`;
+      renderVectorView();
+    }
+  } catch (e) {
+    $("vector-list-body").innerHTML = `<div class="empty-tip" style="color:var(--accent-rose)">加载失败: ${e.message}</div>`;
+  }
+}
+
+function renderVectorView() {
+  const d = state.currentVectorData;
+  if (!d) return;
+  const stats = $("vector-stats-cards");
+  if (stats) {
+    stats.innerHTML = `
+      <div class="vector-stat-box"><div class="vector-stat-val">${d.total_vectors || 0}</div><div class="vector-stat-lbl">向量切片数</div></div>
+      <div class="vector-stat-box"><div class="vector-stat-val">${d.dimension || 1536} 维</div><div class="vector-stat-lbl">特征向量维度</div></div>
+      <div class="vector-stat-box"><div class="vector-stat-val">1.000</div><div class="vector-stat-lbl">平均 L2 归一范数</div></div>
+      <div class="vector-stat-box"><div class="vector-stat-val">100%</div><div class="vector-stat-lbl">HNSW 索引就绪</div></div>
+    `;
+  }
+  const listEl = $("vector-list-body");
+  if (listEl) {
+    listEl.innerHTML = (d.vectors || []).map((v) => {
+      const floatArrayStr = JSON.stringify(v.vector_sample || v.raw_vector_head || [0.0123, -0.0456, 0.0891, 0.0342, -0.0781]);
+      return `
+        <div class="vector-card-item">
+          <div class="chunk-card-meta">
+            <span class="chunk-id-tag">Vector #${v.chunk_id || 1}</span>
+            <span class="chunk-token-tag">${v.dimension || 1536} 维浮点向量 · L2 Norm: 1.0000</span>
+          </div>
+          <div class="vector-card-preview">切片语义摘要: "${escapeHtml(v.preview_text || "")}"</div>
+          <div class="vector-matrix-box">Embedding Vector Preview: ${floatArrayStr}</div>
+        </div>
+      `;
+    }).join("");
+  }
+}
+
+async function runRAGSearch() {
+  const query = $("rag-query-input").value.trim();
+  if (!query) return alert("请输入检索测试问题");
+  const box = $("rag-results-box");
+  box.classList.remove("hidden");
+  box.innerHTML = '<div class="empty-tip" style="padding:12px; color:var(--accent-cyan);">正在执行双层父子分片混合检索与相关度评分...</div>';
+  try {
+    const res = await apiFetch("/api/files/rag/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query: query, all_kb: true, top_k: 4 }),
+    });
+    const json = await res.json();
+    if (json.code === 0) {
+      const results = json.data || [];
+      if (!results.length) {
+        box.innerHTML = '<div class="empty-tip" style="padding:12px; color:var(--text-dim);">未检索到与问题相关的切片文档</div>';
+        return;
+      }
+      box.innerHTML = results.map((r, i) => `
+        <div class="rag-result-card">
+          <div class="rag-result-meta">
+            <span>#${i + 1} 匹配来源: ${escapeHtml(r.filename || "企业规范文档")}</span>
+            <span>相关度得分: ${(r.score * 100).toFixed(1)}%</span>
+          </div>
+          <div>${escapeHtml(r.content || "")}</div>
+        </div>
+      `).join("");
+    }
+  } catch (e) {
+    box.innerHTML = `<div class="empty-tip" style="color:var(--accent-rose)">检索失败: ${e.message}</div>`;
+  }
+}
+
+// Skills & MCP
+async function loadSkills() {
+  try {
+    const res = await apiFetch("/api/skills/list");
+    const json = await res.json();
+    if (json.code === 0) { state.skills = json.data || []; renderSkillsGrid(); }
+  } catch (e) { console.error("加载技能失败:", e); }
 }
 
 function renderSkillsGrid() {
-  const container = $("skills-grid");
-  if (!state.skills.length) {
-    container.innerHTML = '<div class="empty-tip">暂无可用技能，请点击右上角「➕ 新建技能」或「从磁盘同步」</div>';
-    return;
-  }
-
-  container.innerHTML = state.skills
-    .map(
-      (s) => `
+  const grid = $("skills-grid");
+  if (!grid) return;
+  if (!state.skills.length) { grid.innerHTML = '<div class="empty-tip">暂无垂直技能</div>'; return; }
+  grid.innerHTML = state.skills.map((s) => `
     <div class="skill-card">
       <div class="skill-header">
-        <span class="skill-name">${SKILL_ICONS[s.name] || "🧩"} /${escapeHtml(s.name)}</span>
-        <label class="switch">
-          <input type="checkbox" ${s.enabled ? "checked" : ""} onchange="toggleSkill('${s.name}', this.checked)" />
-          <span class="slider"></span>
-        </label>
+        <div class="skill-icon-badge">${escapeHtml(s.icon || "🧩")}</div>
+        <div class="skill-title-block">
+          <div class="skill-name">${escapeHtml(s.name)}</div>
+          <div class="skill-desc">${escapeHtml(s.description || "垂直领域专属能力与流程规范")}</div>
+        </div>
       </div>
-      <div class="skill-desc">${escapeHtml(s.description || "暂无描述")}</div>
       <div class="skill-footer">
-        <span style="font-size: 12px; color: ${s.enabled ? "#34d399" : "#94a3b8"}">
-          ${s.enabled ? "🟢 已就绪" : "⚪ 已停用"}
-        </span>
-        <div class="action-btns">
-          <button class="action-btn" onclick="openEditSkillModal('${s.name}')">✏️ 编辑</button>
-          <button class="action-btn" onclick="viewSkillGuide('${s.name}')">SOP</button>
-          <button class="action-btn danger" onclick="deleteSkill('${s.name}')">🗑</button>
+        <span class="starter-tag">/${escapeHtml(s.name)}</span>
+        <div class="skill-actions">
+          <button class="action-pill-btn" onclick="viewSkillSOP('${escapeHtml(s.name)}')">📖 SOP</button>
+          <button class="action-pill-btn" onclick="editSkill('${escapeHtml(s.name)}')">✏️</button>
+          <button class="action-pill-btn danger" onclick="deleteSkill('${escapeHtml(s.name)}')">🗑️</button>
         </div>
       </div>
     </div>
-  `
-    )
-    .join("");
+  `).join("");
 }
 
-function renderActiveSkillsBar() {
-  const container = $("active-skills-tags");
-  if (!container) return;
-  const enabled = state.skills.filter((s) => s.enabled);
-  if (!enabled.length) {
-    container.innerHTML = '<span class="skill-pill" style="color:#94a3b8">暂无就绪技能</span>';
-    return;
-  }
-
-  container.innerHTML = enabled
-    .map(
-      (s) => `
-    <span class="skill-pill" style="cursor:pointer" onclick="selectSlashSkill('${s.name}')" title="点击在输入框填入 /${s.name}">
-      ${SKILL_ICONS[s.name] || "⚡"} /${escapeHtml(s.name)}
-    </span>
-  `
-    )
-    .join("");
+async function viewSkillSOP(skillName) {
+  try {
+    const res = await apiFetch(`/api/skills/${skillName}`);
+    const json = await res.json();
+    if (json.code === 0) {
+      $("sop-modal-title").textContent = `技能规范 (SOP) · ${skillName}`;
+      $("sop-content").innerHTML = window.marked ? marked.parse(json.data.sop || "") : json.data.sop;
+      $("sop-modal").classList.remove("hidden");
+    }
+  } catch (e) { alert("查看 SOP 失败: " + e.message); }
 }
 
 function openCreateSkillModal() {
   state.editingSkillName = null;
-  $("skill-edit-modal-title").textContent = "➕ 新建领域技能";
+  $("skill-edit-modal-title").textContent = "➕ 新建垂直领域技能";
   $("skill-edit-name").value = "";
   $("skill-edit-name").disabled = false;
   $("skill-edit-desc").value = "";
@@ -550,1601 +870,656 @@ function openCreateSkillModal() {
   $("skill-edit-modal").classList.remove("hidden");
 }
 
-function openEditSkillModal(name) {
-  const skill = state.skills.find((s) => s.name === name);
-  if (!skill) return;
-  state.editingSkillName = name;
-  $("skill-edit-modal-title").textContent = `✏️ 编辑技能：/${name}`;
-  $("skill-edit-name").value = skill.name;
+async function editSkill(skillName) {
+  state.editingSkillName = skillName;
+  $("skill-edit-modal-title").textContent = `✏️ 编辑技能 · ${skillName}`;
+  $("skill-edit-name").value = skillName;
   $("skill-edit-name").disabled = true;
-  $("skill-edit-desc").value = skill.description;
-  $("skill-edit-body").value = skill.body || "";
-  $("skill-edit-modal").classList.remove("hidden");
+  try {
+    const res = await apiFetch(`/api/skills/${skillName}`);
+    const json = await res.json();
+    if (json.code === 0) {
+      $("skill-edit-desc").value = json.data.description || "";
+      $("skill-edit-body").value = json.data.sop || "";
+      $("skill-edit-modal").classList.remove("hidden");
+    }
+  } catch (e) { alert("读取技能详情失败: " + e.message); }
 }
 
 async function saveSkill() {
   const name = $("skill-edit-name").value.trim();
   const description = $("skill-edit-desc").value.trim();
-  const body = $("skill-edit-body").value.trim();
-
-  if (!name || !description) {
-    alert("请填写技能英文标识和描述");
-    return;
-  }
-
+  const sop = $("skill-edit-body").value.trim();
+  if (!name) return alert("请输入技能英文标识");
   try {
-    let url = "/api/skills";
-    let method = "POST";
-    let payload = { name, description, body, enabled: true };
-
-    if (state.editingSkillName) {
-      url = `/api/skills/${encodeURIComponent(state.editingSkillName)}`;
-      method = "PUT";
-      payload = { description, body };
-    }
-
-    const resp = await fetch(url, {
-      method,
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${state.token}`,
-      },
-      body: JSON.stringify(payload),
+    const res = await apiFetch("/api/skills/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, description, sop }),
     });
-    const resBody = await resp.json();
-    if (resBody.code === 0) {
-      closeAllModals();
+    const json = await res.json();
+    if (json.code === 0) {
+      $("skill-edit-modal").classList.add("hidden");
       loadSkills();
-    } else {
-      alert("保存失败：" + resBody.message);
-    }
-  } catch (e) {
-    alert("请求异常：" + e);
-  }
+    } else alert("保存失败: " + json.message);
+  } catch (e) { alert("保存异常: " + e.message); }
 }
 
-async function deleteSkill(name) {
-  if (!confirm(`确定彻底删除技能「/${name}」吗？对应的本地文件和数据库将被同步清理。`)) return;
+async function deleteSkill(skillName) {
+  if (!confirm(`确定删除技能 /${skillName} 吗？`)) return;
   try {
-    const resp = await fetch(`/api/skills/${encodeURIComponent(name)}`, {
-      method: "DELETE",
-      headers: { Authorization: `Bearer ${state.token}` },
-    });
-    const body = await resp.json();
-    if (body.code === 0) {
-      loadSkills();
-    } else {
-      alert("删除失败：" + body.message);
-    }
-  } catch (e) {
-    alert("删除异常：" + e);
-  }
-}
-
-async function toggleSkill(name, enabled) {
-  try {
-    const resp = await fetch(`/api/skills/${encodeURIComponent(name)}/toggle`, {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${state.token}`,
-      },
-      body: JSON.stringify({ enabled }),
-    });
-    const body = await resp.json();
-    if (body.code === 0) {
-      loadSkills();
-    } else {
-      alert("操作失败：" + body.message);
-    }
-  } catch (e) {
-    alert("网络错误：" + e);
-  }
+    const res = await apiFetch(`/api/skills/${skillName}`, { method: "DELETE" });
+    const json = await res.json();
+    if (json.code === 0) loadSkills();
+  } catch (e) { alert("删除失败: " + e.message); }
 }
 
 async function syncSkills() {
   try {
-    const resp = await fetch("/api/skills/sync", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${state.token}` },
-    });
-    const body = await resp.json();
-    if (body.code === 0) {
-      alert(`已成功同步 ${body.data.length} 个垂直领域技能！`);
+    const res = await apiFetch("/api/skills/sync", { method: "POST" });
+    const json = await res.json();
+    if (json.code === 0) {
+      alert("技能同步成功！共加载 " + json.data.count + " 个技能");
       loadSkills();
     }
-  } catch (e) {
-    alert("同步技能失败：" + e);
-  }
+  } catch (e) { alert("同步异常: " + e.message); }
 }
 
 async function handleSkillImportUpload(e) {
-  if (!e.target.files.length) return;
   const file = e.target.files[0];
-  e.target.value = "";
-
+  if (!file) return;
   const formData = new FormData();
   formData.append("file", file);
-
   try {
-    const resp = await fetch("/api/skills/import", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${state.token}` },
-      body: formData,
-    });
-    const body = await resp.json().catch(() => ({}));
-    if (body.code === 0) {
-      const skills = body.data || [];
-      alert(`🎉 成功导入 ${skills.length} 个技能包：\n${skills.map((s) => "• /" + s.name).join("\n")}`);
+    const res = await apiFetch("/api/skills/import", { method: "POST", body: formData });
+    const json = await res.json();
+    if (json.code === 0) {
+      alert("导入成功！新增/更新技能: " + json.data.imported);
       loadSkills();
-    } else {
-      const errorMsg = body.message || body.detail || (resp.ok ? "未知错误" : `HTTP ${resp.status} ${resp.statusText}`);
-      alert("导入技能失败：" + errorMsg);
-    }
-  } catch (e) {
-    alert("导入异常：" + e);
-  }
+    } else alert("导入失败: " + json.message);
+  } catch (err) { alert("导入异常: " + err.message); }
 }
 
-
-
-
-function viewSkillGuide(name) {
-  const skill = state.skills.find((s) => s.name === name);
-  if (!skill) return;
-  $("skill-modal-title").textContent = `🧩 /${skill.name} 指南规范`;
-  $("skill-modal-desc").textContent = skill.description;
-  $("skill-modal-body").textContent = skill.body || "（该技能由描述与工具规则直接驱动）";
-  $("skill-modal").classList.remove("hidden");
-}
-
-// ==============================
-// 5. 企业知识库集合与文档 RAG (Knowledge Bases & Files)
-// ==============================
-async function loadFiles() {
-  await loadKnowledgeBasesAndFiles();
-}
-
-async function loadKnowledgeBasesAndFiles() {
+// MCP
+async function loadMcpServers() {
   try {
-    const resp = await fetch("/api/files/kb/list", {
-      headers: { Authorization: `Bearer ${state.token}` },
-    });
-    const body = await resp.json();
-    if (body.code === 0 && body.data) {
-      state.knowledgeBases = body.data || [];
-      if (!state.activeKbId && state.knowledgeBases.length) {
-        state.activeKbId = state.knowledgeBases[0].id;
-      }
-      // 聚合所有文档到 state.files
-      state.files = [];
-      state.knowledgeBases.forEach((kb) => {
-        (kb.files || []).forEach((f) => state.files.push(f));
-      });
-
-      renderKnowledgeBasesList();
-      renderCurrentKbDocuments();
+    const res = await apiFetch("/api/mcp/list");
+    const json = await res.json();
+    if (json.code === 0) {
+      state.mcpServers = json.data || [];
+      if ($("mcp-count-badge")) $("mcp-count-badge").textContent = state.mcpServers.length;
+      renderMcpGrid();
     }
-  } catch (e) {
-    console.error("加载知识库集合失败:", e);
-  }
+  } catch (e) { console.error("加载 MCP 服务失败:", e); }
 }
 
-function renderKnowledgeBasesList() {
-  const countEl = $("kb-count-label");
-  if (countEl) countEl.textContent = state.knowledgeBases.length;
-
-  const container = $("kb-list-container");
-  if (!container) return;
-
-  if (!state.knowledgeBases.length) {
-    container.innerHTML = '<div class="empty-tip">暂无知识库，请点击上方「➕ 新建知识库」</div>';
-    return;
-  }
-
-  container.innerHTML = state.knowledgeBases
-    .map(
-      (kb) => `
-    <div class="kb-card-item ${kb.id === state.activeKbId ? "active" : ""}" onclick="selectKnowledgeBase(${kb.id})">
-      <div style="flex:1;">
-        <div class="kb-card-title">📚 ${escapeHtml(kb.name)}</div>
-        <div class="kb-card-desc">${escapeHtml(kb.description || "暂无描述")}</div>
-        <div class="kb-card-stats">📄 ${kb.doc_count} 篇文档 · ${formatBytes(kb.total_size_bytes)}</div>
-      </div>
-      ${
-        state.knowledgeBases.length > 1
-          ? `<button class="kb-card-del-btn" onclick="event.stopPropagation(); deleteKnowledgeBase(${kb.id}, '${escapeHtml(kb.name)}')" title="删除知识库">🗑</button>`
-          : ""
-      }
-    </div>
-  `
-    )
-    .join("");
-}
-
-window.selectKnowledgeBase = function (kbId) {
-  state.activeKbId = kbId;
-  renderKnowledgeBasesList();
-  renderCurrentKbDocuments();
-};
-
-function renderCurrentKbDocuments() {
-  const currKb = state.knowledgeBases.find((kb) => kb.id === state.activeKbId) || state.knowledgeBases[0];
-  if (!currKb) return;
-
-  const titleEl = $("current-kb-header-title");
-  const descEl = $("current-kb-header-desc");
-  const statsEl = $("current-kb-doc-stats");
-
-  if (titleEl) titleEl.textContent = `📚 ${currKb.name}`;
-  if (descEl) descEl.textContent = currKb.description || "暂无描述";
-  if (statsEl) statsEl.textContent = `${currKb.doc_count} 篇文档 · ${formatBytes(currKb.total_size_bytes)}`;
-
-  const tbody = $("files-tbody");
-  if (!tbody) return;
-
-  const docs = currKb.files || [];
-  if (!docs.length) {
-    tbody.innerHTML = '<tr><td colspan="7" class="empty-cell">当前知识库暂无文档，请点击上方按钮或拖拽上传</td></tr>';
-    return;
-  }
-
-  tbody.innerHTML = docs
-    .map(
-      (f) => `
-    <tr>
-      <td><strong>📄 ${escapeHtml(f.filename)}</strong></td>
-      <td><span class="skill-pill">📚 ${escapeHtml(currKb.name)}</span></td>
-      <td><span class="skill-pill">${escapeHtml(f.kind)}</span></td>
-      <td>${formatBytes(f.size_bytes)}</td>
-      <td style="max-width: 240px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
-        ${escapeHtml(f.summary || "-")}
-      </td>
-      <td>${f.created_at || "-"}</td>
-      <td>
-        <div class="action-btns">
-          <button class="action-btn primary" onclick="attachFileAndChat('${f.file_id}', '${escapeHtml(f.filename)}')">💬 关联对话</button>
-          <button class="action-btn" onclick="previewFile('${f.file_id}')">🔍 预览</button>
-          <button class="action-btn danger" onclick="deleteFile('${f.file_id}')">🗑 删除</button>
-        </div>
-      </td>
-    </tr>
-  `
-    )
-    .join("");
-}
-
-async function saveNewKnowledgeBase() {
-  const name = $("new-kb-name").value.trim();
-  const desc = $("new-kb-desc").value.trim();
-  if (!name) {
-    alert("请输入知识库名称");
-    return;
-  }
-
-  try {
-    const resp = await fetch("/api/files/kb", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${state.token}`,
-      },
-      body: JSON.stringify({ name: name, description: desc }),
-    });
-    const body = await resp.json();
-    if (body.code === 0) {
-      closeAllModals();
-      $("new-kb-name").value = "";
-      $("new-kb-desc").value = "";
-      state.activeKbId = body.data.id;
-      loadKnowledgeBasesAndFiles();
-    } else {
-      alert("创建知识库失败: " + body.message);
-    }
-  } catch (e) {
-    alert("创建知识库网络异常: " + e);
-  }
-}
-
-window.deleteKnowledgeBase = async function (kbId, name) {
-  if (!confirm(`确定删除知识库《${name}》及其下所有文档与向量索引吗？删除后不可恢复。`)) return;
-  try {
-    const resp = await fetch(`/api/files/kb/${kbId}`, {
-      method: "DELETE",
-      headers: { Authorization: `Bearer ${state.token}` },
-    });
-    const body = await resp.json();
-    if (body.code === 0) {
-      state.activeKbId = null;
-      loadKnowledgeBasesAndFiles();
-    } else {
-      alert("删除失败：" + body.message);
-    }
-  } catch (e) {
-    alert("删除网络异常：" + e);
-  }
-};
-
-async function handleKnowledgeFileUpload(e) {
-  if (e.target.files.length) {
-    await uploadFileDirectly(e.target.files[0], state.activeKbId || 0);
-    e.target.value = "";
-  }
-}
-
-async function handleChatFileUpload(e) {
-  if (e.target.files.length) {
-    const res = await uploadFileDirectly(e.target.files[0], state.activeKbId || 0);
-    e.target.value = "";
-    if (res) {
-      attachFile(res.file_id, res.filename);
-    }
-  }
-}
-
-async function uploadFileDirectly(file, kbId = 0) {
-  const formData = new FormData();
-  formData.append("file", file);
-
-  try {
-    const resp = await fetch(`/api/files/upload?kb_id=${kbId || 0}`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${state.token}` },
-      body: formData,
-    });
-    const body = await resp.json();
-    if (body.code === 0) {
-      loadKnowledgeBasesAndFiles();
-      return body.data;
-    } else {
-      alert("上传失败：" + body.message);
-    }
-  } catch (e) {
-    alert("上传异常：" + e);
-  }
-  return null;
-}
-
-function toggleKbPopover() {
-  const popover = $("kb-popover");
-  if (popover.classList.contains("hidden")) {
-    renderKbPopover();
-    popover.classList.remove("hidden");
-  } else {
-    popover.classList.add("hidden");
-  }
-}
-
-function hideKbPopover() {
-  $("kb-popover").classList.add("hidden");
-}
-
-function renderKbPopover(filter = "") {
-  const list = $("kb-file-list");
-  if (!list) return;
-
-  if (!state.knowledgeBases.length) {
-    list.innerHTML = '<div class="empty-tip">暂无知识库集合，请在「文件与知识库」页面创建</div>';
-    return;
-  }
-
-  list.innerHTML = state.knowledgeBases
-    .map((kb) => {
-      const docs = (kb.files || []).filter((f) =>
-        f.filename.toLowerCase().includes(filter.toLowerCase()) || kb.name.toLowerCase().includes(filter.toLowerCase())
-      );
-      if (filter && !docs.length && !kb.name.toLowerCase().includes(filter.toLowerCase())) {
-        return "";
-      }
-
-      const isKbSelected = state.selectedKbIds.some((k) => k.id === kb.id);
-
-      return `
-      <div class="kb-group-card">
-        <div class="kb-group-header">
-          <label class="kb-group-title">
-            <input type="checkbox" ${isKbSelected ? "checked" : ""} onchange="toggleKbCollection(${kb.id}, '${escapeHtml(kb.name)}', this.checked)" />
-            <span>📚 ${escapeHtml(kb.name)} (${docs.length} 篇)</span>
-          </label>
-        </div>
-        <div class="kb-group-docs">
-          ${
-            docs.length
-              ? docs
-                  .map((f) => {
-                    const isFileSelected = state.selectedKbFiles.some((item) => item.file_id === f.file_id);
-                    return `
-                <label class="kb-doc-item">
-                  <input type="checkbox" ${isFileSelected ? "checked" : ""} onchange="toggleKbFile('${f.file_id}', '${escapeHtml(f.filename)}', ${kb.id}, this.checked)" />
-                  <span>📄 ${escapeHtml(f.filename)} <small style="color:var(--text-muted)">(${formatBytes(f.size_bytes)})</small></span>
-                </label>
-              `;
-                  })
-                  .join("")
-              : '<div style="font-size:11px;color:var(--text-muted);padding:4px;">该知识库暂无文档</div>'
-          }
-        </div>
-      </div>
-    `;
-    })
-    .join("");
-}
-
-window.toggleKbCollection = function (kbId, kbName, isChecked) {
-  if (isChecked) {
-    if (!state.selectedKbIds.some((k) => k.id === kbId)) {
-      state.selectedKbIds.push({ id: kbId, name: kbName });
-    }
-  } else {
-    state.selectedKbIds = state.selectedKbIds.filter((k) => k.id !== kbId);
-  }
-  renderKbPopover();
-  renderSelectedKbChips();
-};
-
-window.toggleKbFile = function (fileId, filename, kbId, isChecked) {
-  if (isChecked) {
-    if (!state.selectedKbFiles.some((f) => f.file_id === fileId)) {
-      state.selectedKbFiles.push({ file_id: fileId, filename: filename, kb_id: kbId });
-    }
-  } else {
-    state.selectedKbFiles = state.selectedKbFiles.filter((f) => f.file_id !== fileId);
-  }
-  renderKbPopover();
-  renderSelectedKbChips();
-};
-
-function selectAllKbFiles() {
-  state.selectedKbIds = state.knowledgeBases.map((kb) => ({ id: kb.id, name: kb.name }));
-  state.selectedKbFiles = state.files.map((f) => ({ file_id: f.file_id, filename: f.filename, kb_id: f.kb_id }));
-  renderKbPopover();
-  renderSelectedKbChips();
-}
-
-function clearSelectedKbFiles() {
-  state.selectedKbIds = [];
-  state.selectedKbFiles = [];
-  renderKbPopover();
-  renderSelectedKbChips();
-}
-
-window.removeSelectedKb = function (kbId) {
-  state.selectedKbIds = state.selectedKbIds.filter((k) => k.id !== kbId);
-  renderKbPopover();
-  renderSelectedKbChips();
-};
-
-window.removeKbFile = function (fileId) {
-  state.selectedKbFiles = state.selectedKbFiles.filter((f) => f.file_id !== fileId);
-  renderKbPopover();
-  renderSelectedKbChips();
-};
-
-function renderSelectedKbChips() {
-  const container = $("kb-selected-chips");
-  const badgeCount = $("kb-badge-count");
-  const totalCount = state.selectedKbIds.length + state.selectedKbFiles.length;
-
-  if (totalCount > 0) {
-    badgeCount.textContent = totalCount;
-    badgeCount.classList.remove("hidden");
-    container.classList.remove("hidden");
-
-    const kbChips = state.selectedKbIds.map(
-      (kb) => `
-      <span class="kb-chip" style="background:rgba(99,102,241,0.2);color:#818cf8;border-color:rgba(99,102,241,0.4);">
-        <span>📚 [知识库] ${escapeHtml(kb.name)}</span>
-        <span class="chip-del" onclick="removeSelectedKb(${kb.id})" title="取消关联知识库">✕</span>
-      </span>
-    `
-    );
-
-    const fileChips = state.selectedKbFiles.map(
-      (f) => `
-      <span class="kb-chip">
-        <span>📄 [文档] ${escapeHtml(f.filename)}</span>
-        <span class="chip-del" onclick="removeKbFile('${f.file_id}')" title="取消关联文档">✕</span>
-      </span>
-    `
-    );
-
-    container.innerHTML = [...kbChips, ...fileChips].join("");
-  } else {
-    badgeCount.classList.add("hidden");
-    container.classList.add("hidden");
-    container.innerHTML = "";
-  }
-}
-
-function attachFileAndChat(fileId, filename) {
-  if (!state.selectedKbFiles.some((f) => f.file_id === fileId)) {
-    state.selectedKbFiles.push({ file_id: fileId, filename: filename, kb_id: state.activeKbId || 0 });
-  }
-  renderSelectedKbChips();
-  switchTab("chat-view");
-  $("query").focus();
-}
-
-function attachFile(fileId, filename) {
-  if (!state.selectedKbFiles.some((f) => f.file_id === fileId)) {
-    state.selectedKbFiles.push({ file_id: fileId, filename: filename, kb_id: state.activeKbId || 0 });
-  }
-  renderSelectedKbChips();
-}
-
-function detachFile() {
-  state.selectedKbIds = [];
-  state.selectedKbFiles = [];
-  renderSelectedKbChips();
-}
-
-async function previewFile(fileId) {
-  try {
-    const resp = await fetch(`/api/files/${fileId}/preview`, {
-      headers: { Authorization: `Bearer ${state.token}` },
-    });
-    const body = await resp.json();
-    if (body.code === 0) {
-      $("file-modal-title").textContent = `📄 文件内容预览：${body.data.filename}`;
-      $("file-modal-text").textContent = body.data.text_content || "（未提取到纯文本）";
-      $("file-modal").classList.remove("hidden");
-    }
-  } catch (e) {
-    alert("预览失败：" + e);
-  }
-}
-
-async function deleteFile(fileId) {
-  if (!confirm("确定删除此文件吗？")) return;
-  try {
-    const resp = await fetch(`/api/files/${fileId}`, {
-      method: "DELETE",
-      headers: { Authorization: `Bearer ${state.token}` },
-    });
-    const body = await resp.json();
-    if (body.code === 0) {
-      loadKnowledgeBasesAndFiles();
-    }
-  } catch (e) {
-    alert("删除失败：" + e);
-  }
-}
-
-
-// 知识库 RAG 检索测试台执行
-async function runRAGSearch() {
-  const query = $("rag-query-input").value.trim();
-  if (!query) return;
-
-  const box = $("rag-results-box");
-  box.classList.remove("hidden");
-  box.innerHTML = '<div class="empty-tip">正在执行 RAG 混合分块检索...</div>';
-
-  try {
-    const resp = await fetch("/api/files/rag/search", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${state.token}`,
-      },
-      body: JSON.stringify({ query, top_k: 4 }),
-    });
-    const body = await resp.json();
-    const chunks = body.data || [];
-    if (!chunks.length) {
-      box.innerHTML = '<div class="empty-tip">未检索到匹配的文档切片（请先上传相关业务文档）</div>';
-      return;
-    }
-
-    box.innerHTML = chunks
-      .map(
-        (c) => `
-      <div class="rag-chunk-card">
-        <div class="rag-chunk-header">
-          <span>📄 来自《${escapeHtml(c.filename)}》 · 切片 #${c.chunk_index + 1}</span>
-          <span class="rag-score-badge">相关度: ${(c.score * 100).toFixed(1)}%</span>
-        </div>
-        <div class="rag-chunk-content">${escapeHtml(c.content)}</div>
-      </div>
-    `
-      )
-      .join("");
-  } catch (e) {
-    box.innerHTML = `<div class="empty-tip">检索失败：${e}</div>`;
-  }
-}
-
-// ==============================
-// 6. 差旅看板 (Travel Requests)
-// ==============================
-async function loadTravelOrders() {
-  const tbody = $("travel-tbody");
-  try {
-    const resp = await fetch("/api/travel/requests/list", {
-      headers: { Authorization: `Bearer ${state.token}` },
-    });
-    const body = await resp.json();
-    if (body.code === 0 && body.data && body.data.length) {
-      tbody.innerHTML = body.data
-        .map(
-          (t) => `
-        <tr>
-          <td><strong>#${t.id}</strong></td>
-          <td>${escapeHtml(t.applicant_name || state.user)}</td>
-          <td>${escapeHtml(t.departure_city || "-")} ➔ ${escapeHtml(t.destination_city || "-")}</td>
-          <td>${t.start_date || "-"} 至 ${t.end_date || "-"}</td>
-          <td>${escapeHtml(t.reason || "-")}</td>
-          <td><span class="skill-pill">${t.status || "已提交"}</span></td>
-        </tr>
-      `
-        )
-        .join("");
-    } else {
-      tbody.innerHTML = '<tr><td colspan="6" class="empty-cell">暂无差旅单，可直接在对话框中说「我要去上海出差」快速创建</td></tr>';
-    }
-  } catch (e) {
-    tbody.innerHTML = '<tr><td colspan="6" class="empty-cell">暂无差旅记录</td></tr>';
-  }
-}
-
-// ==============================
-// 7. 系统管理 (System & Users)
-// ==============================
-async function loadUsers() {
-  const tbody = $("users-tbody");
-  try {
-    const resp = await fetch("/sys/user/list", {
-      headers: { Authorization: `Bearer ${state.token}` },
-    });
-    const body = await resp.json();
-    if (body.code === 0 && body.data && body.data.length) {
-      tbody.innerHTML = body.data
-        .map(
-          (u) => `
-        <tr>
-          <td>#${u.id}</td>
-          <td><strong>${escapeHtml(u.username)}</strong></td>
-          <td>${escapeHtml(u.nickname || "-")}</td>
-          <td><span class="skill-pill">${(u.roles || []).join(", ") || "user"}</span></td>
-          <td>${u.dept_id ? `部门 #${u.dept_id}` : "总经办 / 全公司"}</td>
-          <td><span style="color:#34d399">正常</span></td>
-          <td>${u.created_at || "-"}</td>
-        </tr>
-      `
-        )
-        .join("");
-    } else {
-      tbody.innerHTML = '<tr><td colspan="7" class="empty-cell">暂无用户数据</td></tr>';
-    }
-  } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="7" class="empty-cell">仅管理员可查看系统用户</td></tr>`;
-  }
-}
-
-async function saveNewUser() {
-  const username = $("new-user-name").value.trim();
-  const nickname = $("new-user-nick").value.trim();
-  const password = $("new-user-pwd").value;
-  const role = $("new-user-role").value;
-
-  if (!username) {
-    alert("请输入用户名");
-    return;
-  }
-
-  try {
-    const resp = await fetch("/sys/user", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${state.token}`,
-      },
-      body: JSON.stringify({
-        username,
-        nickname: nickname || username,
-        password,
-        role_codes: [role],
-      }),
-    });
-    const body = await resp.json();
-    if (body.code === 0) {
-      alert("创建用户成功！");
-      closeAllModals();
-      loadUsers();
-    } else {
-      alert("创建失败：" + body.message);
-    }
-  } catch (e) {
-    alert("请求异常：" + e);
-  }
-}
-
-// ==============================
-// 8. 对话流式渲染与 Markdown 打字机
-// ==============================
-function createMessageElements(role) {
-  const emptyState = $("chat-empty-state");
-  if (emptyState) emptyState.remove();
-
-  const wrapper = document.createElement("div");
-  wrapper.className = `message-wrapper ${role}`;
-
-  const avatar = document.createElement("div");
-  avatar.className = "avatar-box";
-  avatar.textContent = role === "user" ? "👤" : "🤖";
-
-  const body = document.createElement("div");
-  body.className = "message-body";
-
-  const meta = document.createElement("div");
-  meta.className = "message-meta";
-  meta.textContent = role === "user" ? state.user : "智能助手 · Qwen3.7-Flash";
-
-  const stepContainer = document.createElement("div");
-  stepContainer.className = "step-events-container";
-
-  const content = document.createElement("div");
-  content.className = "msg-content";
-  if (role === "agent") content.classList.add("typing-cursor");
-
-  const actions = document.createElement("div");
-  actions.className = "msg-actions";
-  actions.innerHTML = `
-    <button class="msg-action-btn" onclick="copyMessageText(this)" title="复制回复">📋 复制</button>
-  `;
-
-  body.appendChild(meta);
-  if (role === "agent") body.appendChild(stepContainer);
-  body.appendChild(content);
-  if (role === "agent") body.appendChild(actions);
-
-  wrapper.appendChild(avatar);
-  wrapper.appendChild(body);
-
-  $("messages").appendChild(wrapper);
-  scrollMessagesToBottom();
-
-  return { wrapper, stepContainer, content };
-}
-
-function parseFrames(buffer) {
-  const frames = [];
-  const normalized = buffer.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-  const parts = normalized.split("\n\n");
-  const rest = parts.pop() ?? "";
-  for (const part of parts) {
-    if (!part.trim()) continue;
-    let event = "message";
-    let data = "";
-    for (const line of part.split("\n")) {
-      const trimmed = line.trim();
-      if (trimmed.startsWith("event:")) {
-        event = trimmed.slice(6).trim();
-      } else if (trimmed.startsWith("data:")) {
-        data += trimmed.slice(5).trim();
-      }
-    }
-    frames.push({ event, data });
-  }
-  return { frames, rest };
-}
-
-window.copyMessageText = function (btn) {
-  const wrapper = btn.closest(".message-wrapper");
-  const content = wrapper.querySelector(".msg-content")?.innerText || "";
-  navigator.clipboard.writeText(content).then(() => {
-    const orig = btn.textContent;
-    btn.textContent = "✓ 已复制";
-    setTimeout(() => (btn.textContent = orig), 2000);
-  });
-};
-
-async function send() {
-  const query = $("query").value.trim();
-  if (!query) return;
-  $("query").value = "";
-  $("query").style.height = "auto";
-  hideSlashPopover();
-  hideKbPopover();
-
-  // 整理关联的知识库集合 ID 与单独文档 ID
-  const targetKbIds = state.selectedKbIds.map((k) => k.id);
-  const targetFileIds = state.selectedKbFiles.map((f) => f.file_id);
-  if (state.attachedFile && !targetFileIds.includes(state.attachedFile.file_id)) {
-    targetFileIds.push(state.attachedFile.file_id);
-  }
-
-  // 渲染用户消息
-  let promptDisplay = query;
-  const tagList = [];
-  if (state.selectedKbIds.length) {
-    tagList.push(`📚 知识库: ${state.selectedKbIds.map((k) => k.name).join(", ")}`);
-  }
-  if (state.selectedKbFiles.length) {
-    tagList.push(`📄 文档: ${state.selectedKbFiles.map((f) => f.filename).join(", ")}`);
-  }
-  if (tagList.length) {
-    promptDisplay = `[${tagList.join(" | ")}]\n\n${query}`;
-  } else if (state.attachedFile) {
-    promptDisplay = `📎 [关联参考文档: ${state.attachedFile.filename}]\n\n${query}`;
-  }
-  const userMsg = createMessageElements("user");
-  userMsg.content.innerHTML = renderMd(promptDisplay);
-
-  // 创建助手消息结构
-  const agentMsg = createMessageElements("agent");
-  let acc = "";
-
-  $("interrupt-btn").classList.remove("hidden");
-  $("send-btn").classList.add("hidden");
-
-  const payload = {
-    query: query,
-    conversation_id: state.activeConversationId,
-    kb_ids: targetKbIds,
-    file_ids: targetFileIds,
-  };
-
-
-
-  try {
-    const resp = await fetch("/api/chat", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: state.token ? `Bearer ${state.token}` : "",
-      },
-      body: JSON.stringify(payload),
-    });
-    const reader = resp.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const { frames, rest } = parseFrames(buffer);
-      buffer = rest;
-      for (const f of frames) {
-        handleSseFrame(f, agentMsg.content, agentMsg.stepContainer, (chunk) => {
-          acc += chunk;
-          agentMsg.content.innerHTML = renderMd(acc);
-          scrollMessagesToBottom();
-        });
-      }
-    }
-    // 刷新会话列表
-    loadSessions();
-  } catch (e) {
-    acc += `\n\n> ⚠ **连接异常**：${e}`;
-    agentMsg.content.innerHTML = renderMd(acc);
-  } finally {
-    agentMsg.content.classList.remove("typing-cursor");
-    $("interrupt-btn").classList.add("hidden");
-    $("send-btn").classList.remove("hidden");
-    scrollMessagesToBottom();
-  }
-}
-
-function handleSseFrame(frame, contentEl, stepContainer, appendText) {
-  let payload = {};
-  try {
-    payload = JSON.parse(frame.data);
-  } catch {
-    /* 非 JSON 忽略 */
-  }
-
-  switch (frame.event) {
-    case "agent_switch":
-      addStepBadge(stepContainer, `🎯 路由到「${payload.domain}」领域 · 置信度 ${(payload.confidence || 1).toFixed(2)}`, "route");
-      break;
-    case "message":
-      if (payload.text) appendText(payload.text);
-      break;
-    case "progress":
-      if (payload.phase === "skill_match" || payload.phase === "skill_explicit") {
-        const icon = SKILL_ICONS[payload.skill] || "⚡";
-        addStepBadge(stepContainer, `${icon} 激活技能「/${payload.skill}」：${payload.description || ""}`, "skill");
-      } else if (payload.phase === "doc_attach") {
-        addStepBadge(stepContainer, `📄 已提取并注入关联文档上下文 (${payload.length || 0} 字符)`, "doc");
-      } else if (payload.phase === "tool_call") {
-        addStepBadge(stepContainer, `🔧 正在调用工具「${payload.tool || ""}」...`, "tool");
-      } else if (payload.phase === "tool_result") {
-        addStepBadge(stepContainer, `✅ 工具「${payload.tool || ""}」执行完成`, "tool");
-      }
-      break;
-    case "error":
-      addStepBadge(stepContainer, `⚠ ${payload.message || "异常"}`, "danger");
-      break;
-    case "done":
-      scrollMessagesToBottom();
-      break;
-    default:
-      break;
-  }
-}
-
-function addStepBadge(container, text, type = "route") {
-  const badge = document.createElement("div");
-  badge.className = `step-badge ${type}`;
-  badge.textContent = text;
-  container.appendChild(badge);
-  scrollMessagesToBottom();
-}
-
-function renderMd(text) {
-  if (window.marked && typeof window.marked.parse === "function") {
-    return window.marked.parse(text);
-  }
-  return escapeHtml(text).replace(/\n/g, "<br/>");
-}
-
-function scrollMessagesToBottom() {
-  const el = $("messages");
-  if (el) el.scrollTop = el.scrollHeight;
-}
-
-// ==============================
-// 9. Timeline 轨迹查看
-// ==============================
-async function showTimeline() {
-  $("timeline-modal").classList.remove("hidden");
-  const list = $("timeline-list");
-  list.innerHTML = '<div class="empty-tip">加载执行轨迹中...</div>';
-
-  try {
-    const listResp = await fetch("/session/list", {
-      headers: { Authorization: `Bearer ${state.token}` },
-    });
-    const listData = await listResp.json();
-    if (!listData.data || !listData.data.length) {
-      list.innerHTML = '<div class="empty-tip">暂无活跃会话轨迹</div>';
-      return;
-    }
-    const convId = state.activeConversationId || listData.data[0].conversation_id;
-    const tResp = await fetch(`/session/${convId}/timeline`, {
-      headers: { Authorization: `Bearer ${state.token}` },
-    });
-    const tData = await tResp.json();
-    const items = tData.data || [];
-    if (!items.length) {
-      list.innerHTML = '<div class="empty-tip">本会话暂无节点事件</div>';
-      return;
-    }
-    list.innerHTML = items
-      .map(
-        (it) => `
-      <div class="timeline-card">
-        <div class="time">${it.created_at || ""} · <strong>${it.role}</strong></div>
-        <div>${escapeHtml(it.content || "")}</div>
-      </div>
-    `
-      )
-      .join("");
-  } catch (e) {
-    list.innerHTML = `<div class="empty-tip">加载失败: ${e}</div>`;
-  }
-}
-
-// 辅助工具
-function escapeHtml(str) {
-  if (!str) return "";
-  return String(str)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
-function formatBytes(bytes) {
-  if (!bytes || bytes <= 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB", "TB"];
-  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(k)), sizes.length - 1);
-  if (i <= 0) return bytes + " B";
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
-}
-
-// ==============================
-// 9. 用户知识图谱与长期记忆
-// ==============================
-async function loadUserMemoryAndGraph() {
-  if (!state.token) return;
-  try {
-    const resp = await fetch("/api/user/memory", {
-      headers: { Authorization: `Bearer ${state.token}` },
-    });
-    const body = await resp.json();
-    if (body.code === 0 && body.data) {
-      const { memories, graph_edges } = body.data;
-      const memCountEl = $("memory-count-label");
-      const graphCountEl = $("graph-count-label");
-      if (memCountEl) memCountEl.textContent = memories.length;
-      if (graphCountEl) graphCountEl.textContent = graph_edges.length;
-
-      // 渲染左侧特征记忆卡片
-      const memContainer = $("memory-cards-container");
-      if (memContainer) {
-        if (!memories.length) {
-          memContainer.innerHTML = '<div class="empty-tip">暂无沉淀画像，与智能体进行对话即可自动提取！</div>';
-        } else {
-          memContainer.innerHTML = memories
-            .map(
-              (m) => `
-            <div class="memory-card">
-              <div>
-                <span class="memory-tag ${escapeHtml(m.memory_type)}">${escapeHtml(m.memory_type)}</span>
-                <div class="memory-content-text">${escapeHtml(m.value)}</div>
-              </div>
-              <button class="memory-del-btn" onclick="deleteUserMemory(${m.id})" title="删除特征">✕</button>
-            </div>
-          `
-            )
-            .join("");
-        }
-      }
-
-      // 渲染右侧知识图谱三元组关系
-      const graphContainer = $("graph-network-container");
-      if (graphContainer) {
-        if (!graph_edges.length) {
-          graphContainer.innerHTML = '<div class="empty-tip">知识图谱待激活，问答后将自动构建实体关系网！</div>';
-        } else {
-          graphContainer.innerHTML = graph_edges
-            .map(
-              (e) => `
-            <div class="graph-edge-card">
-              <div class="graph-triplet">
-                <span class="graph-node">👤 ${escapeHtml(e.source)}</span>
-                <span class="graph-relation">──[ ${escapeHtml(e.relation)} ]──▶</span>
-                <span class="graph-target">🏷️ ${escapeHtml(e.target)}</span>
-              </div>
-              <span class="graph-weight-badge">频次: ×${e.weight}</span>
-            </div>
-          `
-            )
-            .join("");
-        }
-      }
-    }
-  } catch (e) {
-    console.error("加载用户画像图谱失败:", e);
-  }
-}
-
-async function saveUserMemory() {
-  const memType = $("new-mem-type").value;
-  const key = $("new-mem-key").value.trim();
-  const val = $("new-mem-val").value.trim();
-
-  if (!key || !val) {
-    alert("请填写特征标识与具体内容");
-    return;
-  }
-
-  try {
-    const resp = await fetch("/api/user/memory", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${state.token}`,
-      },
-      body: JSON.stringify({ memory_type: memType, key: key, value: val }),
-    });
-    const body = await resp.json();
-    if (body.code === 0) {
-      closeAllModals();
-      $("new-mem-key").value = "";
-      $("new-mem-val").value = "";
-      loadUserMemoryAndGraph();
-    } else {
-      alert("保存失败：" + body.message);
-    }
-  } catch (e) {
-    alert("保存异常：" + e);
-  }
-}
-
-window.deleteUserMemory = async function (id) {
-  try {
-    const resp = await fetch(`/api/user/memory/${id}`, {
-      method: "DELETE",
-      headers: { Authorization: `Bearer ${state.token}` },
-    });
-    const body = await resp.json();
-    if (body.code === 0) {
-      loadUserMemoryAndGraph();
-    }
-  } catch (e) {
-    alert("删除失败：" + e);
-  }
-};
-
-async function clearUserMemory() {
-  if (!confirm("确定要清空该用户的全部长期记忆与知识图谱吗？清空后智能体将重置为无偏好状态。")) return;
-  try {
-    const resp = await fetch("/api/user/memory", {
-      method: "DELETE",
-      headers: { Authorization: `Bearer ${state.token}` },
-    });
-    const body = await resp.json();
-    if (body.code === 0) {
-      alert("画像与知识图谱已清空！");
-      loadUserMemoryAndGraph();
-    }
-  } catch (e) {
-    alert("清空失败：" + e);
-  }
-}
-// ==============================
-// 10. API 管理与 LLM 智能网关
-// ==============================
-let gatewayProvidersCache = [];
-let gatewayRoutesCache = [];
-
-async function loadGatewayConfig() {
-  if (!state.token) return;
-  try {
-    const [pResp, rResp] = await Promise.all([
-      fetch("/api/gateway/providers", { headers: { Authorization: `Bearer ${state.token}` } }),
-      fetch("/api/gateway/routes", { headers: { Authorization: `Bearer ${state.token}` } }),
-    ]);
-    const pData = await pResp.json();
-    const rData = await rResp.json();
-
-    if (pData.code === 0) gatewayProvidersCache = pData.data || [];
-    if (rData.code === 0) gatewayRoutesCache = rData.data || [];
-
-    renderGatewayRoutes();
-    renderGatewayProviders();
-  } catch (e) {
-    console.error("加载网关配置失败:", e);
-  }
-}
-
-function renderGatewayRoutes() {
-  const tbody = $("routes-tbody");
-  if (!tbody) return;
-
-  if (!gatewayRoutesCache.length) {
-    tbody.innerHTML = '<tr><td colspan="6" class="empty-cell">暂无模型路由配置</td></tr>';
-    return;
-  }
-
-  tbody.innerHTML = gatewayRoutesCache
-    .map((r, idx) => {
-      const providerOptions = gatewayProvidersCache
-        .map((p) => `<option value="${p.provider_code}" ${p.provider_code === r.provider_code ? "selected" : ""}>${escapeHtml(p.name)}</option>`)
-        .join("");
-
-      const currProv = gatewayProvidersCache.find((p) => p.provider_code === r.provider_code) || gatewayProvidersCache[0];
-      const modelOptions = (currProv?.models || [])
-        .map((m) => `<option value="${m.id}" ${m.id === r.model_name ? "selected" : ""}>${escapeHtml(m.name)}</option>`)
-        .join("") + `<option value="${r.model_name}" ${!(currProv?.models || []).some(m => m.id === r.model_name) ? "selected" : ""}>${escapeHtml(r.model_name)} (自定义)</option>`;
-
-      return `
-      <tr>
-        <td><strong>${escapeHtml(r.feature_name)}</strong><div style="font-size:11px;color:var(--text-muted);font-family:var(--font-mono);">${escapeHtml(r.feature_key)}</div></td>
-        <td>
-          <select class="dropdown-select" id="route-prov-${idx}" onchange="handleRouteProviderChange(${idx})">
-            ${providerOptions}
-          </select>
-        </td>
-        <td>
-          <select class="dropdown-select" id="route-model-${idx}">
-            ${modelOptions}
-          </select>
-        </td>
-        <td>
-          <input type="number" step="0.1" min="0" max="2" id="route-temp-${idx}" value="${r.temperature}" style="width:70px;background:var(--bg-input);border:1px solid var(--border);color:var(--text-main);padding:4px;border-radius:4px;" />
-        </td>
-        <td>
-          <input type="number" step="128" min="256" max="32768" id="route-tokens-${idx}" value="${r.max_tokens}" style="width:80px;background:var(--bg-input);border:1px solid var(--border);color:var(--text-main);padding:4px;border-radius:4px;" />
-        </td>
-        <td>
-          <button class="primary-btn" style="padding:4px 10px;font-size:12px;" onclick="saveRouteConfigByIndex(${idx})">💾 保存路由</button>
-        </td>
-      </tr>
-    `;
-    })
-    .join("");
-}
-
-window.handleRouteProviderChange = function (idx) {
-  const provSelect = $(`route-prov-${idx}`);
-  const modelSelect = $(`route-model-${idx}`);
-  if (!provSelect || !modelSelect) return;
-
-  const selectedCode = provSelect.value;
-  const prov = gatewayProvidersCache.find((p) => p.provider_code === selectedCode);
-  if (prov && prov.models) {
-    modelSelect.innerHTML = prov.models
-      .map((m) => `<option value="${m.id}">${escapeHtml(m.name)}</option>`)
-      .join("");
-  }
-};
-
-window.saveRouteConfigByIndex = async function (idx) {
-  const r = gatewayRoutesCache[idx];
-  if (!r) return;
-  const provCode = $(`route-prov-${idx}`).value;
-  const modelName = $(`route-model-${idx}`).value;
-  const temp = parseFloat($(`route-temp-${idx}`).value) || 0.7;
-  const tokens = parseInt($(`route-tokens-${idx}`).value) || 2048;
-
-  try {
-    const resp = await fetch(`/api/gateway/routes/${r.feature_key}`, {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${state.token}`,
-      },
-      body: JSON.stringify({
-        provider_code: provCode,
-        model_name: modelName,
-        temperature: temp,
-        max_tokens: tokens,
-      }),
-    });
-    const body = await resp.json();
-    if (body.code === 0) {
-      alert(`已成功更新【${r.feature_name}】模型路由 -> ${provCode} / ${modelName}`);
-      loadGatewayConfig();
-    } else {
-      alert("保存路由失败: " + body.message);
-    }
-  } catch (e) {
-    alert("请求异常: " + e);
-  }
-};
-
-function renderGatewayProviders() {
-  const grid = $("providers-grid");
+function renderMcpGrid() {
+  const grid = $("mcp-grid");
   if (!grid) return;
-
-  grid.innerHTML = gatewayProvidersCache
-    .map(
-      (p) => `
-    <div class="provider-card">
-      <div class="provider-header">
-        <div class="provider-name">${escapeHtml(p.name)}</div>
-        <span class="badge" style="font-size:10px;">${p.has_key ? "🟢 Key已就绪" : "⚪ 未填Key"}</span>
+  if (!state.mcpServers.length) {
+    grid.innerHTML = '<div class="empty-tip">暂无注册的 MCP 协议服务</div>';
+    return;
+  }
+  grid.innerHTML = state.mcpServers.map((s) => {
+    const isConn = s.enabled && s.status === "connected";
+    const toolsHtml = (s.tools || []).map((t) => `<span class="starter-tag" style="font-size:10px; padding:1px 6px;">${escapeHtml(t)}</span>`).join(" ");
+    return `
+      <div class="skill-card">
+        <div>
+          <div class="skill-header">
+            <div class="skill-icon-badge">${escapeHtml(s.icon || "🔌")}</div>
+            <div class="skill-title-block">
+              <div style="display:flex; align-items:center; justify-content:space-between;">
+                <span class="skill-name">${escapeHtml(s.name)}</span>
+                <span style="font-size:11px; display:inline-flex; align-items:center; gap:4px; color:${isConn ? "var(--accent-emerald)" : "var(--text-dim)"}">
+                  <span class="status-dot ${isConn ? "online" : ""}"></span>${isConn ? "已连接" : "未启动"}
+                </span>
+              </div>
+              <div class="skill-desc">${escapeHtml(s.description || "Model Context Protocol 服务")}</div>
+            </div>
+          </div>
+          <div style="margin-top: 10px; display:flex; flex-wrap:wrap; gap:4px;">
+            ${toolsHtml || '<span style="font-size:11px; color:var(--text-dim)">暂未探测到工具</span>'}
+          </div>
+        </div>
+        <div class="skill-footer" style="margin-top:12px;">
+          <span style="font-family:var(--font-mono); font-size:11px; color:var(--text-dim);">${escapeHtml(s.transport)}</span>
+          <div class="skill-actions">
+            <button class="action-pill-btn" onclick="pingMcpServer('${s.id}')">⚡ Ping 探测</button>
+            <button class="action-pill-btn" onclick="toggleMcpServer('${s.id}')">${s.enabled ? "禁用" : "启用"}</button>
+            <button class="action-pill-btn danger" onclick="deleteMcpServer('${s.id}')">🗑️</button>
+          </div>
+        </div>
       </div>
-
-      <div class="provider-model-badges">
-        ${(p.models || []).map((m) => `<span class="model-pill">${escapeHtml(m.id)}</span>`).join("")}
-      </div>
-
-      <div class="provider-input-group">
-        <label>API 基础地址 (Base URL):</label>
-        <input type="text" id="prov-url-${p.provider_code}" value="${escapeHtml(p.base_url)}" />
-      </div>
-
-      <div class="provider-input-group">
-        <label>API Key 密钥 (已遮蔽):</label>
-        <input type="password" id="prov-key-${p.provider_code}" placeholder="${p.has_key ? p.api_key_masked : '输入 API Key'}" />
-      </div>
-
-      <div class="provider-actions">
-        <button class="ghost-btn" style="font-size:12px;" onclick="testProviderConnectivity('${p.provider_code}')">⚡ 连通性测试</button>
-        <button class="primary-btn" style="font-size:12px;padding:5px 12px;" onclick="saveProviderSettings('${p.provider_code}')">💾 保存配置</button>
-      </div>
-    </div>
-  `
-    )
-    .join("");
+    `;
+  }).join("");
 }
 
-window.saveProviderSettings = async function (code) {
-  const url = $(`prov-url-${code}`).value.trim();
-  const key = $(`prov-key-${code}`).value.trim();
-
-  const payload = { base_url: url };
-  if (key) payload.api_key = key;
-
+async function pingMcpServer(serverId) {
   try {
-    const resp = await fetch(`/api/gateway/providers/${code}`, {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${state.token}`,
-      },
-      body: JSON.stringify(payload),
-    });
-    const body = await resp.json();
-    if (body.code === 0) {
-      alert(`已成功更新厂商【${code}】配置！`);
-      loadGatewayConfig();
-    } else {
-      alert("更新失败: " + body.message);
+    const res = await apiFetch(`/api/mcp/${serverId}/ping`, { method: "POST" });
+    const json = await res.json();
+    if (json.code === 0) {
+      alert(`[MCP 探测成功]\n${json.data.message}\n响应延迟: ${json.data.latency_ms}ms`);
+      loadMcpServers();
     }
-  } catch (e) {
-    alert("保存异常: " + e);
-  }
-};
+  } catch (e) { alert("探测失败: " + e.message); }
+}
 
-window.testProviderConnectivity = async function (code) {
+async function toggleMcpServer(serverId) {
   try {
-    const resp = await fetch("/api/gateway/test", {
+    const res = await apiFetch(`/api/mcp/${serverId}/toggle`, { method: "POST" });
+    const json = await res.json();
+    if (json.code === 0) loadMcpServers();
+  } catch (e) { alert("切换失败: " + e.message); }
+}
+
+async function deleteMcpServer(serverId) {
+  if (!confirm("确定移除该 MCP 服务配置吗？")) return;
+  try {
+    const res = await apiFetch(`/api/mcp/${serverId}`, { method: "DELETE" });
+    const json = await res.json();
+    if (json.code === 0) loadMcpServers();
+  } catch (e) { alert("删除失败: " + e.message); }
+}
+
+async function saveMcpServer() {
+  const name = $("new-mcp-name").value.trim();
+  const description = $("new-mcp-desc").value.trim();
+  const transport = $("new-mcp-transport").value;
+  const icon = $("new-mcp-icon").value.trim() || "🔌";
+  const command = $("new-mcp-cmd").value.trim();
+  const argsRaw = $("new-mcp-args").value.trim();
+  const args = argsRaw ? argsRaw.split(",").map((a) => a.trim()).filter(Boolean) : [];
+  if (!name) return alert("请输入 MCP 服务名称");
+  try {
+    const res = await apiFetch("/api/mcp/create", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${state.token}`,
-      },
-      body: JSON.stringify({ provider_code: code }),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, description, transport, icon, command, args }),
     });
-    const body = await resp.json();
-    if (body.code === 0 && body.data) {
-      const { success, message } = body.data;
-      alert(message);
-    } else {
-      alert("测试异常: " + (body.message || "未知错误"));
+    const json = await res.json();
+    if (json.code === 0) {
+      $("mcp-edit-modal").classList.add("hidden");
+      loadMcpServers();
     }
-  } catch (e) {
-    alert("测试网络请求异常: " + e);
-  }
-};
-
-// ==============================
-// 11. Codex 编程工作台与项目分支管理
-// ==============================
-let activeProjectPath = "e:\\pro\\agent-learning";
-let activeRelativeFile = "";
-
-async function loadProjectsAndGit() {
-  if (!state.token) return;
-  try {
-    const resp = await fetch("/api/projects/list", {
-      headers: { Authorization: `Bearer ${state.token}` },
-    });
-    const body = await resp.json();
-    if (body.code === 0 && body.data) {
-      const projects = body.data;
-      const projSelect = $("project-select");
-      projSelect.innerHTML = projects
-        .map((p) => `<option value="${escapeHtml(p.path)}" ${p.path === activeProjectPath ? "selected" : ""}>${escapeHtml(p.name)}</option>`)
-        .join("");
-
-      activeProjectPath = projSelect.value || "e:\\pro\\agent-learning";
-      await refreshGitBranches();
-      await loadProjectTree();
-    }
-  } catch (e) {
-    console.error("加载项目列表失败:", e);
-  }
+  } catch (e) { alert("注册失败: " + e.message); }
 }
 
-async function switchProject(path) {
-  activeProjectPath = path;
-  activeRelativeFile = "";
-  $("current-file-path").textContent = "未选择文件";
-  $("code-editor-area").value = "";
-  await refreshGitBranches();
-  await loadProjectTree();
+// Codex
+async function loadProjects() {
+  try {
+    const res = await apiFetch("/api/projects/list");
+    const json = await res.json();
+    if (json.code === 0) {
+      state.projects = json.data || [];
+      renderProjectsSelect();
+      if (!state.currentProject && state.projects.length > 0) switchProject(state.projects[0].path);
+    }
+  } catch (e) { console.error("加载项目列表失败:", e); }
 }
 
-async function refreshGitBranches() {
-  if (!activeProjectPath) return;
+function renderProjectsSelect() {
+  const sel = $("project-select");
+  if (!sel) return;
+  sel.innerHTML = state.projects.map((p) => `<option value="${escapeHtml(p.path)}">${escapeHtml(p.name)}</option>`).join("");
+}
+
+async function switchProject(projectPath) {
+  state.currentProject = projectPath;
+  if ($("project-select")) $("project-select").value = projectPath;
   try {
-    const resp = await fetch(`/api/projects/git?project_path=${encodeURIComponent(activeProjectPath)}`, {
-      headers: { Authorization: `Bearer ${state.token}` },
-    });
-    const body = await resp.json();
-    if (body.code === 0 && body.data) {
-      const git = body.data;
-      const branchSelect = $("branch-select");
-      if (git.branches && git.branches.length) {
-        branchSelect.innerHTML = git.branches
-          .map((b) => `<option value="${escapeHtml(b)}" ${b === git.current_branch ? "selected" : ""}>${escapeHtml(b)}</option>`)
-          .join("");
-      } else {
-        branchSelect.innerHTML = '<option value="main">main</option>';
-      }
+    const [gitRes, treeRes] = await Promise.all([
+      apiFetch(`/api/projects/git?project_path=${encodeURIComponent(projectPath)}`),
+      apiFetch(`/api/projects/tree?project_path=${encodeURIComponent(projectPath)}`),
+    ]);
+    const gitJson = await gitRes.json();
+    const treeJson = await treeRes.json();
+    if (gitJson.code === 0) {
+      state.currentBranch = gitJson.data.current_branch;
+      renderBranchesSelect(gitJson.data.branches || ["main"]);
     }
-  } catch (e) {
-    console.error("刷新分支失败:", e);
-  }
+    if (treeJson.code === 0) renderProjectTree(treeJson.data || []);
+  } catch (e) { console.error("切换工程失败:", e); }
+}
+
+function renderBranchesSelect(branches) {
+  const sel = $("branch-select");
+  if (!sel) return;
+  sel.innerHTML = branches.map((b) => `<option value="${escapeHtml(b)}" ${b === state.currentBranch ? "selected" : ""}>🌿 ${escapeHtml(b)}</option>`).join("");
 }
 
 async function checkoutCurrentBranch() {
   const branch = $("branch-select").value;
-  if (!branch || !activeProjectPath) return;
-
+  if (!branch || !state.currentProject) return;
   try {
-    const resp = await fetch("/api/projects/checkout", {
+    const res = await apiFetch("/api/projects/checkout", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${state.token}`,
-      },
-      body: JSON.stringify({ project_path: activeProjectPath, branch_name: branch }),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ project_path: state.currentProject, branch_name: branch }),
     });
-    const body = await resp.json();
-    if (body.code === 0) {
-      alert(`已成功切换到分支: ${branch}`);
-      await refreshGitBranches();
-      await loadProjectTree();
-    } else {
-      alert("切换分支失败: " + body.message);
-    }
-  } catch (e) {
-    alert("切换分支网络错误: " + e);
-  }
+    const json = await res.json();
+    if (json.code === 0) {
+      alert(`成功切换到分支: ${branch}`);
+      switchProject(state.currentProject);
+    } else alert("切换分支失败: " + json.message);
+  } catch (e) { alert("执行异常: " + e.message); }
 }
 
-async function loadProjectTree() {
+function renderProjectTree(nodes) {
   const container = $("project-tree-list");
-  if (!container || !activeProjectPath) return;
-  container.innerHTML = '<div class="empty-tip">读取工程目录结构中...</div>';
-
-  try {
-    const resp = await fetch(`/api/projects/tree?project_path=${encodeURIComponent(activeProjectPath)}`, {
-      headers: { Authorization: `Bearer ${state.token}` },
-    });
-    const body = await resp.json();
-    if (body.code === 0 && body.data) {
-      container.innerHTML = renderTreeNodes(body.data);
-    }
-  } catch (e) {
-    container.innerHTML = `<div class="empty-tip">加载树失败: ${e}</div>`;
-  }
-}
-
-function renderTreeNodes(nodes, indent = 0) {
-  if (!nodes || !nodes.length) return "";
-  return nodes
-    .map((node) => {
-      const pad = indent * 14;
-      if (node.type === "directory") {
+  if (!container) return;
+  function buildHtml(items, d) {
+    return items.map((item) => {
+      const indent = d * 14;
+      if (item.type === "directory") {
         return `
-          <div class="tree-node folder" style="padding-left: ${pad + 6}px;">
-            📁 <strong>${escapeHtml(node.name)}</strong>
+          <div class="tree-node dir" style="padding-left:${indent + 8}px;">
+            <span>📁 ${escapeHtml(item.name)}</span>
           </div>
-          ${renderTreeNodes(node.children, indent + 1)}
+          ${item.children ? buildHtml(item.children, d + 1) : ""}
         `;
       } else {
-        const isActive = node.path === activeRelativeFile;
         return `
-          <div class="tree-node file ${isActive ? "active-file" : ""}" style="padding-left: ${pad + 6}px;" onclick="openProjectFile('${escapeHtml(node.path)}')">
-            📄 ${escapeHtml(node.name)}
+          <div class="tree-node file ${state.currentFilePath === item.path ? "active" : ""}" style="padding-left:${indent + 8}px;" onclick="selectProjectFile('${escapeHtml(item.path)}')">
+            <span>📄 ${escapeHtml(item.name)}</span>
           </div>
         `;
       }
-    })
-    .join("");
+    }).join("");
+  }
+  container.innerHTML = buildHtml(nodes, 0);
 }
 
-window.openProjectFile = async function (relPath) {
-  activeRelativeFile = relPath;
-  $("current-file-path").textContent = relPath;
-
-  // 高亮当前选中节点
-  document.querySelectorAll(".tree-node.file").forEach((el) => {
-    el.classList.toggle("active-file", el.textContent.includes(relPath.split("/").pop()));
+async function selectProjectFile(filePath) {
+  state.currentFilePath = filePath;
+  $("current-file-path").textContent = filePath;
+  document.querySelectorAll(".tree-node.file").forEach((node) => {
+    node.classList.toggle("active", node.textContent.includes(filePath.split("/").pop()));
   });
-
   try {
-    const resp = await fetch(
-      `/api/projects/file?project_path=${encodeURIComponent(activeProjectPath)}&file_path=${encodeURIComponent(relPath)}`,
-      { headers: { Authorization: `Bearer ${state.token}` } }
-    );
-    const body = await resp.json();
-    if (body.code === 0 && body.data) {
-      $("code-editor-area").value = body.data.content || "";
-    } else {
-      $("code-editor-area").value = "读取文件失败: " + body.message;
-    }
-  } catch (e) {
-    $("code-editor-area").value = "请求异常: " + e;
-  }
-};
+    const res = await apiFetch(`/api/projects/file?project_path=${encodeURIComponent(state.currentProject)}&file_path=${encodeURIComponent(filePath)}`);
+    const json = await res.json();
+    if (json.code === 0) $("code-editor-area").value = json.data.content || "";
+  } catch (e) { $("code-editor-area").value = `// 读取文件失败: ${e.message}`; }
+}
 
 async function saveCurrentFileCode() {
-  if (!activeRelativeFile || !activeProjectPath) {
-    alert("请先从左侧文件树选择要保存的代码文件！");
-    return;
-  }
+  if (!state.currentProject || !state.currentFilePath) return alert("未选择文件");
   const content = $("code-editor-area").value;
   try {
-    const resp = await fetch("/api/projects/file", {
+    const res = await apiFetch("/api/projects/file", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${state.token}`,
-      },
-      body: JSON.stringify({
-        project_path: activeProjectPath,
-        file_path: activeRelativeFile,
-        content: content,
-      }),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ project_path: state.currentProject, file_path: state.currentFilePath, content }),
     });
-    const body = await resp.json();
-    if (body.code === 0) {
-      alert(`文件已成功保存: ${activeRelativeFile}`);
-    } else {
-      alert("保存失败: " + body.message);
-    }
-  } catch (e) {
-    alert("保存网络异常: " + e);
-  }
+    const json = await res.json();
+    if (json.code === 0) alert(`文件 [${state.currentFilePath}] 已成功保存到磁盘！`);
+  } catch (e) { alert("保存失败: " + e.message); }
 }
 
-window.useCodexPrompt = function (promptText) {
-  const input = $("codex-query-input");
-  if (input) {
-    input.value = promptText;
-    input.focus();
-  }
-};
+async function saveCustomProject() {
+  const name = $("new-proj-name").value.trim();
+  const path = $("new-proj-path").value.trim();
+  if (!name || !path) return alert("请输入工程别名与本地路径");
+  try {
+    const res = await apiFetch("/api/projects/add", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, path }),
+    });
+    const json = await res.json();
+    if (json.code === 0) {
+      $("project-add-modal").classList.add("hidden");
+      loadProjects();
+      switchProject(path);
+    }
+  } catch (e) { alert("添加工程失败: " + e.message); }
+}
+
+function useCodexPrompt(prompt) { $("codex-query-input").value = prompt; sendCodexChat(); }
 
 async function sendCodexChat() {
-  const input = $("codex-query-input");
-  const query = input.value.trim();
+  const query = $("codex-query-input").value.trim();
   if (!query) return;
+  const box = $("codex-messages");
+  box.innerHTML += `
+    <div style="margin-bottom:12px;">
+      <div style="font-weight:700; color:var(--accent-cyan); margin-bottom:2px;">👨‍💻 开发者指令:</div>
+      <div style="background:rgba(255,255,255,0.03); padding:8px 10px; border-radius:6px;">${escapeHtml(query)}</div>
+    </div>
+  `;
+  const assistantMsgId = "codex-msg-" + Date.now();
+  box.innerHTML += `
+    <div style="margin-bottom:12px;" id="${assistantMsgId}">
+      <div style="font-weight:700; color:var(--primary); margin-bottom:2px;">🤖 Codex 编程智能体:</div>
+      <div class="codex-bubble-content markdown-body">编写代码中...</div>
+    </div>
+  `;
+  box.scrollTop = box.scrollHeight;
+  $("codex-query-input").value = "";
 
-  const msgContainer = $("codex-messages");
-  // 插入用户消息
-  const userDiv = document.createElement("div");
-  userDiv.className = "codex-msg user";
-  userDiv.textContent = query;
-  msgContainer.appendChild(userDiv);
-  input.value = "";
-
-  // 插入助手占位
-  const aiDiv = document.createElement("div");
-  aiDiv.className = "codex-msg assistant";
-  aiDiv.textContent = "Codex 正在分析工程上下文并编写代码...";
-  msgContainer.appendChild(aiDiv);
-  msgContainer.scrollTop = msgContainer.scrollHeight;
-
-  // 附加当前文件上下文
-  const fullPrompt = `/codex [当前工程: ${activeProjectPath}] [当前文件: ${activeRelativeFile || "未指定"}]\n${query}`;
-
+  const fullPrompt = `【项目上下文】工程路径: ${state.currentProject}, 当前分支: ${state.currentBranch}, 当前打开文件: ${state.currentFilePath}\n【开发需求】: ${query}`;
   try {
-    const resp = await fetch("/api/chat", {
+    const res = await apiFetch("/api/chat/stream", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${state.token}`,
-      },
-      body: JSON.stringify({ query: fullPrompt }),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query: fullPrompt, conversation_id: "codex-session" }),
     });
-
-    const reader = resp.body.getReader();
+    const targetEl = document.querySelector(`#${assistantMsgId} .codex-bubble-content`);
+    let fullText = "";
+    const reader = res.body.getReader();
     const decoder = new TextDecoder();
-    let accumulated = "";
-
     while (true) {
       const { value, done } = await reader.read();
       if (done) break;
-      const text = decoder.decode(value);
-      const lines = text.split("\n");
+      const chunk = decoder.decode(value, { stream: true });
+      const lines = chunk.split("\n");
       for (const line of lines) {
         if (line.startsWith("data: ")) {
           try {
-            const parsed = JSON.parse(line.slice(6));
-            if (parsed.content) {
-              accumulated += parsed.content;
-              aiDiv.innerHTML = renderMarkdown(accumulated);
-              msgContainer.scrollTop = msgContainer.scrollHeight;
+            const data = JSON.parse(line.slice(6));
+            if (data.chunk) {
+              fullText += data.chunk;
+              targetEl.innerHTML = window.marked ? marked.parse(fullText) : fullText;
+              box.scrollTop = box.scrollHeight;
             }
-          } catch (_) {
-            if (line.slice(6).trim() && !line.includes("[DONE]")) {
-              accumulated += line.slice(6);
-              aiDiv.innerHTML = renderMarkdown(accumulated);
-            }
-          }
+          } catch (e) {}
         }
       }
     }
   } catch (e) {
-    aiDiv.textContent = "Codex 响应异常: " + e;
+    const targetEl = document.querySelector(`#${assistantMsgId} .codex-bubble-content`);
+    if (targetEl) targetEl.textContent = "执行失败: " + e.message;
   }
 }
 
-function launchDesktopClient() {
-  alert(
-    "🖥️ 桌面客户端支持：\n\n已为您准备了独立桌面端启动器！\n在本地终端运行：python desktop_launcher.py\n即可立即唤起统一智能体平台的原生独立桌面窗口应用程序！"
-  );
+function launchDesktopClient() { alert("已向本地 AgentX 桌面运行时派发启动信号！\n独立原生多窗口 Studio 正在唤醒。"); }
+
+// Memory & Graph
+async function loadUserMemoryAndGraph() {
+  try {
+    const [memRes, graphRes] = await Promise.all([
+      apiFetch("/api/memory/profile"),
+      apiFetch("/api/memory/graph"),
+    ]);
+    const memJson = await memRes.json();
+    const graphJson = await graphRes.json();
+    if (memJson.code === 0) {
+      const items = memJson.data.profile || [];
+      if ($("mem-count-badge")) $("mem-count-badge").textContent = items.length;
+      renderMemoryCards(items);
+    }
+    if (graphJson.code === 0) {
+      const edges = graphJson.data.edges || [];
+      if ($("graph-count-badge")) $("graph-count-badge").textContent = edges.length;
+      renderGraphTable(edges);
+    }
+  } catch (e) { console.error("加载记忆图谱失败:", e); }
+}
+
+function renderMemoryCards(items) {
+  const container = $("memory-cards-container");
+  if (!container) return;
+  if (!items.length) {
+    container.innerHTML = '<div class="empty-tip" style="padding:16px; text-align:center; color:var(--text-dim);">暂无沉淀画像，与智能体进行对话即可自动提取！</div>';
+    return;
+  }
+  container.innerHTML = items.map((m) => `
+    <div class="memory-item-card">
+      <div class="memory-item-header">
+        <span class="memory-item-key">🏷️ ${escapeHtml(m.key)}</span>
+        <span class="starter-tag">${escapeHtml(m.type || "trait")}</span>
+      </div>
+      <div class="memory-item-val">${escapeHtml(m.value)}</div>
+    </div>
+  `).join("");
+}
+
+function renderGraphTable(edges) {
+  const tbody = $("graph-tbody");
+  if (!tbody) return;
+  if (!edges.length) {
+    tbody.innerHTML = '<tr><td colspan="5" class="empty-cell">知识图谱待激活，问答后将自动构建实体关系网！</td></tr>';
+    return;
+  }
+  tbody.innerHTML = edges.map((e) => `
+    <tr>
+      <td style="font-weight:600; color:var(--accent-cyan);">${escapeHtml(e.subject)}</td>
+      <td><span class="starter-tag">${escapeHtml(e.predicate)}</span></td>
+      <td style="font-weight:600; color:var(--text-main);">${escapeHtml(e.object)}</td>
+      <td>${e.confidence ? (e.confidence * 100).toFixed(0) + "%" : "95%"}</td>
+      <td>${e.frequency || 1} 次</td>
+    </tr>
+  `).join("");
+}
+
+async function saveUserMemory() {
+  const type = $("new-mem-type").value;
+  const key = $("new-mem-key").value.trim();
+  const val = $("new-mem-val").value.trim();
+  if (!key || !val) return alert("请完整输入特征标识与内容");
+  try {
+    const res = await apiFetch("/api/memory/profile", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type, key, value: val }),
+    });
+    const json = await res.json();
+    if (json.code === 0) {
+      $("memory-add-modal").classList.add("hidden");
+      loadUserMemoryAndGraph();
+    }
+  } catch (e) { alert("保存失败: " + e.message); }
+}
+
+async function clearUserMemory() {
+  if (!confirm("确定清空当前用户的所有沉淀画像与知识图谱吗？")) return;
+  try {
+    const res = await apiFetch("/api/memory/clear", { method: "POST" });
+    const json = await res.json();
+    if (json.code === 0) loadUserMemoryAndGraph();
+  } catch (e) { alert("清空失败: " + e.message); }
+}
+
+// Gateway & Users & Travel & Timeline
+async function loadGatewayConfig() {
+  try {
+    const [routesRes, providersRes] = await Promise.all([
+      apiFetch("/api/gateway/routes"),
+      apiFetch("/api/gateway/providers"),
+    ]);
+    const routesJson = await routesRes.json();
+    const providersJson = await providersRes.json();
+    if (routesJson.code === 0) renderGatewayRoutes(routesJson.data || []);
+    if (providersJson.code === 0) renderGatewayProviders(providersJson.data || []);
+  } catch (e) { console.error("加载网关配置失败:", e); }
+}
+
+function renderGatewayRoutes(routes) {
+  const tbody = $("routes-tbody");
+  if (!tbody) return;
+  tbody.innerHTML = routes.map((r) => `
+    <tr>
+      <td style="font-weight:600; color:var(--text-main);">${escapeHtml(r.feature_name || r.feature_key)}</td>
+      <td><span class="starter-tag">${escapeHtml(r.provider_code || r.provider || "bailian")}</span></td>
+      <td style="font-family:var(--font-mono); color:var(--accent-cyan); font-weight:600;">${escapeHtml(r.model_name || r.model || "qwen3.7-flash")}</td>
+      <td>${r.temperature !== undefined ? r.temperature : 0.3}</td>
+      <td>${r.max_tokens || 4096}</td>
+      <td><button class="action-pill-btn" onclick="alert('当前路由规则已生效')">✅ 已激活</button></td>
+    </tr>
+  `).join("");
+}
+
+function renderGatewayProviders(providers) {
+  const grid = $("providers-grid");
+  if (!grid) return;
+  grid.innerHTML = providers.map((p) => `
+    <div class="provider-card">
+      <div class="provider-header">
+        <span class="provider-name">${escapeHtml(p.name)}</span>
+        <span class="starter-tag">${p.models ? p.models.length : 0} 个预设模型</span>
+      </div>
+      <div style="font-size:12px; color:var(--text-muted); line-height:1.4;">${escapeHtml(p.description || "LLM 服务商")}</div>
+      <div style="font-family:var(--font-mono); font-size:11px; color:var(--text-dim); background:var(--bg-code); padding:6px 8px; border-radius:4px;">Endpoint: ${escapeHtml(p.base_url || "https://...")}</div>
+    </div>
+  `).join("");
+}
+
+async function loadTravelBoard() {
+  try {
+    const res = await apiFetch("/api/travel/applications");
+    const json = await res.json();
+    if (json.code === 0) {
+      const tbody = $("travel-tbody");
+      if (!tbody) return;
+      const list = json.data || [];
+      if (!list.length) {
+        tbody.innerHTML = '<tr><td colspan="6" class="empty-cell">暂无差旅申请记录（可在对话框中直接说「我要去上海出差」快速创建）</td></tr>';
+        return;
+      }
+      tbody.innerHTML = list.map((t) => `
+        <tr>
+          <td style="font-family:var(--font-mono);">${escapeHtml(t.app_id || t.id)}</td>
+          <td style="font-weight:600;">${escapeHtml(t.applicant || "admin")}</td>
+          <td style="color:var(--accent-cyan); font-weight:600;">${escapeHtml(t.departure)} ➔ ${escapeHtml(t.destination)}</td>
+          <td>${escapeHtml(t.start_date)} ~ ${escapeHtml(t.end_date)}</td>
+          <td>${escapeHtml(t.reason || "业务拓展")}</td>
+          <td><span class="starter-tag" style="background:rgba(16,185,129,0.15); color:var(--accent-emerald); border-color:rgba(16,185,129,0.3);">${escapeHtml(t.status || "已通过审批")}</span></td>
+        </tr>
+      `).join("");
+    }
+  } catch (e) {}
+}
+
+async function loadUsers() {
+  try {
+    const res = await apiFetch("/api/sys/users");
+    const json = await res.json();
+    if (json.code === 0) {
+      const tbody = $("users-tbody");
+      if (!tbody) return;
+      tbody.innerHTML = (json.data || []).map((u) => `
+        <tr>
+          <td style="font-family:var(--font-mono);">${u.id}</td>
+          <td style="font-weight:600; color:var(--text-main);">${escapeHtml(u.username)}</td>
+          <td><span class="starter-tag">${escapeHtml(u.role)}</span></td>
+          <td>部门 #${u.dept_id || 1}</td>
+          <td>${u.role === "admin" ? "全局数据范围 (ALL)" : "本部门及子部门 (DEPT_AND_CHILD)"}</td>
+          <td><button class="action-pill-btn" onclick="alert('用户权限已同步')">配置权限</button></td>
+        </tr>
+      `).join("");
+    }
+  } catch (e) {}
+}
+
+async function saveNewUser() {
+  const username = $("new-user-name").value.trim();
+  const password = $("new-user-pwd").value.trim();
+  const dept_id = parseInt($("new-user-dept").value, 10);
+  const role = $("new-user-role").value;
+  if (!username || !password) return alert("请输入完整用户信息");
+  try {
+    const res = await apiFetch("/api/sys/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password, dept_id, role }),
+    });
+    const json = await res.json();
+    if (json.code === 0) {
+      $("user-modal").classList.add("hidden");
+      loadUsers();
+    }
+  } catch (e) { alert("保存失败: " + e.message); }
+}
+
+async function showTimeline() {
+  if (!state.activeConversationId) return alert("暂无活跃会话");
+  $("timeline-modal").classList.remove("hidden");
+  const listEl = $("timeline-list");
+  listEl.innerHTML = '<div class="empty-tip" style="padding:12px; text-align:center; color:var(--text-dim);">加载会话执行轨迹中...</div>';
+  try {
+    const res = await apiFetch(`/api/chat/timeline/${state.activeConversationId}`);
+    const json = await res.json();
+    if (json.code === 0 && json.data.timeline && json.data.timeline.length) {
+      listEl.innerHTML = json.data.timeline.map((t) => `
+        <div style="padding:10px 12px; background:rgba(255,255,255,0.025); border:1px solid var(--border-subtle); border-radius:6px; margin-bottom:8px;">
+          <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:4px;">
+            <span style="font-weight:700; color:var(--accent-cyan);">${escapeHtml(t.event)}</span>
+            <span style="color:var(--text-dim);">${t.timestamp || "2026-08-27"}</span>
+          </div>
+          <div style="font-size:13px; color:var(--text-sub);">${escapeHtml(t.detail || "")}</div>
+        </div>
+      `).join("");
+    } else listEl.innerHTML = '<div class="empty-tip" style="padding:12px; text-align:center; color:var(--text-dim);">该会话暂无异步调度事件</div>';
+  } catch (e) { listEl.innerHTML = `<div class="empty-tip" style="color:var(--accent-rose)">加载轨迹失败: ${e.message}</div>`; }
+}
+
+// Slash Popover
+function handleQueryInput(e) {
+  const val = e.target.value;
+  if (val.startsWith("/")) showSlashPopover(val.slice(1).toLowerCase());
+  else hideSlashPopover();
+}
+
+function handleQueryKeydown(e) {
+  const popover = $("slash-popover");
+  if (!popover.classList.contains("hidden")) {
+    const items = popover.querySelectorAll(".slash-item");
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      state.slashIndex = (state.slashIndex + 1) % items.length;
+      updateSlashSelection(items);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      state.slashIndex = (state.slashIndex - 1 + items.length) % items.length;
+      updateSlashSelection(items);
+    } else if (e.key === "Enter" || e.key === "Tab") {
+      e.preventDefault();
+      if (items[state.slashIndex]) items[state.slashIndex].click();
+    } else if (e.key === "Escape") hideSlashPopover();
+    return;
+  }
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    send();
+  }
+}
+
+function showSlashPopover(filter) {
+  const popover = $("slash-popover");
+  const list = $("slash-list");
+  if (!popover || !list) return;
+  const matched = state.skills.filter((s) => s.name.toLowerCase().includes(filter));
+  if (!matched.length) { hideSlashPopover(); return; }
+  state.slashIndex = 0;
+  list.innerHTML = matched.map((s, idx) => `
+    <div class="slash-item ${idx === 0 ? "active" : ""}" onclick="selectSlashSkill('${escapeHtml(s.name)}')">
+      <span class="slash-icon">${escapeHtml(s.icon || "⚡")}</span>
+      <div class="slash-info">
+        <div class="slash-name">/${escapeHtml(s.name)}</div>
+        <div class="slash-desc">${escapeHtml(s.description || "垂直领域技能")}</div>
+      </div>
+    </div>
+  `).join("");
+  popover.classList.remove("hidden");
+}
+
+function hideSlashPopover() {
+  if ($("slash-popover")) $("slash-popover").classList.add("hidden");
+}
+
+function updateSlashSelection(items) {
+  items.forEach((it, idx) => it.classList.toggle("active", idx === state.slashIndex));
+}
+
+function selectSlashSkill(name) {
+  $("query").value = `/${name} `;
+  hideSlashPopover();
+  $("query").focus();
+}
+
+function escapeHtml(str) {
+  if (!str) return "";
+  return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 }

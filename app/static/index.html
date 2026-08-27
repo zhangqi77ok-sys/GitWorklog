@@ -3,53 +3,79 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>统一智能体平台 (Unified Agent Platform)</title>
+  <title>AgentX Studio · 统一企业智能体协同工作台</title>
   <link rel="stylesheet" href="/static/app.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
 </head>
 <body>
-  <div id="app">
-    <!-- 登录面板 -->
-    <section id="login-panel" class="panel">
-      <div class="login-card">
-        <div class="brand-logo">🤖</div>
-        <h1>统一智能体平台</h1>
-        <p class="sub">差旅多 Agent × 数据分析（Text2SQL）× 技能生态 × 知识库 RAG</p>
-        <div class="form-group">
-          <input id="username" placeholder="用户名" autocomplete="username" value="admin" />
-          <input id="password" type="password" placeholder="密码" autocomplete="current-password" value="admin123" />
-          <button id="login-btn" class="primary-btn">登 录</button>
-        </div>
-        <div id="login-error" class="error"></div>
-        <div class="login-tips">演示账号：admin / admin123</div>
-      </div>
-    </section>
+  <!-- 背景动态环境光晕 -->
+  <div class="ambient-glow glow-1"></div>
+  <div class="ambient-glow glow-2"></div>
+  <div class="ambient-glow glow-3"></div>
 
-    <!-- 主工作台 (Modern Desktop App Shell) -->
-    <section id="main-panel" class="panel hidden app-layout">
-      <!-- 左侧极简应用导航栏 (Sidebar Navigation Rail) -->
-      <aside class="app-sidebar">
-        <!-- 品牌标识与当前状态 -->
-        <div class="sidebar-brand">
-          <div class="brand-avatar">⚡</div>
-          <div class="brand-meta">
-            <div class="brand-name">AgentX Studio</div>
-            <div class="brand-status">
-              <span class="pulse-dot"></span>
-              <span class="status-text">Qwen3.7-Flash · 就绪</span>
+  <!-- 1. 登录面板 -->
+  <div id="login-panel" class="auth-wrapper">
+    <div class="auth-card">
+      <div class="auth-brand">
+        <div class="brand-badge-icon">⚡</div>
+        <h1>AgentX Studio</h1>
+        <p class="auth-tagline">新一代统一企业级智能体协同操作系统</p>
+      </div>
+
+      <div class="auth-form-body">
+        <div class="input-field-group">
+          <label>账号</label>
+          <div class="input-with-icon">
+            <span class="icon">👤</span>
+            <input id="username" type="text" placeholder="输入用户名（如 admin）" value="admin" />
+          </div>
+        </div>
+
+        <div class="input-field-group">
+          <label>密码</label>
+          <div class="input-with-icon">
+            <span class="icon">🔒</span>
+            <input id="password" type="password" placeholder="输入登录密码" value="admin123" />
+          </div>
+        </div>
+
+        <button id="login-btn" class="primary-btn submit-btn">
+          <span>进入工作台</span>
+          <span class="arrow-icon">→</span>
+        </button>
+      </div>
+
+      <div class="auth-footer-meta">
+        <span>支持 RBAC 权限体系 · 多大模型网关 · 自进化记忆图谱</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. 主控制台（登录后显示） -->
+  <div id="main-panel" class="desktop-shell hidden">
+    <!-- 顶层全景桌面布局 -->
+    <div class="app-workspace">
+      <!-- 左侧极简导航栏 (Sidebar Rail) -->
+      <aside class="sidebar-nav">
+        <!-- 品牌标识与全局模型状态 -->
+        <div class="sidebar-header">
+          <div class="sidebar-logo">
+            <div class="logo-box">⚡</div>
+            <div class="logo-info">
+              <span class="logo-title">AgentX Studio</span>
+              <span class="logo-status"><span class="status-dot online"></span>Qwen3.7-Flash · 就绪</span>
             </div>
           </div>
         </div>
 
         <!-- 导航分组与菜单 -->
-        <nav class="sidebar-nav">
+        <nav class="nav-groups">
           <div class="nav-section-title">核心工作流</div>
           <button class="nav-item active" data-tab="chat-view">
             <span class="nav-icon">💬</span>
-            <span class="nav-label">智能对话</span>
-          </button>
-          <button class="nav-item" data-tab="coding-view">
-            <span class="nav-icon">💻</span>
-            <span class="nav-label">Codex 编程</span>
+            <span class="nav-label">智能问答</span>
           </button>
           <button class="nav-item" data-tab="files-view">
             <span class="nav-icon">📁</span>
@@ -67,7 +93,7 @@
           </button>
           <button class="nav-item" data-tab="skills-view">
             <span class="nav-icon">🧩</span>
-            <span class="nav-label">技能生态管理</span>
+            <span class="nav-label">技能与 MCP 生态</span>
           </button>
 
           <div class="nav-section-title">业务与管控</div>
@@ -99,7 +125,7 @@
 
       <!-- 右侧主工作流容器 -->
       <main class="main-content">
-        <!-- 视图 1：智能对话（含左侧会话历史侧边栏） -->
+        <!-- 视图 1：智能问答（融合：对话问答 + Codex 编程工作台） -->
         <div id="chat-view" class="view-pane active chat-layout">
           <!-- 会话历史侧边栏 -->
           <aside class="session-sidebar">
@@ -113,135 +139,236 @@
             </div>
           </aside>
 
-          <!-- 聊天主区域 -->
+          <!-- 问答与编程主区域 -->
           <div class="chat-main-area">
-            <!-- 消息流区域（已彻底移除上方冗余技能栏） -->
-            <div id="messages" class="messages-container">
-              <!-- 空白引导开场卡片 -->
-              <div id="chat-empty-state" class="empty-state">
-                <div class="empty-hero-icon">✨</div>
-                <h2 class="empty-hero-title">统一企业智能体协同平台</h2>
-                <p class="empty-desc">基于各大主流大模型与自进化记忆图谱，提供差旅协同、数据分析、代码重构与知识库精准问答。在输入框键入 <code>/</code> 可随时调度垂直技能。</p>
-                
-                <div class="starter-grid">
-                  <div class="starter-card" onclick="useStarter('/data-analysis 统计上月各部门的销售额与订单总数')">
-                    <div class="starter-card-top">
-                      <span class="starter-icon">📊</span>
-                      <span class="starter-tag">Text2SQL</span>
+            <!-- 模式切换头部：智能对话 与 Codex 编程模式切换 -->
+            <div class="qa-mode-header">
+              <div class="qa-mode-switcher">
+                <button id="qa-mode-chat-btn" class="mode-btn active" onclick="switchQAMode('chat')">
+                  <span>💬 智能问答对话</span>
+                </button>
+                <button id="qa-mode-codex-btn" class="mode-btn" onclick="switchQAMode('codex')">
+                  <span>💻 Codex 编程工作台</span>
+                </button>
+              </div>
+
+              <!-- Codex 顶部工具栏（在 Codex 模式激活时展示） -->
+              <div id="codex-header-toolbar" class="codex-toolbar-group hidden">
+                <div class="project-toolbar">
+                  <span>📦 项目:</span>
+                  <select id="project-select" class="dropdown-select"></select>
+                  <span>🌿 分支:</span>
+                  <select id="branch-select" class="dropdown-select"></select>
+                  <button id="checkout-branch-btn" class="ghost-btn">切换分支</button>
+                </div>
+                <button id="launch-desktop-btn" class="primary-btn" title="启动独立原生桌面窗口">🖥️ 桌面客户端</button>
+              </div>
+            </div>
+
+            <!-- 子区域 A：智能对话视图 -->
+            <div id="qa-chat-subview" class="qa-subview-pane active">
+              <!-- 消息流区域 -->
+              <div id="messages" class="messages-container">
+                <!-- 空白引导开场卡片 -->
+                <div id="chat-empty-state" class="empty-state">
+                  <div class="empty-hero-icon">✨</div>
+                  <h2 class="empty-hero-title">统一企业智能问答与协同平台</h2>
+                  <p class="empty-desc">融合主流大模型、自进化记忆图谱与知识库深度 RAG，支持数据分析、差旅协同与 Codex 代码工程。输入框键入 <code>/</code> 即可快速调度垂直技能。</p>
+                  
+                  <div class="starter-grid">
+                    <div class="starter-card" onclick="useStarter('/data-analysis 统计上月各部门的销售额与订单总数')">
+                      <div class="starter-card-top">
+                        <span class="starter-icon">📊</span>
+                        <span class="starter-tag">Text2SQL</span>
+                      </div>
+                      <div class="starter-title">数据指标统计分析</div>
+                      <div class="starter-text">统计上月各部门的销售额与订单总数</div>
                     </div>
-                    <div class="starter-title">数据指标统计分析</div>
-                    <div class="starter-text">统计上月各部门的销售额与订单总数</div>
+
+                    <div class="starter-card" onclick="useStarter('/flight-booking 帮我查询明天北京到上海的机票')">
+                      <div class="starter-card-top">
+                        <span class="starter-icon">✈️</span>
+                        <span class="starter-tag">差旅预订</span>
+                      </div>
+                      <div class="starter-title">智能航班比价预订</div>
+                      <div class="starter-text">查询明天北京到上海的合规机票并推荐</div>
+                    </div>
+
+                    <div class="starter-card" onclick="useStarter('/hotel-booking 帮我预订下周上海陆家嘴附近的差旅标准酒店')">
+                      <div class="starter-card-top">
+                        <span class="starter-icon">🏨</span>
+                        <span class="starter-tag">住宿推荐</span>
+                      </div>
+                      <div class="starter-title">商圈协议酒店推荐</div>
+                      <div class="starter-text">推荐上海陆家嘴附近的差旅标准协议酒店</div>
+                    </div>
+
+                    <div class="starter-card" onclick="switchQAMode('codex')">
+                      <div class="starter-card-top">
+                        <span class="starter-icon">💻</span>
+                        <span class="starter-tag">Codex 编程</span>
+                      </div>
+                      <div class="starter-title">代码重构与架构设计</div>
+                      <div class="starter-text">基于当前项目分支上下文进行编程开发</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 悬浮指令输入框 -->
+              <div class="composer-container">
+                <!-- Slash 指令弹窗 -->
+                <div id="slash-popover" class="slash-popover hidden">
+                  <div class="slash-header">⚡ 快捷技能调度 (键入 ↑↓ 选择，Tab/Enter 确认)</div>
+                  <div id="slash-list" class="slash-list"></div>
+                </div>
+
+                <!-- 知识库多级选择弹窗 (全库 / 单库 / 单文件) -->
+                <div id="kb-select-modal" class="kb-select-popover hidden">
+                  <div class="kb-popover-header">
+                    <div class="kb-popover-title">📚 选择关联知识库范围</div>
+                    <div class="kb-popover-actions">
+                      <button id="kb-select-all-btn" class="text-btn">全选</button>
+                      <button id="kb-clear-all-btn" class="text-btn">清空</button>
+                      <button id="close-kb-popover-btn" class="close-icon-btn">✕</button>
+                    </div>
                   </div>
 
-                  <div class="starter-card" onclick="useStarter('/flight-booking 帮我查询明天北京到上海的机票')">
-                    <div class="starter-card-top">
-                      <span class="starter-icon">✈️</span>
-                      <span class="starter-tag">差旅预订</span>
-                    </div>
-                    <div class="starter-title">智能航班比价预订</div>
-                    <div class="starter-text">查询明天北京到上海的合规机票并推荐</div>
+                  <!-- 全库检索主复选框 -->
+                  <div class="kb-all-selector-bar">
+                    <label class="checkbox-label kb-master-label">
+                      <input type="checkbox" id="kb-check-all-scope" />
+                      <span class="kb-master-text">🌟 检索全部知识库（全库知识检索）</span>
+                    </label>
                   </div>
 
-                  <div class="starter-card" onclick="useStarter('/hotel-booking 推荐上海陆家嘴附近的差旅协议酒店')">
-                    <div class="starter-card-top">
-                      <span class="starter-icon">🏨</span>
-                      <span class="starter-tag">住宿推荐</span>
-                    </div>
-                    <div class="starter-title">商圈协议酒店推荐</div>
-                    <div class="starter-text">推荐上海陆家嘴附近的差旅标准协议酒店</div>
+                  <div class="kb-search-box">
+                    <input id="kb-search-input" placeholder="搜索知识库文档..." />
                   </div>
+                  <div id="kb-file-list" class="kb-file-list">
+                    <div class="empty-tip">加载知识库文档中...</div>
+                  </div>
+                </div>
 
-                  <div class="starter-card" onclick="useStarter('/codex 帮我重构项目中的异常处理逻辑')">
-                    <div class="starter-card-top">
-                      <span class="starter-icon">💻</span>
-                      <span class="starter-tag">Codex 编程</span>
+                <!-- 知识库已挂载 Chips 标签条 -->
+                <div id="kb-selected-chips" class="kb-selected-chips hidden"></div>
+
+                <div class="composer-inner">
+                  <textarea id="query" rows="2" placeholder="输入业务问题，或键入 / 唤起专属技能（如 /flight-booking、/codex）..."></textarea>
+                  <div class="composer-bottom-bar">
+                    <div class="composer-left-tools">
+                      <input type="file" id="chat-file-input" class="hidden" accept=".txt,.md,.pdf,.docx,.csv,.json,.xlsx" />
+                      <button id="open-kb-btn" class="tool-btn" title="勾选关联知识库与参考文档">
+                        <span class="tool-icon">📚</span>
+                        <span>知识库</span>
+                        <span id="kb-badge-count" class="kb-badge-count hidden">0</span>
+                      </button>
+                      <button id="attach-file-btn" class="tool-btn" title="上传本地文档">
+                        <span class="tool-icon">📎</span>
+                        <span>上传</span>
+                      </button>
                     </div>
-                    <div class="starter-title">代码重构与架构设计</div>
-                    <div class="starter-text">基于当前项目分支上下文进行编程开发</div>
+                    <div class="composer-right-actions">
+                      <button id="interrupt-btn" class="ghost-btn hidden danger">中 断</button>
+                      <button id="send-btn" class="send-btn" title="发送指令 (Enter)">
+                        <span>发送</span>
+                        <span class="send-icon">↑</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
 
-
-            <!-- 底部输入区域 -->
-            <div class="composer-container">
-              <!-- Slash Command 快捷技能悬浮选单 -->
-              <div id="slash-popover" class="slash-popover hidden">
-                <div class="slash-header">⚡ 快捷技能指令 (点击或键盘选择)</div>
-                <div id="slash-list" class="slash-list"></div>
-              </div>
-
-              <!-- 知识库多选弹层 -->
-              <div id="kb-popover" class="kb-popover hidden">
-                <div class="kb-popover-header">
-                  <span class="kb-popover-title">📚 选择关联知识库参考文档</span>
-                  <div class="kb-popover-actions">
-                    <button id="kb-select-all-btn" class="text-btn">全选</button>
-                    <button id="kb-clear-all-btn" class="text-btn">清空</button>
-                    <button id="kb-close-btn" class="icon-btn">✕</button>
+            <!-- 子区域 B：Codex 编程工作台视图 -->
+            <div id="qa-codex-subview" class="qa-subview-pane hidden">
+              <div class="coding-workspace-grid">
+                <!-- 左侧：工程文件树 -->
+                <div class="code-tree-pane">
+                  <div class="code-pane-title">📁 工程文件目录</div>
+                  <div id="project-tree-list" class="project-tree-list">
+                    <div class="empty-tip">加载工程目录树中...</div>
                   </div>
                 </div>
-                <div class="kb-search-box">
-                  <input id="kb-search-input" placeholder="搜索知识库文档..." />
-                </div>
-                <div id="kb-file-list" class="kb-file-list">
-                  <div class="empty-tip">加载知识库文档中...</div>
-                </div>
-              </div>
 
-              <!-- 知识库已挂载 Chips 标签条 -->
-              <div id="kb-selected-chips" class="kb-selected-chips hidden"></div>
-
-              <div class="composer-inner">
-                <textarea id="query" rows="2" placeholder="输入业务问题，或键入 / 唤起专属技能（如 /flight-booking、/codex）..."></textarea>
-                <div class="composer-bottom-bar">
-                  <div class="composer-left-tools">
-                    <input type="file" id="chat-file-input" class="hidden" accept=".txt,.md,.pdf,.docx,.csv,.json,.xlsx" />
-                    <button id="open-kb-btn" class="tool-btn" title="勾选关联知识库与参考文档">
-                      <span class="tool-icon">📚</span>
-                      <span>知识库</span>
-                      <span id="kb-badge-count" class="kb-badge-count hidden">0</span>
-                    </button>
-                    <button id="attach-file-btn" class="tool-btn" title="上传本地文档">
-                      <span class="tool-icon">📎</span>
-                      <span>上传</span>
-                    </button>
+                <!-- 中间：代码编辑器与预览 -->
+                <div class="code-editor-pane">
+                  <div class="editor-header">
+                    <span id="current-file-path" class="current-file-label">未选择文件</span>
+                    <div class="btn-group">
+                      <button id="save-code-btn" class="primary-btn" style="padding: 4px 12px; font-size: 12px;">💾 保存文件</button>
+                    </div>
                   </div>
-                  <div class="composer-right-actions">
-                    <button id="interrupt-btn" class="ghost-btn hidden danger">中 断</button>
-                    <button id="send-btn" class="send-btn" title="发送指令 (Enter)">
-                      <span>发送</span>
-                      <span class="send-icon">↑</span>
-                    </button>
+                  <textarea id="code-editor-area" class="code-editor-textarea" placeholder="从左侧文件树选择文件进行查看与编辑..."></textarea>
+                </div>
+
+                <!-- 右侧：Codex 编程助手 -->
+                <div class="codex-chat-pane">
+                  <div class="code-pane-title">🤖 Codex 编程智能体</div>
+                  <div class="codex-quick-prompts">
+                    <button class="starter-tag" onclick="useCodexPrompt('请为当前选中的代码文件编写完整的 PyTest 单元测试用例')">🧪 生成单测</button>
+                    <button class="starter-tag" onclick="useCodexPrompt('请对当前代码进行性能优化与异常边界重构')">⚡ 优化重构</button>
+                    <button class="starter-tag" onclick="useCodexPrompt('请对当前模块进行架构分析与规范审查')">🔍 架构审查</button>
+                  </div>
+                  <div id="codex-messages" class="codex-messages-box">
+                    <div class="empty-tip">在下方输入您的开发需求，Codex 将基于当前项目与分支为您编写代码！</div>
+                  </div>
+                  <div class="codex-input-box">
+                    <textarea id="codex-query-input" placeholder="输入编程需求（如：帮我实现一个新功能...）"></textarea>
+                    <button id="codex-send-btn" class="primary-btn">发送</button>
                   </div>
                 </div>
               </div>
             </div>
           </div>
-
         </div>
 
-        <!-- 视图 2：技能管理 -->
+        <!-- 视图 2：技能与 MCP 生态管理 -->
         <div id="skills-view" class="view-pane">
           <div class="pane-header">
             <div>
-              <h2>🧩 垂直领域技能生态管理</h2>
-              <p class="pane-sub">支持在线新增、导入（ZIP/MD/JSON）、编辑与删除技能，问答时支持通过 <code>/skill-name</code> 显式指定或按语义自动调用。</p>
+              <h2>🧩 技能生态与 Model Context Protocol (MCP) 管理</h2>
+              <p class="pane-sub">统一管理垂直领域 Agent Skills (SOP 业务规范) 与 MCP 协议运行时服务 (stdio/SSE 外部工具动态调度)。</p>
             </div>
-            <div class="header-actions">
-              <input type="file" id="skill-import-input" class="hidden" accept=".zip,.md,.json" />
-              <button id="import-skill-btn" class="ghost-btn">📥 导入技能包 (ZIP/MD/JSON)</button>
-              <button id="add-skill-btn" class="primary-btn">➕ 新建技能</button>
-              <button id="sync-skills-btn" class="ghost-btn">🔄 从磁盘同步 (Sync FS)</button>
+            <!-- 生态分类切换器 -->
+            <div class="pill-tabs">
+              <button id="eco-tab-skills-btn" class="pill-tab-btn active" onclick="switchEcoTab('skills')">🧩 垂直 Agent Skills (16)</button>
+              <button id="eco-tab-mcp-btn" class="pill-tab-btn" onclick="switchEcoTab('mcp')">🔌 MCP 协议服务 (<span id="mcp-count-badge">6</span>)</button>
             </div>
           </div>
-          <div id="skills-grid" class="skills-grid">
-            <div class="loading-tip">正在加载技能列表...</div>
+
+          <!-- 子面板 A: 垂直 Agent Skills -->
+          <div id="eco-subpane-skills" class="eco-subpane active">
+            <div class="pane-header" style="border-bottom: none; margin-bottom: 8px; padding-bottom: 0;">
+              <span style="font-size: 13px; font-weight: 700; color: var(--text-main);">垂直领域业务技能库 (Agent SOP Prompt / Markdown)</span>
+              <div class="btn-group">
+                <input type="file" id="skill-file-input" class="hidden" accept=".zip,.md,.json" />
+                <button id="import-skill-btn" class="ghost-btn">📥 导入技能包 (ZIP/MD/JSON)</button>
+                <button id="create-skill-btn" class="primary-btn">➕ 新建技能</button>
+                <button id="sync-skills-btn" class="ghost-btn">🔄 从磁盘同步</button>
+              </div>
+            </div>
+            <div id="skills-grid" class="skills-grid" style="margin-top: 10px;">
+              <div class="empty-tip">加载垂直技能生态中...</div>
+            </div>
+          </div>
+
+          <!-- 子面板 B: MCP 协议服务管理 -->
+          <div id="eco-subpane-mcp" class="eco-subpane hidden">
+            <div class="pane-header" style="border-bottom: none; margin-bottom: 8px; padding-bottom: 0;">
+              <span style="font-size: 13px; font-weight: 700; color: var(--text-main);">Model Context Protocol (MCP) 运行时服务与外部工具集成</span>
+              <div class="btn-group">
+                <button id="create-mcp-btn" class="primary-btn">➕ 注册 MCP 服务</button>
+                <button id="refresh-mcp-btn" class="ghost-btn">🔄 刷新 MCP 状态</button>
+              </div>
+            </div>
+            <div id="mcp-grid" class="skills-grid" style="margin-top: 10px;">
+              <div class="empty-tip">加载 MCP 协议服务中...</div>
+            </div>
           </div>
         </div>
 
-        <!-- 视图 3：企业知识库与文档 RAG -->
+        <!-- 视图 3：知识库与 RAG -->
         <div id="files-view" class="view-pane">
           <div class="pane-header">
             <div>
@@ -249,33 +376,33 @@
               <p class="pane-sub">支持按业务主题建立多个专属知识库、归集并解析业务文档、父子双层分片混合检索与智能体 RAG 问答。</p>
             </div>
             <div class="btn-group">
-              <input type="file" id="knowledge-file-input" class="hidden" accept=".txt,.md,.pdf,.docx,.csv,.json,.xlsx" />
               <button id="create-kb-btn" class="primary-btn">➕ 新建知识库</button>
-              <button id="upload-knowledge-btn" class="ghost-btn">📤 上传文档至当前库</button>
+              <button id="upload-file-btn" class="ghost-btn">📤 上传文档至当前库</button>
             </div>
           </div>
 
-          <!-- 知识库双列管理面板 -->
-          <div class="kb-management-grid">
+          <div class="kb-workspace-layout">
             <!-- 左侧：知识库分类列表 -->
-            <div class="kb-sidebar-col">
-              <div class="kb-col-header">
-                <h3>📚 知识库列表 (<span id="kb-count-label">0</span>)</h3>
-                <span class="memory-hint">按主题分类归集</span>
+            <div class="kb-sidebar-pane">
+              <div class="kb-sidebar-title-row">
+                <span class="kb-title-label">📚 知识库列表</span>
+                <span class="kb-count-badge" id="kb-total-count">0</span>
               </div>
-              <div id="kb-list-container" class="kb-cards-container">
+              <div id="kb-list-container" class="kb-list-container">
                 <div class="empty-tip">加载知识库列表中...</div>
               </div>
             </div>
 
-            <!-- 右侧：当前知识库文档列表与操作 -->
-            <div class="kb-content-col">
+            <!-- 右侧：当前选中知识库详情与文档管理 -->
+            <div class="kb-detail-pane">
               <div class="current-kb-banner">
-                <div>
+                <div class="kb-banner-left">
                   <h3 id="current-kb-header-title">默认知识库</h3>
-                  <p id="current-kb-header-desc" style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">通用知识库与常用参考文档集合</p>
+                  <p id="current-kb-header-desc" class="kb-banner-sub">通用知识库与常用参考文档集合</p>
                 </div>
-                <span id="current-kb-doc-stats" class="badge">0 篇文档 · 0 KB</span>
+                <div class="kb-banner-right">
+                  <span id="current-kb-stat-badge" class="kb-stat-badge">0 篇文档</span>
+                </div>
               </div>
 
               <!-- 拖拽上传区 -->
@@ -309,7 +436,7 @@
                       <th>大小</th>
                       <th>内容摘要</th>
                       <th>上传时间</th>
-                      <th>操作</th>
+                      <th style="min-width: 220px;">操作 (分片 / 向量 / 问答)</th>
                     </tr>
                   </thead>
                   <tbody id="files-tbody">
@@ -320,7 +447,6 @@
             </div>
           </div>
         </div>
-
 
         <!-- 视图 4：差旅看板 -->
         <div id="travel-view" class="view-pane">
@@ -364,28 +490,25 @@
                 <tr>
                   <th>用户 ID</th>
                   <th>用户名</th>
-                  <th>用户昵称</th>
-                  <th>角色</th>
-                  <th>归属部门</th>
-                  <th>状态</th>
-                  <th>创建时间</th>
+                  <th>角色 (Role)</th>
+                  <th>所属部门</th>
+                  <th>数据权限范围</th>
+                  <th>操作</th>
                 </tr>
               </thead>
               <tbody id="users-tbody">
-                <tr><td colspan="7" class="empty-cell">加载用户列表中...</td></tr>
+                <tr><td colspan="6" class="empty-cell">加载用户列表中...</td></tr>
               </tbody>
             </table>
           </div>
         </div>
 
-        <!-- 视图 6：用户专属知识图谱与长期记忆 -->
+        <!-- 视图 6：用户画像与长期记忆图谱 -->
         <div id="memory-view" class="view-pane">
           <div class="pane-header">
             <div>
               <h2>🧠 用户专属画像图谱与长期记忆</h2>
-              <p class="pane-sub">
-                大模型在每次对话后自动分析并学习您的<strong>出行偏好、常驻城市、业务关注点与合规约束</strong>，并以知识图谱三元组持久化沉淀。后续对话将<strong>默认融入专属画像</strong>进行个性化定制回答。
-              </p>
+              <p class="pane-sub">大模型在每次对话后自动分析并学习您的出行偏好、常驻城市、业务关注点与合规约束，并以知识图谱三元组持久化沉淀。后续对话默认融入专属画像进行个性化定制回答。</p>
             </div>
             <div class="btn-group">
               <button id="add-memory-btn" class="primary-btn">➕ 添加特征/记忆</button>
@@ -394,92 +517,45 @@
             </div>
           </div>
 
-          <!-- 图谱与记忆双列面板 -->
           <div class="memory-grid-layout">
-            <!-- 左侧：动态画像特征卡片 -->
-            <div class="memory-column">
-              <div class="memory-col-header">
-                <h3>🏷️ 沉淀画像与长期特征 (<span id="memory-count-label">0</span> 项)</h3>
+            <!-- 左侧：个性化特征卡片流 -->
+            <div class="memory-cards-pane">
+              <div class="memory-pane-header">
+                <span class="memory-title">🏷️ 沉淀画像与长期特征 (<span id="mem-count-badge">0</span> 项)</span>
                 <span class="memory-hint">每次回答后自动动态学习</span>
               </div>
               <div id="memory-cards-container" class="memory-cards-container">
-                <div class="empty-tip">暂无沉淀画像，快去与智能体对话试试吧！</div>
+                <div class="empty-tip">暂无沉淀画像，与智能体进行对话即可自动提取！</div>
               </div>
             </div>
 
-            <!-- 右侧：知识图谱三元组实体网络 -->
-            <div class="memory-column">
-              <div class="memory-col-header">
-                <h3>🕸️ 知识图谱实体关系网络 (<span id="graph-count-label">0</span> 条关系)</h3>
+            <!-- 右侧：知识图谱关系实体网络表格 -->
+            <div class="memory-graph-pane">
+              <div class="memory-pane-header">
+                <span class="memory-title">🕸️ 知识图谱实体关系网络 (<span id="graph-count-badge">0</span> 条关系)</span>
                 <span class="memory-hint">权重随提及频次自适应递增</span>
               </div>
-              <div id="graph-network-container" class="graph-network-container">
-                <div class="empty-tip">知识图谱待激活</div>
+              <div class="table-container">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>实体主体 (Subject)</th>
+                      <th>关联谓词 (Predicate)</th>
+                      <th>实体客体 (Object)</th>
+                      <th>置信度</th>
+                      <th>频次</th>
+                    </tr>
+                  </thead>
+                  <tbody id="graph-tbody">
+                    <tr><td colspan="5" class="empty-cell">知识图谱待激活，问答后将自动构建实体关系网！</td></tr>
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
         </div>
 
-        <!-- 视图 7：Codex 编程工作台 -->
-        <div id="coding-view" class="view-pane">
-
-          <div class="pane-header">
-            <div>
-              <h2>💻 Codex 编程开发工作台</h2>
-              <p class="pane-sub">支持本地工程与 Git 分支选择，基于代码树上下文进行精准代码生成、重构与架构设计。</p>
-            </div>
-            <div class="btn-group">
-              <div class="project-toolbar">
-                <span style="font-size: 13px; color: var(--text-muted);">📦 项目:</span>
-                <select id="project-select" class="dropdown-select"></select>
-                <span style="font-size: 13px; color: var(--text-muted); margin-left: 10px;">🌿 分支:</span>
-                <select id="branch-select" class="dropdown-select"></select>
-                <button id="checkout-branch-btn" class="ghost-btn">切换分支</button>
-              </div>
-              <button id="launch-desktop-btn" class="primary-btn" title="启动独立原生桌面窗口">🖥️ 桌面客户端模式</button>
-            </div>
-          </div>
-
-          <div class="coding-workspace-grid">
-            <!-- 左侧：工程文件树 -->
-            <div class="code-tree-pane">
-              <div class="code-pane-title">📁 工程文件目录</div>
-              <div id="project-tree-list" class="project-tree-list">
-                <div class="empty-tip">加载工程目录树中...</div>
-              </div>
-            </div>
-
-            <!-- 中间：代码编辑器与预览 -->
-            <div class="code-editor-pane">
-              <div class="editor-header">
-                <span id="current-file-path" class="current-file-label">未选择文件</span>
-                <div class="btn-group">
-                  <button id="save-code-btn" class="primary-btn" style="padding: 4px 12px; font-size: 12px;">💾 保存文件</button>
-                </div>
-              </div>
-              <textarea id="code-editor-area" class="code-editor-textarea" placeholder="从左侧文件树选择文件进行查看与编辑..."></textarea>
-            </div>
-
-            <!-- 右侧：Codex 编程助手 -->
-            <div class="codex-chat-pane">
-              <div class="code-pane-title">🤖 Codex 编程智能体</div>
-              <div class="codex-quick-prompts">
-                <button class="starter-tag" onclick="useCodexPrompt('请为当前选中的代码文件编写完整的 PyTest 单元测试用例')">🧪 生成单测</button>
-                <button class="starter-tag" onclick="useCodexPrompt('请对当前代码进行性能优化与异常边界重构')">⚡ 优化重构</button>
-                <button class="starter-tag" onclick="useCodexPrompt('请对当前模块进行架构分析与规范审查')">🔍 架构审查</button>
-              </div>
-              <div id="codex-messages" class="codex-messages-box">
-                <div class="empty-tip">在下方输入您的开发需求，Codex 将基于当前项目与分支为您编写代码！</div>
-              </div>
-              <div class="codex-input-box">
-                <textarea id="codex-query-input" placeholder="输入编程需求（如：帮我实现一个新功能...）"></textarea>
-                <button id="codex-send-btn" class="primary-btn">发 送</button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- 视图 8：API 与 LLM 智能网关 -->
+        <!-- 视图 7：API 管理与各大模型网关 -->
         <div id="gateway-view" class="view-pane">
           <div class="pane-header">
             <div>
@@ -491,10 +567,12 @@
             </div>
           </div>
 
-          <!-- 槽位模型路由映射表 -->
-          <div class="gateway-section">
-            <h3 class="gateway-section-title">🎛️ 业务功能模型路由矩阵 (Feature Model Routing)</h3>
-            <div class="table-wrapper" style="margin-top: 10px;">
+          <!-- 模块 1：业务功能模型路由矩阵 -->
+          <div class="gateway-section-card">
+            <div class="gateway-section-header">
+              <h3>🎛️ 业务功能模型路由矩阵 (Feature Model Routing)</h3>
+            </div>
+            <div class="table-container">
               <table class="data-table">
                 <thead>
                   <tr>
@@ -502,66 +580,67 @@
                     <th>调用厂商 (Provider)</th>
                     <th>目标模型 (Model)</th>
                     <th>Temperature</th>
-                    <th>Max Tokens</th>
+                    <th>最大 Tokens</th>
                     <th>操作</th>
                   </tr>
                 </thead>
                 <tbody id="routes-tbody">
-                  <tr><td colspan="6" class="empty-cell">加载模型路由中...</td></tr>
+                  <tr><td colspan="6" class="empty-cell">加载功能模型路由规则中...</td></tr>
                 </tbody>
               </table>
             </div>
           </div>
 
-          <!-- 厂商 API 凭据与 Base URL 管理 -->
-          <div class="gateway-section" style="margin-top: 24px;">
-            <h3 class="gateway-section-title">🏭 大模型厂商接入与 API 凭据配置</h3>
-            <div id="providers-grid" class="providers-grid" style="margin-top: 12px;">
-              <div class="empty-tip">加载厂商列表中...</div>
+          <!-- 模块 2：模型厂商 API Key 与服务配置卡片 -->
+          <div class="gateway-section-card" style="margin-top: 20px;">
+            <div class="gateway-section-header">
+              <h3>🏢 预设大模型厂商网关配置 (LLM Providers)</h3>
+            </div>
+            <div id="providers-grid" class="providers-grid">
+              <div class="empty-tip">加载厂商配置中...</div>
             </div>
           </div>
         </div>
       </main>
-    </section>
+    </div>
 
+    <!-- 3. 全局弹窗体系 (Modals) -->
 
-    <!-- Modal 1: Timeline 抽屉 -->
+    <!-- Modal 1: 会话执行轨迹弹窗 -->
     <div id="timeline-modal" class="modal hidden">
+      <div class="modal-content large">
+        <div class="modal-header">
+          <h2>⏱️ 会话执行轨迹（Timeline）</h2>
+          <button class="close-modal-btn ghost-btn">✕</button>
+        </div>
+        <div id="timeline-list" class="timeline-list">
+          <div class="empty-tip">暂无执行事件</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal 2: Skill SOP 查看弹窗 -->
+    <div id="sop-modal" class="modal hidden">
       <div class="modal-content">
         <div class="modal-header">
-          <h2>⏱️ 会话执行轨迹 (Trace / Timeline)</h2>
+          <h2 id="sop-modal-title">技能规范说明 (SOP)</h2>
           <button class="close-modal-btn ghost-btn">✕</button>
         </div>
-        <div id="timeline-list" class="timeline-container">
-          <div class="empty-tip">暂无轨迹数据</div>
-        </div>
+        <div id="sop-content" class="sop-body markdown-body"></div>
       </div>
     </div>
 
-    <!-- Modal 2: Skill 详情查看 -->
-    <div id="skill-modal" class="modal hidden">
+    <!-- Modal 3: 文件预览弹窗 -->
+    <div id="preview-modal" class="modal hidden">
       <div class="modal-content large">
         <div class="modal-header">
-          <h2 id="skill-modal-title">技能详细规范</h2>
+          <h2 id="preview-filename">文件预览</h2>
           <button class="close-modal-btn ghost-btn">✕</button>
         </div>
-        <div id="skill-modal-desc" class="skill-modal-desc"></div>
-        <div class="modal-code-wrapper">
-          <pre id="skill-modal-body" class="code-box"></pre>
+        <div class="preview-meta">
+          <span id="preview-kind"></span> · <span id="preview-size"></span>
         </div>
-      </div>
-    </div>
-
-    <!-- Modal 3: 文件文本预览 -->
-    <div id="file-modal" class="modal hidden">
-      <div class="modal-content large">
-        <div class="modal-header">
-          <h2 id="file-modal-title">文件文本内容预览</h2>
-          <button class="close-modal-btn ghost-btn">✕</button>
-        </div>
-        <div class="modal-code-wrapper">
-          <pre id="file-modal-text" class="code-box"></pre>
-        </div>
+        <pre id="preview-body" class="preview-text"></pre>
       </div>
     </div>
 
@@ -573,9 +652,14 @@
           <button class="close-modal-btn ghost-btn">✕</button>
         </div>
         <div class="form-group" style="margin-top: 10px;">
-          <input id="new-user-name" placeholder="登录用户名 (如 zhangsan)" />
-          <input id="new-user-nick" placeholder="用户昵称 (如 张三)" />
-          <input id="new-user-pwd" type="password" placeholder="登录密码" value="123456" />
+          <input id="new-user-name" placeholder="用户名（如 zhangsan）" />
+          <input id="new-user-pwd" type="password" placeholder="初始密码（如 pass123）" />
+          <select id="new-user-dept" style="background: var(--bg-input); border: 1px solid var(--border); color: var(--text-main); padding: 12px; border-radius: var(--radius);">
+            <option value="1">技术研发部</option>
+            <option value="2">市场销售部</option>
+            <option value="3">财务审计部</option>
+            <option value="4">综合行政部</option>
+          </select>
           <select id="new-user-role" style="background: var(--bg-input); border: 1px solid var(--border); color: var(--text-main); padding: 12px; border-radius: var(--radius);">
             <option value="user">普通员工 (user)</option>
             <option value="manager">部门主管 (manager)</option>
@@ -638,9 +722,87 @@
         </div>
       </div>
     </div>
+
+    <!-- Modal 8: 查看分片 (Chunks) 弹窗 -->
+    <div id="chunk-modal" class="modal hidden">
+      <div class="modal-content large">
+        <div class="modal-header">
+          <div>
+            <h2 id="chunk-modal-title">🧩 文档切片详情 (Parent-Child Chunks)</h2>
+            <div id="chunk-modal-sub" class="modal-sub-meta">加载切片数据中...</div>
+          </div>
+          <button class="close-modal-btn ghost-btn">✕</button>
+        </div>
+        <div class="modal-toolbar-row">
+          <div class="pill-tabs">
+            <button id="chunk-tab-children-btn" class="pill-tab-btn active" onclick="switchChunkTab('children')">微观子分片 (Child Chunks, 250~350字)</button>
+            <button id="chunk-tab-parents-btn" class="pill-tab-btn" onclick="switchChunkTab('parents')">宏观父分片 (Parent Chunks, 1000~1500字)</button>
+          </div>
+          <input id="chunk-search-input" placeholder="🔍 快速过滤分片关键词..." oninput="filterChunkList(this.value)" />
+        </div>
+        <div id="chunk-list-body" class="chunk-list-body">
+          <div class="empty-tip">加载分片数据中...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal 9: 向量矩阵与特征维度 (Vectors) 弹窗 -->
+    <div id="vector-modal" class="modal hidden">
+      <div class="modal-content large">
+        <div class="modal-header">
+          <div>
+            <h2 id="vector-modal-title">🔮 向量特征嵌入矩阵 (Embedding Vectors)</h2>
+            <div id="vector-modal-sub" class="modal-sub-meta">加载向量矩阵中...</div>
+          </div>
+          <button class="close-modal-btn ghost-btn">✕</button>
+        </div>
+        <!-- 向量特征卡片 -->
+        <div id="vector-stats-cards" class="vector-stats-grid"></div>
+        <div id="vector-list-body" class="vector-list-body">
+          <div class="empty-tip">加载向量特征列表中...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal 10: 注册 / 编辑 MCP 服务弹窗 -->
+    <div id="mcp-edit-modal" class="modal hidden">
+      <div class="modal-content large">
+        <div class="modal-header">
+          <h2 id="mcp-modal-title">🔌 注册新的 Model Context Protocol (MCP) 服务</h2>
+          <button class="close-modal-btn ghost-btn">✕</button>
+        </div>
+        <div class="form-group" style="margin-top: 10px;">
+          <input id="new-mcp-name" placeholder="服务名称（如 PostgreSQL Database MCP）" />
+          <input id="new-mcp-desc" placeholder="服务简要描述（如 数据库结构查询与只读分析）" />
+          <div style="display: flex; gap: 10px;">
+            <select id="new-mcp-transport" style="flex: 1; background: var(--bg-input); border: 1px solid var(--border); color: var(--text-main); padding: 10px; border-radius: var(--radius);">
+              <option value="stdio">标准 I/O 协议 (stdio)</option>
+              <option value="sse">Server-Sent Events 协议 (sse/http)</option>
+            </select>
+            <input id="new-mcp-icon" placeholder="图标 Emoji（如 🗄️）" style="width: 120px;" value="🔌" />
+          </div>
+          <input id="new-mcp-cmd" placeholder="执行命令（stdio 如 npx 或 uvx；sse 如 http://localhost:8080/sse）" />
+          <input id="new-mcp-args" placeholder="启动参数（逗号分隔，如 -y, @modelcontextprotocol/server-postgres）" />
+          <button id="save-mcp-btn" class="primary-btn" style="margin-top: 10px;">注 册 MCP 服 务</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal 11: 添加本地工程目录弹窗 -->
+    <div id="project-add-modal" class="modal hidden">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>➕ 选定本地开发工程目录</h2>
+          <button class="close-modal-btn ghost-btn">✕</button>
+        </div>
+        <div class="form-group" style="margin-top: 10px;">
+          <input id="new-proj-name" placeholder="工程别名（如 前端微服务工程）" />
+          <input id="new-proj-path" placeholder="本地绝对路径（如 e:\pro\agent-learning 或 d:\projects\my-app）" />
+          <button id="save-project-btn" class="primary-btn" style="margin-top: 10px;">关 联 并 载 入 工 程</button>
+        </div>
+      </div>
+    </div>
   </div>
-
-
 
   <!-- 引入内置 Markdown 渲染引擎 -->
   <script src="/static/marked.min.js"></script>

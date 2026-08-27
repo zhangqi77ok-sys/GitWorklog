@@ -51,8 +51,10 @@ class ChatRequest(BaseModel):
     file_ids: list[str] = []
     kb_id: int | None = None
     kb_ids: list[int] = []
+    all_kb: bool = False
     # 对上一次 USER_INTERACTION 提问的答复；带上则恢复挂起的执行（P1-M6）
     resume: str | None = None
+
 
 
 
@@ -317,7 +319,18 @@ async def chat(
         from app.platform.files.rag import search_knowledge_base
 
         try:
-            if target_fids:
+            if req.all_kb:
+                # 显式全库检索：检索全部知识库的所有文档 Top-K 最相关切片
+                chunks = search_knowledge_base(
+                    session, effective_user_query, all_kb=True, top_k=6, min_score=0.05
+                )
+                if chunks:
+                    doc_parts = [
+                        f"【企业全部知识库命中段落 · 来自《{c.filename}》（相关度: {c.best_score}）】\n{c.content}"
+                        for c in chunks
+                    ]
+                    doc_context = "\n\n".join(doc_parts)
+            elif target_fids:
                 # 显式关联文档：检索关联文件的 Top-K 最相关切片
                 chunks = search_knowledge_base(
                     session, effective_user_query, file_ids=target_fids, top_k=5, min_score=0.0
@@ -356,6 +369,7 @@ async def chat(
                     doc_context = "\n\n".join(doc_parts)
 
         except Exception as exc:
+
             logger.warning("rag_retrieval_failed", error=str(exc))
 
         # 3. 提取并注入用户长期记忆与画像知识图谱

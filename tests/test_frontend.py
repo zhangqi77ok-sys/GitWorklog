@@ -12,8 +12,9 @@ client = TestClient(app)
 def test_index_served() -> None:
     resp = client.get("/")
     assert resp.status_code == 200
-    assert "统一智能体平台" in resp.text
+    assert "AgentX Studio" in resp.text
     assert "/static/app.js" in resp.text
+
 
 
 def test_static_js_served() -> None:

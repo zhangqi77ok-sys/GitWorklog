@@ -81,3 +81,21 @@ def update_file(req: SaveFileRequest, _: CurrentUser) -> R[dict[str, str]]:
         return R.ok({"file_path": req.file_path, "status": "saved"})
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+class AddProjectRequest(BaseModel):
+    name: str
+    path: str
+
+
+@router.post("/add")
+def add_project(req: AddProjectRequest, _: CurrentUser) -> R[dict[str, Any]]:
+    """添加并绑定新的本地工程目录。"""
+    from app.platform.projects.service import add_custom_project
+
+    try:
+        res = add_custom_project(req.name, req.path)
+        return R.ok(res)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+

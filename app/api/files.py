@@ -313,6 +313,8 @@ def delete_file(file_id: str, session: DbDep, _: CurrentUser) -> R[DeleteFileRes
 class RAGSearchRequest(BaseModel):
     query: str
     file_ids: list[str] = []
+    kb_id: str | None = None
+    all_kb: bool = False
     top_k: int = 4
 
 
@@ -328,13 +330,15 @@ class RAGChunkItem(BaseModel):
 
 @router.post("/rag/search")
 def search_rag(req: RAGSearchRequest, session: DbDep, _: CurrentUser) -> R[list[RAGChunkItem]]:
-    """知识库高阶 RAG 父子分片检索接口。"""
+    """知识库高阶 RAG 父子分片检索接口：支持全库、单库及单文件检索。"""
     from app.platform.files.rag import search_knowledge_base
 
     chunks = search_knowledge_base(
         session,
         query=req.query.strip(),
         file_ids=req.file_ids if req.file_ids else None,
+        kb_id=req.kb_id,
+        all_kb=req.all_kb,
         top_k=req.top_k,
     )
     return R.ok(
@@ -351,3 +355,31 @@ def search_rag(req: RAGSearchRequest, session: DbDep, _: CurrentUser) -> R[list[
             for c in chunks
         ]
     )
+
+
+@router.get("/{file_id}/chunks")
+def get_file_chunks(file_id: str, session: DbDep, _: CurrentUser) -> R[dict]:
+    """获取指定文档的父子切片详情与结构化数据列表。"""
+    rec = session.execute(
+        select(FileRecord).where(FileRecord.file_id == file_id)
+    ).scalar_one_or_none()
+    if not rec:
+        raise HTTPException(status_code=404, detail="文件不存在")
+    from app.platform.files.rag import get_file_chunks_detail
+
+    return R.ok(get_file_chunks_detail(rec))
+
+
+@router.get("/{file_id}/vectors")
+def get_file_vectors(file_id: str, session: DbDep, _: CurrentUser) -> R[dict]:
+    """获取指定文档切片的向量嵌入特征、维度及向量数值矩阵。"""
+    rec = session.execute(
+        select(FileRecord).where(FileRecord.file_id == file_id)
+    ).scalar_one_or_none()
+    if not rec:
+        raise HTTPException(status_code=404, detail="文件不存在")
+    from app.platform.files.rag import get_file_vectors_detail
+
+    return R.ok(get_file_vectors_detail(rec))
+
+

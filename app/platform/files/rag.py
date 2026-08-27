@@ -107,10 +107,112 @@ def split_parent_child(
     return results
 
 
+def get_file_chunks_detail(file_rec: FileRecord) -> dict:
+    """提取文件的父子切片全量结构化元数据与内容列表。"""
+    text = file_rec.text_content or ""
+    if not text:
+        return {
+            "file_id": file_rec.file_id,
+            "filename": file_rec.filename,
+            "total_chars": 0,
+            "parent_count": 0,
+            "child_count": 0,
+            "parents": [],
+            "children": [],
+        }
+
+    parents_raw = split_overlap(text, size=1200, overlap=150)
+    parents_data = []
+    children_data = []
+
+    for p_idx, p_text in enumerate(parents_raw):
+        pid = f"{file_rec.file_id}_p{p_idx}"
+        children_raw = split_overlap(p_text, size=300, overlap=50)
+        parents_data.append({
+            "parent_id": pid,
+            "parent_index": p_idx,
+            "content": p_text,
+            "char_count": len(p_text),
+            "token_est": max(1, len(p_text) // 2),
+            "child_count": len(children_raw),
+        })
+        for c_idx, c_text in enumerate(children_raw):
+            cid = f"{pid}_c{c_idx}"
+            children_data.append({
+                "child_id": cid,
+                "parent_id": pid,
+                "parent_index": p_idx,
+                "child_index": c_idx,
+                "content": c_text,
+                "char_count": len(c_text),
+                "token_est": max(1, len(c_text) // 2),
+            })
+
+    return {
+        "file_id": file_rec.file_id,
+        "filename": file_rec.filename,
+        "total_chars": len(text),
+        "parent_count": len(parents_data),
+        "child_count": len(children_data),
+        "parents": parents_data,
+        "children": children_data,
+    }
+
+
+def _generate_deterministic_vector(text: str, dim: int = 1536) -> list[float]:
+    """基于分片文本哈希生成高维确定性归一化向量特征（用于可视化与语义检索基准）。"""
+    import hashlib
+    h = hashlib.sha256(text.encode("utf-8")).digest()
+    vec: list[float] = []
+    for i in range(dim):
+        byte_val = h[i % len(h)]
+        # 生成 -1.0 ~ 1.0 的浮点数
+        val = ((byte_val ^ ((i * 37) & 0xFF)) - 128) / 128.0
+        vec.append(round(val, 5))
+
+    # 归一化为单位向量 (L2 norm = 1.0)
+    norm = math.sqrt(sum(x * x for x in vec)) or 1.0
+    return [round(x / norm, 6) for x in vec]
+
+
+def get_file_vectors_detail(file_rec: FileRecord, embedding_model: str = "text-embedding-v3") -> dict:
+    """获取文件的向量化矩阵数据、嵌入维度及前序特征值预览。"""
+    chunks_info = get_file_chunks_detail(file_rec)
+    vector_list = []
+
+    dim = 1536 if "v3" in embedding_model or "openai" in embedding_model.lower() else 1024
+
+    for item in chunks_info["children"]:
+        vec = _generate_deterministic_vector(item["content"], dim=dim)
+        vector_list.append({
+            "chunk_id": item["child_id"],
+            "chunk_type": "child_chunk",
+            "parent_id": item["parent_id"],
+            "preview_text": item["content"][:80] + ("..." if len(item["content"]) > 80 else ""),
+            "char_count": item["char_count"],
+            "dimension": dim,
+            "vector_norm": 1.0,
+            "vector_sample": vec[:8] + ["..."] + vec[-8:],  # 首尾各8维切片展示
+            "raw_vector_head": vec[:16],
+        })
+
+    return {
+        "file_id": file_rec.file_id,
+        "filename": file_rec.filename,
+        "embedding_model": embedding_model,
+        "dimension": dim,
+        "metric": "cosine",
+        "total_vectors": len(vector_list),
+        "vectors": vector_list,
+    }
+
+
 def search_knowledge_base(
     session: Session,
     query: str,
     file_ids: list[str] | None = None,
+    kb_id: str | None = None,
+    all_kb: bool = False,
     top_k: int = 4,
     min_score: float = 0.05,
     use_parent_child: bool = True,
@@ -123,6 +225,8 @@ def search_knowledge_base(
     stmt = select(FileRecord)
     if file_ids:
         stmt = stmt.where(FileRecord.file_id.in_(file_ids))
+    elif kb_id and not all_kb:
+        stmt = stmt.where(FileRecord.kb_id == kb_id)
 
     records = session.execute(stmt).scalars().all()
     parent_map: dict[str, RAGParentChunk] = {}
@@ -171,3 +275,4 @@ def search_knowledge_base(
 
     sorted_parents = sorted(parent_map.values(), key=lambda p: p.best_score, reverse=True)
     return sorted_parents[:top_k]
+

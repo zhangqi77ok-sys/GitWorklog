@@ -20,6 +20,7 @@ from app.api import (
     files,
     gateway,
     health,
+    mcp,
     memory,
     projects,
     session,
@@ -52,17 +53,26 @@ app = FastAPI(
 
 register_exception_handlers(app)
 
-app.include_router(health.router)
-app.include_router(auth.router)
-app.include_router(chat.router)
-app.include_router(files.router)
-app.include_router(gateway.router)
-app.include_router(memory.router)
-app.include_router(projects.router)
-app.include_router(sys.router)
-app.include_router(session.router)
-app.include_router(skills.router)
-app.include_router(travel.router)
+_routers = [
+    health.router,
+    auth.router,
+    chat.router,
+    files.router,
+    gateway.router,
+    mcp.router,
+    memory.router,
+    projects.router,
+    sys.router,
+    session.router,
+    skills.router,
+    travel.router,
+]
+
+for r in _routers:
+    app.include_router(r)
+    app.include_router(r, prefix="/api")
+
+
 
 
 # 静态前端：/static/* 资源 + / 首页
