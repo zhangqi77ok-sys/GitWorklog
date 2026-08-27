@@ -1,4 +1,5 @@
 import pytest
+import asyncio
 from fastapi.testclient import TestClient
 from app.main import app
 from app.core.eventbus import get_event_bus, PlatformEvent
@@ -15,6 +16,9 @@ from app.platform.memory.service import get_short_term_memory, get_long_term_mem
 from app.platform.graph.service import get_graph_service
 from app.platform.cockpit.registry import get_cockpit_registry
 from app.platform.token_meter.service import get_token_meter
+from app.platform.harness.service import get_harness
+from app.platform.audit.service import get_audit_skill, get_ironman_skill
+from app.platform.loop.engine import get_loop_engine
 from app.core.db import session_scope
 
 client = TestClient(app)
@@ -120,3 +124,58 @@ def test_token_meter_audit():
     assert summary["prompt_tokens"] >= 250
     assert summary["completion_tokens"] >= 150
     assert summary["total_tokens"] >= 400
+
+def test_harness_syntax_and_safety():
+    harness = get_harness()
+    # 1. 语法检查
+    ok, msg = harness.check_ast_syntax("def add(a: int, b: int) -> int: return a + b")
+    assert ok is True
+    fail_ok, fail_msg = harness.check_ast_syntax("def invalid_func(:")
+    assert fail_ok is False
+    assert "SyntaxError" in fail_msg
+
+    # 2. 路径穿越安全防护
+    safe = harness.validate_path_safety("app/utils/math.py")
+    assert safe is True
+    unsafe = harness.validate_path_safety("../../../Windows/System32/calc.exe")
+    assert unsafe is False
+
+    # 3. Diff 补丁
+    diff = harness.generate_diff("a = 1\n", "a = 2\n", "test.py")
+    assert "-a = 1" in diff
+    assert "+a = 2" in diff
+
+def test_audit_skill_and_dual_ironman():
+    # 1. 审核 Skill
+    auditor = get_audit_skill()
+    good_code = '''def calculate_total(items: list[float]) -> float:
+    """计算总额。"""
+    return sum(items)
+'''
+    res_good = auditor.inspect_code(good_code)
+    assert res_good["passed"] is True
+    assert res_good["score"] == 100
+
+    bad_code = "eval('__import__(\\'os\\').system(\\'calc\\')')"
+    res_bad = auditor.inspect_code(bad_code)
+    assert res_bad["passed"] is False
+    assert len(res_bad["violations"]) >= 1
+
+    # 2. 双向钢人对抗辩论 Skill
+    ironman = get_ironman_skill()
+    debate = ironman.conduct_debate("实现数值计算", good_code)
+    assert debate["approved"] is True
+    assert len(debate["transcript"]) >= 3
+    assert any(t["role"] == "Critic" for t in debate["transcript"])
+
+@pytest.mark.asyncio
+async def test_self_correcting_loop_engine():
+    loop_engine = get_loop_engine()
+    steps = await loop_engine.run_loop("构建高可用统计计算模块", "conv-loop-test", "antigravity", "antigravity-core")
+    assert len(steps) == 5
+    agent_names = [s["agent"] for s in steps]
+    assert "Architect" in agent_names
+    assert "Coder" in agent_names
+    assert "Tester" in agent_names
+    assert "Auditor" in agent_names
+    assert "IronMan" in agent_names

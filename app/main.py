@@ -8,6 +8,7 @@ from app.core.db import engine, Base
 from app.api.session import router as session_router
 from app.api.chat import router as chat_router
 from app.api.cockpit import router as cockpit_router
+from app.api.harness import router as harness_router
 from app.api.graph import router as graph_router
 from app.api.memory import router as memory_router
 from app.api.mesh import router as mesh_router
@@ -39,6 +40,7 @@ routers = [
     session_router,
     chat_router,
     cockpit_router,
+    harness_router,
     graph_router,
     memory_router,
     mesh_router,
