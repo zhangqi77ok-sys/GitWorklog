@@ -89,6 +89,12 @@ def get_engine() -> Engine:
             with contextlib.suppress(Exception):
                 with _engine.begin() as conn:
                     conn.execute(text("ALTER TABLE agentx_llm_provider ADD COLUMN models_json TEXT"))
+            with contextlib.suppress(Exception):
+                with _engine.begin() as conn:
+                    conn.execute(text("ALTER TABLE chat_conversation ADD COLUMN tags VARCHAR(255) DEFAULT ''"))
+            with contextlib.suppress(Exception):
+                with _engine.begin() as conn:
+                    conn.execute(text("ALTER TABLE chat_conversation ADD COLUMN status VARCHAR(32) DEFAULT 'idle'"))
         except Exception:
             import contextlib
             import os
@@ -107,7 +113,18 @@ def get_engine() -> Engine:
             with contextlib.suppress(Exception):
                 with _engine.begin() as conn:
                     conn.execute(text("ALTER TABLE agentx_llm_provider ADD COLUMN models_json TEXT"))
+            with contextlib.suppress(Exception):
+                with _engine.begin() as conn:
+                    conn.execute(text("ALTER TABLE chat_conversation ADD COLUMN tags VARCHAR(255) DEFAULT ''"))
+            with contextlib.suppress(Exception):
+                with _engine.begin() as conn:
+                    conn.execute(text("ALTER TABLE chat_conversation ADD COLUMN status VARCHAR(32) DEFAULT 'idle'"))
     return _engine
+
+
+def init_db() -> Engine:
+    """初始化数据库并创建表。"""
+    return get_engine()
 
 
 

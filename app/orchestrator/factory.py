@@ -63,10 +63,15 @@ class DomainAgentFactory:
             from app.domains.data.agent import build_data_agent
 
             return build_data_agent(self.ctx.data_tools(), model, self.checkpointer)
-        if domain == "travel":
-            from app.domains.travel.agent import build_travel_agent
+        if domain in ("coding", "codex", "travel"):
+            from langgraph.prebuilt import create_react_agent
 
-            return build_travel_agent(self.ctx.travel_tools(), model, self.checkpointer)
+            return create_react_agent(
+                model=model,
+                tools=[],
+                prompt="你是 Vite Coding 平台的高级全自主研发架构师。请针对用户的开发需求输出清晰、结构化、模块化的高质量代码及工程设计。",
+                checkpointer=self.checkpointer,
+            )
 
         if domain == "general":
             from langgraph.prebuilt import create_react_agent
@@ -74,7 +79,7 @@ class DomainAgentFactory:
             return create_react_agent(
                 model=model,
                 tools=[],
-                prompt="你是统一智能体平台的智能助手。请用清晰、结构化且友好的中文回答用户问题。涉及差旅、数据分析等专业场景时可提示用户相关指令或功能。",
+                prompt="你是 Vite Coding 平台的智能助手。请用清晰、结构化且友好的中文回答用户问题，支持全自主代码开发、多智能体协同、知识图谱与工程管理。",
                 checkpointer=self.checkpointer,
             )
         return None

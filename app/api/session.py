@@ -22,6 +22,8 @@ router = APIRouter(prefix="/session", tags=["session"])
 class ConversationBrief(BaseModel):
     conversation_id: str
     title: str
+    tags: list[str] = []
+    status: str = "idle"  # idle (green), running (blue), failed (red)
 
 
 class MessageBrief(BaseModel):
@@ -32,6 +34,14 @@ class MessageBrief(BaseModel):
 
 class RenameRequest(BaseModel):
     title: str
+
+
+class TagsRequest(BaseModel):
+    tags: list[str]
+
+
+class StatusRequest(BaseModel):
+    status: str
 
 
 class TimelineEventBrief(BaseModel):
@@ -53,8 +63,55 @@ class InterruptResponse(BaseModel):
 def list_sessions(session: DbDep, user: CurrentUser) -> R[list[ConversationBrief]]:
     convs = service.list_conversations(session, user.id)
     return R.ok(
-        [ConversationBrief(conversation_id=c.conversation_id, title=c.title) for c in convs]
+        [
+            ConversationBrief(
+                conversation_id=c.conversation_id,
+                title=c.title,
+                tags=[t for t in (c.tags or "").split(",") if t],
+                status=c.status or "idle",
+            )
+            for c in convs
+        ]
     )
+
+
+@router.get("/search")
+def search_sessions(
+    q: str = "", session: DbDep = None, user: CurrentUser = None
+) -> R[list[ConversationBrief]]:
+    """搜索会话（支持标题与标签模糊检索，用于 @ 跨会话引用）。"""
+    convs = service.search_conversations(session, user.id, q)
+    return R.ok(
+        [
+            ConversationBrief(
+                conversation_id=c.conversation_id,
+                title=c.title,
+                tags=[t for t in (c.tags or "").split(",") if t],
+                status=c.status or "idle",
+            )
+            for c in convs
+        ]
+    )
+
+
+@router.post("/{conversation_id}/tags")
+def set_tags(
+    conversation_id: str, req: TagsRequest, session: DbDep, user: CurrentUser
+) -> R[dict[str, Any]]:
+    """更新会话标签集。"""
+    _require_own(session, user, conversation_id)
+    service.update_conversation_tags(session, conversation_id, req.tags)
+    return R.ok({"conversation_id": conversation_id, "tags": req.tags})
+
+
+@router.post("/{conversation_id}/status")
+def set_status(
+    conversation_id: str, req: StatusRequest, session: DbDep, user: CurrentUser
+) -> R[dict[str, Any]]:
+    """更新会话状态灯（idle 绿色 / running 蓝色 / failed 红色）。"""
+    _require_own(session, user, conversation_id)
+    service.update_conversation_status(session, conversation_id, req.status)
+    return R.ok({"conversation_id": conversation_id, "status": req.status})
 
 
 def _require_own(session: DbDep, user: SysUser, conversation_id: str) -> None:

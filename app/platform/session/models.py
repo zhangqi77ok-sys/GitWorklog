@@ -19,6 +19,8 @@ class ChatConversation(Base, TimestampMixin):
     conversation_id: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     user_id: Mapped[int] = mapped_column(index=True)
     title: Mapped[str] = mapped_column(String(255), default="新对话")
+    tags: Mapped[str] = mapped_column(String(255), default="")  # 逗号分隔标签，如 "feat,bugfix,review"
+    status: Mapped[str] = mapped_column(String(32), default="idle")  # idle (green), running (blue), failed (red)
 
 
 class ChatMessage(Base, TimestampMixin):

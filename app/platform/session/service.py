@@ -83,6 +83,37 @@ def rename_conversation(session: Session, conversation_id: str, title: str) -> N
         session.commit()
 
 
+def update_conversation_tags(session: Session, conversation_id: str, tags: list[str]) -> None:
+    conv = session.execute(
+        select(ChatConversation).where(ChatConversation.conversation_id == conversation_id)
+    ).scalar_one_or_none()
+    if conv is not None:
+        conv.tags = ",".join(tags)
+        session.commit()
+
+
+def update_conversation_status(session: Session, conversation_id: str, status: str) -> None:
+    conv = session.execute(
+        select(ChatConversation).where(ChatConversation.conversation_id == conversation_id)
+    ).scalar_one_or_none()
+    if conv is not None:
+        conv.status = status
+        session.commit()
+
+
+def search_conversations(session: Session, user_id: int, query: str) -> list[ChatConversation]:
+    query_str = f"%{query}%"
+    stmt = (
+        select(ChatConversation)
+        .where(
+            ChatConversation.user_id == user_id,
+            (ChatConversation.title.like(query_str) | ChatConversation.tags.like(query_str)),
+        )
+        .order_by(ChatConversation.id.desc())
+    )
+    return list(session.execute(stmt).scalars())
+
+
 def delete_conversation(session: Session, conversation_id: str) -> None:
     """删除会话及其所有关联消息。"""
     from sqlalchemy import delete

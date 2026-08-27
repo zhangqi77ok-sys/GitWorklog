@@ -15,7 +15,7 @@ from app.platform.auth.service import kick_user
 from app.platform.auth.service import login as login_service
 from app.platform.auth.service import logout as logout_service
 
-router = APIRouter(prefix="/auth", tags=["auth"])
+router = APIRouter(tags=["auth"])
 
 
 class LoginRequest(BaseModel):
@@ -35,18 +35,21 @@ class UserInfo(BaseModel):
     nickname: str
 
 
-@router.post("/login")
+@router.post("/api/auth/login")
+@router.post("/auth/login")
 def login(req: LoginRequest, session: DbDep) -> R[LoginResponse]:
     user, token = login_service(session, req.username, req.password)
     return R.ok(LoginResponse(token=token, user_id=user.id, username=user.username))
 
 
-@router.get("/me")
+@router.get("/api/auth/me")
+@router.get("/auth/me")
 def me(user: CurrentUser) -> R[UserInfo]:
     return R.ok(UserInfo(user_id=user.id, username=user.username, nickname=user.nickname))
 
 
-@router.post("/logout")
+@router.post("/api/auth/logout")
+@router.post("/auth/logout")
 def logout(
     user: CurrentUser,
     authorization: Annotated[str | None, Header()] = None,
@@ -58,6 +61,8 @@ def logout(
     return R.ok(None)
 
 
+@router.post("/api/auth/kick/{user_id}", dependencies=[Depends(require_role("admin"))])
+@router.post("/auth/kick/{user_id}", dependencies=[Depends(require_role("admin"))])
 @router.post("/kick/{user_id}", dependencies=[Depends(require_role("admin"))])
 def kick(user_id: int) -> R[int]:
     """踢人下线（管理员）：吊销该用户全部会话，令牌即刻失效不必等过期。"""

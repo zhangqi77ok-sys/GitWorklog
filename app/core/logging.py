@@ -48,5 +48,8 @@ def configure_logging(debug: bool = True) -> None:
     )
 
 
-def get_logger(name: str | None = None) -> Any:
+def get_logger(name: str = "") -> structlog.stdlib.BoundLogger:
     return structlog.get_logger(name)
+
+
+setup_logging = configure_logging

@@ -1,1987 +1,966 @@
-// AgentX Studio - Enterprise Autonomous Agent Operating System
-const $ = (id) => document.getElementById(id);
-function showToast(msg, type = "info") {
-  let c = $("toast-container");
-  if (!c) {
-    c = document.createElement("div");
-    c.id = "toast-container";
-    c.className = "toast-container";
-    document.body.appendChild(c);
-  }
-  const toast = document.createElement("div");
-  toast.className = `toast-card toast-${type}`;
-  toast.textContent = msg;
-  c.appendChild(toast);
-  setTimeout(() => {
-    toast.style.opacity = "0";
-    toast.style.transition = "opacity 0.3s";
-    setTimeout(() => toast.remove(), 300);
-  }, 3500);
-}
-window.alert = (msg) => showToast(msg);
+// Vite Coding Platform - Desktop Multi-Agent Studio Controller
 const state = {
-  token: localStorage.getItem("token"),
-  user: localStorage.getItem("user") || "admin",
-  currentTab: "chat-view",
-  qaMode: "chat",
-  ecoTab: "skills",
-  activeConversationId: null,
+  token: localStorage.getItem("auth_token") || "",
+  currentUser: null,
+  currentProject: "e:\\pro\\agent-learning",
+  currentBranch: "main",
   sessions: [],
-  skills: [],
-  mcpServers: [],
-  files: [],
-  knowledgeBases: [],
-  activeKbId: null,
-  allKbSelected: false,
-  selectedKbIds: [],
-  selectedKbFiles: [],
-  attachedFile: null,
-  slashIndex: -1,
-  editingSkillName: null,
-  projects: [],
-  currentProject: null,
-  currentBranch: null,
-  currentFilePath: null,
-  currentChunkData: null,
-  currentChunkTab: "children",
-  currentVectorData: null,
-  providers: [],
-  routes: [],
-  selectedChatProvider: "dashscope",
-  selectedChatModel: "qwen3.7-flash",
-  selectedCodexProvider: "dashscope",
-  selectedCodexModel: "qwen3.7-flash",
+  currentSessionId: "",
+  activeFilePath: "",
+  activeFileContent: "",
+  activeTagFilter: "",
+  graphData: { nodes: [], edges: [] },
+  isGenerating: false,
 };
 
-window.addEventListener("DOMContentLoaded", () => {
-  initEventListeners();
-  if (state.token) showMainPanel();
-  else showLoginPanel();
-});
+const $ = (id) => document.getElementById(id);
 
-function initEventListeners() {
-  if ($("login-btn")) $("login-btn").onclick = login;
-  if ($("logout-btn")) $("logout-btn").onclick = logout;
-  if ($("password")) $("password").onkeydown = (e) => e.key === "Enter" && login();
-  document.querySelectorAll(".sidebar-nav .nav-item").forEach((btn) => {
-    btn.onclick = () => switchTab(btn.dataset.tab);
-  });
-  const q = $("query");
-  if (q) { q.oninput = handleQueryInput; q.onkeydown = handleQueryKeydown; }
-  if ($("send-btn")) $("send-btn").onclick = send;
-  if ($("timeline-btn")) $("timeline-btn").onclick = showTimeline;
-  if ($("new-chat-btn")) $("new-chat-btn").onclick = startNewChat;
-
-  if ($("open-kb-btn")) $("open-kb-btn").onclick = toggleKbPopover;
-  if ($("close-kb-popover-btn")) $("close-kb-popover-btn").onclick = hideKbPopover;
-  if ($("kb-select-all-btn")) $("kb-select-all-btn").onclick = selectAllKbFiles;
-  if ($("kb-clear-all-btn")) $("kb-clear-all-btn").onclick = clearSelectedKbFiles;
-  if ($("kb-search-input")) $("kb-search-input").oninput = (e) => renderKbPopover(e.target.value.trim());
-  if ($("kb-check-all-scope")) $("kb-check-all-scope").onchange = handleMasterKbToggle;
-
-  if ($("chat-provider-select")) {
-    $("chat-provider-select").onchange = (e) => {
-      state.selectedChatProvider = e.target.value;
-      updateChatModelOptions();
-    };
-  }
-  if ($("chat-model-select")) {
-    $("chat-model-select").onchange = (e) => {
-      state.selectedChatModel = e.target.value;
-    };
-  }
-
-  if ($("codex-provider-select")) {
-    $("codex-provider-select").onchange = (e) => {
-      state.selectedCodexProvider = e.target.value;
-      updateCodexModelOptions();
-    };
-  }
-  if ($("codex-model-select")) {
-    $("codex-model-select").onchange = (e) => {
-      state.selectedCodexModel = e.target.value;
-    };
-  }
-
-  if ($("attach-file-btn")) $("attach-file-btn").onclick = () => $("chat-file-input").click();
-  if ($("chat-file-input")) $("chat-file-input").onchange = handleChatFileUpload;
-
-  if ($("create-kb-btn")) $("create-kb-btn").onclick = () => $("kb-create-modal").classList.remove("hidden");
-  if ($("save-kb-btn")) $("save-kb-btn").onclick = saveNewKnowledgeBase;
-  if ($("upload-file-btn")) $("upload-file-btn").onclick = () => $("drop-zone").click();
-  if ($("drop-zone")) {
-    $("drop-zone").onclick = () => {
-      let fileIn = document.getElementById("kb-direct-file-input");
-      if (!fileIn) {
-        fileIn = document.createElement("input");
-        fileIn.id = "kb-direct-file-input";
-        fileIn.type = "file";
-        fileIn.className = "hidden";
-        fileIn.onchange = handleDirectKbFileUpload;
-        document.body.appendChild(fileIn);
-      }
-      fileIn.click();
-    };
-  }
-  if ($("rag-search-btn")) $("rag-search-btn").onclick = runRAGSearch;
-  if ($("rag-query-input")) $("rag-query-input").onkeydown = (e) => e.key === "Enter" && runRAGSearch();
-
-  if ($("create-skill-btn")) $("create-skill-btn").onclick = openCreateSkillModal;
-  if ($("save-skill-btn")) $("save-skill-btn").onclick = saveSkill;
-  if ($("sync-skills-btn")) $("sync-skills-btn").onclick = syncSkills;
-  if ($("import-skill-btn")) $("import-skill-btn").onclick = () => $("skill-file-input").click();
-  if ($("skill-file-input")) $("skill-file-input").onchange = handleSkillImportUpload;
-  if ($("create-mcp-btn")) $("create-mcp-btn").onclick = () => $("mcp-edit-modal").classList.remove("hidden");
-  if ($("save-mcp-btn")) $("save-mcp-btn").onclick = saveMcpServer;
-  if ($("refresh-mcp-btn")) $("refresh-mcp-btn").onclick = loadMcpServers;
-
-  if ($("add-memory-btn")) $("add-memory-btn").onclick = () => $("memory-add-modal").classList.remove("hidden");
-  if ($("save-memory-btn")) $("save-memory-btn").onclick = saveUserMemory;
-  if ($("refresh-memory-btn")) $("refresh-memory-btn").onclick = loadUserMemoryAndGraph;
-  if ($("clear-memory-btn")) $("clear-memory-btn").onclick = clearUserMemory;
-
-  if ($("project-select")) $("project-select").onchange = (e) => switchProject(e.target.value);
-  if ($("checkout-branch-btn")) $("checkout-branch-btn").onclick = checkoutCurrentBranch;
-  if ($("save-code-btn")) $("save-code-btn").onclick = saveActiveFileCode;
-  if ($("run-code-btn")) $("run-code-btn").onclick = runActiveFileCode;
-  if ($("toggle-term-btn")) $("toggle-term-btn").onclick = toggleTerminalDrawer;
-  if ($("code-editor-area")) {
-    $("code-editor-area").addEventListener("keydown", (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
-        e.preventDefault();
-        saveActiveFileCode();
-      }
-    });
-  }
-  if ($("codex-send-btn")) $("codex-send-btn").onclick = sendCodexChat;
-  if ($("codex-query-input")) {
-    $("codex-query-input").onkeydown = (e) => {
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        sendCodexChat();
-      }
-    };
-  }
-  if ($("add-project-btn")) $("add-project-btn").onclick = () => $("project-add-modal").classList.remove("hidden");
-  if ($("save-project-btn")) $("save-project-btn").onclick = saveCustomProject;
-  if ($("load-direct-path-btn")) $("load-direct-path-btn").onclick = loadDirectPathProject;
-  if ($("codex-direct-path-input")) {
-    $("codex-direct-path-input").onkeydown = (e) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        loadDirectPathProject();
-      }
-    };
-  }
-  if ($("launch-desktop-btn")) $("launch-desktop-btn").onclick = launchDesktopClient;
-
-  if ($("refresh-gateway-btn")) $("refresh-gateway-btn").onclick = loadGatewayConfig;
-  if ($("sync-all-models-btn")) $("sync-all-models-btn").onclick = syncAllOfficialModels;
-  if ($("save-custom-model-btn")) $("save-custom-model-btn").onclick = saveCustomModel;
-
-  if ($("add-user-btn")) $("add-user-btn").onclick = () => $("user-modal").classList.remove("hidden");
-  if ($("save-user-btn")) $("save-user-btn").onclick = saveNewUser;
-
-  document.querySelectorAll(".modal .close-modal-btn").forEach((btn) => {
-    btn.onclick = () => btn.closest(".modal").classList.add("hidden");
-  });
-}
-
-function showLoginPanel() {
-  $("login-panel").classList.remove("hidden");
-  $("main-panel").classList.add("hidden");
-}
-
-function showMainPanel() {
-  $("login-panel").classList.add("hidden");
-  $("main-panel").classList.remove("hidden");
-  if ($("who")) $("who").textContent = state.user || "admin";
-  loadSessions();
-  loadKnowledgeBases();
-  loadSkills();
-  loadMcpServers();
-  loadProjects();
-  loadUsers();
-  loadGatewayConfig();
-  loadTravelBoard();
+function showToast(msg, duration = 2500) {
+  const container = $("toast-container");
+  if (!container) return;
+  const t = document.createElement("div");
+  t.className = "toast-msg";
+  t.textContent = msg;
+  container.appendChild(t);
+  setTimeout(() => { t.style.opacity = "0"; setTimeout(() => t.remove(), 200); }, duration);
 }
 
 async function apiFetch(url, options = {}) {
   options.headers = options.headers || {};
-  if (state.token) options.headers["Authorization"] = `Bearer ${state.token}`;
+  if (state.token) {
+    options.headers["Authorization"] = `Bearer ${state.token}`;
+  }
   const res = await fetch(url, options);
-  if (res.status === 401) { logout(); throw new Error("登录已过期"); }
+  if (res.status === 401) {
+    showLoginModal();
+  }
   return res;
 }
 
+// 1. 初始化与登录
+async function initApp() {
+  if (!state.token) {
+    showLoginModal();
+    return;
+  }
+  await loadCurrentUser();
+  await loadSessions();
+  await refreshProjectTree();
+  await reloadObsidianGraph();
+  await loadLongTermMemories();
+  setupEventListeners();
+}
+
+function showLoginModal() {
+  $("login-modal").classList.remove("hidden");
+}
+
 async function login() {
-  const username = $("username").value.trim();
-  const password = $("password").value.trim();
-  if (!username || !password) return alert("请输入账号与密码");
+  const u = $("username").value.trim();
+  const p = $("password").value.trim();
   try {
     const res = await fetch("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify({ username: u, password: p }),
     });
-    const data = await res.json();
-    if (data.code === 0 && data.data && data.data.token) {
-      state.token = data.data.token;
-      state.user = data.data.username || "admin";
-      localStorage.setItem("token", state.token);
-      localStorage.setItem("user", state.user);
-      showMainPanel();
+    const json = await res.json();
+    if (json.code === 0 && json.data?.token) {
+      state.token = json.data.token;
+      localStorage.setItem("auth_token", state.token);
+      $("login-modal").classList.add("hidden");
+      showToast("登录成功，进入 Vite Coding 桌面工作台！");
+      await initApp();
     } else {
-      alert("登录失败: " + (data.message || "密码错误"));
+      showToast("登录失败: " + (json.message || "密码错误"));
     }
-  } catch (e) { alert("网络异常: " + e.message); }
+  } catch (e) {
+    showToast("连接服务器异常: " + e.message);
+  }
 }
 
-function logout() {
-  state.token = null; state.user = null;
-  localStorage.removeItem("token"); localStorage.removeItem("user");
-  showLoginPanel();
+async function loadCurrentUser() {
+  try {
+    const res = await apiFetch("/api/auth/me");
+    const json = await res.json();
+    if (json.code === 0 && json.data) {
+      state.currentUser = json.data;
+      if ($("current-user-badge")) {
+        $("current-user-badge").textContent = (json.data.username || "U")[0].toUpperCase();
+      }
+    }
+  } catch (e) { console.error("加载用户信息失败:", e); }
 }
 
-function switchTab(tabId) {
-  state.currentTab = tabId;
-  document.querySelectorAll(".sidebar-nav .nav-item").forEach((btn) => {
-    btn.classList.toggle("active", btn.dataset.tab === tabId);
-  });
-  document.querySelectorAll(".main-content .view-pane").forEach((pane) => {
-    pane.classList.toggle("active", pane.id === tabId);
-  });
-
-  if (tabId === "memory-view") loadUserMemoryAndGraph();
-  if (tabId === "files-view") loadKnowledgeBases();
-  if (tabId === "skills-view") { loadSkills(); loadMcpServers(); }
-  if (tabId === "gateway-view") loadGatewayConfig();
-  if (tabId === "travel-view") loadTravelBoard();
-  if (tabId === "sys-view") loadUsers();
-}
-
-function switchQAMode(mode) {
-  state.qaMode = mode;
-  $("qa-mode-chat-btn").classList.toggle("active", mode === "chat");
-  $("qa-mode-codex-btn").classList.toggle("active", mode === "codex");
-  $("qa-chat-subview").classList.toggle("active", mode === "chat");
-  $("qa-chat-subview").classList.toggle("hidden", mode !== "chat");
-  $("qa-codex-subview").classList.toggle("active", mode === "codex");
-  $("qa-codex-subview").classList.toggle("hidden", mode !== "codex");
-  $("codex-header-toolbar").classList.toggle("hidden", mode !== "codex");
-  if (mode === "codex" && !state.currentProject) loadProjects();
-}
-
-function switchEcoTab(tab) {
-  state.ecoTab = tab;
-  $("eco-tab-skills-btn").classList.toggle("active", tab === "skills");
-  $("eco-tab-mcp-btn").classList.toggle("active", tab === "mcp");
-  $("eco-subpane-skills").classList.toggle("active", tab === "skills");
-  $("eco-subpane-skills").classList.toggle("hidden", tab !== "skills");
-  $("eco-subpane-mcp").classList.toggle("active", tab === "mcp");
-  $("eco-subpane-mcp").classList.toggle("hidden", tab !== "mcp");
-  if (tab === "mcp") loadMcpServers();
-}
-
-// Sessions & Messages
+// 2. 会话管理 (带 🔵 运行 / 🟢 就绪 / 🔴 失败 状态灯，标签与重命名)
 async function loadSessions() {
   try {
-    const res = await apiFetch("/api/session/list");
+    const res = await apiFetch("/session/list");
     const json = await res.json();
     if (json.code === 0) {
       state.sessions = json.data || [];
       renderSessionList();
-      if (!state.activeConversationId && state.sessions.length > 0) {
+      if (!state.currentSessionId && state.sessions.length > 0) {
         selectSession(state.sessions[0].conversation_id);
+      } else if (state.sessions.length === 0) {
+        await createNewSession();
       }
     }
   } catch (e) { console.error("加载会话失败:", e); }
 }
 
 function renderSessionList() {
-  const box = $("session-list");
-  if (!box) return;
-  if (!state.sessions.length) {
-    box.innerHTML = '<div class="empty-tip" style="padding:12px; color:var(--text-dim); font-size:12px; text-align:center;">暂无历史会话</div>';
-    return;
-  }
-  box.innerHTML = state.sessions.map((s) => `
-    <div class="session-item ${s.conversation_id === state.activeConversationId ? "active" : ""}" onclick="selectSession('${s.conversation_id}')">
-      <span class="session-item-title">${escapeHtml(s.title || "新对话")}</span>
-      <button class="session-del-btn" onclick="deleteSession(event, '${s.conversation_id}')">✕</button>
-    </div>
-  `).join("");
-}
-
-async function selectSession(convId) {
-  state.activeConversationId = convId;
-  renderSessionList();
-  try {
-    const res = await apiFetch(`/api/session/${convId}`);
-    const json = await res.json();
-    if (json.code === 0) renderMessages(json.data.messages || []);
-  } catch (e) { console.error("加载消息失败:", e); }
-}
-
-function startNewChat() {
-  state.activeConversationId = "conv-" + Date.now();
-  const newSess = { conversation_id: state.activeConversationId, title: "新智能问答会话", created_at: new Date().toISOString() };
-  state.sessions.unshift(newSess);
-  renderSessionList();
-  renderMessages([]);
-  $("query").focus();
-}
-
-async function deleteSession(e, convId) {
-  e.stopPropagation();
-  if (!confirm("确定删除该会话记录吗？")) return;
-  try {
-    await apiFetch(`/api/session/${convId}`, { method: "DELETE" });
-    state.sessions = state.sessions.filter((s) => s.conversation_id !== convId);
-    if (state.activeConversationId === convId) {
-      state.activeConversationId = state.sessions[0] ? state.sessions[0].conversation_id : null;
-      if (state.activeConversationId) selectSession(state.activeConversationId);
-      else renderMessages([]);
-    }
-    renderSessionList();
-  } catch (e) { alert("删除会话失败: " + e.message); }
-}
-
-function renderMessages(messages) {
-  const container = $("messages");
+  const container = $("session-list-container");
   if (!container) return;
-  if (!messages || messages.length === 0) {
-    container.innerHTML = `
-      <div id="chat-empty-state" class="empty-state">
-        <div class="empty-hero-icon">✨</div>
-        <h2 class="empty-hero-title">统一企业智能问答与协同平台</h2>
-        <p class="empty-desc">融合主流大模型、自进化记忆图谱与知识库深度 RAG，支持数据分析、差旅协同与 Codex 编程开发。输入框键入 <code>/</code> 即可快速调度垂直技能。</p>
-        <div class="starter-grid">
-          <div class="starter-card" onclick="useStarter('/data-analysis 统计上月各部门的销售额与订单总数')">
-            <div class="starter-card-top"><span class="starter-icon">📊</span><span class="starter-tag">Text2SQL</span></div>
-            <div class="starter-title">数据指标统计分析</div>
-            <div class="starter-text">统计上月各部门的销售额与订单总数</div>
-          </div>
-          <div class="starter-card" onclick="useStarter('/flight-booking 帮我查询明天北京到上海的机票')">
-            <div class="starter-card-top"><span class="starter-icon">✈️</span><span class="starter-tag">差旅预订</span></div>
-            <div class="starter-title">智能航班比价预订</div>
-            <div class="starter-text">查询明天北京到上海的合规机票并推荐</div>
-          </div>
-          <div class="starter-card" onclick="useStarter('/hotel-booking 帮我预订下周上海陆家嘴附近的差旅标准酒店')">
-            <div class="starter-card-top"><span class="starter-icon">🏨</span><span class="starter-tag">住宿推荐</span></div>
-            <div class="starter-title">商圈协议酒店推荐</div>
-            <div class="starter-text">推荐上海陆家嘴附近的差旅标准协议酒店</div>
-          </div>
-          <div class="starter-card" onclick="switchQAMode('codex')">
-            <div class="starter-card-top"><span class="starter-icon">💻</span><span class="starter-tag">Codex 编程</span></div>
-            <div class="starter-title">代码重构与架构设计</div>
-            <div class="starter-text">基于当前项目分支上下文进行编程开发</div>
-          </div>
+  
+  let list = state.sessions;
+  if (state.activeTagFilter) {
+    list = list.filter(s => (s.tags || []).includes(state.activeTagFilter));
+  }
+  
+  container.innerHTML = list.map(s => {
+    const isActive = s.conversation_id === state.currentSessionId ? "active" : "";
+    // 三色状态灯：blue=running, green=idle, red=failed
+    let dotClass = "green";
+    if (s.status === "running") dotClass = "blue";
+    else if (s.status === "failed") dotClass = "red";
+    
+    const tagsHtml = (s.tags || []).map(t => `<span class="session-tag-badge">#${escapeHtml(t)}</span>`).join(" ");
+    
+    return `
+      <div class="session-item ${isActive}" onclick="selectSession('${s.conversation_id}')">
+        <div class="session-item-left">
+          <span class="session-status-dot ${dotClass}" title="状态: ${s.status || 'idle'}"></span>
+          <span class="session-title-text" id="title-text-${s.conversation_id}">${escapeHtml(s.title || '新对话')}</span>
+          ${tagsHtml}
+        </div>
+        <div class="session-actions" onclick="event.stopPropagation()">
+          <button class="session-mini-btn" onclick="promptRenameSession('${s.conversation_id}', '${escapeHtml(s.title)}')">✏️</button>
+          <button class="session-mini-btn" onclick="promptAddTag('${s.conversation_id}')">🏷️</button>
+          <button class="session-mini-btn" onclick="deleteSession('${s.conversation_id}')">🗑️</button>
         </div>
       </div>
     `;
-    return;
-  }
-  container.innerHTML = messages.map((msg) => {
-    const isUser = msg.role === "user";
-    const parsed = isUser ? escapeHtml(msg.content) : (window.marked ? marked.parse(msg.content) : msg.content);
-    return `
-      <div class="message-bubble ${isUser ? "user" : "assistant"}">
-        <div class="message-avatar">${isUser ? "👤" : "⚡"}</div>
-        <div class="message-content">${parsed}</div>
-      </div>
-    `;
   }).join("");
-  container.scrollTop = container.scrollHeight;
 }
 
-function useStarter(text) { $("query").value = text; send(); }
+async function createNewSession() {
+  const convId = "conv-" + Date.now().toString(36) + Math.random().toString(36).substr(2, 4);
+  try {
+    const res = await apiFetch(`/session/${convId}/tags`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tags: ["coding", "vite"] })
+    });
+    await loadSessions();
+    selectSession(convId);
+    showToast("✨ 已创建新会话！");
+  } catch (e) {
+    state.currentSessionId = convId;
+    renderSessionList();
+  }
+}
 
-async function send() {
-  const query = $("query").value.trim();
+async function selectSession(convId) {
+  state.currentSessionId = convId;
+  renderSessionList();
+  await loadSessionMessages(convId);
+  await loadShortTermBuffer(convId);
+}
+
+async function loadSessionMessages(convId) {
+  const box = $("agent-messages-box");
+  if (!box) return;
+  try {
+    const res = await apiFetch(`/session/${convId}/messages`);
+    const json = await res.json();
+    if (json.code === 0 && Array.isArray(json.data) && json.data.length > 0) {
+      box.innerHTML = json.data.map(m => renderMessageBubble(m.role, m.content, m.extra)).join("");
+      decorateCodeBlocks(box);
+    } else {
+      box.innerHTML = `
+        <div class="welcome-box">
+          <h3>⚡ Vite Coding 多智能体自主编程环境</h3>
+          <p>当前会话 ID: <code>${convId}</code>。支持自然语言开发需求、跨会话引用（输入 <code>@</code> 引用其他会话）、多 Agent 自动协同（A 编码 -> B 审查 -> C 跑单测）与 Obsidian 动态图谱。</p>
+        </div>
+      `;
+    }
+  } catch (e) { console.error("加载消息失败:", e); }
+}
+
+function renderMessageBubble(role, content, extra) {
+  const isUser = role === "user";
+  const avatar = isUser ? "👤" : (role === "reviewer" ? "🔍" : (role === "tester" ? "🧪" : "👨‍💻"));
+  const roleName = isUser ? "开发者 (You)" : (role === "reviewer" ? "Reviewer 审查员" : (role === "tester" ? "Tester 单测工程师" : "Coder 研发工程师"));
+  
+  return `
+    <div class="agent-bubble ${isUser ? 'user' : ''}">
+      <div class="agent-bubble-header">
+        <span class="agent-name-tag">${avatar} ${roleName}</span>
+        <span>${new Date().toLocaleTimeString()}</span>
+      </div>
+      <div class="bubble-body">${renderMarkdown(content)}</div>
+    </div>
+  `;
+}
+
+async function promptRenameSession(convId, oldTitle) {
+  const newTitle = prompt("重命名会话标题:", oldTitle);
+  if (newTitle && newTitle.trim()) {
+    await apiFetch(`/session/${convId}/rename`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: newTitle.trim() }),
+    });
+    await loadSessions();
+    showToast("已重命名会话！");
+  }
+}
+
+async function promptAddTag(convId) {
+  const s = state.sessions.find(x => x.conversation_id === convId);
+  const current = (s?.tags || []).join(",");
+  const tagStr = prompt("输入标签（逗号分隔，如: feat,bugfix,review）:", current);
+  if (tagStr !== null) {
+    const tags = tagStr.split(",").map(t => t.trim()).filter(Boolean);
+    await apiFetch(`/session/${convId}/tags`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tags }),
+    });
+    await loadSessions();
+    showToast("已更新会话标签！");
+  }
+}
+
+async function deleteSession(convId) {
+  if (confirm("确定删除该会话记录吗？")) {
+    await apiFetch(`/session/${convId}`, { method: "DELETE" });
+    if (state.currentSessionId === convId) state.currentSessionId = "";
+    await loadSessions();
+    showToast("会话已删除");
+  }
+}
+
+function filterSessionsByTag(tag) {
+  state.activeTagFilter = tag;
+  const chips = document.querySelectorAll(".tag-filter-chips .tag-chip");
+  chips.forEach(c => {
+    if (c.textContent.replace("#", "") === (tag || "全部")) c.classList.add("active");
+    else c.classList.remove("active");
+  });
+  renderSessionList();
+}
+
+function onSessionSearchInput(query) {
+  const q = query.toLowerCase().trim();
+  const container = $("session-list-container");
+  if (!container) return;
+  const items = container.querySelectorAll(".session-item");
+  items.forEach(el => {
+    const text = el.textContent.toLowerCase();
+    el.style.display = (!q || text.includes(q)) ? "flex" : "none";
+  });
+}
+
+// 3. 跨会话引用 (@ 快捷联想与上下文注入)
+function checkCitationTrigger(e) {
+  const input = $("agent-query-input");
+  const val = input.value;
+  const lastAt = val.lastIndexOf("@");
+  const popover = $("citation-popover");
+  
+  if (lastAt !== -1 && (lastAt === 0 || val[lastAt - 1] === " " || val[lastAt - 1] === "\n")) {
+    const query = val.slice(lastAt + 1).toLowerCase();
+    const matches = state.sessions.filter(s => s.conversation_id !== state.currentSessionId && (s.title.toLowerCase().includes(query) || (s.tags || []).some(t => t.includes(query))));
+    if (matches.length > 0) {
+      popover.classList.remove("hidden");
+      $("citation-items-list").innerHTML = matches.slice(0, 5).map(m => `
+        <div class="popover-item" onclick="insertCitation('${m.conversation_id}', '${escapeHtml(m.title)}')">
+          <span>💬 <b>${escapeHtml(m.title)}</b> (${(m.tags || []).map(t => '#' + t).join(' ')})</span>
+          <span style="font-size:10px; color:#64748b;">${m.conversation_id.slice(-6)}</span>
+        </div>
+      `).join("");
+      return;
+    }
+  }
+  popover.classList.add("hidden");
+}
+
+function insertCitation(convId, title) {
+  const input = $("agent-query-input");
+  const val = input.value;
+  const lastAt = val.lastIndexOf("@");
+  if (lastAt !== -1) {
+    input.value = val.slice(0, lastAt) + `@session:${convId} [${title}] ` + val.slice(lastAt + 1);
+  }
+  $("citation-popover").classList.add("hidden");
+  input.focus();
+}
+
+// 4. 发送指令与多智能体流 (Parent-Child, Coder -> Reviewer -> Tester)
+async function sendAgentMessage() {
+  const input = $("agent-query-input");
+  const query = input.value.trim();
   if (!query) return;
-  if (!state.activeConversationId) state.activeConversationId = "conv-" + Date.now();
-  const empty = $("chat-empty-state");
-  if (empty) empty.remove();
-  const container = $("messages");
-  container.innerHTML += `
-    <div class="message-bubble user">
-      <div class="message-avatar">👤</div>
-      <div class="message-content">${escapeHtml(query)}</div>
-    </div>
-  `;
-  const assistantBubbleId = "msg-" + Date.now();
-  container.innerHTML += `
-    <div class="message-bubble assistant" id="${assistantBubbleId}">
-      <div class="message-avatar">⚡</div>
-      <div class="message-content markdown-body">思考中...</div>
-    </div>
-  `;
-  container.scrollTop = container.scrollHeight;
-  $("query").value = "";
-  hideKbPopover();
-  hideSlashPopover();
+  input.value = "";
+  $("citation-popover").classList.add("hidden");
+  
+  const box = $("agent-messages-box");
+  box.innerHTML += renderMessageBubble("user", query);
+  box.scrollTop = box.scrollHeight;
+  
+  // 更新状态灯为 blue (running)
+  await apiFetch(`/session/${state.currentSessionId}/status`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status: "running" }),
+  });
+  const currentS = state.sessions.find(s => s.conversation_id === state.currentSessionId);
+  if (currentS) currentS.status = "running";
+  renderSessionList();
+  
+  // 检查是否触发多 Agent 协同流水线
+  const role = $("agent-role-select").value;
+  if (role === "architect" || query.includes("多Agent") || query.includes("协同") || query.includes("流水线")) {
+    await runMultiAgentCollaboration(query);
+  } else {
+    await runSingleAgentChat(query, role);
+  }
+}
 
-  const kbFileIds = state.selectedKbFiles.map((f) => f.file_id);
-  const kbIds = state.selectedKbIds.map((k) => k.id);
-  const chatProvider = state.selectedChatProvider || ($("chat-provider-select") ? $("chat-provider-select").value : "dashscope");
-  const chatModel = state.selectedChatModel || ($("chat-model-select") ? $("chat-model-select").value : "qwen3.7-flash");
+async function runMultiAgentCollaboration(query) {
+  const box = $("agent-messages-box");
+  showToast("🤖 启动多智能体协作流水线 (Coder -> Reviewer -> Tester)...");
+  
+  try {
+    const res = await apiFetch("/api/mesh/collaborate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        conversation_id: state.currentSessionId,
+        task_prompt: query,
+        target_file: "data/demo_agentic_calc.py"
+      }),
+    });
+    const json = await res.json();
+    if (json.code === 0 && json.data?.events) {
+      for (const evt of json.data.events) {
+        await new Promise(r => setTimeout(r, 600));
+        let role = evt.sender || "coder";
+        let content = evt.payload?.summary || "";
+        if (evt.payload?.code) {
+          content += `\n\n\`\`\`python:${evt.payload.file_path || 'data/demo_agentic_calc.py'}\n${evt.payload.code}\n\`\`\``;
+        }
+        box.innerHTML += renderMessageBubble(role, content);
+        decorateCodeBlocks(box);
+        box.scrollTop = box.scrollHeight;
+      }
+      
+      // 更新状态灯为 green (idle/done)
+      await apiFetch(`/session/${state.currentSessionId}/status`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "idle" }),
+      });
+      if (currentS = state.sessions.find(s => s.conversation_id === state.currentSessionId)) currentS.status = "idle";
+      renderSessionList();
+      await reloadObsidianGraph();
+    }
+  } catch (e) {
+    showToast("多智能体执行异常: " + e.message);
+  }
+}
 
+async function runSingleAgentChat(query, role) {
+  const box = $("agent-messages-box");
   try {
     const res = await apiFetch("/api/chat/stream", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        conversation_id: state.currentSessionId,
         query: query,
-        conversation_id: state.activeConversationId,
-        all_kb: state.allKbSelected,
-        kb_ids: kbIds,
-        file_ids: kbFileIds,
-        provider: chatProvider,
-        model: chatModel,
+        project_path: state.currentProject,
+        active_file: state.activeFilePath,
       }),
     });
-    if (!res.ok) {
-      const errBody = await res.text();
-      throw new Error(`服务异常 (${res.status}): ${errBody}`);
-    }
-    const targetEl = document.querySelector(`#${assistantBubbleId} .message-content`);
-    let fullText = "";
-    let buffer = "";
+    
     const reader = res.body.getReader();
-    const decoder = new TextDecoder();
+    const decoder = new TextDecoder("utf-8");
+    let accumulatedText = "";
+    
+    // 插入临时助手气泡
+    const bubbleId = "bubble-" + Date.now();
+    box.innerHTML += `
+      <div class="agent-bubble" id="${bubbleId}">
+        <div class="agent-bubble-header">
+          <span class="agent-name-tag">👨‍💻 Coder 研发工程师</span>
+          <span>思考并编写中...</span>
+        </div>
+        <div class="bubble-body" id="${bubbleId}-content"></div>
+      </div>
+    `;
+    box.scrollTop = box.scrollHeight;
+    
     while (true) {
-      const { value, done } = await reader.read();
+      const { done, value } = await reader.read();
       if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() || "";
+      const chunk = decoder.decode(value, { stream: true });
+      const lines = chunk.split("\n");
       for (const line of lines) {
-        const trimmed = line.trim();
-        if (trimmed.startsWith("data: ")) {
-          const raw = trimmed.slice(6).trim();
-          if (!raw || raw === "[DONE]") continue;
+        if (line.startsWith("data: ")) {
           try {
-            const data = JSON.parse(raw);
-            const text = data.text !== undefined ? data.text : (data.chunk !== undefined ? data.chunk : (data.content !== undefined ? data.content : ""));
-            if (text) {
-              fullText += text;
-              targetEl.innerHTML = window.marked ? marked.parse(fullText) : escapeHtml(fullText);
-              container.scrollTop = container.scrollHeight;
+            const data = JSON.parse(line.slice(6));
+            if (data.event === "delta" && data.text) {
+              accumulatedText += data.text;
+              $(`${bubbleId}-content`).innerHTML = renderMarkdown(accumulatedText);
+              box.scrollTop = box.scrollHeight;
             }
-          } catch (e) {
-            // raw string fallback
-            if (!raw.startsWith("{")) {
-              fullText += raw;
-              targetEl.innerHTML = window.marked ? marked.parse(fullText) : escapeHtml(fullText);
-              container.scrollTop = container.scrollHeight;
-            }
-          }
+          } catch (_) {}
         }
       }
     }
-    loadSessions();
+    
+    decorateCodeBlocks(box);
+    
+    // 更新状态灯为 green
+    await apiFetch(`/session/${state.currentSessionId}/status`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "idle" }),
+    });
+    if (currentS = state.sessions.find(s => s.conversation_id === state.currentSessionId)) currentS.status = "idle";
+    renderSessionList();
   } catch (e) {
-    const targetEl = document.querySelector(`#${assistantBubbleId} .message-content`);
-    if (targetEl) targetEl.innerHTML = `<span style="color:var(--accent-rose)">响应异常: ${e.message}</span>`;
+    showToast("生成异常: " + e.message);
   }
 }
 
-// KB Select Popover & Chips
-function handleMasterKbToggle(e) {
-  state.allKbSelected = e.target.checked;
-  renderSelectedKbChips();
-}
+// 5. 交互式代码操作栏挂载与文件写入
+function decorateCodeBlocks(container) {
+  const pres = container.querySelectorAll("pre:not([data-decorated])");
+  pres.forEach((pre) => {
+    pre.setAttribute("data-decorated", "true");
+    const code = pre.querySelector("code");
+    if (!code) return;
+    const rawCode = code.innerText;
+    
+    // 探测文件名
+    let targetFile = state.activeFilePath || "data/demo.py";
+    const headerMatch = rawCode.match(/^#\s*(?:file|filepath|path):\s*([^\r\n]+)/i) || code.className.match(/language-python:([^\s]+)/);
+    if (headerMatch) targetFile = headerMatch[1].trim();
 
-function toggleKbPopover() {
-  const popover = $("kb-select-modal");
-  if (!popover) return;
-  if (popover.classList.contains("hidden")) {
-    popover.classList.remove("hidden");
-    renderKbPopover();
-  } else popover.classList.add("hidden");
-}
-
-function hideKbPopover() {
-  if ($("kb-select-modal")) $("kb-select-modal").classList.add("hidden");
-}
-
-function renderKbPopover(filterText = "") {
-  const listEl = $("kb-file-list");
-  if (!listEl) return;
-  if ($("kb-check-all-scope")) $("kb-check-all-scope").checked = state.allKbSelected;
-  if (!state.knowledgeBases.length) {
-    listEl.innerHTML = '<div class="empty-tip" style="padding:12px; color:var(--text-dim); text-align:center;">暂无知识库集合</div>';
-    return;
-  }
-  let html = "";
-  state.knowledgeBases.forEach((kb) => {
-    const kbFiles = state.files.filter((f) => f.kb_id === kb.id || (!f.kb_id && kb.id === "kb-default"));
-    const matchedFiles = filterText ? kbFiles.filter((f) => f.filename.toLowerCase().includes(filterText.toLowerCase())) : kbFiles;
-    const isKbSelected = state.selectedKbIds.some((k) => k.id === kb.id);
-    html += `
-      <div class="kb-group-card">
-        <div class="kb-group-title">
-          <label class="checkbox-label" style="display:flex; align-items:center; gap:6px; cursor:pointer;">
-            <input type="checkbox" ${isKbSelected ? "checked" : ""} onchange="toggleKbScope('${kb.id}', '${escapeHtml(kb.name)}', this.checked)" />
-            <span>📁 ${escapeHtml(kb.name)}</span>
-          </label>
-        </div>
-        <div class="kb-group-files">
-          ${matchedFiles.length ? matchedFiles.map((f) => {
-            const isFileSel = state.selectedKbFiles.some((x) => x.file_id === f.file_id);
-            return `
-              <div class="kb-file-item-row">
-                <label class="checkbox-label" style="display:flex; align-items:center; gap:6px; cursor:pointer;">
-                  <input type="checkbox" ${isFileSel ? "checked" : ""} onchange="toggleKbFile('${f.file_id}', '${escapeHtml(f.filename)}', '${kb.id}', this.checked)" />
-                  <span>📄 ${escapeHtml(f.filename)}</span>
-                </label>
-              </div>
-            `;
-          }).join("") : '<span style="font-size:11px; color:var(--text-dim)">暂无文档</span>'}
-        </div>
+    const actionBar = document.createElement("div");
+    actionBar.className = "agent-code-action-bar";
+    actionBar.innerHTML = `
+      <span class="agent-target-file">📄 ${escapeHtml(targetFile)}</span>
+      <div class="agent-action-buttons">
+        <button class="action-pill-green" onclick="applyAgentCodeToProject('${escapeHtml(targetFile)}', this)">✨ 写入磁盘工程</button>
+        <button class="action-pill-cyan" onclick="loadCodeToEditor('${escapeHtml(targetFile)}', this)">👁️ 载入编辑器</button>
+        <button class="action-pill-amber" onclick="runGeneratedTest('${escapeHtml(targetFile)}')">▶️ 运行单测</button>
       </div>
     `;
+    pre.parentNode.insertBefore(actionBar, pre);
   });
-  listEl.innerHTML = html;
 }
 
-function toggleKbScope(kbId, kbName, checked) {
-  if (checked) {
-    if (!state.selectedKbIds.some((k) => k.id === kbId)) state.selectedKbIds.push({ id: kbId, name: kbName });
-  } else {
-    state.selectedKbIds = state.selectedKbIds.filter((k) => k.id !== kbId);
-  }
-  renderSelectedKbChips();
-}
-
-function toggleKbFile(fileId, filename, kbId, checked) {
-  if (checked) {
-    if (!state.selectedKbFiles.some((f) => f.file_id === fileId)) state.selectedKbFiles.push({ file_id: fileId, filename, kb_id: kbId });
-  } else {
-    state.selectedKbFiles = state.selectedKbFiles.filter((f) => f.file_id !== fileId);
-  }
-  renderSelectedKbChips();
-}
-
-function selectAllKbFiles() {
-  state.allKbSelected = true;
-  if ($("kb-check-all-scope")) $("kb-check-all-scope").checked = true;
-  renderSelectedKbChips();
-}
-
-function clearSelectedKbFiles() {
-  state.allKbSelected = false;
-  state.selectedKbIds = [];
-  state.selectedKbFiles = [];
-  if ($("kb-check-all-scope")) $("kb-check-all-scope").checked = false;
-  renderSelectedKbChips();
-  renderKbPopover();
-}
-
-function renderSelectedKbChips() {
-  const container = $("kb-selected-chips");
-  const badge = $("kb-badge-count");
-  if (!container) return;
-  const chips = [];
-  if (state.allKbSelected) {
-    chips.push(`
-      <span class="kb-chip-item">
-        <span>🌟 全部知识库 (全库检索)</span>
-        <span class="kb-chip-del" onclick="state.allKbSelected=false; renderSelectedKbChips();">✕</span>
-      </span>
-    `);
-  }
-  state.selectedKbIds.forEach((kb) => {
-    chips.push(`
-      <span class="kb-chip-item">
-        <span>📁 ${escapeHtml(kb.name)}</span>
-        <span class="kb-chip-del" onclick="toggleKbScope('${kb.id}', '', false); renderKbPopover();">✕</span>
-      </span>
-    `);
-  });
-  state.selectedKbFiles.forEach((file) => {
-    chips.push(`
-      <span class="kb-chip-item">
-        <span>📄 ${escapeHtml(file.filename)}</span>
-        <span class="kb-chip-del" onclick="toggleKbFile('${file.file_id}', '', '', false); renderKbPopover();">✕</span>
-      </span>
-    `);
-  });
-  const totalCount = (state.allKbSelected ? 1 : 0) + state.selectedKbIds.length + state.selectedKbFiles.length;
-  if (badge) {
-    badge.textContent = totalCount;
-    badge.classList.toggle("hidden", totalCount === 0);
-  }
-  if (chips.length > 0) {
-    container.innerHTML = chips.join("");
-    container.classList.remove("hidden");
-  } else {
-    container.innerHTML = "";
-    container.classList.add("hidden");
-  }
-}
-
-// Knowledge Base & Chunks / Vectors
-async function loadKnowledgeBases() {
+async function applyAgentCodeToProject(relPath, btn) {
+  const pre = btn.closest(".agent-code-action-bar").nextElementSibling;
+  const codeEl = pre ? pre.querySelector("code") : null;
+  const content = codeEl ? codeEl.innerText : "";
+  if (!content) return showToast("未探测到有效代码");
+  
   try {
-    const [kbRes, filesRes] = await Promise.all([
-      apiFetch("/api/files/kb/list"),
-      apiFetch("/api/files/list"),
-    ]);
-    const kbJson = await kbRes.json();
-    const filesJson = await filesRes.json();
-    if (kbJson.code === 0) {
-      state.knowledgeBases = kbJson.data || [];
-      if (!state.activeKbId && state.knowledgeBases.length > 0) state.activeKbId = state.knowledgeBases[0].id;
-    }
-    if (filesJson.code === 0) state.files = filesJson.data || [];
-    renderKnowledgeBaseView();
-  } catch (e) { console.error("加载知识库数据失败:", e); }
-}
-
-function renderKnowledgeBaseView() {
-  const kbListEl = $("kb-list-container");
-  const countBadge = $("kb-total-count");
-  if (countBadge) countBadge.textContent = state.knowledgeBases.length;
-
-  if (kbListEl) {
-    kbListEl.innerHTML = state.knowledgeBases.map((kb) => {
-      const kbFiles = state.files.filter((f) => f.kb_id === kb.id || (!f.kb_id && kb.id === "kb-default"));
-      return `
-        <div class="kb-card-item ${kb.id === state.activeKbId ? "active" : ""}" onclick="selectKnowledgeBase('${kb.id}')">
-          <div class="kb-card-name">📚 ${escapeHtml(kb.name)}</div>
-          <div class="kb-card-desc">${escapeHtml(kb.description || "企业业务知识集合")}</div>
-          <div class="kb-card-meta">
-            <span>${kbFiles.length} 篇文档</span>
-            <span>${kb.created_at ? kb.created_at.slice(0, 10) : "2026-08"}</span>
-          </div>
-        </div>
-      `;
-    }).join("");
-  }
-
-  const activeKb = state.knowledgeBases.find((k) => k.id === state.activeKbId) || state.knowledgeBases[0];
-  if (activeKb) {
-    if ($("current-kb-header-title")) $("current-kb-header-title").textContent = activeKb.name;
-    if ($("current-kb-header-desc")) $("current-kb-header-desc").textContent = activeKb.description || "通用知识库";
-  }
-
-  const curFiles = state.files.filter((f) => f.kb_id === state.activeKbId || (!f.kb_id && state.activeKbId === "kb-default"));
-  if ($("current-kb-stat-badge")) $("current-kb-stat-badge").textContent = `${curFiles.length} 篇文档`;
-
-  const tbody = $("files-tbody");
-  if (!tbody) return;
-  if (!curFiles.length) {
-    tbody.innerHTML = '<tr><td colspan="7" class="empty-cell">当前知识库暂无上传文档，可拖拽或点击上方区域上传！</td></tr>';
-    return;
-  }
-
-  tbody.innerHTML = curFiles.map((f) => {
-    const sizeStr = f.size_bytes > 1024 * 1024 ? `${(f.size_bytes / 1024 / 1024).toFixed(2)} MB` : `${(f.size_bytes / 1024).toFixed(1)} KB`;
-    const kbName = activeKb ? activeKb.name : "默认知识库";
-    return `
-      <tr>
-        <td style="font-weight:600; color:var(--text-main);">📄 ${escapeHtml(f.filename)}</td>
-        <td><span class="starter-tag">${escapeHtml(kbName)}</span></td>
-        <td>${escapeHtml(f.content_type || "text/plain")}</td>
-        <td>${sizeStr}</td>
-        <td style="max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${escapeHtml(f.summary || "")}">${escapeHtml(f.summary || "已完成父子切片解析与高维向量嵌入")}</td>
-        <td>${f.created_at ? f.created_at.slice(0, 16).replace("T", " ") : "2026-08-27"}</td>
-        <td>
-          <div class="btn-group">
-            <button class="action-pill-btn" onclick="showChunkModal('${f.file_id}', '${escapeHtml(f.filename)}')">🧩 分片</button>
-            <button class="action-pill-btn" onclick="showVectorModal('${f.file_id}', '${escapeHtml(f.filename)}')">🔮 向量</button>
-            <button class="action-pill-btn" onclick="previewFile('${f.file_id}', '${escapeHtml(f.filename)}')">👁️ 预览</button>
-            <button class="action-pill-btn danger" onclick="deleteFile('${f.file_id}')">🗑️</button>
-          </div>
-        </td>
-      </tr>
-    `;
-  }).join("");
-}
-
-function selectKnowledgeBase(kbId) {
-  state.activeKbId = kbId;
-  renderKnowledgeBaseView();
-}
-
-async function saveNewKnowledgeBase() {
-  const name = $("new-kb-name").value.trim();
-  const description = $("new-kb-desc").value.trim();
-  if (!name) return alert("请输入知识库名称");
-  try {
-    const res = await apiFetch("/api/files/kb", {
+    const res = await apiFetch("/api/projects/file", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, description }),
+      body: JSON.stringify({
+        project_path: state.currentProject,
+        file_path: relPath,
+        content: content,
+      }),
     });
     const json = await res.json();
     if (json.code === 0) {
-      $("kb-create-modal").classList.add("hidden");
-      $("new-kb-name").value = ""; $("new-kb-desc").value = "";
-      loadKnowledgeBases();
+      showToast(`✨ 代码已成功写入磁盘工程: [${relPath}]！`);
+      state.activeFilePath = relPath;
+      state.activeFileContent = content;
+      $("active-file-indicator").textContent = relPath;
+      $("code-editor-area").value = content;
+      switchRightTab("editor");
+      await refreshProjectTree();
+      await reloadObsidianGraph();
+    } else {
+      showToast("写入失败: " + (json.message || json.detail));
     }
-  } catch (e) { alert("创建知识库失败: " + e.message); }
+  } catch (e) { showToast("写入异常: " + e.message); }
 }
 
-async function handleDirectKbFileUpload(e) {
-  const file = e.target.files[0];
-  if (!file) return;
-  const formData = new FormData();
-  formData.append("file", file);
-  if (state.activeKbId) formData.append("kb_id", state.activeKbId);
-  try {
-    const res = await apiFetch("/api/files/upload", { method: "POST", body: formData });
-    const json = await res.json();
-    if (json.code === 0) loadKnowledgeBases();
-    else alert("上传失败: " + json.message);
-  } catch (err) { alert("上传异常: " + err.message); }
+function loadCodeToEditor(relPath, btn) {
+  const pre = btn.closest(".agent-code-action-bar").nextElementSibling;
+  const codeEl = pre ? pre.querySelector("code") : null;
+  const content = codeEl ? codeEl.innerText : "";
+  state.activeFilePath = relPath;
+  state.activeFileContent = content;
+  $("active-file-indicator").textContent = relPath;
+  $("code-editor-area").value = content;
+  switchRightTab("editor");
+  showToast(`已载入文件 [${relPath}] 到编辑器`);
 }
 
-async function handleChatFileUpload(e) {
-  const file = e.target.files[0];
-  if (!file) return;
-  const formData = new FormData();
-  formData.append("file", file);
-  formData.append("kb_id", "kb-default");
+async function runGeneratedTest(relPath) {
+  switchRightTab("editor");
+  openTerminalDrawer();
+  const cmd = relPath.includes("test_") ? `uv run pytest ${relPath} -v` : `uv run pytest tests/ -v`;
+  await runWorkspaceCommand(cmd);
+}
+
+// 6. 文件树与编辑器控制
+async function refreshProjectTree() {
   try {
-    const res = await apiFetch("/api/files/upload", { method: "POST", body: formData });
+    const res = await apiFetch(`/api/projects/tree?project_path=${encodeURIComponent(state.currentProject)}`);
     const json = await res.json();
     if (json.code === 0) {
-      state.selectedKbFiles.push({ file_id: json.data.file_id, filename: json.data.filename, kb_id: "kb-default" });
-      renderSelectedKbChips();
-      loadKnowledgeBases();
+      renderProjectTree(json.data || []);
     }
-  } catch (err) { alert("上传异常: " + err.message); }
-}
-
-async function previewFile(fileId, filename) {
-  try {
-    const res = await apiFetch(`/api/files/${fileId}/preview`);
-    const json = await res.json();
-    if (json.code === 0) {
-      $("preview-filename").textContent = filename;
-      $("preview-body").textContent = json.data.text_content || "文件内容为空";
-      $("preview-modal").classList.remove("hidden");
-    }
-  } catch (e) { alert("读取文件内容失败: " + e.message); }
-}
-
-async function deleteFile(fileId) {
-  if (!confirm("确定删除该文档及其向量数据库切片吗？")) return;
-  try {
-    const res = await apiFetch(`/api/files/${fileId}`, { method: "DELETE" });
-    const json = await res.json();
-    if (json.code === 0) loadKnowledgeBases();
-  } catch (e) { alert("删除失败: " + e.message); }
-}
-
-// Chunks & Vectors Modals
-async function showChunkModal(fileId, filename) {
-  $("chunk-modal-title").textContent = `🧩 文档分片详情 · ${filename}`;
-  $("chunk-modal-sub").textContent = "加载父子切片数据中...";
-  $("chunk-list-body").innerHTML = '<div class="empty-tip" style="padding:16px; text-align:center; color:var(--text-muted)">加载中...</div>';
-  $("chunk-modal").classList.remove("hidden");
-  try {
-    const res = await apiFetch(`/api/files/${fileId}/chunks`);
-    const json = await res.json();
-    if (json.code === 0) {
-      state.currentChunkData = json.data;
-      const childCount = json.data.child_count ?? json.data.total_children ?? (json.data.children ? json.data.children.length : 0);
-      const parentCount = json.data.parent_count ?? json.data.total_parents ?? (json.data.parents ? json.data.parents.length : 0);
-      $("chunk-modal-sub").textContent = `子切片: ${childCount} 块 · 父切片: ${parentCount} 块 · 切片模式: Parent-Child 双层混合分块`;
-      renderChunkList();
-    }
-  } catch (e) {
-    $("chunk-list-body").innerHTML = `<div class="empty-tip" style="color:var(--accent-rose)">加载失败: ${e.message}</div>`;
-  }
-}
-
-function switchChunkTab(tab) {
-  state.currentChunkTab = tab;
-  $("chunk-tab-children-btn").classList.toggle("active", tab === "children");
-  $("chunk-tab-parents-btn").classList.toggle("active", tab === "parents");
-  renderChunkList($("chunk-search-input") ? $("chunk-search-input").value.trim() : "");
-}
-
-function filterChunkList(query) { renderChunkList(query); }
-
-function renderChunkList(filter = "") {
-  const container = $("chunk-list-body");
-  if (!container || !state.currentChunkData) return;
-  const isChildren = state.currentChunkTab === "children";
-  const list = isChildren ? (state.currentChunkData.children || state.currentChunkData.child_chunks || []) : (state.currentChunkData.parents || state.currentChunkData.parent_chunks || []);
-  const filtered = filter ? list.filter((c) => (c.content || "").toLowerCase().includes(filter.toLowerCase())) : list;
-  if (!filtered || !filtered.length) {
-    container.innerHTML = '<div class="empty-tip" style="padding:16px; text-align:center; color:var(--text-dim);">暂无匹配的分片内容</div>';
-    return;
-  }
-  container.innerHTML = filtered.map((chunk) => {
-    const chunkId = chunk.child_id || chunk.parent_id || chunk.chunk_id || "1";
-    const charCount = chunk.char_count || chunk.token_count || (chunk.content ? chunk.content.length : 0);
-    return `
-      <div class="chunk-card-item">
-        <div class="chunk-card-meta">
-          <span class="chunk-id-tag">#${chunkId} ${isChildren ? "Child Chunk (250~350字)" : "Parent Chunk (1000~1500字)"}</span>
-          <span class="chunk-token-tag">${charCount} 字符 · 索引序号 #${chunk.index !== undefined ? chunk.index : 1}</span>
-        </div>
-        <div class="chunk-content-text">${escapeHtml(chunk.content)}</div>
-      </div>
-    `;
-  }).join("");
-}
-
-async function showVectorModal(fileId, filename) {
-  $("vector-modal-title").textContent = `🔮 向量特征嵌入矩阵 · ${filename}`;
-  $("vector-modal-sub").textContent = "加载向量矩阵与特征维度中...";
-  $("vector-list-body").innerHTML = '<div class="empty-tip" style="padding:16px; text-align:center; color:var(--text-muted)">加载中...</div>';
-  $("vector-modal").classList.remove("hidden");
-  try {
-    const res = await apiFetch(`/api/files/${fileId}/vectors`);
-    const json = await res.json();
-    if (json.code === 0) {
-      state.currentVectorData = json.data;
-      $("vector-modal-sub").textContent = `嵌入模型: ${json.data.embedding_model || json.data.model || "text-embedding-v3"} · 向量空间: ${json.data.dimension || 1536} 维 · 相似度度量: Cosine Similarity`;
-      renderVectorView();
-    }
-  } catch (e) {
-    $("vector-list-body").innerHTML = `<div class="empty-tip" style="color:var(--accent-rose)">加载失败: ${e.message}</div>`;
-  }
-}
-
-function renderVectorView() {
-  const d = state.currentVectorData;
-  if (!d) return;
-  const stats = $("vector-stats-cards");
-  if (stats) {
-    stats.innerHTML = `
-      <div class="vector-stat-box"><div class="vector-stat-val">${d.total_vectors || 0}</div><div class="vector-stat-lbl">向量切片数</div></div>
-      <div class="vector-stat-box"><div class="vector-stat-val">${d.dimension || 1536} 维</div><div class="vector-stat-lbl">特征向量维度</div></div>
-      <div class="vector-stat-box"><div class="vector-stat-val">1.000</div><div class="vector-stat-lbl">平均 L2 归一范数</div></div>
-      <div class="vector-stat-box"><div class="vector-stat-val">100%</div><div class="vector-stat-lbl">HNSW 索引就绪</div></div>
-    `;
-  }
-  const listEl = $("vector-list-body");
-  if (listEl) {
-    listEl.innerHTML = (d.vectors || []).map((v) => {
-      const floatArrayStr = JSON.stringify(v.vector_sample || v.raw_vector_head || [0.0123, -0.0456, 0.0891, 0.0342, -0.0781]);
-      return `
-        <div class="vector-card-item">
-          <div class="chunk-card-meta">
-            <span class="chunk-id-tag">Vector #${v.chunk_id || 1}</span>
-            <span class="chunk-token-tag">${v.dimension || 1536} 维浮点向量 · L2 Norm: 1.0000</span>
-          </div>
-          <div class="vector-card-preview">切片语义摘要: "${escapeHtml(v.preview_text || "")}"</div>
-          <div class="vector-matrix-box">Embedding Vector Preview: ${floatArrayStr}</div>
-        </div>
-      `;
-    }).join("");
-  }
-}
-
-async function runRAGSearch() {
-  const query = $("rag-query-input").value.trim();
-  if (!query) return alert("请输入检索测试问题");
-  const box = $("rag-results-box");
-  box.classList.remove("hidden");
-  box.innerHTML = '<div class="empty-tip" style="padding:12px; color:var(--accent-cyan);">正在执行双层父子分片混合检索与相关度评分...</div>';
-  try {
-    const res = await apiFetch("/api/files/rag/search", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query: query, all_kb: true, top_k: 4 }),
-    });
-    const json = await res.json();
-    if (json.code === 0) {
-      const results = json.data || [];
-      if (!results.length) {
-        box.innerHTML = '<div class="empty-tip" style="padding:12px; color:var(--text-dim);">未检索到与问题相关的切片文档</div>';
-        return;
-      }
-      box.innerHTML = results.map((r, i) => `
-        <div class="rag-result-card">
-          <div class="rag-result-meta">
-            <span>#${i + 1} 匹配来源: ${escapeHtml(r.filename || "企业规范文档")}</span>
-            <span>相关度得分: ${(r.score * 100).toFixed(1)}%</span>
-          </div>
-          <div>${escapeHtml(r.content || "")}</div>
-        </div>
-      `).join("");
-    }
-  } catch (e) {
-    box.innerHTML = `<div class="empty-tip" style="color:var(--accent-rose)">检索失败: ${e.message}</div>`;
-  }
-}
-
-// Skills & MCP
-async function loadSkills() {
-  try {
-    const res = await apiFetch("/api/skills/list");
-    const json = await res.json();
-    if (json.code === 0) { state.skills = json.data || []; renderSkillsGrid(); }
-  } catch (e) { console.error("加载技能失败:", e); }
-}
-
-function renderSkillsGrid() {
-  const grid = $("skills-grid");
-  if (!grid) return;
-  if (!state.skills.length) { grid.innerHTML = '<div class="empty-tip">暂无垂直技能</div>'; return; }
-  grid.innerHTML = state.skills.map((s) => `
-    <div class="skill-card">
-      <div class="skill-header">
-        <div class="skill-icon-badge">${escapeHtml(s.icon || "🧩")}</div>
-        <div class="skill-title-block">
-          <div class="skill-name">${escapeHtml(s.name)}</div>
-          <div class="skill-desc">${escapeHtml(s.description || "垂直领域专属能力与流程规范")}</div>
-        </div>
-      </div>
-      <div class="skill-footer">
-        <span class="starter-tag">/${escapeHtml(s.name)}</span>
-        <div class="skill-actions">
-          <button class="action-pill-btn" onclick="viewSkillSOP('${escapeHtml(s.name)}')">📖 SOP</button>
-          <button class="action-pill-btn" onclick="editSkill('${escapeHtml(s.name)}')">✏️</button>
-          <button class="action-pill-btn danger" onclick="deleteSkill('${escapeHtml(s.name)}')">🗑️</button>
-        </div>
-      </div>
-    </div>
-  `).join("");
-}
-
-async function viewSkillSOP(skillName) {
-  try {
-    const res = await apiFetch(`/api/skills/${skillName}`);
-    const json = await res.json();
-    if (json.code === 0) {
-      $("sop-modal-title").textContent = `技能规范 (SOP) · ${skillName}`;
-      $("sop-content").innerHTML = window.marked ? marked.parse(json.data.sop || "") : json.data.sop;
-      $("sop-modal").classList.remove("hidden");
-    }
-  } catch (e) { alert("查看 SOP 失败: " + e.message); }
-}
-
-function openCreateSkillModal() {
-  state.editingSkillName = null;
-  $("skill-edit-modal-title").textContent = "➕ 新建垂直领域技能";
-  $("skill-edit-name").value = "";
-  $("skill-edit-name").disabled = false;
-  $("skill-edit-desc").value = "";
-  $("skill-edit-body").value = "";
-  $("skill-edit-modal").classList.remove("hidden");
-}
-
-async function editSkill(skillName) {
-  state.editingSkillName = skillName;
-  $("skill-edit-modal-title").textContent = `✏️ 编辑技能 · ${skillName}`;
-  $("skill-edit-name").value = skillName;
-  $("skill-edit-name").disabled = true;
-  try {
-    const res = await apiFetch(`/api/skills/${skillName}`);
-    const json = await res.json();
-    if (json.code === 0) {
-      $("skill-edit-desc").value = json.data.description || "";
-      $("skill-edit-body").value = json.data.sop || "";
-      $("skill-edit-modal").classList.remove("hidden");
-    }
-  } catch (e) { alert("读取技能详情失败: " + e.message); }
-}
-
-async function saveSkill() {
-  const name = $("skill-edit-name").value.trim();
-  const description = $("skill-edit-desc").value.trim();
-  const sop = $("skill-edit-body").value.trim();
-  if (!name) return alert("请输入技能英文标识");
-  try {
-    const res = await apiFetch("/api/skills/create", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, description, sop }),
-    });
-    const json = await res.json();
-    if (json.code === 0) {
-      $("skill-edit-modal").classList.add("hidden");
-      loadSkills();
-    } else alert("保存失败: " + json.message);
-  } catch (e) { alert("保存异常: " + e.message); }
-}
-
-async function deleteSkill(skillName) {
-  if (!confirm(`确定删除技能 /${skillName} 吗？`)) return;
-  try {
-    const res = await apiFetch(`/api/skills/${skillName}`, { method: "DELETE" });
-    const json = await res.json();
-    if (json.code === 0) loadSkills();
-  } catch (e) { alert("删除失败: " + e.message); }
-}
-
-async function syncSkills() {
-  try {
-    const res = await apiFetch("/api/skills/sync", { method: "POST" });
-    const json = await res.json();
-    if (json.code === 0) {
-      alert("技能同步成功！共加载 " + json.data.count + " 个技能");
-      loadSkills();
-    }
-  } catch (e) { alert("同步异常: " + e.message); }
-}
-
-async function handleSkillImportUpload(e) {
-  const file = e.target.files[0];
-  if (!file) return;
-  const formData = new FormData();
-  formData.append("file", file);
-  try {
-    const res = await apiFetch("/api/skills/import", { method: "POST", body: formData });
-    const json = await res.json();
-    if (json.code === 0) {
-      alert("导入成功！新增/更新技能: " + json.data.imported);
-      loadSkills();
-    } else alert("导入失败: " + json.message);
-  } catch (err) { alert("导入异常: " + err.message); }
-}
-
-// MCP
-async function loadMcpServers() {
-  try {
-    const res = await apiFetch("/api/mcp/list");
-    const json = await res.json();
-    if (json.code === 0) {
-      state.mcpServers = json.data || [];
-      if ($("mcp-count-badge")) $("mcp-count-badge").textContent = state.mcpServers.length;
-      renderMcpGrid();
-    }
-  } catch (e) { console.error("加载 MCP 服务失败:", e); }
-}
-
-function renderMcpGrid() {
-  const grid = $("mcp-grid");
-  if (!grid) return;
-  if (!state.mcpServers.length) {
-    grid.innerHTML = '<div class="empty-tip">暂无注册的 MCP 协议服务</div>';
-    return;
-  }
-  grid.innerHTML = state.mcpServers.map((s) => {
-    const isConn = s.enabled && s.status === "connected";
-    const toolsHtml = (s.tools || []).map((t) => `<span class="starter-tag" style="font-size:10px; padding:1px 6px;">${escapeHtml(t)}</span>`).join(" ");
-    return `
-      <div class="skill-card">
-        <div>
-          <div class="skill-header">
-            <div class="skill-icon-badge">${escapeHtml(s.icon || "🔌")}</div>
-            <div class="skill-title-block">
-              <div style="display:flex; align-items:center; justify-content:space-between;">
-                <span class="skill-name">${escapeHtml(s.name)}</span>
-                <span style="font-size:11px; display:inline-flex; align-items:center; gap:4px; color:${isConn ? "var(--accent-emerald)" : "var(--text-dim)"}">
-                  <span class="status-dot ${isConn ? "online" : ""}"></span>${isConn ? "已连接" : "未启动"}
-                </span>
-              </div>
-              <div class="skill-desc">${escapeHtml(s.description || "Model Context Protocol 服务")}</div>
-            </div>
-          </div>
-          <div style="margin-top: 10px; display:flex; flex-wrap:wrap; gap:4px;">
-            ${toolsHtml || '<span style="font-size:11px; color:var(--text-dim)">暂未探测到工具</span>'}
-          </div>
-        </div>
-        <div class="skill-footer" style="margin-top:12px;">
-          <span style="font-family:var(--font-mono); font-size:11px; color:var(--text-dim);">${escapeHtml(s.transport)}</span>
-          <div class="skill-actions">
-            <button class="action-pill-btn" onclick="pingMcpServer('${s.id}')">⚡ Ping 探测</button>
-            <button class="action-pill-btn" onclick="toggleMcpServer('${s.id}')">${s.enabled ? "禁用" : "启用"}</button>
-            <button class="action-pill-btn danger" onclick="deleteMcpServer('${s.id}')">🗑️</button>
-          </div>
-        </div>
-      </div>
-    `;
-  }).join("");
-}
-
-async function pingMcpServer(serverId) {
-  try {
-    const res = await apiFetch(`/api/mcp/${serverId}/ping`, { method: "POST" });
-    const json = await res.json();
-    if (json.code === 0) {
-      alert(`[MCP 探测成功]\n${json.data.message}\n响应延迟: ${json.data.latency_ms}ms`);
-      loadMcpServers();
-    }
-  } catch (e) { alert("探测失败: " + e.message); }
-}
-
-async function toggleMcpServer(serverId) {
-  try {
-    const res = await apiFetch(`/api/mcp/${serverId}/toggle`, { method: "POST" });
-    const json = await res.json();
-    if (json.code === 0) loadMcpServers();
-  } catch (e) { alert("切换失败: " + e.message); }
-}
-
-async function deleteMcpServer(serverId) {
-  if (!confirm("确定移除该 MCP 服务配置吗？")) return;
-  try {
-    const res = await apiFetch(`/api/mcp/${serverId}`, { method: "DELETE" });
-    const json = await res.json();
-    if (json.code === 0) loadMcpServers();
-  } catch (e) { alert("删除失败: " + e.message); }
-}
-
-async function saveMcpServer() {
-  const name = $("new-mcp-name").value.trim();
-  const description = $("new-mcp-desc").value.trim();
-  const transport = $("new-mcp-transport").value;
-  const icon = $("new-mcp-icon").value.trim() || "🔌";
-  const command = $("new-mcp-cmd").value.trim();
-  const argsRaw = $("new-mcp-args").value.trim();
-  const args = argsRaw ? argsRaw.split(",").map((a) => a.trim()).filter(Boolean) : [];
-  if (!name) return alert("请输入 MCP 服务名称");
-  try {
-    const res = await apiFetch("/api/mcp/create", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, description, transport, icon, command, args }),
-    });
-    const json = await res.json();
-    if (json.code === 0) {
-      $("mcp-edit-modal").classList.add("hidden");
-      loadMcpServers();
-    }
-  } catch (e) { alert("注册失败: " + e.message); }
-}
-
-// Codex
-async function loadProjects() {
-  try {
-    const res = await apiFetch("/api/projects/list");
-    const json = await res.json();
-    if (json.code === 0) {
-      state.projects = json.data || [];
-      renderProjectsSelect();
-      if (!state.currentProject && state.projects.length > 0) switchProject(state.projects[0].path);
-    }
-  } catch (e) { console.error("加载项目列表失败:", e); }
-}
-
-function renderProjectsSelect() {
-  const sel = $("project-select");
-  if (!sel) return;
-  sel.innerHTML = state.projects.map((p) => `<option value="${escapeHtml(p.path)}">${escapeHtml(p.name)}</option>`).join("");
-}
-
-async function loadDirectPathProject() {
-  const pathInput = $("codex-direct-path-input");
-  if (!pathInput) return;
-  const dirPath = pathInput.value.trim();
-  if (!dirPath) return alert("请输入任意本地有效文件夹路径");
-  try {
-    const res = await apiFetch("/api/projects/add", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: "", path: dirPath }),
-    });
-    const json = await res.json();
-    if (json.code === 0) {
-      await loadProjects();
-      switchProject(dirPath);
-    } else alert("载入目录失败: " + json.message);
-  } catch (e) { alert("载入异常: " + e.message); }
-}
-
-async function switchProject(projectPath) {
-  state.currentProject = projectPath;
-  if ($("project-select")) $("project-select").value = projectPath;
-  if ($("codex-direct-path-input")) $("codex-direct-path-input").value = projectPath;
-  try {
-    const [gitRes, treeRes] = await Promise.all([
-      apiFetch(`/api/projects/git?project_path=${encodeURIComponent(projectPath)}`),
-      apiFetch(`/api/projects/tree?project_path=${encodeURIComponent(projectPath)}`),
-    ]);
-    const gitJson = await gitRes.json();
-    const treeJson = await treeRes.json();
-    if (gitJson.code === 0) {
-      state.currentBranch = gitJson.data.current_branch;
-      renderBranchesSelect(gitJson.data.branches || ["main"]);
-    }
-    if (treeJson.code === 0) renderProjectTree(treeJson.data || []);
-  } catch (e) { console.error("切换工程失败:", e); }
-}
-
-function renderBranchesSelect(branches) {
-  const sel = $("branch-select");
-  if (!sel) return;
-  sel.innerHTML = branches.map((b) => `<option value="${escapeHtml(b)}" ${b === state.currentBranch ? "selected" : ""}>🌿 ${escapeHtml(b)}</option>`).join("");
-}
-
-async function checkoutCurrentBranch() {
-  const branch = $("branch-select").value;
-  if (!branch || !state.currentProject) return;
-  try {
-    const res = await apiFetch("/api/projects/checkout", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ project_path: state.currentProject, branch_name: branch }),
-    });
-    const json = await res.json();
-    if (json.code === 0) {
-      alert(`成功切换到分支: ${branch}`);
-      switchProject(state.currentProject);
-    } else alert("切换分支失败: " + json.message);
-  } catch (e) { alert("执行异常: " + e.message); }
+  } catch (e) { console.error("加载文件树失败:", e); }
 }
 
 function renderProjectTree(nodes) {
   const container = $("project-tree-list");
   if (!container) return;
-  function buildHtml(items, d) {
-    return items.map((item) => {
-      const indent = d * 14;
+  
+  function buildHtml(items, depth = 0) {
+    return items.map(item => {
+      const indent = depth * 12;
       if (item.type === "directory") {
         return `
-          <div class="tree-node dir" style="padding-left:${indent + 8}px;">
-            <span>📁 ${escapeHtml(item.name)}</span>
+          <div class="tree-node-item" style="padding-left: ${indent}px;">
+            <span>📁</span> <b>${escapeHtml(item.name)}</b>
           </div>
-          ${item.children ? buildHtml(item.children, d + 1) : ""}
+          ${item.children ? buildHtml(item.children, depth + 1) : ""}
         `;
       } else {
+        const isSelected = item.path === state.activeFilePath ? "active" : "";
         return `
-          <div class="tree-node file ${state.currentFilePath === item.path ? "active" : ""}" style="padding-left:${indent + 8}px;" onclick="selectProjectFile('${escapeHtml(item.path)}')">
-            <span>📄 ${escapeHtml(item.name)}</span>
+          <div class="tree-node-item ${isSelected}" style="padding-left: ${indent}px;" onclick="openProjectFile('${escapeHtml(item.path)}')">
+            <span>📄</span> <span>${escapeHtml(item.name)}</span>
           </div>
         `;
       }
     }).join("");
   }
-  container.innerHTML = buildHtml(nodes, 0);
+  
+  container.innerHTML = buildHtml(nodes);
 }
 
-async function selectProjectFile(filePath) {
-  state.currentFilePath = filePath;
-  $("current-file-path").textContent = filePath;
-  document.querySelectorAll(".tree-node.file").forEach((node) => {
-    node.classList.toggle("active", node.textContent.includes(filePath.split("/").pop()));
-  });
+async function openProjectFile(relPath) {
   try {
-    const res = await apiFetch(`/api/projects/file?project_path=${encodeURIComponent(state.currentProject)}&file_path=${encodeURIComponent(filePath)}`);
+    const res = await apiFetch(`/api/projects/file?project_path=${encodeURIComponent(state.currentProject)}&file_path=${encodeURIComponent(relPath)}`);
     const json = await res.json();
-    if (json.code === 0) $("code-editor-area").value = json.data.content || "";
-  } catch (e) { $("code-editor-area").value = `// 读取文件失败: ${e.message}`; }
+    if (json.code === 0 && json.data) {
+      state.activeFilePath = relPath;
+      state.activeFileContent = json.data.content || "";
+      $("active-file-indicator").textContent = relPath;
+      $("code-editor-area").value = state.activeFileContent;
+      switchRightTab("editor");
+      renderProjectTree(state.treeNodes || []);
+      showToast(`已打开文件: ${relPath}`);
+    }
+  } catch (e) { showToast("打开文件失败: " + e.message); }
 }
 
-function openNewFileModal() {
-  $("new-file-relpath").value = "";
-  $("new-file-init-content").value = "";
-  $("new-file-modal").classList.remove("hidden");
+async function saveActiveFileCode() {
+  if (!state.activeFilePath) return showToast("请先在左侧选择或新建一个文件");
+  const content = $("code-editor-area").value;
+  try {
+    const res = await apiFetch("/api/projects/file", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        project_path: state.currentProject,
+        file_path: state.activeFilePath,
+        content: content,
+      }),
+    });
+    const json = await res.json();
+    if (json.code === 0) {
+      showToast(`💾 文件已保存: [${state.activeFilePath}]`);
+      await reloadObsidianGraph();
+    } else {
+      showToast("保存失败: " + (json.message || json.detail));
+    }
+  } catch (e) { showToast("保存异常: " + e.message); }
 }
+
+async function runActiveFileCode() {
+  if (!state.activeFilePath) return showToast("请先选择要执行的代码文件");
+  let cmd = `uv run python ${state.activeFilePath}`;
+  if (state.activeFilePath.endsWith(".py") && state.activeFilePath.includes("test_")) {
+    cmd = `uv run pytest ${state.activeFilePath} -v`;
+  }
+  openTerminalDrawer();
+  await runWorkspaceCommand(cmd);
+}
+
+// 7. 新建文件弹窗
+function openNewFileModal() { $("new-file-modal").classList.remove("hidden"); }
+function closeNewFileModal() { $("new-file-modal").classList.add("hidden"); }
 
 async function confirmCreateNewFile() {
   const relPath = $("new-file-relpath").value.trim();
   const initContent = $("new-file-init-content").value;
-  if (!relPath) return alert("请输入相对工程文件路径");
-  const projPath = state.currentProject || "e:\\pro\\agent-learning";
+  if (!relPath) return showToast("请输入相对文件路径");
+  
   try {
     const res = await apiFetch("/api/projects/create-file", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ project_path: projPath, file_path: relPath, initial_content: initContent }),
+      body: JSON.stringify({
+        project_path: state.currentProject,
+        file_path: relPath,
+        initial_content: initContent,
+      }),
     });
     const json = await res.json();
     if (json.code === 0) {
-      $("new-file-modal").classList.add("hidden");
-      state.currentFilePath = relPath;
-      $("current-file-path").textContent = relPath;
+      closeNewFileModal();
+      showToast(`✨ 文件 [${relPath}] 创建成功并已载入！`);
+      state.activeFilePath = relPath;
+      state.activeFileContent = initContent;
+      $("active-file-indicator").textContent = relPath;
       $("code-editor-area").value = initContent;
-      await loadProjects();
-      showToast(`🎉 文件 [${relPath}] 创建成功并已载入编辑器！`, "success");
+      switchRightTab("editor");
+      await refreshProjectTree();
+      await reloadObsidianGraph();
     } else {
-      alert("创建失败: " + json.message);
+      showToast("创建失败: " + (json.message || json.detail));
     }
-  } catch (e) {
-    alert("创建异常: " + e.message);
-  }
+  } catch (e) { showToast("创建异常: " + e.message); }
 }
 
-async function saveActiveFileCode() {
-  if (!state.currentFilePath || state.currentFilePath === "未选择文件") {
-    return openNewFileModal();
-  }
-  const content = $("code-editor-area").value;
-  const projPath = state.currentProject || "e:\\pro\\agent-learning";
-  try {
-    const res = await apiFetch("/api/projects/file", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ project_path: projPath, file_path: state.currentFilePath, content }),
-    });
-    const json = await res.json();
-    if (json.code === 0) {
-      showToast(`💾 文件 [${state.currentFilePath}] 已成功保存到磁盘！`, "success");
-    } else {
-      alert("保存失败: " + json.message);
-    }
-  } catch (e) {
-    alert("保存失败: " + e.message);
-  }
-}
-
-function toggleTerminalDrawer(forceOpen) {
+// 8. 终端控制台
+function toggleTerminalDrawer() {
   const drawer = $("terminal-drawer");
-  if (!drawer) return;
-  if (forceOpen === true) drawer.classList.remove("hidden");
-  else if (forceOpen === false) drawer.classList.add("hidden");
-  else drawer.classList.toggle("hidden");
+  drawer.classList.toggle("hidden");
 }
+function openTerminalDrawer() { $("terminal-drawer").classList.remove("hidden"); }
+function clearTerminalOutput() { $("terminal-output").textContent = "// Vite Coding Terminal Ready.\n$ "; }
 
-function clearTerminalOutput() {
-  if ($("terminal-output")) $("terminal-output").textContent = "$ 控制台输出已清空\n";
-}
-
-async function runWorkspaceCommand(command) {
-  if (!command) return;
-  toggleTerminalDrawer(true);
-  const outEl = $("terminal-output");
-  const badge = $("terminal-status-badge");
-  if (badge) { badge.className = "status-badge"; badge.textContent = "⚡ 执行中..."; }
-  if (outEl) outEl.textContent = `$ ${command}\n\n[INFO] 正在本地工程环境执行指令，请稍候...\n`;
-  const projPath = state.currentProject || "e:\\pro\\agent-learning";
+async function runWorkspaceCommand(cmd) {
+  const outputEl = $("terminal-output");
+  const badgeEl = $("terminal-status-badge");
+  outputEl.textContent += `\n$ ${cmd}\n[执行中...]\n`;
+  badgeEl.textContent = "运行中";
+  badgeEl.style.color = "#38bdf8";
+  
   try {
     const res = await apiFetch("/api/projects/run-command", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ project_path: projPath, command: command, timeout_seconds: 30 }),
+      body: JSON.stringify({
+        project_path: state.currentProject,
+        command: cmd,
+        timeout_seconds: 40,
+      }),
     });
     const json = await res.json();
     if (json.code === 0 && json.data) {
       const d = json.data;
-      let text = `$ ${command}\n[完成] 耗时: ${d.elapsed_seconds}s | 退出码: ${d.returncode}\n\n`;
-      if (d.stdout) text += `${d.stdout}\n`;
-      if (d.stderr) text += `[STDERR / 输出]:\n${d.stderr}\n`;
-      if (!d.stdout && !d.stderr) text += `(命令执行完毕，无文本输出)\n`;
-      if (outEl) outEl.textContent = text;
-      if (badge) {
-        badge.className = d.success ? "status-badge ready" : "status-badge danger";
-        badge.textContent = d.success ? "✅ 成功" : "❌ 失败";
-      }
+      const isSuccess = d.exit_code === 0;
+      badgeEl.textContent = isSuccess ? "成功" : `退出码: ${d.exit_code}`;
+      badgeEl.style.color = isSuccess ? "#10b981" : "#ef4444";
+      
+      outputEl.textContent += `[完成] 耗时: ${d.duration_seconds}s | 退出码: ${d.exit_code}\n\n${d.stdout || ''}${d.stderr ? '\n[Stderr]\n' + d.stderr : ''}\n$ `;
+      outputEl.scrollTop = outputEl.scrollHeight;
     } else {
-      if (outEl) outEl.textContent += `\n[ERROR] 执行失败: ${json.message || '未知异常'}\n`;
-      if (badge) { badge.className = "status-badge danger"; badge.textContent = "❌ 异常"; }
+      outputEl.textContent += `\n[执行错误]: ${json.message || json.detail}\n$ `;
     }
   } catch (e) {
-    if (outEl) outEl.textContent += `\n[ERROR] 网络异常: ${e.message}\n`;
-    if (badge) { badge.className = "status-badge danger"; badge.textContent = "❌ 异常"; }
+    outputEl.textContent += `\n[网络异常]: ${e.message}\n$ `;
   }
 }
 
-async function runActiveFileCode() {
-  if (!state.currentFilePath || state.currentFilePath === "未选择文件") {
-    return alert("请先在左侧选择或新建一个代码文件");
-  }
-  const f = state.currentFilePath;
-  let cmd = "";
-  if (f.endsWith(".py")) {
-    if (f.startsWith("tests/") || f.includes("test_")) {
-      cmd = `uv run pytest ${f} -v`;
-    } else {
-      cmd = `uv run python ${f}`;
-    }
-  } else if (f.endsWith(".js") || f.endsWith(".ts")) {
-    cmd = `node ${f}`;
-  } else {
-    cmd = `git status`;
-  }
-  await runWorkspaceCommand(cmd);
-}
+// 9. Obsidian 动态知识图谱力导向绘制引擎 (Canvas Force-Directed Simulation)
+let graphAnimationId = null;
+let graphSimulation = { nodes: [], edges: [], hoveredNode: null };
 
-async function applyAgentCodeToProject(relPath, codeBase64) {
+async function reloadObsidianGraph() {
   try {
-    const content = decodeURIComponent(escape(atob(codeBase64)));
-    const projPath = state.currentProject || "e:\\pro\\agent-learning";
-    const res = await apiFetch("/api/projects/file", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ project_path: projPath, file_path: relPath, content }),
-    });
+    const res = await apiFetch(`/api/graph/project?project_path=${encodeURIComponent(state.currentProject)}`);
     const json = await res.json();
-    if (json.code === 0) {
-      state.currentFilePath = relPath;
-      $("current-file-path").textContent = relPath;
-      $("code-editor-area").value = content;
-      await loadProjects();
-      showToast(`✨ 代码已直接写入工程文件 [${relPath}] 并载入编辑器！`, "success");
-    } else {
-      alert("写入失败: " + json.message);
+    if (json.code === 0 && json.data) {
+      initObsidianGraphCanvas(json.data);
     }
-  } catch (e) {
-    alert("写入异常: " + e.message);
-  }
+  } catch (e) { console.error("加载知识图谱失败:", e); }
 }
 
-function renderCodexMarkdownWithActions(fullText) {
-  let html = window.marked ? marked.parse(fullText) : escapeHtml(fullText);
-  return html;
-}
-
-async function saveCustomProject() {
-  const name = $("new-proj-name").value.trim();
-  const path = $("new-proj-path").value.trim();
-  if (!path) return alert("请输入本地工程路径");
-  try {
-    const res = await apiFetch("/api/projects/add", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, path }),
-    });
-    const json = await res.json();
-    if (json.code === 0) {
-      $("project-add-modal").classList.add("hidden");
-      await loadProjects();
-      switchProject(path);
-    }
-  } catch (e) { alert("添加工程失败: " + e.message); }
-}
-
-function useCodexPrompt(prompt) { $("codex-query-input").value = prompt; sendCodexChat(); }
-
-async function sendCodexChat() {
-  const query = $("codex-query-input").value.trim();
-  if (!query) return;
-  const box = $("codex-messages");
-  const statusTag = $("codex-status-tag");
-  if (statusTag) statusTag.textContent = "⚡ 代码生成中...";
-
-  box.innerHTML += `
-    <div class="codex-user-bubble">
-      <div style="font-weight:700; color:var(--accent-cyan); font-size:11px; margin-bottom:4px;">👨‍💻 开发者指令</div>
-      <div>${escapeHtml(query)}</div>
-    </div>
-  `;
-  const assistantMsgId = "codex-msg-" + Date.now();
-  box.innerHTML += `
-    <div class="codex-assistant-bubble" id="${assistantMsgId}">
-      <div style="font-weight:700; color:var(--primary); font-size:11px; margin-bottom:6px; display:flex; align-items:center; justify-content:space-between;">
-        <span>🤖 Codex 编程智能体 (${escapeHtml(state.selectedCodexModel)})</span>
-        <span style="font-size:10px; color:var(--text-dim);">${new Date().toLocaleTimeString()}</span>
-      </div>
-      <div class="codex-bubble-content markdown-body">思考中...</div>
-    </div>
-  `;
-  box.scrollTop = box.scrollHeight;
-  $("codex-query-input").value = "";
-
-  const codexProvider = state.selectedCodexProvider || ($("codex-provider-select") ? $("codex-provider-select").value : "dashscope");
-  const codexModel = state.selectedCodexModel || ($("codex-model-select") ? $("codex-model-select").value : "qwen3.7-flash");
-  const fullPrompt = `【项目上下文】工程路径: ${state.currentProject || "e:\\pro\\agent-learning"}, 当前分支: ${state.currentBranch || "main"}, 当前打开文件: ${state.currentFilePath || "未选择文件"}\n【开发需求】: ${query}`;
-  try {
-    const res = await apiFetch("/api/chat/stream", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        query: fullPrompt,
-        conversation_id: "codex-session",
-        provider: codexProvider,
-        model: codexModel,
-      }),
-    });
-    if (!res.ok) {
-      const errBody = await res.text();
-      throw new Error(`服务异常 (${res.status}): ${errBody}`);
-    }
-    const targetEl = document.querySelector(`#${assistantMsgId} .codex-bubble-content`);
-    let fullText = "";
-    let buffer = "";
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() || "";
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (trimmed.startsWith("data: ")) {
-          const raw = trimmed.slice(6).trim();
-          if (!raw || raw === "[DONE]") continue;
-          try {
-            const data = JSON.parse(raw);
-            const text = data.text !== undefined ? data.text : (data.chunk !== undefined ? data.chunk : (data.content !== undefined ? data.content : ""));
-            if (text) {
-              fullText += text;
-              targetEl.innerHTML = renderCodexMarkdownWithActions(fullText);
-              decorateCodexCodeBlocks(targetEl);
-              box.scrollTop = box.scrollHeight;
-            }
-          } catch (e) {
-            if (!raw.startsWith("{")) {
-              fullText += raw;
-              targetEl.innerHTML = renderCodexMarkdownWithActions(fullText);
-              decorateCodexCodeBlocks(targetEl);
-              box.scrollTop = box.scrollHeight;
-            }
-          }
+function initObsidianGraphCanvas(data) {
+  const canvas = $("obsidian-graph-canvas");
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  
+  const width = canvas.parentElement.clientWidth || 500;
+  const height = canvas.parentElement.clientHeight || 400;
+  canvas.width = width;
+  canvas.height = height;
+  
+  // 初始化物理节点坐标
+  const nodes = data.nodes.map((n, i) => ({
+    ...n,
+    x: width / 2 + (Math.random() - 0.5) * (width * 0.7),
+    y: height / 2 + (Math.random() - 0.5) * (height * 0.7),
+    vx: 0,
+    vy: 0,
+    radius: n.val || 8,
+  }));
+  
+  const nodeMap = new Map(nodes.map(n => [n.id, n]));
+  const edges = data.edges.map(e => ({
+    source: nodeMap.get(e.source),
+    target: nodeMap.get(e.target),
+    color: e.color || "rgba(255,255,255,0.15)",
+    label: e.label
+  })).filter(e => e.source && e.target);
+  
+  graphSimulation = { nodes, edges, hoveredNode: null };
+  
+  if (graphAnimationId) cancelAnimationFrame(graphAnimationId);
+  
+  function step() {
+    ctx.clearRect(0, 0, width, height);
+    
+    // 物理力模拟 (斥力 + 弹力 + 中心重力)
+    for (let i = 0; i < nodes.length; i++) {
+      const a = nodes[i];
+      // 中心引力
+      a.vx += (width / 2 - a.x) * 0.0005;
+      a.vy += (height / 2 - a.y) * 0.0005;
+      
+      // 节点间斥力
+      for (let j = i + 1; j < nodes.length; j++) {
+        const b = nodes[j];
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+        if (dist < 180) {
+          const force = (180 - dist) / dist * 0.02;
+          a.vx -= dx * force;
+          a.vy -= dy * force;
+          b.vx += dx * force;
+          b.vy += dy * force;
         }
       }
     }
-    if (statusTag) statusTag.textContent = "✅ 就绪";
-    decorateCodexCodeBlocks(targetEl);
-  } catch (e) {
-    const targetEl = document.querySelector(`#${assistantMsgId} .codex-bubble-content`);
-    if (targetEl) targetEl.innerHTML = `<span style="color:var(--accent-rose)">执行失败: ${e.message}</span>`;
-    if (statusTag) statusTag.textContent = "❌ 异常";
+    
+    // 连线弹力
+    for (const edge of edges) {
+      const dx = edge.target.x - edge.source.x;
+      const dy = edge.target.y - edge.source.y;
+      const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+      const force = (dist - 70) * 0.003;
+      edge.source.vx += dx * force;
+      edge.source.vy += dy * force;
+      edge.target.vx -= dx * force;
+      edge.target.vy -= dy * force;
+    }
+    
+    // 绘制连线
+    for (const edge of edges) {
+      ctx.beginPath();
+      ctx.moveTo(edge.source.x, edge.source.y);
+      ctx.lineTo(edge.target.x, edge.target.y);
+      ctx.strokeStyle = edge.color;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+    
+    // 更新位置并绘制节点
+    for (const n of nodes) {
+      n.x += n.vx * 0.85;
+      n.y += n.vy * 0.85;
+      n.vx *= 0.85;
+      n.vy *= 0.85;
+      
+      // 边界约束
+      n.x = Math.max(20, Math.min(width - 20, n.x));
+      n.y = Math.max(20, Math.min(height - 20, n.y));
+      
+      // 节点发光晕环
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, n.radius + 3, 0, Math.PI * 2);
+      ctx.fillStyle = (n.color || "#6366f1") + "33";
+      ctx.fill();
+      
+      // 实体圆点
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, n.radius, 0, Math.PI * 2);
+      ctx.fillStyle = n.color || "#6366f1";
+      ctx.fill();
+      
+      // 标签文字：仅悬浮节点或关键节点高亮显示，与 Obsidian 一致保持纯净星空美感
+      if (n === graphSimulation.hoveredNode || n.type === "project" || n.type === "commit" || nodes.length <= 25) {
+        ctx.font = "11px 'JetBrains Mono', monospace";
+        ctx.fillStyle = n === graphSimulation.hoveredNode ? "#38bdf8" : "#cbd5e1";
+        ctx.fillText(n.label, n.x + n.radius + 4, n.y + 4);
+      }
+    }
+    
+    graphAnimationId = requestAnimationFrame(step);
   }
+  
+  step();
+  
+  // 鼠标交互：点击节点打开文件
+  canvas.onmousemove = (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    const hit = nodes.find(n => {
+      const dx = n.x - mx;
+      const dy = n.y - my;
+      return Math.sqrt(dx * dx + dy * dy) <= n.radius + 4;
+    });
+    canvas.style.cursor = hit ? "pointer" : "default";
+    graphSimulation.hoveredNode = hit;
+  };
+  
+  canvas.onclick = () => {
+    if (graphSimulation.hoveredNode && graphSimulation.hoveredNode.path) {
+      openProjectFile(graphSimulation.hoveredNode.path);
+      showToast(`🎯 图谱定位: ${graphSimulation.hoveredNode.details || graphSimulation.hoveredNode.label}`);
+    }
+  };
 }
 
-function decorateCodexCodeBlocks(container) {
+// 10. 分层记忆中心 (短期上下文 + 长期语义规范)
+async function loadLongTermMemories() {
+  try {
+    const res = await apiFetch("/api/memory/long-term/list");
+    const json = await res.json();
+    if (json.code === 0) {
+      renderLongTermMemories(json.data || []);
+    }
+  } catch (e) { console.error("加载长期记忆失败:", e); }
+}
+
+function renderLongTermMemories(memories) {
+  const container = $("long-term-memory-list");
   if (!container) return;
-  const blocks = container.querySelectorAll("pre");
-  blocks.forEach((pre) => {
-    if (pre.previousElementSibling && pre.previousElementSibling.classList.contains("agent-code-action-bar")) return;
-    const codeEl = pre.querySelector("code");
-    if (!codeEl) return;
-    const codeText = codeEl.innerText || "";
-    if (codeText.length < 10) return;
+  container.innerHTML = memories.map(m => `
+    <div class="memory-card">
+      <div class="mem-title">💡 ${escapeHtml(m.title)} <span style="font-size:10px; color:#a5b4fc;">[${m.category}]</span></div>
+      <div class="mem-content">${escapeHtml(m.content)}</div>
+    </div>
+  `).join("");
+}
 
-    let targetPath = state.currentFilePath && state.currentFilePath !== "未选择文件" ? state.currentFilePath : "app/main.py";
-    const prevText = pre.previousElementSibling ? (pre.previousElementSibling.innerText || "") : "";
-    const pathMatch = prevText.match(/([a-zA-Z0-9_\-\/\\\.]+\.(py|js|ts|json|html|css|md|yaml|yml))/);
-    if (pathMatch) targetPath = pathMatch[1].replace(/\\/g, "/");
+async function onMemorySearch(query) {
+  try {
+    const res = await apiFetch(`/api/memory/search?q=${encodeURIComponent(query)}`);
+    const json = await res.json();
+    if (json.code === 0) {
+      renderLongTermMemories(json.data || []);
+    }
+  } catch (e) {}
+}
 
-    let b64 = "";
-    try { b64 = btoa(unescape(encodeURIComponent(codeText))); } catch (e) { b64 = ""; }
-    if (!b64) return;
+async function loadShortTermBuffer(convId) {
+  try {
+    const res = await apiFetch(`/api/memory/short-term/${convId}`);
+    const json = await res.json();
+    const box = $("short-term-buffer-display");
+    if (box) {
+      if (json.code === 0 && json.data && json.data.length > 0) {
+        box.textContent = JSON.stringify(json.data, null, 2);
+      } else {
+        box.textContent = "// 当前会话短期记忆缓存已就绪，记录多轮开发上下文与临时代码片段。";
+      }
+    }
+  } catch (e) {}
+}
 
-    const bar = document.createElement("div");
-    bar.className = "agent-code-action-bar";
-    bar.innerHTML = `
-      <span class="agent-target-file">📝 目标文件: <code>${escapeHtml(targetPath)}</code></span>
-      <div class="agent-action-buttons">
-        <button class="action-pill-green" onclick="applyAgentCodeToProject('${escapeHtml(targetPath)}', '${b64}')">✨ 写入磁盘工程</button>
-        <button class="action-pill-cyan" onclick="selectProjectFile('${escapeHtml(targetPath)}')">👁️ 载入编辑器</button>
-        ${targetPath.endsWith('.py') ? `<button class="action-pill-amber" onclick="runWorkspaceCommand('uv run pytest ${escapeHtml(targetPath)} -v')">▶️ 运行单测</button>` : ''}
-      </div>
-    `;
-    pre.parentNode.insertBefore(bar, pre);
+function openAddMemoryModal() { $("add-memory-modal").classList.remove("hidden"); }
+function closeAddMemoryModal() { $("add-memory-modal").classList.add("hidden"); }
+
+async function confirmAddMemory() {
+  const category = $("new-mem-category").value.trim() || "architecture";
+  const title = $("new-mem-title").value.trim();
+  const content = $("new-mem-content").value.trim();
+  const tags = ($("new-mem-tags").value || "").split(",").map(t => t.trim()).filter(Boolean);
+  if (!title || !content) return showToast("请填写规范标题与内容");
+  
+  try {
+    const res = await apiFetch("/api/memory/long-term/add", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ category, title, content, tags }),
+    });
+    const json = await res.json();
+    if (json.code === 0) {
+      closeAddMemoryModal();
+      showToast("✨ 长期记忆/规范已持久化！");
+      await loadLongTermMemories();
+    }
+  } catch (e) { showToast("添加记忆异常: " + e.message); }
+}
+
+// 11. 视图与 Tab 切换
+function switchRightTab(tabName) {
+  ["editor", "graph", "memory"].forEach(t => {
+    $(`pane-${t}`).classList.toggle("active", t === tabName);
+    $(`tab-btn-${t}`).classList.toggle("active", t === tabName);
+  });
+  if (tabName === "graph") reloadObsidianGraph();
+}
+
+function toggleRightTab(tabName) {
+  switchRightTab(tabName);
+}
+
+function applyPromptChip(text) {
+  const input = $("agent-query-input");
+  input.value = text;
+  input.focus();
+}
+
+function setupEventListeners() {
+  const input = $("agent-query-input");
+  if (input) {
+    input.addEventListener("input", checkCitationTrigger);
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        sendAgentMessage();
+      }
+    });
+  }
+  
+  window.addEventListener("keydown", (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+      e.preventDefault();
+      saveActiveFileCode();
+    }
   });
 }
 
-function launchDesktopClient() { alert("已向本地 AgentX 桌面运行时派发启动信号！\n独立原生多窗口 Studio 正在唤醒。"); }
-
-// Memory & Graph
-async function loadUserMemoryAndGraph() {
-  try {
-    const [memRes, graphRes] = await Promise.all([
-      apiFetch("/api/memory/profile"),
-      apiFetch("/api/memory/graph"),
-    ]);
-    const memJson = await memRes.json();
-    const graphJson = await graphRes.json();
-    if (memJson.code === 0) {
-      const items = memJson.data.profile || [];
-      if ($("mem-count-badge")) $("mem-count-badge").textContent = items.length;
-      renderMemoryCards(items);
-    }
-    if (graphJson.code === 0) {
-      const edges = graphJson.data.edges || [];
-      if ($("graph-count-badge")) $("graph-count-badge").textContent = edges.length;
-      renderGraphTable(edges);
-    }
-  } catch (e) { console.error("加载记忆图谱失败:", e); }
-}
-
-function renderMemoryCards(items) {
-  const container = $("memory-cards-container");
-  if (!container) return;
-  if (!items.length) {
-    container.innerHTML = '<div class="empty-tip" style="padding:16px; text-align:center; color:var(--text-dim);">暂无沉淀画像，与智能体进行对话即可自动提取！</div>';
-    return;
-  }
-  container.innerHTML = items.map((m) => `
-    <div class="memory-item-card">
-      <div class="memory-item-header">
-        <span class="memory-item-key">🏷️ ${escapeHtml(m.key)}</span>
-        <span class="starter-tag">${escapeHtml(m.type || "trait")}</span>
-      </div>
-      <div class="memory-item-val">${escapeHtml(m.value)}</div>
-    </div>
-  `).join("");
-}
-
-function renderGraphTable(edges) {
-  const tbody = $("graph-tbody");
-  if (!tbody) return;
-  if (!edges.length) {
-    tbody.innerHTML = '<tr><td colspan="5" class="empty-cell">知识图谱待激活，问答后将自动构建实体关系网！</td></tr>';
-    return;
-  }
-  tbody.innerHTML = edges.map((e) => `
-    <tr>
-      <td style="font-weight:600; color:var(--accent-cyan);">${escapeHtml(e.subject)}</td>
-      <td><span class="starter-tag">${escapeHtml(e.predicate)}</span></td>
-      <td style="font-weight:600; color:var(--text-main);">${escapeHtml(e.object)}</td>
-      <td>${e.confidence ? (e.confidence * 100).toFixed(0) + "%" : "95%"}</td>
-      <td>${e.frequency || 1} 次</td>
-    </tr>
-  `).join("");
-}
-
-async function saveUserMemory() {
-  const type = $("new-mem-type").value;
-  const key = $("new-mem-key").value.trim();
-  const val = $("new-mem-val").value.trim();
-  if (!key || !val) return alert("请完整输入特征标识与内容");
-  try {
-    const res = await apiFetch("/api/memory/profile", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type, key, value: val }),
-    });
-    const json = await res.json();
-    if (json.code === 0) {
-      $("memory-add-modal").classList.add("hidden");
-      loadUserMemoryAndGraph();
-    }
-  } catch (e) { alert("保存失败: " + e.message); }
-}
-
-async function clearUserMemory() {
-  if (!confirm("确定清空当前用户的所有沉淀画像与知识图谱吗？")) return;
-  try {
-    const res = await apiFetch("/api/memory/clear", { method: "POST" });
-    const json = await res.json();
-    if (json.code === 0) loadUserMemoryAndGraph();
-  } catch (e) { alert("清空失败: " + e.message); }
-}
-
-// Gateway & Model Selectors & Users & Travel & Timeline
-async function loadGatewayConfig() {
-  try {
-    const [routesRes, providersRes] = await Promise.all([
-      apiFetch("/api/gateway/routes"),
-      apiFetch("/api/gateway/providers"),
-    ]);
-    const routesJson = await routesRes.json();
-    const providersJson = await providersRes.json();
-    if (routesJson.code === 0) {
-      state.routes = routesJson.data || [];
-      renderGatewayRoutes(state.routes);
-    }
-    if (providersJson.code === 0) {
-      state.providers = providersJson.data || [];
-      renderGatewayProviders(state.providers);
-      populateModelSelectors();
-    }
-  } catch (e) { console.error("加载网关配置失败:", e); }
-}
-
-function populateModelSelectors() {
-  const chatP = $("chat-provider-select");
-  const codexP = $("codex-provider-select");
-  if (!state.providers.length) return;
-
-  const optionsHtml = state.providers.map((p) => `<option value="${escapeHtml(p.provider_code)}">${escapeHtml(p.name)}</option>`).join("");
-  if (chatP) {
-    chatP.innerHTML = optionsHtml;
-    chatP.value = state.selectedChatProvider || state.providers[0].provider_code;
-    updateChatModelOptions();
-  }
-  if (codexP) {
-    codexP.innerHTML = optionsHtml;
-    codexP.value = state.selectedCodexProvider || state.providers[0].provider_code;
-    updateCodexModelOptions();
-  }
-}
-
-function updateChatModelOptions() {
-  const pCode = $("chat-provider-select") ? $("chat-provider-select").value : state.selectedChatProvider;
-  state.selectedChatProvider = pCode;
-  const p = state.providers.find((x) => x.provider_code === pCode);
-  const mSel = $("chat-model-select");
-  if (!mSel || !p) return;
-  const models = p.models || [];
-  mSel.innerHTML = models.map((m) => `<option value="${escapeHtml(m.id)}">${escapeHtml(m.name || m.id)}</option>`).join("");
-  if (models.length > 0) {
-    const hasCurrent = models.some((m) => m.id === state.selectedChatModel);
-    if (!hasCurrent) state.selectedChatModel = models[0].id;
-    mSel.value = state.selectedChatModel;
-  }
-}
-
-function updateCodexModelOptions() {
-  const pCode = $("codex-provider-select") ? $("codex-provider-select").value : state.selectedCodexProvider;
-  state.selectedCodexProvider = pCode;
-  const p = state.providers.find((x) => x.provider_code === pCode);
-  const mSel = $("codex-model-select");
-  if (!mSel || !p) return;
-  const models = p.models || [];
-  mSel.innerHTML = models.map((m) => `<option value="${escapeHtml(m.id)}">${escapeHtml(m.name || m.id)}</option>`).join("");
-  if (models.length > 0) {
-    const hasCurrent = models.some((m) => m.id === state.selectedCodexModel);
-    if (!hasCurrent) state.selectedCodexModel = models[0].id;
-    mSel.value = state.selectedCodexModel;
-  }
-}
-
-function renderGatewayRoutes(routes) {
-  const tbody = $("routes-tbody");
-  if (!tbody) return;
-  tbody.innerHTML = routes.map((r) => `
-    <tr>
-      <td style="font-weight:600; color:var(--text-main);">${escapeHtml(r.feature_name || r.feature_key)}</td>
-      <td><span class="starter-tag">${escapeHtml(r.provider_code || r.provider || "dashscope")}</span></td>
-      <td style="font-family:var(--font-mono); color:var(--accent-cyan); font-weight:600;">${escapeHtml(r.model_name || r.model || "qwen3.7-flash")}</td>
-      <td>${r.temperature !== undefined ? r.temperature : 0.3}</td>
-      <td>${r.max_tokens || 4096}</td>
-      <td><button class="action-pill-btn" onclick="alert('当前路由规则已生效')">✅ 已激活</button></td>
-    </tr>
-  `).join("");
-}
-
-function renderGatewayProviders(providers) {
-  const grid = $("providers-grid");
-  if (!grid) return;
-  grid.innerHTML = providers.map((p) => {
-    const modelsList = p.models || [];
-    const modelsHtml = modelsList.map((m) => `
-      <span class="provider-model-tag ${m.custom ? "custom" : ""}" title="${escapeHtml(m.name || m.id)}">
-        <span>${m.custom ? "🏷️ " : ""}${escapeHtml(m.id)}</span>
-        ${m.custom ? `<button class="session-del-btn" style="opacity:1; margin-left:2px;" onclick="deleteCustomModel('${p.provider_code}', '${m.id}')">✕</button>` : ""}
-      </span>
-    `).join(" ");
-
-    return `
-      <div class="provider-card">
-        <div class="provider-header">
-          <span class="provider-name">${escapeHtml(p.name)}</span>
-          <span class="starter-tag">${modelsList.length} 个可用模型</span>
-        </div>
-        <div style="font-size:12px; color:var(--text-muted); line-height:1.4;">${escapeHtml(p.description || "兼容 OpenAI / Anthropic 标准协议")}</div>
-        <div style="font-family:var(--font-mono); font-size:11px; color:var(--text-dim); background:var(--bg-code); padding:6px 8px; border-radius:4px;">Endpoint: ${escapeHtml(p.base_url || "https://...")}</div>
-        
-        <div style="display:flex; flex-wrap:wrap; gap:4px; margin-top:4px; max-height:100px; overflow-y:auto;">
-          ${modelsHtml || '<span style="font-size:11px; color:var(--text-dim)">暂未配置模型</span>'}
-        </div>
-
-        <div class="skill-footer" style="margin-top:8px; padding-top:8px;">
-          <button class="action-pill-btn" onclick="openAddCustomModelModal('${p.provider_code}', '${escapeHtml(p.name)}')">➕ 自定义模型</button>
-          <button class="action-pill-btn" onclick="syncProviderOfficialModels('${p.provider_code}')">🔄 同步官方模型</button>
-        </div>
-      </div>
-    `;
-  }).join("");
-}
-
-function openAddCustomModelModal(providerCode, providerName) {
-  $("custom-model-provider-hidden").value = providerCode;
-  $("custom-model-modal-title").textContent = `➕ 为 ${providerName} 添加自定义模型`;
-  $("custom-model-id").value = "";
-  $("custom-model-name").value = "";
-  $("custom-model-modal").classList.remove("hidden");
-}
-
-async function saveCustomModel() {
-  const providerCode = $("custom-model-provider-hidden").value;
-  const modelId = $("custom-model-id").value.trim();
-  const modelName = $("custom-model-name").value.trim();
-  if (!modelId) return alert("请输入模型标识 ID");
-  try {
-    const res = await apiFetch(`/api/gateway/providers/${providerCode}/models`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model_id: modelId, model_name: modelName }),
-    });
-    const json = await res.json();
-    if (json.code === 0) {
-      $("custom-model-modal").classList.add("hidden");
-      loadGatewayConfig();
-    } else alert("保存失败: " + json.message);
-  } catch (e) { alert("操作异常: " + e.message); }
-}
-
-async function deleteCustomModel(providerCode, modelId) {
-  if (!confirm(`确定删除自定义模型 [${modelId}] 吗？`)) return;
-  try {
-    const res = await apiFetch(`/api/gateway/providers/${providerCode}/models/${encodeURIComponent(modelId)}`, {
-      method: "DELETE",
-    });
-    const json = await res.json();
-    if (json.code === 0) loadGatewayConfig();
-  } catch (e) { alert("删除失败: " + e.message); }
-}
-
-async function syncProviderOfficialModels(providerCode) {
-  try {
-    const res = await apiFetch(`/api/gateway/providers/${providerCode}/sync-models`, {
-      method: "POST",
-    });
-    const json = await res.json();
-    if (json.code === 0) {
-      alert(`[官方同步成功] 厂商 [${providerCode}] 共同步到 ${json.data.total_synced} 个最新模型！`);
-      loadGatewayConfig();
-    }
-  } catch (e) { alert("同步失败: " + e.message); }
-}
-
-async function syncAllOfficialModels() {
-  try {
-    const res = await apiFetch("/api/gateway/sync-models", { method: "POST" });
-    const json = await res.json();
-    if (json.code === 0) {
-      alert(`[全网官方模型同步完成] 共同步更新了 ${json.data.total_synced} 个模型！`);
-      loadGatewayConfig();
-    }
-  } catch (e) { alert("全量同步失败: " + e.message); }
-}
-
-async function loadTravelBoard() {
-  try {
-    const res = await apiFetch("/api/travel/applications");
-    const json = await res.json();
-    if (json.code === 0) {
-      const tbody = $("travel-tbody");
-      if (!tbody) return;
-      const list = json.data || [];
-      if (!list.length) {
-        tbody.innerHTML = '<tr><td colspan="6" class="empty-cell">暂无差旅申请记录（可在对话框中直接说「我要去上海出差」快速创建）</td></tr>';
-        return;
-      }
-      tbody.innerHTML = list.map((t) => `
-        <tr>
-          <td style="font-family:var(--font-mono);">${escapeHtml(t.app_id || t.id)}</td>
-          <td style="font-weight:600;">${escapeHtml(t.applicant || "admin")}</td>
-          <td style="color:var(--accent-cyan); font-weight:600;">${escapeHtml(t.departure)} ➔ ${escapeHtml(t.destination)}</td>
-          <td>${escapeHtml(t.start_date)} ~ ${escapeHtml(t.end_date)}</td>
-          <td>${escapeHtml(t.reason || "业务拓展")}</td>
-          <td><span class="starter-tag" style="background:rgba(16,185,129,0.15); color:var(--accent-emerald); border-color:rgba(16,185,129,0.3);">${escapeHtml(t.status || "已通过审批")}</span></td>
-        </tr>
-      `).join("");
-    }
-  } catch (e) {}
-}
-
-async function loadUsers() {
-  try {
-    const res = await apiFetch("/api/sys/users");
-    const json = await res.json();
-    if (json.code === 0) {
-      const tbody = $("users-tbody");
-      if (!tbody) return;
-      tbody.innerHTML = (json.data || []).map((u) => `
-        <tr>
-          <td style="font-family:var(--font-mono);">${u.id}</td>
-          <td style="font-weight:600; color:var(--text-main);">${escapeHtml(u.username)}</td>
-          <td><span class="starter-tag">${escapeHtml(u.role)}</span></td>
-          <td>部门 #${u.dept_id || 1}</td>
-          <td>${u.role === "admin" ? "全局数据范围 (ALL)" : "本部门及子部门 (DEPT_AND_CHILD)"}</td>
-          <td><button class="action-pill-btn" onclick="alert('用户权限已同步')">配置权限</button></td>
-        </tr>
-      `).join("");
-    }
-  } catch (e) {}
-}
-
-async function saveNewUser() {
-  const username = $("new-user-name").value.trim();
-  const password = $("new-user-pwd").value.trim();
-  const dept_id = parseInt($("new-user-dept").value, 10);
-  const role = $("new-user-role").value;
-  if (!username || !password) return alert("请输入完整用户信息");
-  try {
-    const res = await apiFetch("/api/sys/users", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password, dept_id, role }),
-    });
-    const json = await res.json();
-    if (json.code === 0) {
-      $("user-modal").classList.add("hidden");
-      loadUsers();
-    }
-  } catch (e) { alert("保存失败: " + e.message); }
-}
-
-async function showTimeline() {
-  if (!state.activeConversationId) return alert("暂无活跃会话");
-  $("timeline-modal").classList.remove("hidden");
-  const listEl = $("timeline-list");
-  listEl.innerHTML = '<div class="empty-tip" style="padding:12px; text-align:center; color:var(--text-dim);">加载会话执行轨迹中...</div>';
-  try {
-    const res = await apiFetch(`/api/chat/timeline/${state.activeConversationId}`);
-    const json = await res.json();
-    if (json.code === 0 && json.data.timeline && json.data.timeline.length) {
-      listEl.innerHTML = json.data.timeline.map((t) => `
-        <div style="padding:10px 12px; background:rgba(255,255,255,0.025); border:1px solid var(--border-subtle); border-radius:6px; margin-bottom:8px;">
-          <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:4px;">
-            <span style="font-weight:700; color:var(--accent-cyan);">${escapeHtml(t.event)}</span>
-            <span style="color:var(--text-dim);">${t.timestamp || "2026-08-27"}</span>
-          </div>
-          <div style="font-size:13px; color:var(--text-sub);">${escapeHtml(t.detail || "")}</div>
-        </div>
-      `).join("");
-    } else listEl.innerHTML = '<div class="empty-tip" style="padding:12px; text-align:center; color:var(--text-dim);">该会话暂无异步调度事件</div>';
-  } catch (e) { listEl.innerHTML = `<div class="empty-tip" style="color:var(--accent-rose)">加载轨迹失败: ${e.message}</div>`; }
-}
-
-// Slash Popover
-function handleQueryInput(e) {
-  const val = e.target.value;
-  if (val.startsWith("/")) showSlashPopover(val.slice(1).toLowerCase());
-  else hideSlashPopover();
-}
-
-function handleQueryKeydown(e) {
-  const popover = $("slash-popover");
-  if (!popover.classList.contains("hidden")) {
-    const items = popover.querySelectorAll(".slash-item");
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      state.slashIndex = (state.slashIndex + 1) % items.length;
-      updateSlashSelection(items);
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      state.slashIndex = (state.slashIndex - 1 + items.length) % items.length;
-      updateSlashSelection(items);
-    } else if (e.key === "Enter" || e.key === "Tab") {
-      e.preventDefault();
-      if (items[state.slashIndex]) items[state.slashIndex].click();
-    } else if (e.key === "Escape") hideSlashPopover();
-    return;
-  }
-  if (e.key === "Enter" && !e.shiftKey) {
-    e.preventDefault();
-    send();
-  }
-}
-
-function showSlashPopover(filter) {
-  const popover = $("slash-popover");
-  const list = $("slash-list");
-  if (!popover || !list) return;
-  const matched = state.skills.filter((s) => s.name.toLowerCase().includes(filter));
-  if (!matched.length) { hideSlashPopover(); return; }
-  state.slashIndex = 0;
-  list.innerHTML = matched.map((s, idx) => `
-    <div class="slash-item ${idx === 0 ? "active" : ""}" onclick="selectSlashSkill('${escapeHtml(s.name)}')">
-      <span class="slash-icon">${escapeHtml(s.icon || "⚡")}</span>
-      <div class="slash-info">
-        <div class="slash-name">/${escapeHtml(s.name)}</div>
-        <div class="slash-desc">${escapeHtml(s.description || "垂直领域技能")}</div>
-      </div>
-    </div>
-  `).join("");
-  popover.classList.remove("hidden");
-}
-
-function hideSlashPopover() {
-  if ($("slash-popover")) $("slash-popover").classList.add("hidden");
-}
-
-function updateSlashSelection(items) {
-  items.forEach((it, idx) => it.classList.toggle("active", idx === state.slashIndex));
-}
-
-function selectSlashSkill(name) {
-  $("query").value = `/${name} `;
-  hideSlashPopover();
-  $("query").focus();
+function renderMarkdown(md) {
+  if (!md) return "";
+  let html = md.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  html = html.replace(/```([a-zA-Z0-9_\-\.:]*)[\r\n]+([\s\S]*?)```/g, (_, lang, code) => {
+    const cleanCode = code.trim();
+    return `<pre><code class="language-${lang}">${cleanCode}</code></pre>`;
+  });
+  html = html.replace(/`([^`\n]+)`/g, "<code>$1</code>");
+  html = html.replace(/\*\*([^\*]+)\*\*/g, "<b>$1</b>");
+  html = html.replace(/\n/g, "<br>");
+  return html;
 }
 
 function escapeHtml(str) {
   if (!str) return "";
-  return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+  return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
+
+window.addEventListener("DOMContentLoaded", initApp);
