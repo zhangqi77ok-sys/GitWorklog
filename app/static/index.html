@@ -145,26 +145,28 @@
             <div class="qa-mode-header">
               <div class="qa-mode-switcher">
                 <button id="qa-mode-chat-btn" class="mode-btn active" onclick="switchQAMode('chat')">
-                  <span>💬 智能问答对话</span>
+                  <span>💬 智能对话</span>
                 </button>
                 <button id="qa-mode-codex-btn" class="mode-btn" onclick="switchQAMode('codex')">
-                  <span>💻 Codex 编程工作台</span>
+                  <span>💻 Codex 编程</span>
                 </button>
               </div>
 
               <!-- Codex 顶部工具栏（在 Codex 模式激活时展示） -->
               <div id="codex-header-toolbar" class="codex-toolbar-group hidden">
-                <div class="project-toolbar">
-                  <span>📦 工程目录:</span>
-                  <select id="project-select" class="dropdown-select"></select>
-                  <input id="codex-direct-path-input" class="dropdown-select" placeholder="输入任意本地绝对路径..." style="width: 220px;" />
-                  <button id="load-direct-path-btn" class="ghost-btn">🚀 载入目录</button>
-                  <button id="add-project-btn" class="ghost-btn">➕ 关联目录</button>
-                  <span>🌿 分支:</span>
-                  <select id="branch-select" class="dropdown-select"></select>
-                  <button id="checkout-branch-btn" class="ghost-btn">切换分支</button>
+                <div class="codex-toolbar-item">
+                  <span class="toolbar-label">📁 工程:</span>
+                  <select id="project-select" class="compact-select" style="max-width: 140px;"></select>
+                  <input id="codex-direct-path-input" class="compact-input" placeholder="输入本地文件夹路径..." style="width: 160px;" />
+                  <button id="load-direct-path-btn" class="compact-action-btn">🚀 载入</button>
+                  <button id="add-project-btn" class="compact-action-btn">➕ 关联</button>
                 </div>
-                <button id="launch-desktop-btn" class="primary-btn" title="启动独立原生桌面窗口">🖥️ 桌面客户端</button>
+                <div class="codex-toolbar-item">
+                  <span class="toolbar-label">🌿 分支:</span>
+                  <select id="branch-select" class="compact-select" style="max-width: 110px;"></select>
+                  <button id="checkout-branch-btn" class="compact-action-btn">切换</button>
+                </div>
+                <button id="launch-desktop-btn" class="desktop-link-btn" title="启动独立原生桌面窗口">🖥️ 桌面客户端</button>
               </div>
             </div>
 
@@ -291,56 +293,68 @@
             <!-- 子区域 B：Codex 编程工作台视图 -->
             <div id="qa-codex-subview" class="qa-subview-pane hidden">
               <div class="coding-workspace-grid">
-                <!-- 1. 工程文件目录（在对话框的左侧） -->
-                <div class="code-tree-pane">
-                  <div class="code-pane-title">📁 工程文件目录</div>
+                <!-- 1. 工程文件目录 (在对话框左侧) -->
+                <div class="code-tree-pane card-pane">
+                  <div class="code-pane-title">
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                      <span>📁</span>
+                      <span>工程文件目录</span>
+                    </div>
+                    <button class="icon-refresh-btn" onclick="loadProjects()" title="刷新目录">🔄</button>
+                  </div>
                   <div id="project-tree-list" class="project-tree-list">
                     <div class="empty-tip">加载工程目录树中...</div>
                   </div>
                 </div>
 
-                <!-- 2. Codex 编程智能体对话区（工程目录在左侧，输入放上面，对话框放下面） -->
-                <div class="codex-chat-pane">
-                  <div class="code-pane-title" style="display: flex; align-items: center; justify-content: space-between;">
-                    <span>🤖 Codex 编程智能体</span>
-                    <div style="display: flex; align-items: center; gap: 4px;">
-                      <select id="codex-provider-select" class="dropdown-select compact" style="max-width: 120px; font-size: 11px;"></select>
-                      <select id="codex-model-select" class="dropdown-select compact" style="max-width: 140px; font-size: 11px;"></select>
+                <!-- 2. Codex 编程智能体对话区 (输入在上面，对话框在下面) -->
+                <div class="codex-chat-pane card-pane">
+                  <div class="code-pane-title">
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                      <span>🤖</span>
+                      <span>Codex 编程智能体</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                      <select id="codex-provider-select" class="compact-select" style="max-width: 110px;"></select>
+                      <select id="codex-model-select" class="compact-select" style="max-width: 130px;"></select>
                     </div>
                   </div>
 
                   <!-- 输入放对话框上面 -->
-                  <div class="codex-input-box">
-                    <textarea id="codex-query-input" placeholder="输入编程需求（如：帮我实现一个新功能，或对选中的文件进行重构）..." rows="3"></textarea>
-                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
-                      <div class="codex-quick-prompts" style="padding: 0; border-bottom: none;">
-                        <button class="starter-tag" onclick="useCodexPrompt('请为当前选中的代码文件编写完整的 PyTest 单元测试用例')">🧪 生成单测</button>
-                        <button class="starter-tag" onclick="useCodexPrompt('请对当前代码进行性能优化与异常边界重构')">⚡ 优化重构</button>
-                        <button class="starter-tag" onclick="useCodexPrompt('请对当前模块进行架构分析与规范审查')">🔍 架构审查</button>
+                  <div class="codex-composer-top">
+                    <textarea id="codex-query-input" placeholder="输入开发指令（如：为当前文件生成单测，或重构当前模块）..." rows="3"></textarea>
+                    <div class="codex-composer-footer">
+                      <div class="codex-quick-prompts">
+                        <button class="quick-chip" onclick="useCodexPrompt('请为当前选中的代码文件编写完整的 PyTest 单元测试用例')">🧪 生成单测</button>
+                        <button class="quick-chip" onclick="useCodexPrompt('请对当前代码进行性能优化与异常边界重构')">⚡ 优化重构</button>
+                        <button class="quick-chip" onclick="useCodexPrompt('请对当前模块进行架构分析与规范审查')">🔍 架构审查</button>
                       </div>
-                      <button id="codex-send-btn" class="primary-btn" style="padding: 6px 14px;">🚀 发送指令</button>
+                      <button id="codex-send-btn" class="composer-send-btn">🚀 发送指令</button>
                     </div>
                   </div>
 
-                  <!-- 对话框放下面（实时渲染消息流） -->
-                  <div class="codex-messages-header" style="padding: 6px 14px; background: rgba(255,255,255,0.02); border-bottom: 1px solid var(--border-subtle); font-size: 11px; color: var(--text-dim); display: flex; justify-content: space-between;">
+                  <!-- 对话框放下面 (实时渲染消息流) -->
+                  <div class="codex-stream-header">
                     <span>💬 对话流与实时代码生成</span>
-                    <span id="codex-status-tag" style="color: var(--accent-cyan);">就绪</span>
+                    <span id="codex-status-tag" class="status-badge ready">🟢 就绪</span>
                   </div>
                   <div id="codex-messages" class="codex-messages-box">
-                    <div class="empty-tip">在上方输入您的开发需求，Codex 将基于当前项目与分支为您编写代码并实时渲染！</div>
+                    <div class="empty-tip">在上方输入开发指令，Codex 将基于当前工程与分支上下文生成代码并实时渲染。</div>
                   </div>
                 </div>
 
                 <!-- 3. 代码编辑器与预览 -->
-                <div class="code-editor-pane">
-                  <div class="editor-header">
-                    <span id="current-file-path" class="current-file-label">未选择文件</span>
-                    <div class="btn-group">
-                      <button id="save-code-btn" class="primary-btn" style="padding: 4px 12px; font-size: 12px;">💾 保存文件</button>
+                <div class="code-editor-pane card-pane">
+                  <div class="editor-tab-bar">
+                    <div class="active-file-tab">
+                      <span>📄</span>
+                      <span id="current-file-path">未选择文件</span>
                     </div>
+                    <button id="save-code-btn" class="editor-save-btn">💾 保存修改</button>
                   </div>
-                  <textarea id="code-editor-area" class="code-editor-textarea" placeholder="从左侧文件树选择文件进行查看与编辑..."></textarea>
+                  <div class="editor-code-container">
+                    <textarea id="code-editor-area" class="monaco-like-editor" placeholder="从左侧文件树选择文件进行查看与编辑..."></textarea>
+                  </div>
                 </div>
               </div>
             </div>
