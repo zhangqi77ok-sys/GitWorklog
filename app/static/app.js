@@ -1,11 +1,12 @@
-// CodeMind-Hub · Interactive Controller (Cursor-like Warm Architecture)
+// CodeMind-Hub · Interactive Controller (Clean IDE File Tabs & Terminal)
 
 let state = {
   currentSessionId: "conv-cabinet-main",
   currentModel: "antigravity-core",
-  activeRightTab: "editor",
   activeFile: "app/platform/loop/engine.py",
+  openedTabs: ["app/platform/loop/engine.py", "app/platform/harness/service.py"],
   tagFilter: "all",
+  terminalOpen: true,
   sessions: [],
   files: [
     { name: "app/main.py", type: "file" },
@@ -25,6 +26,7 @@ document.addEventListener("DOMContentLoaded", () => {
 async function initCodeMindStudio() {
   await loadSessionList();
   renderFileTree();
+  renderOpenedTabs();
   loadMockFileContent(state.activeFile);
   initWelcomeMessages();
   loadCockpitProviders();
@@ -127,6 +129,64 @@ function handleSessionSearch(keyword) {
 }
 
 // --------------------------------------------------------------------------
+// 纯净 IDE 原生文件标签栏 (Opened File Tabs)
+// --------------------------------------------------------------------------
+function renderOpenedTabs() {
+  const container = document.getElementById("opened-files-tabs");
+  if (!container) return;
+  container.innerHTML = "";
+
+  state.openedTabs.forEach(filepath => {
+    const filename = filepath.split("/").pop();
+    const isActive = filepath === state.activeFile;
+    const tab = document.createElement("div");
+    tab.className = `editor-file-tab ${isActive ? "active" : ""}`;
+    tab.onclick = () => openFile(filepath);
+
+    const icon = filename.endsWith(".py") ? "🐍" : (filename.endsWith(".md") ? "📝" : "📄");
+
+    tab.innerHTML = `
+      <span class="file-tab-icon">${icon}</span>
+      <span class="file-tab-title">${filename}</span>
+      <span class="file-tab-close" onclick="closeFileTab('${filepath}', event)">✕</span>
+    `;
+    container.appendChild(tab);
+  });
+
+  const addBtn = document.createElement("button");
+  addBtn.className = "tab-new-btn";
+  addBtn.title = "新建文件/标签";
+  addBtn.innerText = "＋";
+  addBtn.onclick = () => createNewFilePrompt();
+  container.appendChild(addBtn);
+}
+
+function closeFileTab(filepath, event) {
+  if (event) event.stopPropagation();
+  state.openedTabs = state.openedTabs.filter(f => f !== filepath);
+  if (state.activeFile === filepath) {
+    state.activeFile = state.openedTabs[state.openedTabs.length - 1] || "app/main.py";
+    if (!state.openedTabs.includes(state.activeFile)) {
+      state.openedTabs.push(state.activeFile);
+    }
+  }
+  renderOpenedTabs();
+  openFile(state.activeFile);
+}
+
+function createNewFilePrompt() {
+  const name = prompt("请输入新建文件名称 (例如: app/utils/helper.py):", "app/utils/new_module.py");
+  if (name) {
+    if (!state.openedTabs.includes(name)) {
+      state.openedTabs.push(name);
+      state.files.push({ name, type: "file" });
+    }
+    openFile(name);
+    renderFileTree();
+  }
+}
+
+// --------------------------------------------------------------------------
 // 工程文件树
 // --------------------------------------------------------------------------
 function renderFileTree() {
@@ -137,7 +197,12 @@ function renderFileTree() {
   state.files.forEach(f => {
     const node = document.createElement("div");
     node.className = `tree-node ${f.name === state.activeFile ? "active" : ""}`;
-    node.onclick = () => openFile(f.name);
+    node.onclick = () => {
+      if (!state.openedTabs.includes(f.name)) {
+        state.openedTabs.push(f.name);
+      }
+      openFile(f.name);
+    };
     node.innerHTML = `
       <span class="node-icon">${f.name.endsWith(".py") ? "🐍" : (f.name.endsWith(".md") ? "📝" : "📄")}</span>
       <span class="node-label">${f.name}</span>
@@ -148,12 +213,15 @@ function renderFileTree() {
 
 function openFile(filepath) {
   state.activeFile = filepath;
-  document.getElementById("active-breadcrumb-file").innerText = filepath.split("/").pop();
-  document.getElementById("editor-filename-label").innerText = filepath.split("/").pop();
+  if (!state.openedTabs.includes(filepath)) {
+    state.openedTabs.push(filepath);
+  }
+  const filename = filepath.split("/").pop();
+  document.getElementById("active-breadcrumb-file").innerText = filename;
   document.getElementById("sub-pathbar-filename").innerText = filepath;
+  renderOpenedTabs();
   renderFileTree();
   loadMockFileContent(filepath);
-  switchRightPanel("editor");
 }
 
 function loadMockFileContent(filepath) {
@@ -295,7 +363,6 @@ function copyCodeSnippet(btn) {
 }
 
 function applyDiffSnippet() {
-  switchRightPanel("editor");
   const editor = document.getElementById("code-editor-area");
   editor.value += `\n# [CodeMind-Hub Diff Applied]\ndef updated_solver():\n    return True\n`;
   alert("⚡ Diff 补丁已精准合并至编辑器！");
@@ -306,52 +373,41 @@ function thumbUp(btn) {
 }
 
 // --------------------------------------------------------------------------
-// 右侧多标签切换
+// 编辑器操作与内置终端
 // --------------------------------------------------------------------------
-function switchRightPanel(tabId) {
-  state.activeRightTab = tabId;
-  document.querySelectorAll(".tab-item").forEach(t => t.classList.remove("active"));
-  document.querySelectorAll(".panel-content-view").forEach(v => v.classList.add("hidden"));
-
-  const targetTab = document.getElementById(`tab-btn-${tabId}`);
-  const targetView = document.getElementById(`view-${tabId}-container`);
-
-  if (targetTab) targetTab.classList.add("active");
-  if (targetView) targetView.classList.remove("hidden");
-
-  if (tabId === "graph") {
-    refreshKnowledgeGraph();
-  }
-}
-
 function saveActiveFile() {
-  const editor = document.getElementById("code-editor-area");
   alert(`💾 文件 ${state.activeFile} 已成功保存！`);
 }
 
 async function runActiveFile() {
-  const term = document.getElementById("terminal-bottom-output");
-  term.innerHTML += `<br><code>$ pytest tests/ --run-harness</code>`;
+  const screen = document.getElementById("terminal-bottom-output");
+  screen.innerText += `\n[codeMindHub-H]$ python ${state.activeFile} --run-harness\n`;
+  if (!state.terminalOpen) toggleTerminalDrawer();
   try {
     const res = await fetch("/harness/run_tests");
     const json = await res.json();
-    term.innerHTML += `<br><span style="color:#a3e635;">✅ Harness 执行完毕: ${json.data.summary} (Exit Code: 0)</span>`;
+    screen.innerText += `✅ [Harness Status]: ${json.data.summary} (Exit Code: 0)\n`;
   } catch (err) {
-    term.innerHTML += `<br><span style="color:#ef4444;">❌ 执行失败: ${err}</span>`;
+    screen.innerText += `❌ [Harness Error]: ${err}\n`;
   }
 }
 
-function toggleBottomTerminal() {
-  const drawer = document.getElementById("integrated-terminal-bottom");
-  const arrow = document.getElementById("terminal-toggle-arrow");
+function toggleTerminalDrawer() {
   const screen = document.getElementById("terminal-bottom-screen");
-  if (drawer.style.height === "24px") {
-    drawer.style.height = "auto";
-    arrow.innerText = "▲";
-  } else {
-    drawer.style.height = "24px";
+  const arrow = document.getElementById("terminal-toggle-arrow");
+  state.terminalOpen = !state.terminalOpen;
+  if (state.terminalOpen) {
+    screen.style.display = "block";
     arrow.innerText = "▼";
+  } else {
+    screen.style.display = "none";
+    arrow.innerText = "▲";
   }
+}
+
+function clearTerminal(event) {
+  if (event) event.stopPropagation();
+  document.getElementById("terminal-bottom-output").innerText = "[codeMindHub-H:agent-project]$ ";
 }
 
 // --------------------------------------------------------------------------
@@ -433,6 +489,13 @@ function downloadShareJson() {
   a.download = `codemind_session_${state.currentSessionId}.json`;
   a.click();
 }
+function openGraphModal() {
+  document.getElementById("graph-modal").classList.remove("hidden");
+  refreshKnowledgeGraph();
+}
+function closeGraphModal() {
+  document.getElementById("graph-modal").classList.add("hidden");
+}
 function openTagManagerModal() {
   document.getElementById("tag-manager-modal").classList.remove("hidden");
 }
@@ -455,8 +518,8 @@ async function refreshKnowledgeGraph() {
   if (!canvas) return;
   canvas.innerHTML = "";
 
-  const width = canvas.clientWidth || 500;
-  const height = 360;
+  const width = canvas.clientWidth || 800;
+  const height = 480;
 
   const svg = d3.select("#graph-d3-canvas")
     .append("svg")
@@ -485,8 +548,8 @@ async function refreshKnowledgeGraph() {
   };
 
   const simulation = d3.forceSimulation(data.nodes)
-    .force("link", d3.forceLink(data.links).id(d => d.id).distance(60))
-    .force("charge", d3.forceManyBody().strength(-120))
+    .force("link", d3.forceLink(data.links).id(d => d.id).distance(70))
+    .force("charge", d3.forceManyBody().strength(-160))
     .force("center", d3.forceCenter(width / 2, height / 2));
 
   const link = svg.append("g")
@@ -500,7 +563,7 @@ async function refreshKnowledgeGraph() {
     .selectAll("circle")
     .data(data.nodes)
     .join("circle")
-    .attr("r", 7)
+    .attr("r", 8)
     .attr("fill", d => d.group === "file" ? "#d96b27" : (d.group === "class" ? "#f59e0b" : "#10b981"));
 
   const label = svg.append("g")
@@ -508,8 +571,8 @@ async function refreshKnowledgeGraph() {
     .data(data.nodes)
     .join("text")
     .text(d => d.id)
-    .attr("font-size", 10)
-    .attr("dx", 9)
+    .attr("font-size", 11)
+    .attr("dx", 10)
     .attr("dy", 4)
     .attr("fill", "#231f1d");
 
@@ -568,7 +631,4 @@ function attachFileToPrompt() {
 function switchActiveModel(model) {
   state.currentModel = model;
   document.getElementById("current-model-tag").innerText = model;
-}
-function clearTerminal() {
-  document.getElementById("terminal-output").innerText = "[codeMindHub-H:~]$ ";
 }

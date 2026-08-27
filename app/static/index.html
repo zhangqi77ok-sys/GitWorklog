@@ -32,7 +32,7 @@
           <span class="crumb-sep">/</span>
           <span class="crumb-dir">src</span>
           <span class="crumb-sep">/</span>
-          <span class="crumb-file" id="active-breadcrumb-file">core</span>
+          <span class="crumb-file" id="active-breadcrumb-file">task_solver.py</span>
         </div>
       </div>
 
@@ -41,7 +41,7 @@
           <span class="gateway-dot">●</span>
           <span class="gateway-text" id="header-gateway-status">Cockpit Gateway: Connected</span>
         </div>
-        <button class="titlebar-btn" onclick="switchRightPanel('graph')" title="Obsidian 知识图谱">🕸️ 图谱</button>
+        <button class="titlebar-btn" onclick="openGraphModal()" title="Obsidian 知识图谱">🕸️ 图谱</button>
         <button class="titlebar-btn" onclick="openShareSessionModal()" title="分享与导出当前会话">🔗 分享</button>
         <button class="titlebar-btn" onclick="openCockpitModal()" title="全厂商模型与配额设置">🎛️ 网关</button>
       </div>
@@ -55,9 +55,9 @@
         <div class="activity-top">
           <button class="act-icon-btn active" id="act-btn-explorer" onclick="toggleLeftPanel('explorer')" title="文件与工程树">📁</button>
           <button class="act-icon-btn" id="act-btn-search" onclick="focusSearch()" title="全局会话检索">🔍</button>
-          <button class="act-icon-btn" id="act-btn-git" onclick="switchRightPanel('terminal')" title="Git 版本管理">🌿</button>
+          <button class="act-icon-btn" id="act-btn-git" onclick="toggleTerminalDrawer()" title="终端 / Git">🌿</button>
           <button class="act-icon-btn" id="act-btn-mesh" onclick="triggerMeshReview()" title="Multi-Agent Mesh 协同">🕸️</button>
-          <button class="act-icon-btn" id="act-btn-graph" onclick="switchRightPanel('graph')" title="Obsidian 知识图谱">🔮</button>
+          <button class="act-icon-btn" id="act-btn-graph" onclick="openGraphModal()" title="Obsidian 知识图谱">🔮</button>
           <button class="act-icon-btn" id="act-btn-cockpit" onclick="openCockpitModal()" title="Cockpit Tools 模型网关">🎛️</button>
         </div>
         <div class="activity-bottom">
@@ -182,74 +182,52 @@
         </div>
       </section>
 
-      <!-- 4. 右侧多标签工作区面板 (Right Multi-Tab Workspace) -->
+      <!-- 4. 右侧编辑器与终端工作区 (Right Code Editor & Terminal Workspace) -->
       <section class="right-workspace-panel" id="right-workspace-panel">
-        <div class="workspace-tabs-bar">
-          <div class="tabs-list">
-            <button class="tab-item active" id="tab-btn-editor" onclick="switchRightPanel('editor')">
-              <span class="tab-icon">📄</span> File Preview (<span id="editor-filename-label">task_solver.py</span>)
-            </button>
-            <button class="tab-item" id="tab-btn-explain" onclick="switchRightPanel('explain')">
-              <span class="tab-icon">💡</span> AI Explain
-            </button>
-            <button class="tab-item" id="tab-btn-graph" onclick="switchRightPanel('graph')">
-              <span class="tab-icon">🕸️</span> Obsidian 知识图谱
-            </button>
-            <button class="tab-item" id="tab-btn-terminal" onclick="switchRightPanel('terminal')">
-              <span class="tab-icon">📟</span> Integrated Terminal
-            </button>
+        
+        <!-- 纯净原生 IDE 文件标签栏 (Only Opened Files + Terminal/Run Actions) -->
+        <div class="editor-tabs-bar">
+          <div class="opened-files-tabs" id="opened-files-tabs">
+            <div class="editor-file-tab active" id="tab-file-active">
+              <span class="file-tab-icon">🐍</span>
+              <span class="file-tab-title" id="editor-tab-filename">task_solver.py</span>
+              <span class="file-tab-close" onclick="closeCurrentTab(event)" title="关闭标签">✕</span>
+            </div>
+            <button class="tab-new-btn" onclick="createNewFilePrompt()" title="新建文件/标签">＋</button>
           </div>
-          <div class="tabs-actions">
-            <button class="btn-tool-sm" onclick="saveActiveFile()" title="保存当前文件">💾 保存</button>
-            <button class="btn-tool-sm btn-tool-primary" onclick="runActiveFile()" title="使用 Harness 治具运行">▶️ 运行</button>
+
+          <div class="editor-top-actions">
+            <button class="icon-action-btn" onclick="toggleTerminalDrawer()" title="打开/关闭终端 (Ctrl+`)">📟 终端</button>
+            <button class="icon-action-btn" onclick="saveActiveFile()" title="保存当前文件 (Ctrl+S)">💾 保存</button>
+            <button class="icon-action-btn btn-run-accent" onclick="runActiveFile()" title="运行当前文件">▶ 运行</button>
           </div>
         </div>
 
-        <!-- 面板容器 1：代码编辑器与预览 -->
-        <div class="panel-content-view" id="view-editor-container">
-          <div class="editor-sub-pathbar">
-            <span class="editor-file-badge">src &gt; core &gt; <strong id="sub-pathbar-filename">task_solver.py</strong></span>
-            <span class="editor-meta-info" id="editor-meta-info">Python · UTF-8</span>
-          </div>
-          <textarea id="code-editor-area" class="monaco-like-editor" placeholder="// 从左侧选择文件或直接编写代码..."></textarea>
+        <!-- 面包屑路径条 -->
+        <div class="editor-sub-pathbar">
+          <span class="editor-file-badge"><span class="path-muted">src / core / </span><strong id="sub-pathbar-filename">task_solver.py</strong></span>
+          <span class="editor-meta-info" id="editor-meta-info">Python · UTF-8 · LF</span>
         </div>
 
-        <!-- 面板容器 2：AI Explain 深度解释 -->
-        <div class="panel-content-view hidden" id="view-explain-container">
-          <div class="explain-body" id="explain-content-box">
-            <div class="explain-card">
-              <h4>💡 AI 架构与代码深度解读</h4>
-              <p>当前模块已通过 <strong>Harness 自动化治具</strong> 与 <strong>ReAct 自愈闭环</strong> 校验，各组件职责解耦清晰，遵循积木拼装架构规范。</p>
+        <!-- 代码编辑区主体 -->
+        <div class="editor-main-canvas" id="editor-main-canvas">
+          <textarea id="code-editor-area" class="monaco-like-editor" spellcheck="false" placeholder="// 从左侧选择文件或直接在此编写代码..."></textarea>
+        </div>
+
+        <!-- 底部可收起内置终端 (Integrated Terminal Drawer) -->
+        <div class="integrated-terminal-bottom" id="integrated-terminal-bottom">
+          <div class="terminal-bottom-bar" onclick="toggleTerminalDrawer()">
+            <div class="term-bar-left">
+              <span class="term-icon">📟</span>
+              <span class="term-title">Integrated Terminal [PowerShell / bash]</span>
+            </div>
+            <div class="term-bar-right">
+              <button class="term-tool-btn" onclick="clearTerminal(event)" title="清空终端">清空</button>
+              <span class="terminal-toggle-arrow" id="terminal-toggle-arrow">▼</span>
             </div>
           </div>
-        </div>
-
-        <!-- 面板容器 3：Obsidian AST 代码与变更图谱 -->
-        <div class="panel-content-view hidden" id="view-graph-container">
-          <div class="graph-header-bar">
-            <span>🕸️ Obsidian AST 代码实体与变动关联图谱</span>
-            <button class="btn-tool-sm" onclick="refreshKnowledgeGraph()">🔄 刷新图谱</button>
-          </div>
-          <div id="graph-d3-canvas" class="d3-graph-canvas"></div>
-        </div>
-
-        <!-- 面板容器 4：底部内置终端 (Integrated Terminal) -->
-        <div class="panel-content-view hidden" id="view-terminal-container">
-          <div class="terminal-header-bar">
-            <span class="terminal-title">📟 Integrated Terminal [PowerShell / bash]</span>
-            <button class="btn-tool-sm" onclick="clearTerminal()">清空</button>
-          </div>
-          <pre class="terminal-screen" id="terminal-output">[codeMindHub-H:agent-project]$ _</pre>
-        </div>
-
-        <!-- 底部固定可折叠小型控制台抽屉 -->
-        <div class="integrated-terminal-bottom" id="integrated-terminal-bottom">
-          <div class="terminal-bottom-bar" onclick="toggleBottomTerminal()">
-            <span>📟 Integrated Terminal</span>
-            <span class="terminal-toggle-arrow" id="terminal-toggle-arrow">▲</span>
-          </div>
-          <div class="terminal-bottom-screen" id="terminal-bottom-output">
-            <code>[codeMindHub-H:~]$ RunCabinet CodeMind-Hub Engine Ready.</code>
+          <div class="terminal-bottom-screen" id="terminal-bottom-screen">
+            <pre id="terminal-bottom-output">[codeMindHub-H:agent-project]$ _</pre>
           </div>
         </div>
       </section>
@@ -309,7 +287,27 @@
       </div>
     </div>
 
-    <!-- 弹窗 3：标签色彩管理 Modal -->
+    <!-- 弹窗 3：Obsidian 知识图谱 Modal (独立全景视窗) -->
+    <div class="modal-backdrop hidden" id="graph-modal">
+      <div class="modal-card modal-large">
+        <div class="modal-header">
+          <div class="modal-title-wrap">
+            <span class="modal-badge-icon">🕸️</span>
+            <h3>Obsidian AST 代码实体与变动关联图谱</h3>
+          </div>
+          <button class="btn-modal-close" onclick="closeGraphModal()">✕</button>
+        </div>
+        <div class="modal-body" style="padding: 0;">
+          <div id="graph-d3-canvas" class="d3-graph-canvas" style="height: 480px;"></div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-modal-sub" onclick="refreshKnowledgeGraph()">🔄 刷新图谱</button>
+          <button class="btn-modal-action" onclick="closeGraphModal()">关闭</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 弹窗 4：标签色彩管理 Modal -->
     <div class="modal-backdrop hidden" id="tag-manager-modal">
       <div class="modal-card">
         <div class="modal-header">

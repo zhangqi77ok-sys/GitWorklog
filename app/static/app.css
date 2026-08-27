@@ -1,5 +1,5 @@
 /* ==========================================================================
-   CodeMind-Hub · AI Coding IDE Theme (Cursor-like Warm Minimalist Enterprise UI)
+   CodeMind-Hub · AI Coding IDE Theme (Cursor Clean Tabs & Warm Off-White)
    ========================================================================== */
 
 :root {
@@ -158,7 +158,7 @@ body.theme-codemind {
 }
 
 /* --------------------------------------------------------------------------
-   2. 主工作区布局 (4 列结构: 活动栏 + 左侧面板 + 中间对话 + 右侧工作区)
+   2. 主工作区布局
    -------------------------------------------------------------------------- */
 .ide-main-body {
   display: flex;
@@ -166,7 +166,7 @@ body.theme-codemind {
   overflow: hidden;
 }
 
-/* 最左侧极简活动栏 (38px) */
+/* 最左侧极简活动栏 (42px) */
 .activity-bar {
   width: 42px;
   background-color: var(--bg-sidebar);
@@ -394,7 +394,6 @@ body.theme-codemind {
   font-weight: 600;
   color: var(--accent-orange);
 }
-.node-indent { width: 14px; display: inline-block; }
 
 /* --------------------------------------------------------------------------
    3. 中间 AI 对话与推理流区 (Center Chat Column)
@@ -463,7 +462,6 @@ body.theme-codemind {
   gap: 14px;
 }
 
-/* 消息气泡卡片 */
 .msg-card {
   display: flex;
   flex-direction: column;
@@ -471,7 +469,6 @@ body.theme-codemind {
   padding: 12px 14px;
   font-size: 13px;
   line-height: 1.6;
-  position: relative;
 }
 .msg-user {
   background-color: var(--bg-user-bubble);
@@ -484,7 +481,6 @@ body.theme-codemind {
   border: 1px solid var(--border-subtle);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
 }
-
 .msg-header {
   display: flex;
   align-items: center;
@@ -501,11 +497,7 @@ body.theme-codemind {
   border-radius: 3px;
   font-size: 10px;
 }
-
-.msg-body {
-  color: var(--text-main);
-  word-break: break-word;
-}
+.msg-body { color: var(--text-main); word-break: break-word; }
 .msg-body pre {
   background-color: #1e1c1a;
   color: #f8f6f2;
@@ -542,14 +534,12 @@ body.theme-codemind {
   display: flex;
   align-items: center;
   gap: 4px;
-  transition: all 0.15s ease;
 }
 .micro-act-btn:hover {
   border-color: var(--accent-orange);
   color: var(--accent-orange);
 }
 
-/* 底部输入控制器 */
 .chat-input-wrapper {
   background-color: var(--bg-surface);
   border-top: 1px solid var(--border-subtle);
@@ -559,13 +549,11 @@ body.theme-codemind {
   gap: 6px;
   flex-shrink: 0;
 }
-
 .input-action-toolbar {
   display: flex;
   align-items: center;
   gap: 6px;
 }
-
 .tool-chip-btn {
   background-color: var(--bg-card);
   border: 1px solid var(--border-subtle);
@@ -591,8 +579,6 @@ body.theme-codemind {
   outline: none;
   cursor: pointer;
 }
-.select-chip:hover { border-color: var(--accent-orange); }
-
 .tool-icon-only-btn {
   background-color: var(--bg-card);
   border: 1px solid var(--border-subtle);
@@ -601,7 +587,6 @@ body.theme-codemind {
   font-size: 12px;
   cursor: pointer;
 }
-
 .input-textarea-row {
   display: flex;
   align-items: flex-end;
@@ -622,7 +607,6 @@ body.theme-codemind {
   color: var(--text-main);
 }
 .prompt-textarea::placeholder { color: var(--text-muted); }
-
 .send-action-btn {
   background-color: var(--accent-orange);
   color: #ffffff;
@@ -634,13 +618,12 @@ body.theme-codemind {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all 0.15s ease;
   flex-shrink: 0;
 }
 .send-action-btn:hover { background-color: var(--accent-orange-hover); }
 
 /* --------------------------------------------------------------------------
-   4. 右侧多标签工作区面板 (Right Workspace Panel)
+   4. 右侧编辑器与终端工作区 (Right Code Editor & Terminal)
    -------------------------------------------------------------------------- */
 .right-workspace-panel {
   flex: 1.3;
@@ -651,73 +634,106 @@ body.theme-codemind {
   overflow: hidden;
 }
 
-.workspace-tabs-bar {
-  height: 36px;
+/* 纯净 IDE 原生标签栏 (Cursor Style: Only files + Terminal Action) */
+.editor-tabs-bar {
+  height: 35px;
   background-color: var(--bg-surface);
   border-bottom: 1px solid var(--border-subtle);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 10px;
+  padding: 0 8px 0 0;
   flex-shrink: 0;
 }
-.tabs-list {
+
+.opened-files-tabs {
   display: flex;
   align-items: center;
-  gap: 2px;
+  height: 100%;
+  overflow-x: auto;
 }
-.tab-item {
-  background: none;
-  border: 1px solid transparent;
-  padding: 4px 10px;
-  border-radius: 4px 4px 0 0;
+
+.editor-file-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  height: 100%;
   font-size: 12px;
   color: var(--text-secondary);
+  border-right: 1px solid var(--border-subtle);
+  background-color: var(--bg-surface);
   cursor: pointer;
+  white-space: nowrap;
+}
+.editor-file-tab:hover {
+  background-color: var(--bg-active);
+  color: var(--text-main);
+}
+.editor-file-tab.active {
+  background-color: var(--bg-card);
+  color: var(--text-main);
+  font-weight: 500;
+  border-bottom: 2px solid var(--accent-orange);
+}
+
+.file-tab-icon { font-size: 12px; }
+.file-tab-title { font-size: 12px; }
+.file-tab-close {
+  font-size: 10px;
+  color: var(--text-muted);
+  padding: 2px;
+  border-radius: 3px;
+}
+.file-tab-close:hover {
+  background-color: var(--bg-active);
+  color: var(--text-main);
+}
+
+.tab-new-btn {
+  background: none;
+  border: none;
+  padding: 0 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  height: 100%;
+  display: flex;
+  align-items: center;
+}
+.tab-new-btn:hover { color: var(--text-main); }
+
+.editor-top-actions {
   display: flex;
   align-items: center;
   gap: 5px;
 }
-.tab-item:hover { color: var(--text-main); background-color: var(--bg-active); }
-.tab-item.active {
-  background-color: var(--bg-card);
-  color: var(--text-main);
-  font-weight: 600;
-  border-color: var(--border-subtle);
-  border-bottom-color: var(--bg-card);
-}
 
-.tabs-actions {
-  display: flex;
-  gap: 6px;
-}
-.btn-tool-sm {
+.icon-action-btn {
   background-color: var(--bg-card);
   border: 1px solid var(--border-subtle);
   padding: 3px 8px;
   border-radius: 4px;
   font-size: 11px;
-  cursor: pointer;
   color: var(--text-main);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
 }
-.btn-tool-sm:hover { border-color: var(--accent-orange); }
-.btn-tool-primary {
+.icon-action-btn:hover { border-color: var(--accent-orange); }
+
+.btn-run-accent {
   background-color: var(--accent-orange);
   color: #ffffff;
   border-color: var(--accent-orange);
 }
-.btn-tool-primary:hover { background-color: var(--accent-orange-hover); }
+.btn-run-accent:hover { background-color: var(--accent-orange-hover); }
 
-.panel-content-view {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-.panel-content-view.hidden { display: none; }
-
+/* 面包屑路径条 */
 .editor-sub-pathbar {
-  height: 26px;
+  height: 24px;
   background-color: var(--bg-surface);
   border-bottom: 1px solid var(--border-subtle);
   display: flex;
@@ -726,14 +742,25 @@ body.theme-codemind {
   padding: 0 12px;
   font-size: 11px;
   color: var(--text-secondary);
+  flex-shrink: 0;
+}
+.path-muted { color: var(--text-muted); }
+
+/* 编辑器画布 */
+.editor-main-canvas {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  background-color: var(--bg-card);
 }
 
 .monaco-like-editor {
   flex: 1;
   width: 100%;
+  height: 100%;
   border: none;
   outline: none;
-  padding: 12px;
+  padding: 14px;
   font-family: var(--font-mono);
   font-size: 13px;
   line-height: 1.6;
@@ -742,28 +769,11 @@ body.theme-codemind {
   resize: none;
 }
 
-.d3-graph-canvas {
-  flex: 1;
-  width: 100%;
-  background-color: #faf8f5;
-}
-
-.terminal-screen {
-  flex: 1;
-  background-color: #1e1c1a;
-  color: #a3e635;
-  padding: 12px;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  line-height: 1.5;
-  overflow-y: auto;
-}
-
-/* 底部可折叠终端小栏 */
+/* 底部可折叠终端 */
 .integrated-terminal-bottom {
   border-top: 1px solid var(--border-subtle);
-  background-color: #1e1c1a;
-  color: #f8f6f2;
+  background-color: #1a1816;
+  flex-shrink: 0;
 }
 .terminal-bottom-bar {
   height: 24px;
@@ -772,20 +782,45 @@ body.theme-codemind {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 12px;
+  padding: 0 10px;
   font-size: 11px;
   font-weight: 500;
   color: var(--text-secondary);
   cursor: pointer;
 }
+.term-bar-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.term-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.term-tool-btn {
+  background: none;
+  border: 1px solid var(--border-subtle);
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-size: 10px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.term-tool-btn:hover { color: var(--text-main); background: var(--bg-active); }
+
 .terminal-bottom-screen {
-  height: 70px;
-  background-color: #1a1816;
+  height: 110px;
+  background-color: #161413;
   padding: 8px 12px;
   font-family: var(--font-mono);
   font-size: 11px;
-  color: #d1d5db;
+  color: #a3e635;
   overflow-y: auto;
+}
+.terminal-bottom-screen pre {
+  margin: 0;
+  font-family: var(--font-mono);
 }
 
 /* --------------------------------------------------------------------------
