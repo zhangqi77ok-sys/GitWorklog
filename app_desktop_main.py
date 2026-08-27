@@ -37,16 +37,20 @@ APP_TITLE = "RunCabinet · Vite Coding Studio"
 
 
 def run_backend_server():
-    """在后台独立线程中运行 FastAPI Uvicorn 服务。"""
+    """在后台独立线程中运行 FastAPI Uvicorn 服务 (Windows Python 3.12 兼容)。"""
+    import asyncio
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     config = uvicorn.Config(
         app=app,
         host=HOST,
         port=PORT,
         log_level="warning",
         access_log=False,
+        loop="asyncio",
     )
     server = uvicorn.Server(config)
-    server.run()
+    loop.run_until_complete(server.serve())
 
 
 def wait_for_server(timeout_sec: float = 15.0) -> bool:

@@ -3,6 +3,7 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 datas = [
     ('app/static', 'app/static'),
+    ('app/static', 'static'),
     ('data', 'data'),
 ]
 datas += collect_data_files('uvicorn')
@@ -52,14 +53,14 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=False,
-    console=False,
+    upx=True,
+    console=True,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=None,
+    icon=['app/static/favicon.ico'] if os.path.exists('app/static/favicon.ico') else None,
 )
 coll = COLLECT(
     exe,

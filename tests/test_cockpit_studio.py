@@ -31,7 +31,8 @@ def test_health_check():
     assert json_data["data"]["status"] == "up"
 
 def test_session_lifecycle_and_tags():
-    conv_id = "test-conv-001"
+    import uuid
+    conv_id = f"test-conv-{uuid.uuid4().hex[:8]}"
     with session_scope() as db:
         c = get_or_create_conversation(db, conv_id, "初始会话", "feat,coding")
         assert c.conversation_id == conv_id

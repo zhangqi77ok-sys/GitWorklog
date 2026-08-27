@@ -1,3 +1,5 @@
+import os
+import sys
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -54,4 +56,41 @@ for r in routers:
     app.include_router(r)
     app.include_router(r, prefix="/api")
 
-app.mount("/", StaticFiles(directory="app/static", html=True), name="static")
+# 动态自适应解析静态资源路径 (兼容 PyInstaller 打包与源码直跑)
+def get_static_dir() -> str:
+    candidates = []
+    if getattr(sys, "frozen", False):
+        meipass = getattr(sys, "_MEIPASS", "")
+        exe_dir = os.path.dirname(sys.executable)
+        if meipass:
+            candidates.extend([
+                os.path.join(meipass, "app", "static"),
+                os.path.join(meipass, "static"),
+            ])
+        candidates.extend([
+            os.path.join(exe_dir, "_internal", "app", "static"),
+            os.path.join(exe_dir, "_internal", "static"),
+            os.path.join(exe_dir, "app", "static"),
+            os.path.join(exe_dir, "static"),
+        ])
+    
+    # 源码模式候选项
+    curr_dir = os.path.dirname(os.path.abspath(__file__))
+    candidates.extend([
+        os.path.join(curr_dir, "static"),
+        os.path.join(curr_dir, "..", "app", "static"),
+        os.path.join(os.getcwd(), "app", "static"),
+        os.path.join(os.getcwd(), "static"),
+    ])
+
+    for c in candidates:
+        if c and os.path.isdir(c):
+            return os.path.abspath(c)
+    
+    # 兜底：自动创建
+    fallback = os.path.join(curr_dir, "static")
+    os.makedirs(fallback, exist_ok=True)
+    return fallback
+
+static_dir_path = get_static_dir()
+app.mount("/", StaticFiles(directory=static_dir_path, html=True), name="static")
