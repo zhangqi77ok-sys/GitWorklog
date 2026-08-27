@@ -1,34 +1,22 @@
-"""会话持久化 ORM（对应 gogo/dodo 的 chat_conversation / chat_message）。
+from sqlalchemy import Column, Integer, String, Text, DateTime
+from datetime import datetime, timezone
+from app.core.db import Base
 
-会话按 userId 隔离。消息支持富事件字段（thinking/progress/travel_data 等）
-以 JSON 存 extra，前端回放时还原。
-"""
+class Conversation(Base):
+    __tablename__ = "conversations"
+    id = Column(Integer, primary_key=True, index=True)
+    conversation_id = Column(String(64), unique=True, index=True, nullable=False)
+    title = Column(String(255), default="新会话")
+    tags = Column(String(255), default="feat,coding")
+    status = Column(String(32), default="idle")
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
-from __future__ import annotations
-
-from sqlalchemy import Integer, String, Text
-from sqlalchemy.orm import Mapped, mapped_column
-
-from app.core.db import Base, TimestampMixin
-
-
-class ChatConversation(Base, TimestampMixin):
-    __tablename__ = "chat_conversation"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    conversation_id: Mapped[str] = mapped_column(String(64), unique=True, index=True)
-    user_id: Mapped[int] = mapped_column(index=True)
-    title: Mapped[str] = mapped_column(String(255), default="新对话")
-    tags: Mapped[str] = mapped_column(String(255), default="")  # 逗号分隔标签，如 "feat,bugfix,review"
-    status: Mapped[str] = mapped_column(String(32), default="idle")  # idle (green), running (blue), failed (red)
-
-
-class ChatMessage(Base, TimestampMixin):
-    __tablename__ = "chat_message"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    conversation_id: Mapped[str] = mapped_column(String(64), index=True)
-    role: Mapped[str] = mapped_column(String(16))  # user / assistant
-    content: Mapped[str] = mapped_column(Text, default="")
-    # 富事件（thinking/progress/travel_data/plan/timeline 等）JSON 字符串
-    extra: Mapped[str] = mapped_column(Text, default="")
+class ChatMessage(Base):
+    __tablename__ = "chat_messages"
+    id = Column(Integer, primary_key=True, index=True)
+    conversation_id = Column(String(64), index=True, nullable=False)
+    role = Column(String(32), nullable=False)
+    content = Column(Text, nullable=False)
+    extra = Column(Text, default="")
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))

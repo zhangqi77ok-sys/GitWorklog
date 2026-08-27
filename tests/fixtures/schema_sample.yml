@@ -1,6 +1,0 @@
-tables:
-  - name: users
-    comment: 用户
-    columns:
-      - {name: id, type: int, primary_key: true, nullable: false}
-      - {name: name, type: varchar, comment: 姓名}

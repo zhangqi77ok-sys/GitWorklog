@@ -3,325 +3,270 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Vite Coding Platform - RunCabinet 暖色调桌面端编程工作台</title>
-  <link rel="stylesheet" href="/static/app.css">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <title>RunCabinet · Vite Coding Studio</title>
+  <link rel="stylesheet" href="/app.css">
+  <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
 </head>
-<body class="warm-theme">
-  <!-- 登录覆盖层 -->
-  <div id="login-modal" class="modal-overlay hidden">
-    <div class="glass-card login-card">
-      <div class="login-header">
-        <div class="app-logo">⚡</div>
-        <h2>Vite Coding Platform</h2>
-        <p class="subtitle">RunCabinet 暖色调多智能体全自主编程平台</p>
+<body class="runcabinet-body">
+  <div id="app" class="studio-container">
+    <!-- 顶部状态栏 -->
+    <header class="top-nav-bar">
+      <div class="nav-brand">
+        <span class="brand-badge">⚡</span>
+        <span class="brand-title">RunCabinet</span>
+        <span class="brand-subtitle">Vite Coding Studio</span>
       </div>
-      <form id="login-form" onsubmit="event.preventDefault(); login();">
-        <div class="form-group">
-          <label>账号</label>
-          <input type="text" id="username" value="admin" required autocomplete="username">
+
+      <div class="nav-center-tags">
+        <span class="project-tag">📁 工程: e:\pro\agent-learning</span>
+        <span class="branch-tag">🌿 分支: main</span>
+        <span class="agent-mesh-tag">🤖 多Agent网格: • 就绪</span>
+        <span class="token-meter-tag" id="token-meter-display">⚡ 0 Tokens</span>
+      </div>
+
+      <div class="nav-actions">
+        <button class="btn btn-outline" id="btn-share-session" onclick="openShareSessionModal()">🔗 分享会话</button>
+        <button class="btn btn-outline" id="btn-open-cockpit" onclick="openCockpitModal()">🎛️ Cockpit 驾驶舱</button>
+        <button class="btn btn-outline" id="btn-toggle-graph" onclick="toggleKnowledgeGraph()">🕸️ Obsidian 知识图谱</button>
+        <button class="btn btn-primary" onclick="openTagManagerModal()">🏷️ 标签管理</button>
+      </div>
+    </header>
+
+    <!-- 主工作区 -->
+    <main class="main-workspace">
+      <!-- 左侧边栏：会话管理与工程目录 -->
+      <aside class="left-sidebar">
+        <div class="sidebar-header">
+          <button class="btn btn-primary btn-block" onclick="createNewSession()">➕ 开启新会话</button>
+          <button class="btn btn-icon" onclick="openTagManagerModal()" title="配置标签色彩">🏷️</button>
         </div>
-        <div class="form-group">
-          <label>密码</label>
-          <input type="password" id="password" value="admin123" required autocomplete="current-password">
+
+        <div class="search-box-container">
+          <input type="text" id="session-search-input" class="search-input" placeholder="🔍 搜索会话或标签..." oninput="handleSessionSearch(this.value)">
         </div>
-        <button type="submit" class="btn btn-primary full-width">进入工作台</button>
-      </form>
-    </div>
-  </div>
 
-  <!-- 全局桌面应用主框架 -->
-  <div class="desktop-app-container">
-    <!-- 1. 最左侧积木式极窄功能导轨 (Cabinet Rail) -->
-    <aside class="desktop-icon-rail">
-      <div class="rail-logo" title="Vite Coding">⚡</div>
-      <nav class="rail-nav">
-        <button class="rail-btn active" id="rail-btn-coding" onclick="switchMainView('coding')" title="多智能体代码工作台">💻</button>
-        <button class="rail-btn" id="rail-btn-cockpit" onclick="switchMainView('cockpit')" title="LLM 管理与 Cockpit Tools 驾驶舱">🎛️</button>
-        <button class="rail-btn" id="rail-btn-graph" onclick="switchMainView('graph')" title="Obsidian 动态知识图谱">🕸️</button>
-        <button class="rail-btn" id="rail-btn-memory" onclick="switchMainView('memory')" title="分层记忆中心">🧠</button>
-      </nav>
-      <div class="rail-bottom">
-        <div class="user-avatar-btn" id="current-user-badge" title="当前登录用户">A</div>
-      </div>
-    </aside>
-
-    <!-- 2. 会话历史与标签过滤器 (Session Sidebar) -->
-    <aside class="desktop-sidebar" id="main-sidebar">
-      <div class="sidebar-header">
-        <button class="btn-new-session" onclick="createNewSession()">➕ 开启新会话</button>
-        <button class="btn-manage-tags" onclick="openTagManagerModal()" title="自定义标签与颜色">🏷️</button>
-      </div>
-
-      <!-- 搜索与标签过滤器 -->
-      <div class="session-filter-box">
-        <input type="text" id="session-search-input" placeholder="🔍 搜索会话或标签..." oninput="onSessionSearchInput(this.value)">
+        <!-- 标签快速过滤胶囊栏 -->
         <div class="tag-filter-chips" id="tag-filter-chips">
-          <!-- 动态渲染自定义颜色标签 Filter -->
+          <span class="chip active" onclick="filterByTag('')">全部</span>
+          <span class="chip chip-feat" onclick="filterByTag('feat')">#feat</span>
+          <span class="chip chip-coding" onclick="filterByTag('coding')">#coding</span>
+          <span class="chip chip-bugfix" onclick="filterByTag('bugfix')">#bugfix</span>
+          <span class="chip chip-review" onclick="filterByTag('review')">#review</span>
+          <span class="chip chip-mesh" onclick="filterByTag('mesh')">#mesh</span>
+          <span class="chip chip-hotfix" onclick="filterByTag('hotfix')">#hotfix</span>
         </div>
-      </div>
 
-      <!-- 会话列表 -->
-      <div class="session-list" id="session-list-container"></div>
-    </aside>
-
-    <!-- 3. 主工作区：Coding 视图 -->
-    <main class="desktop-workspace-main" id="view-coding">
-      <!-- 顶部状态与工程栏 (含实时 Token 消耗指示器 & 分享按钮) -->
-      <header class="workspace-top-bar">
-        <div class="top-bar-left">
-          <div class="workspace-chip">📁 工程: <span id="current-project-label">e:\pro\agent-learning</span></div>
-          <div class="workspace-chip">🌿 分支: <span id="current-branch-label">main</span></div>
-          <div class="agent-mesh-badge" id="mesh-status-indicator">🤖 多Agent网格: <span class="status-dot green"></span> 就绪</div>
-          <div class="workspace-chip token-meter-chip" id="token-meter-chip" title="当前会话消耗 Token">⚡ 1,280 Tokens</div>
+        <!-- 会话历史流 -->
+        <div class="session-list-wrapper" id="session-list-container">
+          <!-- 动态加载会话卡片 -->
         </div>
-        <div class="top-bar-right">
-          <button class="ghost-btn share-btn" onclick="openShareSessionModal()">🔗 分享会话</button>
-          <button class="ghost-btn" onclick="switchMainView('cockpit')">🎛️ LLM 驾驶舱</button>
-          <button class="ghost-btn" onclick="toggleRightTab('graph')">🕸️ 切换图谱</button>
-          <button class="ghost-btn" onclick="toggleRightTab('editor')">💻 切换编辑器</button>
+
+        <!-- 工程目录树折叠面板 -->
+        <div class="project-tree-section">
+          <div class="section-title">
+            <span>📁 工程目录树</span>
+            <button class="btn-xs" onclick="loadProjectTree()">🔄 刷新</button>
+          </div>
+          <div class="tree-container" id="project-tree-list">
+            <!-- 动态生成文件树 -->
+          </div>
         </div>
-      </header>
+      </aside>
 
-      <!-- 中间核心三栏积木面板 Grid -->
-      <div class="workspace-panels-grid">
-        <!-- Panel 1: 工程文件目录树 -->
-        <section class="panel-block file-tree-block" id="block-file-tree">
-          <div class="panel-header">
-            <span>📁 工程目录</span>
-            <div class="panel-actions">
-              <button class="icon-mini-btn" onclick="openNewFileModal()" title="新建文件">➕</button>
-              <button class="icon-mini-btn" onclick="refreshProjectTree()" title="刷新">🔄</button>
-            </div>
+      <!-- 中间对话与多 Agent 协同流 -->
+      <section class="chat-workspace">
+        <div class="chat-header-bar">
+          <div class="chat-title-info">
+            <span class="status-indicator-dot idle" id="current-session-status-dot"></span>
+            <span class="active-session-title" id="active-session-title-text">RunCabinet 暖色多Agent协同工程</span>
           </div>
-          <div class="panel-body file-tree-scroll" id="project-tree-list"></div>
-        </section>
-
-        <!-- Panel 2: 多智能体对话与协作流 (Coder / Reviewer / Tester) -->
-        <section class="panel-block agent-stream-block" id="block-agent-stream">
-          <div class="panel-header">
-            <div class="agent-role-picker">
-              <span class="role-avatar">🤖</span>
-              <select id="agent-role-select">
-                <option value="architect">🏗️ Architect 主架构师 (多Agent联动)</option>
-                <option value="coder">👨‍💻 Coder 研发工程师</option>
-                <option value="reviewer">🔍 Reviewer 审查员</option>
-                <option value="tester">🧪 Tester 单测工程师</option>
-              </select>
-            </div>
-            <div class="model-picker-pill">
-              <select id="model-select">
-                <option value="qwen3.7-flash">Qwen 3.7 Flash (极速)</option>
-                <option value="qwen3.7-max">Qwen 3.7 Max (深度推理)</option>
-                <option value="deepseek-v3">DeepSeek-V3</option>
-              </select>
-            </div>
+          <div class="chat-model-selector">
+            <select id="chat-provider-select" class="select-box" onchange="handleProviderChange()">
+              <option value="antigravity">Antigravity (AGY 官方)</option>
+              <option value="gemini">Google Gemini 官方</option>
+              <option value="trae">ByteDance Trae</option>
+              <option value="qoder">Qoder AI Studio</option>
+              <option value="kiro">Kiro AI Engine</option>
+              <option value="bailian">阿里云百炼 (DashScope)</option>
+              <option value="deepseek">DeepSeek 官方</option>
+              <option value="claude">Anthropic Claude</option>
+              <option value="openai">OpenAI 官方</option>
+              <option value="ollama">Ollama 本地大模型</option>
+            </select>
+            <select id="chat-model-select" class="select-box">
+              <option value="antigravity-core">antigravity-core</option>
+              <option value="agy-code-agent">agy-code-agent</option>
+              <option value="agy-multi-mesh">agy-multi-mesh</option>
+            </select>
           </div>
+        </div>
 
-          <!-- 消息流容器 -->
-          <div class="agent-messages-container" id="agent-messages-box"></div>
+        <!-- 对话消息列表 -->
+        <div class="messages-container" id="agent-messages-box">
+          <!-- 动态渲染消息气泡 -->
+        </div>
 
-          <!-- 底部输入指令区 -->
-          <div class="agent-composer-area">
-            <div class="composer-prompt-chips">
-              <span class="p-chip" onclick="applyPromptChip('编写新功能并生成完整代码与单测')">✨ 编写新模块</span>
-              <span class="p-chip" onclick="applyPromptChip('多Agent协同开发: Coder写代码, Reviewer审查, Tester跑单测')">🤖 多Agent流水线</span>
-              <span class="p-chip" onclick="applyPromptChip('优化代码结构与性能，并执行PyTest验证')">⚡ 重构与单测</span>
-            </div>
-            <div class="composer-input-row">
-              <textarea id="agent-query-input" placeholder="输入开发指令（输入 @ 可引用其他会话上下文，Enter 发送，Shift+Enter 换行）..." rows="3"></textarea>
-              <button class="btn btn-send-agent" onclick="sendAgentMessage()">🚀 发送指令</button>
-            </div>
-          </div>
-        </section>
-
-        <!-- Panel 3: 右侧多功能积木 (Monaco 编辑器 / Obsidian 图谱 / 记忆中心) -->
-        <section class="panel-block editor-graph-block" id="block-right-workbench">
-          <div class="workbench-tab-bar">
-            <button class="wb-tab-btn active" id="tab-btn-editor" onclick="switchRightTab('editor')">💻 代码编辑器 <span class="tab-file-name" id="active-file-indicator">未选文件</span></button>
-            <button class="wb-tab-btn" id="tab-btn-graph" onclick="switchRightTab('graph')">🕸️ Obsidian 知识图谱</button>
-            <button class="wb-tab-btn" id="tab-btn-memory" onclick="switchRightTab('memory')">🧠 分层记忆中心</button>
-            <div class="wb-actions">
-              <button class="btn-tool-pill" onclick="saveActiveFileCode()" title="保存 (Ctrl+S)">💾 保存</button>
-              <button class="btn-tool-pill btn-run-pill" onclick="runActiveFileCode()" title="运行代码">▶️ 运行</button>
-            </div>
+        <!-- 底部输入框与指令模板 -->
+        <div class="chat-input-wrapper">
+          <div class="prompt-templates">
+            <button class="template-chip" onclick="insertPrompt('编写新模块: 为 app/utils/math_helpers.py 实现几何级数算法')">✨ 编写新模块</button>
+            <button class="template-chip" onclick="insertPrompt('多Agent流水线: Architect设计 -> Coder编写 -> Reviewer审查 -> Tester单测')">🤖 多Agent流水线</button>
+            <button class="template-chip" onclick="insertPrompt('重构与单测: 优化现有模块并运行 PyTest 验证')">⚡ 重构与单测</button>
           </div>
 
-          <!-- Tab Content 1: 代码编辑器 -->
-          <div class="wb-tab-pane active" id="pane-editor">
-            <textarea id="code-editor-area" class="monaco-code-editor" placeholder="// 从左侧目录树选择文件，或点击 [+ 新建] 创建新文件进行自主编辑..."></textarea>
+          <div class="input-form-container">
+            <textarea id="agent-query-input" class="chat-textarea" placeholder="输入开发指令（输入 @ 可引用其他会话上下文，Enter 发送，Shift+Enter 换行）..." onkeydown="handleInputKeyDown(event)"></textarea>
+            <button class="btn btn-primary btn-send" id="btn-send-message" onclick="sendAgentMessage()">🚀 发送指令</button>
           </div>
+        </div>
+      </section>
 
-          <!-- Tab Content 2: Obsidian 知识图谱 -->
-          <div class="wb-tab-pane" id="pane-graph">
-            <div class="graph-toolbar">
-              <span class="graph-title">🕸️ 项目代码与变更知识图谱 (AST & Git 拓扑)</span>
-              <div class="graph-legend">
-                <span class="dot-label"><span class="dot" style="background:#e06c3a"></span> 项目</span>
-                <span class="dot-label"><span class="dot" style="background:#38bdf8"></span> Python</span>
-                <span class="dot-label"><span class="dot" style="background:#10b981"></span> 函数</span>
-                <span class="dot-label"><span class="dot" style="background:#ec4899"></span> 类</span>
-                <span class="dot-label"><span class="dot" style="background:#f59e0b"></span> Git提交</span>
-              </div>
-              <button class="btn-tool-pill" onclick="reloadObsidianGraph()">🔄 刷新图谱</button>
-            </div>
-            <div class="graph-canvas-container">
-              <canvas id="obsidian-graph-canvas"></canvas>
-            </div>
+      <!-- 右侧：代码编辑器、知识图谱与分层记忆 -->
+      <section class="editor-workspace" id="editor-workspace-panel">
+        <div class="editor-header">
+          <div class="editor-tabs">
+            <button class="tab-btn active" id="tab-editor-btn" onclick="switchRightPanel('editor')">💻 代码编辑器 <span class="file-path-indicator" id="active-file-indicator">未选文件</span></button>
+            <button class="tab-btn" id="tab-graph-btn" onclick="switchRightPanel('graph')">🕸️ Obsidian 知识图谱</button>
+            <button class="tab-btn" id="tab-memory-btn" onclick="switchRightPanel('memory')">🧠 分层记忆中心</button>
           </div>
+          <div class="editor-actions">
+            <button class="btn btn-sm btn-outline" onclick="saveActiveFile()">💾 保存</button>
+            <button class="btn btn-sm btn-primary" onclick="runActiveFile()">▶️ 运行</button>
+          </div>
+        </div>
 
-          <!-- Tab Content 3: 分层记忆中心 -->
-          <div class="wb-tab-pane" id="pane-memory">
-            <div class="memory-container">
-              <div class="memory-section">
-                <h4>🧠 长期语义记忆与架构规范</h4>
-                <div class="memory-cards-grid" id="long-term-memory-list"></div>
-              </div>
+        <!-- 编辑器面板 -->
+        <div class="editor-view" id="editor-view-container">
+          <textarea id="code-editor-area" class="code-textarea" placeholder="// 从左侧目录树选择文件，或点击 [+ 新建] 创建新文件进行自主编辑 ..."></textarea>
+        </div>
+
+        <!-- Obsidian 知识图谱面板 -->
+        <div class="graph-view hidden" id="graph-view-container">
+          <div class="graph-toolbar">
+            <span>🕸️ Obsidian 力导向代码与变动图谱</span>
+            <button class="btn-xs" onclick="refreshKnowledgeGraph()">🔄 刷新图谱</button>
+          </div>
+          <div id="graph-d3-canvas" class="d3-graph-canvas"></div>
+        </div>
+
+        <!-- 分层记忆面板 -->
+        <div class="memory-view hidden" id="memory-view-container">
+          <div class="memory-grid">
+            <div class="memory-card">
+              <h3>⚡ 短期工作记忆 (Working Buffer)</h3>
+              <div id="short-memory-list" class="memory-content-box"></div>
+            </div>
+            <div class="memory-card">
+              <h3>📚 长期语义经验库 (Long-Term Rules)</h3>
+              <div id="long-memory-list" class="memory-content-box"></div>
             </div>
           </div>
-        </section>
-      </div>
+        </div>
+
+        <!-- 终端回显抽屉 -->
+        <div class="terminal-drawer">
+          <div class="terminal-header">
+            <span>📟 内置控制台终端 (Console Output)</span>
+            <button class="btn-xs" onclick="clearTerminal()">清空</button>
+          </div>
+          <pre class="terminal-body" id="terminal-output">// RunCabinet Vite Coding Studio Terminal Ready.</pre>
+        </div>
+      </section>
     </main>
 
-    <!-- 4. 主工作区：Cockpit 驾驶舱视图 -->
-    <main class="desktop-workspace-main hidden" id="view-cockpit">
-      <header class="workspace-top-bar">
-        <div class="top-bar-left">
-          <div class="workspace-chip">🎛️ <b>LLM & Cockpit Tools 驾驶舱操控台</b></div>
-          <div class="agent-mesh-badge"><span class="status-dot green"></span> 运行正常</div>
+    <!-- 弹窗 1：会话分享与导出 Modal -->
+    <div class="modal-backdrop hidden" id="share-session-modal">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3>🔗 分享当前会话记录与代码成果</h3>
+          <button class="btn-close" onclick="closeShareSessionModal()">✕</button>
         </div>
-        <div class="top-bar-right">
-          <button class="ghost-btn" onclick="switchMainView('coding')">💻 返回编程工作台</button>
+        <div class="modal-body">
+          <p class="modal-desc">导出格式预览 (Markdown Transcription):</p>
+          <textarea id="share-export-content" class="modal-textarea" readonly></textarea>
         </div>
-      </header>
-
-      <div class="cockpit-dashboard-grid">
-        <section class="cockpit-card token-metrics-card">
-          <div class="cockpit-card-header">
-            <h3>⚡ Token 消耗与运行大盘</h3>
-            <span class="badge-pill">实时审计</span>
-          </div>
-          <div class="metrics-kpi-row">
-            <div class="kpi-box">
-              <div class="kpi-num" id="kpi-total-tokens">1,280</div>
-              <div class="kpi-label">累计消耗 Tokens</div>
-            </div>
-            <div class="kpi-box">
-              <div class="kpi-num" id="kpi-total-calls">4</div>
-              <div class="kpi-label">智能体调用次数</div>
-            </div>
-            <div class="kpi-box">
-              <div class="kpi-num" id="kpi-avg-latency">420ms</div>
-              <div class="kpi-label">平均响应延迟</div>
-            </div>
-            <div class="kpi-box">
-              <div class="kpi-num" id="kpi-active-tools">5 / 5</div>
-              <div class="kpi-label">活跃 Cockpit 工具</div>
-            </div>
-          </div>
-          <div class="token-breakdown-row" id="token-model-breakdown"></div>
-        </section>
-
-        <section class="cockpit-card tools-management-card">
-          <div class="cockpit-card-header">
-            <h3>🛠️ Cockpit Tools 驾驶舱工具库</h3>
-            <button class="btn-tool-pill" onclick="loadCockpitTools()">🔄 刷新工具</button>
-          </div>
-          <div class="cockpit-tools-grid" id="cockpit-tools-list"></div>
-        </section>
-
-        <section class="cockpit-card llm-provider-card">
-          <div class="cockpit-card-header">
-            <h3>🔮 LLM 厂商与模型接入</h3>
-            <button class="btn-tool-pill" onclick="openAddCustomModelModal()">➕ 自定义模型</button>
-          </div>
-          <div class="providers-list-scroll" id="llm-providers-container"></div>
-        </section>
-      </div>
-    </main>
-  </div>
-
-  <!-- 会话分享导出弹窗 (Share Session Modal) -->
-  <div id="share-session-modal" class="modal-overlay hidden">
-    <div class="glass-card modal-box" style="width: 520px;">
-      <h3>🔗 分享当前会话记录与代码成果</h3>
-      <div class="form-group">
-        <label>导出格式预览 (Markdown Transcription):</label>
-        <textarea id="share-export-content" rows="8" class="monaco-code-editor" style="height:160px;"></textarea>
-      </div>
-      <div class="modal-footer-btns">
-        <button class="ghost-btn" onclick="closeShareSessionModal()">关闭</button>
-        <button class="btn btn-primary" onclick="copyShareMarkdown()">📋 复制 Markdown 全文</button>
-        <button class="btn btn-primary" style="background:#d97706;" onclick="downloadSessionJson()">💾 导出 JSON 快照</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- 标签与颜色管理弹窗 (Tag & Color Manager Modal) -->
-  <div id="tag-manager-modal" class="modal-overlay hidden">
-    <div class="glass-card modal-box">
-      <h3>🏷️ 自定义标签与颜色管理</h3>
-      <div class="form-group">
-        <label>标签名称 (Tag Name):</label>
-        <input type="text" id="custom-tag-name" placeholder="如: feat, bugfix, review, hotfix">
-      </div>
-      <div class="form-group">
-        <label>选择标签代表颜色 (Color Palette):</label>
-        <div class="color-picker-row" id="tag-color-palette">
-          <div class="color-dot-choice selected" style="background:#e06c3a;" data-color="#e06c3a" onclick="selectTagColor(this)"></div>
-          <div class="color-dot-choice" style="background:#f59e0b;" data-color="#f59e0b" onclick="selectTagColor(this)"></div>
-          <div class="color-dot-choice" style="background:#10b981;" data-color="#10b981" onclick="selectTagColor(this)"></div>
-          <div class="color-dot-choice" style="background:#38bdf8;" data-color="#38bdf8" onclick="selectTagColor(this)"></div>
-          <div class="color-dot-choice" style="background:#a855f7;" data-color="#a855f7" onclick="selectTagColor(this)"></div>
-          <div class="color-dot-choice" style="background:#f43f5e;" data-color="#f43f5e" onclick="selectTagColor(this)"></div>
+        <div class="modal-footer">
+          <button class="btn btn-outline" onclick="closeShareSessionModal()">关闭</button>
+          <button class="btn btn-primary" onclick="copyShareMarkdown()">📋 复制 Markdown 全文</button>
+          <button class="btn btn-secondary" onclick="downloadShareJson()">💾 导出 JSON 快照</button>
         </div>
       </div>
-      <div class="modal-footer-btns">
-        <button class="ghost-btn" onclick="closeTagManagerModal()">取消</button>
-        <button class="btn btn-primary" onclick="saveCustomTag()">💾 保存标签</button>
+    </div>
+
+    <!-- 弹窗 2：标签色彩管理 Modal -->
+    <div class="modal-backdrop hidden" id="tag-manager-modal">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3>🏷️ 标签管理与色彩配置</h3>
+          <button class="btn-close" onclick="closeTagManagerModal()">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="tag-form-group">
+            <label>标签名称 (英文/拼音):</label>
+            <input type="text" id="new-tag-name" class="search-input" placeholder="例如: refactor, urgent">
+          </div>
+          <div class="tag-form-group">
+            <label>选择色系调色盘:</label>
+            <div class="color-palette-options">
+              <span class="color-dot" style="background:#e06c3a;" onclick="selectTagColor('#e06c3a')"></span>
+              <span class="color-dot" style="background:#f59e0b;" onclick="selectTagColor('#f59e0b')"></span>
+              <span class="color-dot" style="background:#f43f5e;" onclick="selectTagColor('#f43f5e')"></span>
+              <span class="color-dot" style="background:#d97706;" onclick="selectTagColor('#d97706')"></span>
+              <span class="color-dot" style="background:#a855f7;" onclick="selectTagColor('#a855f7')"></span>
+              <span class="color-dot" style="background:#ef4444;" onclick="selectTagColor('#ef4444')"></span>
+            </div>
+          </div>
+          <div class="tag-preview-box" id="tag-preview-box">
+            当前预设标签: 
+            <span class="chip chip-feat">#feat</span>
+            <span class="chip chip-coding">#coding</span>
+            <span class="chip chip-bugfix">#bugfix</span>
+            <span class="chip chip-review">#review</span>
+            <span class="chip chip-mesh">#mesh</span>
+            <span class="chip chip-hotfix">#hotfix</span>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline" onclick="closeTagManagerModal()">关闭</button>
+          <button class="btn btn-primary" onclick="saveCustomTag()">💾 保存标签配置</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 弹窗 3：Cockpit Tools 模型网关与配额监控 Modal -->
+    <div class="modal-backdrop hidden" id="cockpit-modal">
+      <div class="modal-card modal-large">
+        <div class="modal-header">
+          <h3>🎛️ Cockpit Tools 模型网关、多账号与配额看板</h3>
+          <button class="btn-close" onclick="closeCockpitModal()">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="cockpit-grid">
+            <!-- 厂商与账号配额卡片 -->
+            <div class="cockpit-section">
+              <h4>🌐 全厂商矩阵、多账号热切换与配额监控 (Quota & Reset Time)</h4>
+              <div id="provider-status-list" class="provider-list"></div>
+            </div>
+            <!-- 工具与沙箱 -->
+            <div class="cockpit-section">
+              <h4>🛠️ Cockpit Tools 工具资产与在线调试沙箱</h4>
+              <div id="cockpit-tools-list" class="tools-list"></div>
+              <div class="sandbox-debug-box">
+                <h5>在线单步调试沙箱 (Mock Debugger)</h5>
+                <input type="text" id="sandbox-params-input" class="search-input" placeholder='参数 JSON 例如 {"cmd": "pytest tests/"}'>
+                <button class="btn btn-sm btn-primary" onclick="debugToolInSandbox()">▶️ 执行沙箱单步调试</button>
+                <pre class="terminal-body" id="sandbox-debug-output">// 沙箱输出将在此回显...</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline" onclick="closeCockpitModal()">关闭</button>
+        </div>
       </div>
     </div>
   </div>
 
-  <!-- 在线调试工具沙箱弹窗 -->
-  <div id="tool-debug-modal" class="modal-overlay hidden">
-    <div class="glass-card modal-box">
-      <h3>🧪 Cockpit 工具在线调试沙箱: <span id="debug-tool-name" style="color:var(--primary);"></span></h3>
-      <div class="form-group">
-        <label>调用参数 (JSON Format):</label>
-        <textarea id="debug-tool-params" rows="5" class="monaco-code-editor" style="height:110px;"></textarea>
-      </div>
-      <div class="form-group">
-        <label>执行回显输出 (Result):</label>
-        <pre class="terminal-body" id="debug-tool-result" style="height:100px; padding:6px; color:#fb923c;">// 点击「执行调用」运行...</pre>
-      </div>
-      <div class="modal-footer-btns">
-        <button class="ghost-btn" onclick="closeToolDebugModal()">关闭</button>
-        <button class="btn btn-primary" onclick="confirmInvokeDebugTool()">🚀 执行调用</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- 新建文件弹窗 -->
-  <div id="new-file-modal" class="modal-overlay hidden">
-    <div class="glass-card modal-box">
-      <h3>➕ 新建工程文件</h3>
-      <div class="form-group">
-        <label>文件相对路径</label>
-        <input type="text" id="new-file-relpath" placeholder="app/services/example.py">
-      </div>
-      <div class="modal-footer-btns">
-        <button class="ghost-btn" onclick="closeNewFileModal()">取消</button>
-        <button class="btn btn-primary" onclick="confirmCreateNewFile()">创建并打开</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Toast 通知容器 -->
-  <div id="toast-container" class="toast-container"></div>
-
-  <script src="/static/app.js"></script>
+  <script src="/app.js"></script>
 </body>
 </html>

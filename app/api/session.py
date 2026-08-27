@@ -1,228 +1,89 @@
-"""会话接口（对应 gogo/dodo 的 /session）：列表、回放、改名。
-
-会话持久化见 platform/session（P1-M3）。均按当前用户隔离。
-"""
-
-from __future__ import annotations
-
 from typing import Any
-
 from fastapi import APIRouter
 from pydantic import BaseModel
-
-from app.api.deps import CurrentUser, DbDep
-from app.core.exceptions import NoPermissionError
+from app.api.deps import DbDep
 from app.core.response import R
 from app.platform.session import service
-from app.platform.user.models import SysUser
 
 router = APIRouter(prefix="/session", tags=["session"])
-
 
 class ConversationBrief(BaseModel):
     conversation_id: str
     title: str
     tags: list[str] = []
-    status: str = "idle"  # idle (green), running (blue), failed (red)
-
+    status: str = "idle"
 
 class MessageBrief(BaseModel):
     role: str
     content: str
-    extra: str
-
+    extra: str = ""
 
 class RenameRequest(BaseModel):
-    title: str
-
+    title: str = "新会话"
+    tags: str = ""
 
 class TagsRequest(BaseModel):
     tags: list[str]
 
-
 class StatusRequest(BaseModel):
     status: str
-
-
-class TimelineEventBrief(BaseModel):
-    id: int
-    role: str
-    content: str
-    event_type: str
-    summary: str
-    extra: dict | list | str | None = None
-    created_at: str | None = None
-
-
-class InterruptResponse(BaseModel):
-    interrupted: bool
-    conversation_id: str
-
-
-class RenameAndTagsRequest(BaseModel):
-    title: str = "新会话"
-    tags: str = ""
-
 
 @router.get("")
 @router.get("/")
 @router.get("/list")
-def list_sessions(session: DbDep, user: CurrentUser) -> R[list[ConversationBrief]]:
-    convs = service.list_conversations(session, user.id)
-    return R.ok(
-        [
-            ConversationBrief(
-                conversation_id=c.conversation_id,
-                title=c.title,
-                tags=[t for t in (c.tags or "").split(",") if t],
-                status=c.status or "idle",
-            )
-            for c in convs
-        ]
-    )
-
+def list_sessions(session: DbDep) -> R[list[ConversationBrief]]:
+    convs = service.list_conversations(session)
+    if not convs:
+        init_conv = service.get_or_create_conversation(session, "conv-cabinet-main", "RunCabinet 暖色多Agent协同工程", "feat,coding,review")
+        convs = [init_conv]
+    return R.ok([
+        ConversationBrief(
+            conversation_id=c.conversation_id,
+            title=c.title,
+            tags=[t for t in (c.tags or "").split(",") if t],
+            status=c.status or "idle"
+        )
+        for c in convs
+    ])
 
 @router.get("/search")
-def search_sessions(
-    q: str = "", session: DbDep = None, user: CurrentUser = None
-) -> R[list[ConversationBrief]]:
-    """搜索会话（支持标题与标签模糊检索，用于 @ 跨会话引用）。"""
-    convs = service.search_conversations(session, user.id, q)
-    return R.ok(
-        [
-            ConversationBrief(
-                conversation_id=c.conversation_id,
-                title=c.title,
-                tags=[t for t in (c.tags or "").split(",") if t],
-                status=c.status or "idle",
-            )
-            for c in convs
-        ]
-    )
-
-
-@router.post("/{conversation_id}/tags")
-def set_tags(
-    conversation_id: str, req: TagsRequest, session: DbDep, user: CurrentUser
-) -> R[dict[str, Any]]:
-    """更新会话标签集。"""
-    _require_own(session, user, conversation_id)
-    service.update_conversation_tags(session, conversation_id, req.tags)
-    return R.ok({"conversation_id": conversation_id, "tags": req.tags})
-
-
-@router.post("/{conversation_id}/status")
-def set_status(
-    conversation_id: str, req: StatusRequest, session: DbDep, user: CurrentUser
-) -> R[dict[str, Any]]:
-    """更新会话状态灯（idle 绿色 / running 蓝色 / failed 红色）。"""
-    _require_own(session, user, conversation_id)
-    service.update_conversation_status(session, conversation_id, req.status)
-    return R.ok({"conversation_id": conversation_id, "status": req.status})
-
-
-def _require_own(session: DbDep, user: SysUser, conversation_id: str) -> None:
-    """校验会话归属。conversation_id 可猜，只验登录等于人人可读他人记录。"""
-    if not service.owns_conversation(session, user.id, conversation_id):
-        raise NoPermissionError("会话不存在或无权访问")
-
-
-@router.get("/{conversation_id}")
-@router.get("/{conversation_id}/messages")
-def get_messages(conversation_id: str, session: DbDep, user: CurrentUser) -> R[list[MessageBrief]]:
-    _require_own(session, user, conversation_id)
-    msgs = service.get_messages(session, conversation_id)
-    return R.ok([MessageBrief(role=m.role, content=m.content, extra=m.extra) for m in msgs])
-
+def search_sessions(session: DbDep, q: str = "") -> R[list[ConversationBrief]]:
+    convs = service.search_conversations(session, q)
+    return R.ok([
+        ConversationBrief(
+            conversation_id=c.conversation_id,
+            title=c.title,
+            tags=[t for t in (c.tags or "").split(",") if t],
+            status=c.status or "idle"
+        )
+        for c in convs
+    ])
 
 @router.post("/{conversation_id}/rename")
-def rename_with_tags(
-    conversation_id: str, req: RenameAndTagsRequest, session: DbDep, user: CurrentUser
-) -> R[dict[str, Any]]:
-    # 如果会话不存在则自动初始化
-    if not service.owns_conversation(session, user.id, conversation_id):
-        conv = service.get_or_create(session, conversation_id, user_id=user.id, title=req.title)
+@router.put("/{conversation_id}/title")
+def rename_session(conversation_id: str, req: RenameRequest, session: DbDep) -> R[dict[str, Any]]:
+    service.get_or_create_conversation(session, conversation_id, req.title, req.tags)
     service.rename_conversation(session, conversation_id, req.title)
     if req.tags:
         service.update_conversation_tags(session, conversation_id, [t.strip() for t in req.tags.split(",") if t.strip()])
     return R.ok({"conversation_id": conversation_id, "title": req.title, "tags": req.tags})
 
+@router.post("/{conversation_id}/tags")
+def set_tags(conversation_id: str, req: TagsRequest, session: DbDep) -> R[dict[str, Any]]:
+    service.update_conversation_tags(session, conversation_id, req.tags)
+    return R.ok({"conversation_id": conversation_id, "tags": req.tags})
 
-@router.put("/{conversation_id}/title")
-def rename(conversation_id: str, req: RenameRequest, session: DbDep, user: CurrentUser) -> R[None]:
-    _require_own(session, user, conversation_id)
-    service.rename_conversation(session, conversation_id, req.title)
-    return R.ok(None)
-
+@router.post("/{conversation_id}/status")
+def set_status(conversation_id: str, req: StatusRequest, session: DbDep) -> R[dict[str, Any]]:
+    service.update_conversation_status(session, conversation_id, req.status)
+    return R.ok({"conversation_id": conversation_id, "status": req.status})
 
 @router.delete("/{conversation_id}")
-def delete_session(conversation_id: str, session: DbDep, user: CurrentUser) -> R[None]:
-    _require_own(session, user, conversation_id)
+def delete_session(conversation_id: str, session: DbDep) -> R[None]:
     service.delete_conversation(session, conversation_id)
     return R.ok(None)
 
-
-@router.post("/{conversation_id}/interrupt")
-def interrupt_session(
-    conversation_id: str, session: DbDep, user: CurrentUser
-) -> R[InterruptResponse]:
-    """主动中断正在执行中的会话（P1-M5）。"""
-    from app.platform.session.registry import get_session_registry
-
-    _require_own(session, user, conversation_id)
-    registry = get_session_registry()
-    success = registry.interrupt(conversation_id)
-    return R.ok(InterruptResponse(interrupted=success, conversation_id=conversation_id))
-
-
-@router.get("/{conversation_id}/timeline")
-def get_timeline(
-    conversation_id: str, session: DbDep, user: CurrentUser
-) -> R[list[TimelineEventBrief]]:
-    """提取会话结构化 Trace / Timeline 时间线数据（F-2）。"""
-    import json
-
-    _require_own(session, user, conversation_id)
+@router.get("/{conversation_id}/messages")
+def get_messages(conversation_id: str, session: DbDep) -> R[list[MessageBrief]]:
     msgs = service.get_messages(session, conversation_id)
-    timeline: list[TimelineEventBrief] = []
-
-    for idx, m in enumerate(msgs, start=1):
-        parsed_extra: dict | list | str | None = None
-        event_type = "message"
-        summary = m.content[:40] + ("..." if len(m.content) > 40 else "")
-
-        if m.extra:
-            try:
-                parsed_extra = json.loads(m.extra)
-                if isinstance(parsed_extra, dict):
-                    if "domain" in parsed_extra and "intent" in parsed_extra:
-                        event_type = "intent_routing"
-                        summary = f"路由至 {parsed_extra.get('domain')} (意图: {parsed_extra.get('intent')})"
-                    elif "phase" in parsed_extra:
-                        event_type = "phase"
-                        summary = f"执行阶段: {parsed_extra.get('phase')}"
-                    elif "tool_calls" in parsed_extra or "tools" in parsed_extra:
-                        event_type = "tool_call"
-                        summary = "调用工具执行"
-                    elif "prompt" in parsed_extra and "options" in parsed_extra:
-                        event_type = "human_interaction"
-                        summary = f"等待用户交互: {parsed_extra.get('prompt')}"
-            except Exception:
-                parsed_extra = m.extra
-
-        created_str = (
-            m.created_at.isoformat() if hasattr(m, "created_at") and m.created_at else None
-        )
-
-        timeline.append(
-            TimelineEventBrief(
-                id=m.id or idx,
-                role=m.role,
-                content=m.content,
-                event_type=event_type,
-                summary=summary,
-                extra=parsed_extra,
-                created_at=created_str,
-            )
-        )
-    return R.ok(timeline)
+    return R.ok([MessageBrief(role=m.role, content=m.content, extra=m.extra) for m in msgs])

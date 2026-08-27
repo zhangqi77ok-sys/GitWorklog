@@ -1,23 +1,15 @@
-"""Token 消耗流水 ORM 模型。"""
+from sqlalchemy import Column, Integer, String, Float, DateTime
+from datetime import datetime, timezone
+from app.core.db import Base
 
-from __future__ import annotations
-
-from datetime import datetime
-from sqlalchemy import DateTime, Integer, String, func
-from sqlalchemy.orm import Mapped, mapped_column
-
-from app.core.db import Base, TimestampMixin
-
-
-class AgentxTokenUsage(Base, TimestampMixin):
-    __tablename__ = "agentx_token_usage"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    conversation_id: Mapped[str] = mapped_column(String(64), index=True, default="")
-    provider_code: Mapped[str] = mapped_column(String(32), default="bailian")
-    model_name: Mapped[str] = mapped_column(String(64), default="qwen3.7-flash")
-    agent_role: Mapped[str] = mapped_column(String(32), default="coder")
-    prompt_tokens: Mapped[int] = mapped_column(Integer, default=0)
-    completion_tokens: Mapped[int] = mapped_column(Integer, default=0)
-    total_tokens: Mapped[int] = mapped_column(Integer, default=0)
-    latency_ms: Mapped[int] = mapped_column(Integer, default=0)
+class TokenUsageRecord(Base):
+    __tablename__ = "token_usage_records"
+    id = Column(Integer, primary_key=True, index=True)
+    conversation_id = Column(String(64), index=True, nullable=False)
+    provider = Column(String(64), default="antigravity")
+    model = Column(String(64), default="antigravity-core")
+    prompt_tokens = Column(Integer, default=0)
+    completion_tokens = Column(Integer, default=0)
+    total_tokens = Column(Integer, default=0)
+    cost_duration = Column(Float, default=0.0)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
