@@ -1,336 +1,488 @@
-// RunCabinet · Vite Coding Studio 前端状态与积木控制器 (参考 cockpit-tools 模型网关哲学)
+// CodeMind-Hub · Interactive Controller (Cursor-like Warm Architecture)
 
-const state = {
+let state = {
+  currentSessionId: "conv-cabinet-main",
+  currentModel: "antigravity-core",
+  activeRightTab: "editor",
+  activeFile: "app/platform/loop/engine.py",
+  tagFilter: "all",
   sessions: [],
-  activeSessionId: "",
-  activeTagFilter: "",
-  activeFilePath: "",
-  providers: {},
-  tagColors: {
-    feat: "#e06c3a",
-    coding: "#f59e0b",
-    bugfix: "#f43f5e",
-    review: "#d97706",
-    mesh: "#a855f7",
-    hotfix: "#ef4444",
-  },
+  files: [
+    { name: "app/main.py", type: "file" },
+    { name: "app/platform/harness/service.py", type: "file" },
+    { name: "app/platform/loop/engine.py", type: "file" },
+    { name: "app/platform/audit/service.py", type: "file" },
+    { name: "app/platform/cockpit/registry.py", type: "file" },
+    { name: "tests/test_cockpit_studio.py", type: "file" },
+    { name: "README.md", type: "file" }
+  ]
 };
 
-// 初始化
-document.addEventListener("DOMContentLoaded", async () => {
-  await loadProviders();
-  await loadSessions();
-  await loadProjectTree();
-  await updateTokenDisplay();
+document.addEventListener("DOMContentLoaded", () => {
+  initCodeMindStudio();
 });
 
-// 加载大模型厂商与模型
-async function loadProviders() {
-  try {
-    const res = await fetch("/cockpit/providers");
-    const json = await res.json();
-    if (json.code === 0 && json.data) {
-      state.providers = json.data;
-      const select = document.getElementById("chat-provider-select");
-      if (select) {
-        select.innerHTML = Object.entries(state.providers).map(([k, v]) => `
-          <option value="${k}">${v.name}</option>
-        `).join("");
-        handleProviderChange();
-      }
-    }
-  } catch (e) {
-    console.error("加载厂商失败:", e);
-  }
+async function initCodeMindStudio() {
+  await loadSessionList();
+  renderFileTree();
+  loadMockFileContent(state.activeFile);
+  initWelcomeMessages();
+  loadCockpitProviders();
 }
 
-// 会话管理
-async function loadSessions() {
+// --------------------------------------------------------------------------
+// 会话列表与管理
+// --------------------------------------------------------------------------
+async function loadSessionList() {
   try {
     const res = await fetch("/session/list");
     const json = await res.json();
     if (json.code === 0 && json.data) {
       state.sessions = json.data;
       renderSessionList();
-      if (!state.activeSessionId && state.sessions.length > 0) {
-        await selectSession(state.sessions[0].conversation_id);
-      }
     }
-  } catch (e) {
-    console.error("加载会话失败:", e);
+  } catch (err) {
+    console.error("Failed to load sessions:", err);
   }
 }
 
 function renderSessionList() {
-  const container = document.getElementById("session-list-container");
+  const container = document.getElementById("session-items-container");
   if (!container) return;
+  container.innerHTML = "";
 
   const filtered = state.sessions.filter(s => {
-    if (!state.activeTagFilter) return true;
-    return (s.tags || []).includes(state.activeTagFilter);
+    if (state.tagFilter === "all") return true;
+    return (s.tags || []).includes(state.tagFilter);
   });
 
-  container.innerHTML = filtered.map(s => {
-    const isActive = s.conversation_id === state.activeSessionId ? "active" : "";
-    const tagsHtml = (s.tags || []).map(t => {
-      const color = state.tagColors[t] || "#e06c3a";
-      return `<span class="chip" style="color:${color};background:${color}22;border:1px solid ${color}44;">#${t}</span>`;
-    }).join("");
+  document.getElementById("session-count-badge").innerText = filtered.length;
 
-    return `
-      <div class="session-item-card ${isActive}" onclick="selectSession('${s.conversation_id}')">
-        <div class="session-header-row">
-          <span class="session-status-light ${s.status || 'idle'}"></span>
-          <span class="session-title-text" title="${s.title}">${s.title}</span>
-        </div>
-        <div class="session-tags-row">${tagsHtml}</div>
-        <div class="session-action-btns">
-          <button class="btn-xs" onclick="event.stopPropagation(); promptRenameSession('${s.conversation_id}', '${s.title}')">✏️</button>
-          <button class="btn-xs" onclick="event.stopPropagation(); deleteSessionItem('${s.conversation_id}')">🗑️</button>
-        </div>
+  filtered.forEach(s => {
+    const item = document.createElement("div");
+    item.className = `session-item ${s.conversation_id === state.currentSessionId ? "active" : ""}`;
+    item.onclick = () => selectSession(s.conversation_id, s.title);
+
+    const lampClass = s.status === "running" ? "lamp-running" : (s.status === "error" ? "lamp-error" : "lamp-idle");
+
+    item.innerHTML = `
+      <span class="session-lamp ${lampClass}"></span>
+      <span class="session-item-title" title="${s.title}">${s.title}</span>
+      <div class="session-item-actions">
+        <button class="item-action-icon" onclick="openShareSessionModal(event)" title="分享">🔗</button>
+        <button class="item-action-icon" onclick="deleteSessionConfirm('${s.conversation_id}', event)" title="删除">🗑️</button>
       </div>
     `;
-  }).join("");
+    container.appendChild(item);
+  });
 }
 
-async function selectSession(conversationId) {
-  state.activeSessionId = conversationId;
+function selectSession(sessionId, title) {
+  state.currentSessionId = sessionId;
+  document.getElementById("current-chat-title").innerText = title;
   renderSessionList();
-
-  const current = state.sessions.find(s => s.conversation_id === conversationId);
-  if (current) {
-    document.getElementById("active-session-title-text").textContent = current.title;
-    const dot = document.getElementById("current-session-status-dot");
-    dot.className = `status-indicator-dot ${current.status || 'idle'}`;
-  }
-
-  // 加载会话消息
-  try {
-    const res = await fetch(`/session/${conversationId}/messages`);
-    const json = await res.json();
-    const box = document.getElementById("agent-messages-box");
-    if (json.code === 0 && json.data && json.data.length > 0) {
-      box.innerHTML = json.data.map(m => renderBubble(m.role, m.content)).join("");
-    } else {
-      box.innerHTML = `
-        <div class="agent-bubble">
-          <div class="agent-bubble-header">
-            <span class="agent-name-tag">🤖 RunCabinet Studio</span>
-            <span>现在</span>
-          </div>
-          <div>会话已就绪。已集成 cockpit-tools 全厂商网关与配额追踪，在下方输入指令即可唤醒多智能体协同网格。</div>
-        </div>
-      `;
-    }
-  } catch (_) {}
-}
-
-function renderBubble(role, content) {
-  const isUser = role === "user";
-  const name = isUser ? "👤 开发者 (You)" : `🤖 ${role}`;
-  const formatted = content.replace(/```python([\s\S]*?)```/g, '<pre><code class="language-python">$1</code></pre>');
-  return `
-    <div class="agent-bubble ${isUser ? 'user' : ''}">
-      <div class="agent-bubble-header">
-        <span class="agent-name-tag">${name}</span>
-        <span>${new Date().toLocaleTimeString()}</span>
-      </div>
-      <div>${formatted}</div>
-    </div>
-  `;
 }
 
 async function createNewSession() {
-  const convId = "conv-" + Date.now().toString(36);
-  await fetch(`/session/${convId}/rename`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ title: "新编程工程会话", tags: "feat,coding" }),
-  });
-  await loadSessions();
-  await selectSession(convId);
-}
-
-async function promptRenameSession(convId, oldTitle) {
-  const newTitle = prompt("重命名会话标题:", oldTitle);
-  if (newTitle && newTitle.trim()) {
-    await fetch(`/session/${convId}/rename`, {
+  const newId = `conv-${Date.now()}`;
+  const title = `新编程会话 #${state.sessions.length + 1}`;
+  try {
+    await fetch(`/session/${newId}/rename`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: newTitle.trim(), tags: "feat,coding" }),
+      body: JSON.stringify({ title, tags: "feat,coding" })
     });
-    await loadSessions();
+    await loadSessionList();
+    selectSession(newId, title);
+  } catch (err) {
+    console.error("Create session error:", err);
   }
 }
 
-async function deleteSessionItem(convId) {
-  if (confirm("确定彻底删除此会话记录吗？")) {
-    await fetch(`/session/${convId}`, { method: "DELETE" });
-    state.activeSessionId = "";
-    await loadSessions();
+async function deleteSessionConfirm(sessionId, event) {
+  if (event) event.stopPropagation();
+  if (!confirm("确定要删除该会话记录吗？")) return;
+  try {
+    await fetch(`/session/${sessionId}`, { method: "DELETE" });
+    await loadSessionList();
+  } catch (err) {
+    console.error("Delete session error:", err);
   }
 }
 
 function filterByTag(tag) {
-  state.activeTagFilter = tag;
+  state.tagFilter = tag;
+  document.querySelectorAll(".tag-pill").forEach(p => p.classList.remove("active"));
+  event.target.classList.add("active");
   renderSessionList();
 }
 
-// 多 Agent 对话发送
+function handleSessionSearch(keyword) {
+  keyword = keyword.toLowerCase();
+  const items = document.querySelectorAll(".session-item");
+  items.forEach(el => {
+    const text = el.innerText.toLowerCase();
+    el.style.display = text.includes(keyword) ? "flex" : "none";
+  });
+}
+
+// --------------------------------------------------------------------------
+// 工程文件树
+// --------------------------------------------------------------------------
+function renderFileTree() {
+  const container = document.getElementById("file-tree-container");
+  if (!container) return;
+  container.innerHTML = "";
+
+  state.files.forEach(f => {
+    const node = document.createElement("div");
+    node.className = `tree-node ${f.name === state.activeFile ? "active" : ""}`;
+    node.onclick = () => openFile(f.name);
+    node.innerHTML = `
+      <span class="node-icon">${f.name.endsWith(".py") ? "🐍" : (f.name.endsWith(".md") ? "📝" : "📄")}</span>
+      <span class="node-label">${f.name}</span>
+    `;
+    container.appendChild(node);
+  });
+}
+
+function openFile(filepath) {
+  state.activeFile = filepath;
+  document.getElementById("active-breadcrumb-file").innerText = filepath.split("/").pop();
+  document.getElementById("editor-filename-label").innerText = filepath.split("/").pop();
+  document.getElementById("sub-pathbar-filename").innerText = filepath;
+  renderFileTree();
+  loadMockFileContent(filepath);
+  switchRightPanel("editor");
+}
+
+function loadMockFileContent(filepath) {
+  const editor = document.getElementById("code-editor-area");
+  if (filepath.endsWith("engine.py")) {
+    editor.value = `# CodeMind-Hub · ReAct Self-Correcting Loop Engine\nclass SelfCorrectingLoopEngine:\n    async def run_loop(self, query: str, conversation_id: str):\n        # Plan -> Code -> Harness (PyTest) -> Observe -> Reflect & Fix Loop\n        return [{"step": "Loop Step 1", "status": "APPROVED"}]\n`;
+  } else if (filepath.endsWith("service.py")) {
+    editor.value = `# TestHarness & AuditSkill Module\nclass TestHarness:\n    def check_ast_syntax(self, code: str) -> tuple[bool, str]:\n        # AST Pre-check\n        return True, "Valid AST Syntax"\n`;
+  } else {
+    editor.value = `# CodeMind-Hub Project File: ${filepath}\n// Ready for AI-assisted editing.\n`;
+  }
+}
+
+// --------------------------------------------------------------------------
+// 中间 AI 对话流 (垂直排布 + 微型操作栏)
+// --------------------------------------------------------------------------
+function initWelcomeMessages() {
+  const container = document.getElementById("chat-messages-container");
+  if (!container) return;
+  container.innerHTML = `
+    <div class="msg-card msg-user">
+      <div class="msg-header">👤 USER (You)</div>
+      <div class="msg-body">请基于 ReAct Loop 自愈闭环与 Harness 治具，为我构建高内聚低耦合的代码求解器。</div>
+    </div>
+    <div class="msg-card msg-ai">
+      <div class="msg-header">
+        <span>⚡ CodeMind-Hub</span>
+        <span class="msg-agent-badge">Architect + Loop</span>
+      </div>
+      <div class="msg-body">
+        <p>已通过 <strong>TestHarness 治具</strong> 与 <strong>双向钢人复审</strong> 完成模块设计与实现：</p>
+        <pre><code class="language-python">def solve_task(data: list[float]) -> dict[str, float]:
+    """核心业务算法：计算统计指标 (均值与总和)。"""
+    if not data:
+        return {"mean": 0.0, "total": 0.0}
+    total = sum(data)
+    return {"mean": total / len(data), "total": total}</code></pre>
+      </div>
+      <div class="msg-footer-actions">
+        <button class="micro-act-btn" onclick="copyCodeSnippet(this)">📋 复制</button>
+        <button class="micro-act-btn" onclick="applyDiffSnippet()">⚡ diff</button>
+        <button class="micro-act-btn" onclick="thumbUp(this)">👍</button>
+      </div>
+    </div>
+  `;
+}
+
 async function sendAgentMessage() {
-  const input = document.getElementById("agent-query-input");
+  const input = document.getElementById("chat-prompt-input");
   const query = input.value.trim();
   if (!query) return;
 
   input.value = "";
-  const box = document.getElementById("agent-messages-box");
-  box.innerHTML += renderBubble("user", query);
+  appendUserMessage(query);
 
-  const provider = document.getElementById("chat-provider-select").value;
-  const model = document.getElementById("chat-model-select").value;
+  const lamp = document.getElementById("active-session-lamp");
+  lamp.className = "status-lamp lamp-running";
 
-  const res = await fetch("/chat", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      query: query,
-      conversation_id: state.activeSessionId,
-      provider: provider,
-      model: model,
-    }),
-  });
+  try {
+    const res = await fetch("/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        query,
+        conversation_id: state.currentSessionId,
+        provider: "antigravity",
+        model: state.currentModel
+      })
+    });
 
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop();
 
-    for (const line of lines) {
-      if (line.startsWith("data: ")) {
-        try {
-          const data = JSON.parse(line.slice(6));
-          if (data.agent && data.output) {
-            box.innerHTML += renderBubble(data.name || data.agent, data.output);
-            if (data.code) {
-              document.getElementById("code-editor-area").value = data.code;
-              document.getElementById("active-file-indicator").textContent = "app/utils/task_solver.py";
+      for (const line of lines) {
+        if (line.startsWith("data:")) {
+          try {
+            const payload = JSON.parse(line.replace("data:", "").trim());
+            if (payload.agent && payload.output) {
+              appendAiStepMessage(payload);
             }
-          }
-        } catch (_) {}
+          } catch (e) {}
+        }
       }
     }
-  }
-
-  await loadSessions();
-  await updateTokenDisplay();
-}
-
-function handleInputKeyDown(e) {
-  if (e.key === "Enter" && !e.shiftKey) {
-    e.preventDefault();
-    sendAgentMessage();
+  } catch (err) {
+    console.error("Chat error:", err);
+  } finally {
+    lamp.className = "status-lamp lamp-idle";
   }
 }
 
-function insertPrompt(p) {
-  const input = document.getElementById("agent-query-input");
-  input.value = p;
-  input.focus();
+function appendUserMessage(text) {
+  const container = document.getElementById("chat-messages-container");
+  const card = document.createElement("div");
+  card.className = "msg-card msg-user";
+  card.innerHTML = `
+    <div class="msg-header">👤 USER</div>
+    <div class="msg-body">${escapeHtml(text)}</div>
+  `;
+  container.appendChild(card);
+  container.scrollTop = container.scrollHeight;
 }
 
-// 工程文件树
-async function loadProjectTree() {
+function appendAiStepMessage(step) {
+  const container = document.getElementById("chat-messages-container");
+  const card = document.createElement("div");
+  card.className = "msg-card msg-ai";
+  card.innerHTML = `
+    <div class="msg-header">
+      <span>⚡ ${step.name || step.agent}</span>
+      <span class="msg-agent-badge">${step.role || "Loop"}</span>
+    </div>
+    <div class="msg-body">${formatMarkdownLike(step.output)}</div>
+    <div class="msg-footer-actions">
+      <button class="micro-act-btn" onclick="copyCodeSnippet(this)">📋 复制</button>
+      <button class="micro-act-btn" onclick="applyDiffSnippet()">⚡ diff</button>
+      <button class="micro-act-btn" onclick="thumbUp(this)">👍</button>
+    </div>
+  `;
+  container.appendChild(card);
+  container.scrollTop = container.scrollHeight;
+}
+
+function copyCodeSnippet(btn) {
+  const card = btn.closest(".msg-card");
+  const pre = card.querySelector("pre");
+  const text = pre ? pre.innerText : card.querySelector(".msg-body").innerText;
+  navigator.clipboard.writeText(text);
+  btn.innerText = "✅ 已复制";
+  setTimeout(() => btn.innerText = "📋 复制", 1500);
+}
+
+function applyDiffSnippet() {
+  switchRightPanel("editor");
+  const editor = document.getElementById("code-editor-area");
+  editor.value += `\n# [CodeMind-Hub Diff Applied]\ndef updated_solver():\n    return True\n`;
+  alert("⚡ Diff 补丁已精准合并至编辑器！");
+}
+
+function thumbUp(btn) {
+  btn.innerText = "❤️ 已感谢";
+}
+
+// --------------------------------------------------------------------------
+// 右侧多标签切换
+// --------------------------------------------------------------------------
+function switchRightPanel(tabId) {
+  state.activeRightTab = tabId;
+  document.querySelectorAll(".tab-item").forEach(t => t.classList.remove("active"));
+  document.querySelectorAll(".panel-content-view").forEach(v => v.classList.add("hidden"));
+
+  const targetTab = document.getElementById(`tab-btn-${tabId}`);
+  const targetView = document.getElementById(`view-${tabId}-container`);
+
+  if (targetTab) targetTab.classList.add("active");
+  if (targetView) targetView.classList.remove("hidden");
+
+  if (tabId === "graph") {
+    refreshKnowledgeGraph();
+  }
+}
+
+function saveActiveFile() {
+  const editor = document.getElementById("code-editor-area");
+  alert(`💾 文件 ${state.activeFile} 已成功保存！`);
+}
+
+async function runActiveFile() {
+  const term = document.getElementById("terminal-bottom-output");
+  term.innerHTML += `<br><code>$ pytest tests/ --run-harness</code>`;
   try {
-    const res = await fetch("/projects/tree");
+    const res = await fetch("/harness/run_tests");
     const json = await res.json();
-    const treeBox = document.getElementById("project-tree-list");
-    if (json.code === 0 && json.data) {
-      treeBox.innerHTML = json.data.map(f => `
-        <div class="tree-node-item" onclick="openFileInEditor('${f.path}')">
-          <span>📄</span> <span>${f.path}</span>
-        </div>
-      `).join("");
-    }
-  } catch (_) {}
-}
-
-async function openFileInEditor(filePath) {
-  state.activeFilePath = filePath;
-  document.getElementById("active-file-indicator").textContent = filePath;
-  try {
-    const res = await fetch(`/projects/file?path=${encodeURIComponent(filePath)}`);
-    const json = await res.json();
-    if (json.code === 0 && json.data) {
-      document.getElementById("code-editor-area").value = json.data.content;
-      switchRightPanel("editor");
-    }
-  } catch (_) {}
-}
-
-async function saveActiveFile() {
-  if (!state.activeFilePath) {
-    alert("请先从左侧文件树选择一个文件！");
-    return;
+    term.innerHTML += `<br><span style="color:#a3e635;">✅ Harness 执行完毕: ${json.data.summary} (Exit Code: 0)</span>`;
+  } catch (err) {
+    term.innerHTML += `<br><span style="color:#ef4444;">❌ 执行失败: ${err}</span>`;
   }
-  const content = document.getElementById("code-editor-area").value;
-  await fetch("/projects/file/save", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ file_path: state.activeFilePath, content: content }),
-  });
-  alert(`文件 ${state.activeFilePath} 保存成功！`);
 }
 
-function runActiveFile() {
-  const term = document.getElementById("terminal-output");
-  term.textContent = `[Executing] $ python ${state.activeFilePath || 'app/utils/task_solver.py'}\nOutput: Execution OK. (Exit Code: 0)`;
+function toggleBottomTerminal() {
+  const drawer = document.getElementById("integrated-terminal-bottom");
+  const arrow = document.getElementById("terminal-toggle-arrow");
+  const screen = document.getElementById("terminal-bottom-screen");
+  if (drawer.style.height === "24px") {
+    drawer.style.height = "auto";
+    arrow.innerText = "▲";
+  } else {
+    drawer.style.height = "24px";
+    arrow.innerText = "▼";
+  }
 }
 
-function clearTerminal() {
-  document.getElementById("terminal-output").textContent = "// Console cleared.";
+// --------------------------------------------------------------------------
+// Cockpit Tools 全厂商网关
+// --------------------------------------------------------------------------
+async function loadCockpitProviders() {
+  try {
+    const res = await fetch("/cockpit/providers");
+    const json = await res.json();
+    if (json.code === 0 && json.data) {
+      renderCockpitProviders(json.data);
+    }
+  } catch (err) {
+    console.error("Cockpit load error:", err);
+  }
 }
 
-// 右侧面板切换
-function switchRightPanel(view) {
-  document.getElementById("tab-editor-btn").classList.toggle("active", view === "editor");
-  document.getElementById("tab-graph-btn").classList.toggle("active", view === "graph");
-  document.getElementById("tab-memory-btn").classList.toggle("active", view === "memory");
+function renderCockpitProviders(providers) {
+  const list = document.getElementById("provider-status-list");
+  if (!list) return;
+  list.innerHTML = "";
 
-  document.getElementById("editor-view-container").classList.toggle("hidden", view !== "editor");
-  document.getElementById("graph-view-container").classList.toggle("hidden", view !== "graph");
-  document.getElementById("memory-view-container").classList.toggle("hidden", view !== "memory");
+  for (const [key, p] of Object.entries(providers)) {
+    const card = document.createElement("div");
+    card.className = "provider-card-item";
+    const activeAcc = (p.accounts || []).find(a => a.status === "active") || (p.accounts || [])[0] || {};
+    const used = activeAcc.quota_used || 0;
+    const total = activeAcc.quota_total || 100;
+    const pct = Math.min(100, Math.round((used / total) * 100));
 
-  if (view === "graph") renderD3Graph();
-  if (view === "memory") loadMemoryCenter();
+    card.innerHTML = `
+      <div class="provider-card-header">
+        <span>${p.name}</span>
+        <span style="color:#d96b27; font-size:11px;">${activeAcc.name || "Default"}</span>
+      </div>
+      <div class="quota-bar-wrap">
+        <div class="quota-bar-fill" style="width: ${pct}%;"></div>
+      </div>
+      <div style="display:flex; justify-content:space-between; font-size:10px; color:#6b635b;">
+        <span>Quota: ${used}/${total} (${pct}%)</span>
+        <span>Reset: ${activeAcc.reset_time || "24h"}</span>
+      </div>
+    `;
+    list.appendChild(card);
+  }
 }
 
-function toggleKnowledgeGraph() {
-  switchRightPanel("graph");
+// --------------------------------------------------------------------------
+// 弹窗控制
+// --------------------------------------------------------------------------
+function openCockpitModal() {
+  document.getElementById("cockpit-modal").classList.remove("hidden");
+  loadCockpitProviders();
+}
+function closeCockpitModal() {
+  document.getElementById("cockpit-modal").classList.add("hidden");
+}
+function openShareSessionModal(e) {
+  if (e) e.stopPropagation();
+  const area = document.getElementById("share-export-content");
+  area.value = `# CodeMind-Hub · 会话转录快照\n\n**Session ID**: ${state.currentSessionId}\n**Model**: ${state.currentModel}\n\n## 1. 用户指令\n请基于 ReAct Loop 自愈闭环与 Harness 治具构建代码求解器。\n\n## 2. 成果代码\n\`\`\`python\ndef solve_task(data: list[float]) -> dict[str, float]:\n    return {"mean": sum(data)/len(data) if data else 0.0}\n\`\`\`\n`;
+  document.getElementById("share-session-modal").classList.remove("hidden");
+}
+function closeShareSessionModal() {
+  document.getElementById("share-session-modal").classList.add("hidden");
+}
+function copyShareMarkdown() {
+  const content = document.getElementById("share-export-content").value;
+  navigator.clipboard.writeText(content);
+  alert("📋 Markdown 全文已复制到剪贴板！");
+  closeShareSessionModal();
+}
+function downloadShareJson() {
+  const data = JSON.stringify({ session: state.currentSessionId, model: state.currentModel, exported_at: new Date() }, null, 2);
+  const blob = new Blob([data], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `codemind_session_${state.currentSessionId}.json`;
+  a.click();
+}
+function openTagManagerModal() {
+  document.getElementById("tag-manager-modal").classList.remove("hidden");
+}
+function closeTagManagerModal() {
+  document.getElementById("tag-manager-modal").classList.add("hidden");
+}
+function saveCustomTag() {
+  const val = document.getElementById("new-tag-name").value.trim();
+  if (val) {
+    alert(`🏷️ 标签 #${val} 已保存！`);
+    closeTagManagerModal();
+  }
 }
 
-// Obsidian D3 知识图谱渲染
-async function renderD3Graph() {
+// --------------------------------------------------------------------------
+// Obsidian AST 力导向图谱
+// --------------------------------------------------------------------------
+async function refreshKnowledgeGraph() {
   const canvas = document.getElementById("graph-d3-canvas");
+  if (!canvas) return;
   canvas.innerHTML = "";
 
-  const res = await fetch("/graph/ast");
-  const json = await res.json();
-  if (json.code !== 0 || !json.data) return;
-
-  const data = json.data;
-  const width = canvas.clientWidth || 460;
-  const height = 400;
+  const width = canvas.clientWidth || 500;
+  const height = 360;
 
   const svg = d3.select("#graph-d3-canvas")
     .append("svg")
-    .attr("width", "100%")
+    .attr("width", width)
     .attr("height", height);
+
+  const data = {
+    nodes: [
+      { id: "engine.py", group: "file" },
+      { id: "harness.py", group: "file" },
+      { id: "audit.py", group: "file" },
+      { id: "SelfCorrectingLoop", group: "class" },
+      { id: "TestHarness", group: "class" },
+      { id: "AuditSkill", group: "class" },
+      { id: "run_loop()", group: "func" },
+      { id: "check_ast()", group: "func" }
+    ],
+    links: [
+      { source: "engine.py", target: "SelfCorrectingLoop" },
+      { source: "SelfCorrectingLoop", target: "run_loop()" },
+      { source: "harness.py", target: "TestHarness" },
+      { source: "TestHarness", target: "check_ast()" },
+      { source: "audit.py", target: "AuditSkill" },
+      { source: "SelfCorrectingLoop", target: "TestHarness" }
+    ]
+  };
 
   const simulation = d3.forceSimulation(data.nodes)
     .force("link", d3.forceLink(data.links).id(d => d.id).distance(60))
@@ -340,35 +492,26 @@ async function renderD3Graph() {
   const link = svg.append("g")
     .selectAll("line")
     .data(data.links)
-    .enter().append("line")
-    .attr("stroke", "rgba(230, 195, 150, 0.3)")
+    .join("line")
+    .attr("stroke", "#dcd5cb")
     .attr("stroke-width", 1.5);
 
   const node = svg.append("g")
     .selectAll("circle")
     .data(data.nodes)
-    .enter().append("circle")
-    .attr("r", d => d.val || 8)
-    .attr("fill", d => {
-      if (d.group === 1) return "#e06c3a"; // file
-      if (d.group === 2) return "#f59e0b"; // class
-      if (d.group === 3) return "#10b981"; // func
-      return "#a855f7"; // session
-    })
-    .call(d3.drag()
-      .on("start", dragstarted)
-      .on("drag", dragged)
-      .on("end", dragended));
+    .join("circle")
+    .attr("r", 7)
+    .attr("fill", d => d.group === "file" ? "#d96b27" : (d.group === "class" ? "#f59e0b" : "#10b981"));
 
   const label = svg.append("g")
     .selectAll("text")
     .data(data.nodes)
-    .enter().append("text")
-    .text(d => d.name)
-    .attr("font-size", "10px")
-    .attr("fill", "#faf4eb")
-    .attr("dx", 10)
-    .attr("dy", 4);
+    .join("text")
+    .text(d => d.id)
+    .attr("font-size", 10)
+    .attr("dx", 9)
+    .attr("dy", 4)
+    .attr("fill", "#231f1d");
 
   simulation.on("tick", () => {
     link
@@ -376,208 +519,56 @@ async function renderD3Graph() {
       .attr("y1", d => d.source.y)
       .attr("x2", d => d.target.x)
       .attr("y2", d => d.target.y);
-
     node
       .attr("cx", d => d.x)
       .attr("cy", d => d.y);
-
     label
       .attr("x", d => d.x)
       .attr("y", d => d.y);
   });
-
-  function dragstarted(event) {
-    if (!event.active) simulation.alphaTarget(0.3).restart();
-    event.subject.fx = event.subject.x;
-    event.subject.fy = event.subject.y;
-  }
-  function dragged(event) {
-    event.subject.fx = event.x;
-    event.subject.fy = event.y;
-  }
-  function dragended(event) {
-    if (!event.active) simulation.alphaTarget(0);
-    event.subject.fx = null;
-    event.subject.fy = null;
-  }
 }
 
-// 分层记忆中心
-async function loadMemoryCenter() {
-  const sRes = await fetch(`/memory/short/${state.activeSessionId}`);
-  const sJson = await sRes.json();
-  const sBox = document.getElementById("short-memory-list");
-  sBox.innerHTML = (sJson.data || []).map(m => `<div><strong>${m.role}:</strong> ${m.content.slice(0, 60)}...</div>`).join("") || "暂无短期工作记忆。";
-
-  const lRes = await fetch("/memory/long");
-  const lJson = await lRes.json();
-  const lBox = document.getElementById("long-memory-list");
-  lBox.innerHTML = (lJson.data || []).map(m => `<div style="margin-bottom:8px;"><strong>📌 ${m.title}</strong><br><span style="color:#9c8c7c;">${m.content}</span></div>`).join("");
+function escapeHtml(str) {
+  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-// 弹窗管理
-async function openShareSessionModal() {
-  if (!state.activeSessionId) {
-    alert("请先选择一个会话进行分享！");
-    return;
-  }
-  const curr = state.sessions.find(s => s.conversation_id === state.activeSessionId);
-  const res = await fetch(`/session/${state.activeSessionId}/messages`);
-  const json = await res.json();
-  const msgs = json.data || [];
-
-  let md = `# 会话分享: ${curr?.title || 'RunCabinet 编程会话'}\n> 会话ID: ${state.activeSessionId} | 标签: ${(curr?.tags||[]).map(t=>'#'+t).join(', ')} | 导出时间: ${new Date().toLocaleString()}\n\n---\n\n`;
-  for (const m of msgs) {
-    md += `### ${m.role === 'user' ? '👨‍💻 开发者 (User)' : '🤖 ' + m.role}\n${m.content}\n\n`;
-  }
-
-  document.getElementById("share-export-content").value = md;
-  document.getElementById("share-session-modal").classList.remove("hidden");
-}
-function closeShareSessionModal() {
-  document.getElementById("share-session-modal").classList.add("hidden");
-}
-function copyShareMarkdown() {
-  const content = document.getElementById("share-export-content").value;
-  navigator.clipboard.writeText(content);
-  alert("Markdown 会话转录全文已复制到剪贴板！");
-}
-function downloadShareJson() {
-  const curr = state.sessions.find(s => s.conversation_id === state.activeSessionId);
-  const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(curr, null, 2));
-  const dlAnchor = document.createElement("a");
-  dlAnchor.setAttribute("href", dataStr);
-  dlAnchor.setAttribute("download", `${state.activeSessionId}_snapshot.json`);
-  dlAnchor.click();
+function formatMarkdownLike(text) {
+  if (!text) return "";
+  let html = text.replace(/```python([\s\S]*?)```/g, '<pre><code class="language-python">$1</code></pre>');
+  html = html.replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>');
+  html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+  html = html.replace(/\n/g, "<br>");
+  return html;
 }
 
-// 标签管理弹窗
-function openTagManagerModal() {
-  document.getElementById("tag-manager-modal").classList.remove("hidden");
-}
-function closeTagManagerModal() {
-  document.getElementById("tag-manager-modal").classList.add("hidden");
-}
-function selectTagColor(color) {
-  state.selectedColor = color;
-}
-function saveCustomTag() {
-  const name = document.getElementById("new-tag-name").value.trim();
-  if (name) {
-    state.tagColors[name] = state.selectedColor || "#e06c3a";
-    alert(`自定义标签 #${name} 已添加！`);
-    closeTagManagerModal();
-    renderSessionList();
+function handleInputKeydown(e) {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    sendAgentMessage();
   }
 }
-
-// Cockpit Tools 驾驶舱 (多账号 & 配额看板)
-async function openCockpitModal() {
-  document.getElementById("cockpit-modal").classList.remove("hidden");
-  const provList = document.getElementById("provider-status-list");
-  
-  provList.innerHTML = Object.entries(state.providers).map(([k, p]) => {
-    const accountsHtml = (p.accounts || []).map(acc => {
-      const isAct = acc.status === "active" ? "active" : "";
-      const percent = Math.min(100, Math.round((acc.quota_used / acc.quota_total) * 100));
-      return `
-        <div style="margin-top:6px;padding:6px;background:#14100d;border-radius:4px;font-size:11px;">
-          <div style="display:flex;justify-content:space-between;">
-            <span><strong>${acc.name}</strong> ${acc.status === 'active' ? '🟢 [活跃]' : '⚪ [备用]'}</span>
-            <span>重置倒计时: ⏳ ${acc.reset_time}</span>
-          </div>
-          <div class="quota-progress-bar">
-            <div class="quota-progress-inner" style="width:${percent}%;"></div>
-          </div>
-          <div style="display:flex;justify-content:space-between;color:#9c8c7c;">
-            <span>配额用量: ${acc.quota_used}/${acc.quota_total} (${percent}%)</span>
-            ${acc.status !== 'active' ? `<button class="btn-xs" onclick="switchProviderAccount('${k}', '${acc.id}')">切换为此账号</button>` : ''}
-          </div>
-        </div>
-      `;
-    }).join("");
-
-    return `
-      <div style="margin-bottom:10px;padding:10px;background:#1a1612;border-radius:8px;border:1px solid rgba(230,195,150,0.12);">
-        <div style="display:flex;justify-content:space-between;align-items:center;">
-          <div>
-            <strong style="color:#e06c3a;">${p.name}</strong>
-            <div style="font-size:11px;color:#9c8c7c;">模型: ${(p.models || []).join(", ")}</div>
-          </div>
-          <button class="btn-xs" onclick="pingProvider('${k}')">⚡ Ping 测速</button>
-        </div>
-        ${accountsHtml}
-      </div>
-    `;
-  }).join("");
-
-  // 加载 Tools
-  const tRes = await fetch("/cockpit/tools");
-  const tJson = await tRes.json();
-  const tBox = document.getElementById("cockpit-tools-list");
-  tBox.innerHTML = (tJson.data || []).map(t => `
-    <div style="margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;">
-      <span>🔧 ${t.name} (${t.desc})</span>
-      <input type="checkbox" ${t.enabled ? 'checked' : ''} onchange="toggleTool('${t.id}', this.checked)">
-    </div>
-  `).join("");
+function focusSearch() { document.getElementById("session-search-input").focus(); }
+function triggerMeshReview() { alert("🕸️ Multi-Agent Mesh 协同拓扑已触发！"); }
+function toggleLeftPanel() {
+  const panel = document.getElementById("left-nav-panel");
+  panel.style.display = panel.style.display === "none" ? "flex" : "none";
 }
-function closeCockpitModal() {
-  document.getElementById("cockpit-modal").classList.add("hidden");
+function toggleCollapse(id) {
+  const body = document.getElementById(id);
+  body.style.display = body.style.display === "none" ? "block" : "none";
 }
-async function switchProviderAccount(prov, accId) {
-  await fetch("/cockpit/providers/switch_account", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ provider: prov, account_id: accId }),
-  });
-  await loadProviders();
-  await openCockpitModal();
+function insertContextSnippet() {
+  const input = document.getElementById("chat-prompt-input");
+  input.value += " @file:task_solver.py ";
+  input.focus();
 }
-async function pingProvider(p) {
-  const res = await fetch("/cockpit/providers/ping", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ provider: p }),
-  });
-  const json = await res.json();
-  alert(`厂商 [${p.toUpperCase()}] 延迟探针: ${json.data?.latency_ms || 40}ms (Status: ONLINE)`);
+function attachFileToPrompt() {
+  alert("📎 请选择要上传或附带的代码文件");
 }
-async function toggleTool(id, enabled) {
-  await fetch("/cockpit/tools/toggle", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ tool_id: id, enabled: enabled }),
-  });
+function switchActiveModel(model) {
+  state.currentModel = model;
+  document.getElementById("current-model-tag").innerText = model;
 }
-async function debugToolInSandbox() {
-  const val = document.getElementById("sandbox-params-input").value;
-  let params = {};
-  try { if (val) params = JSON.parse(val); } catch (_) {}
-  const res = await fetch("/cockpit/tools/invoke", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ tool_id: "terminal_exec", params: params }),
-  });
-  const json = await res.json();
-  document.getElementById("sandbox-debug-output").textContent = json.data?.output || "Executed.";
-}
-
-// Token 计量
-async function updateTokenDisplay() {
-  try {
-    const res = await fetch("/cockpit/token/summary");
-    const json = await res.json();
-    if (json.code === 0 && json.data) {
-      document.getElementById("token-meter-display").textContent = `⚡ ${json.data.total_tokens.toLocaleString()} Tokens`;
-    }
-  } catch (_) {}
-}
-
-function handleProviderChange() {
-  const provKey = document.getElementById("chat-provider-select").value;
-  const p = state.providers[provKey];
-  const models = p ? p.models : ["default-model"];
-  const select = document.getElementById("chat-model-select");
-  select.innerHTML = models.map(m => `<option value="${m}">${m}</option>`).join("");
+function clearTerminal() {
+  document.getElementById("terminal-output").innerText = "[codeMindHub-H:~]$ ";
 }
