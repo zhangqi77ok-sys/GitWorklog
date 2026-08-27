@@ -291,7 +291,7 @@
             <!-- 子区域 B：Codex 编程工作台视图 -->
             <div id="qa-codex-subview" class="qa-subview-pane hidden">
               <div class="coding-workspace-grid">
-                <!-- 左侧：工程文件树 -->
+                <!-- 1. 工程文件目录（在对话框的左侧） -->
                 <div class="code-tree-pane">
                   <div class="code-pane-title">📁 工程文件目录</div>
                   <div id="project-tree-list" class="project-tree-list">
@@ -299,18 +299,7 @@
                   </div>
                 </div>
 
-                <!-- 中间：代码编辑器与预览 -->
-                <div class="code-editor-pane">
-                  <div class="editor-header">
-                    <span id="current-file-path" class="current-file-label">未选择文件</span>
-                    <div class="btn-group">
-                      <button id="save-code-btn" class="primary-btn" style="padding: 4px 12px; font-size: 12px;">💾 保存文件</button>
-                    </div>
-                  </div>
-                  <textarea id="code-editor-area" class="code-editor-textarea" placeholder="从左侧文件树选择文件进行查看与编辑..."></textarea>
-                </div>
-
-                <!-- 右侧：Codex 编程助手 -->
+                <!-- 2. Codex 编程智能体对话区（工程目录在左侧，输入放上面，对话框放下面） -->
                 <div class="codex-chat-pane">
                   <div class="code-pane-title" style="display: flex; align-items: center; justify-content: space-between;">
                     <span>🤖 Codex 编程智能体</span>
@@ -341,6 +330,17 @@
                   <div id="codex-messages" class="codex-messages-box">
                     <div class="empty-tip">在上方输入您的开发需求，Codex 将基于当前项目与分支为您编写代码并实时渲染！</div>
                   </div>
+                </div>
+
+                <!-- 3. 代码编辑器与预览 -->
+                <div class="code-editor-pane">
+                  <div class="editor-header">
+                    <span id="current-file-path" class="current-file-label">未选择文件</span>
+                    <div class="btn-group">
+                      <button id="save-code-btn" class="primary-btn" style="padding: 4px 12px; font-size: 12px;">💾 保存文件</button>
+                    </div>
+                  </div>
+                  <textarea id="code-editor-area" class="code-editor-textarea" placeholder="从左侧文件树选择文件进行查看与编辑..."></textarea>
                 </div>
               </div>
             </div>
