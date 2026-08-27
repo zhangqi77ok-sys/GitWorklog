@@ -1,7 +1,15 @@
+import os
+from pathlib import Path
 from contextlib import contextmanager
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 from app.core.config import settings
+
+# 确保 SQLite 数据库文件所在目录已创建
+if settings.database_url.startswith("sqlite:///"):
+    db_file = settings.database_url.replace("sqlite:///", "")
+    db_path = Path(db_file)
+    db_path.parent.mkdir(parents=True, exist_ok=True)
 
 engine = create_engine(
     settings.database_url,

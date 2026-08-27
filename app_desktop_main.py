@@ -24,6 +24,7 @@ else:
     BUNDLE_DIR = BASE_DIR
 
 os.chdir(BASE_DIR)
+os.makedirs(os.path.join(BASE_DIR, "data"), exist_ok=True)
 sys.path.insert(0, BASE_DIR)
 sys.path.insert(0, BUNDLE_DIR)
 
