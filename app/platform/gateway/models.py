@@ -20,6 +20,7 @@ class LLMProviderRecord(Base, TimestampMixin):
     api_key: Mapped[str] = mapped_column(Text, default="")
     protocol: Mapped[str] = mapped_column(String(32), default="openai")  # openai, anthropic, ollama
     enabled: Mapped[int] = mapped_column(default=1)  # 1 启用 0 停用
+    models_json: Mapped[str] = mapped_column(Text, default="[]")  # 自定义与官方同步的模型列表 JSON
 
 
 class LLMRouteRecord(Base, TimestampMixin):

@@ -155,8 +155,11 @@
               <!-- Codex 顶部工具栏（在 Codex 模式激活时展示） -->
               <div id="codex-header-toolbar" class="codex-toolbar-group hidden">
                 <div class="project-toolbar">
-                  <span>📦 项目:</span>
+                  <span>📦 工程目录:</span>
                   <select id="project-select" class="dropdown-select"></select>
+                  <input id="codex-direct-path-input" class="dropdown-select" placeholder="输入任意本地绝对路径..." style="width: 220px;" />
+                  <button id="load-direct-path-btn" class="ghost-btn">🚀 载入目录</button>
+                  <button id="add-project-btn" class="ghost-btn">➕ 关联目录</button>
                   <span>🌿 分支:</span>
                   <select id="branch-select" class="dropdown-select"></select>
                   <button id="checkout-branch-btn" class="ghost-btn">切换分支</button>
@@ -267,6 +270,11 @@
                         <span class="tool-icon">📎</span>
                         <span>上传</span>
                       </button>
+                      <div class="composer-model-selector" title="选择本次问答调用的厂商与模型">
+                        <span style="font-size: 11px; color: var(--text-dim); display: flex; align-items: center; gap: 3px;">🤖</span>
+                        <select id="chat-provider-select" class="dropdown-select compact" style="max-width: 140px;"></select>
+                        <select id="chat-model-select" class="dropdown-select compact" style="max-width: 170px;"></select>
+                      </div>
                     </div>
                     <div class="composer-right-actions">
                       <button id="interrupt-btn" class="ghost-btn hidden danger">中 断</button>
@@ -304,7 +312,13 @@
 
                 <!-- 右侧：Codex 编程助手 -->
                 <div class="codex-chat-pane">
-                  <div class="code-pane-title">🤖 Codex 编程智能体</div>
+                  <div class="code-pane-title" style="display: flex; align-items: center; justify-content: space-between;">
+                    <span>🤖 Codex 编程智能体</span>
+                    <div style="display: flex; align-items: center; gap: 4px;">
+                      <select id="codex-provider-select" class="dropdown-select compact" style="max-width: 120px; font-size: 11px;"></select>
+                      <select id="codex-model-select" class="dropdown-select compact" style="max-width: 140px; font-size: 11px;"></select>
+                    </div>
+                  </div>
                   <div class="codex-quick-prompts">
                     <button class="starter-tag" onclick="useCodexPrompt('请为当前选中的代码文件编写完整的 PyTest 单元测试用例')">🧪 生成单测</button>
                     <button class="starter-tag" onclick="useCodexPrompt('请对当前代码进行性能优化与异常边界重构')">⚡ 优化重构</button>
@@ -560,9 +574,10 @@
           <div class="pane-header">
             <div>
               <h2>🔌 API 管理与 LLM 智能网关</h2>
-              <p class="pane-sub">内置各大主流模型厂商协议规则，支持按不同业务功能槽位自定义路由模型与参数配置。</p>
+              <p class="pane-sub">内置各大主流模型厂商协议规则，支持自定义填写模型，并支持对官方一键同步最新模型列表与路由配置。</p>
             </div>
             <div class="btn-group">
+              <button id="sync-all-models-btn" class="primary-btn">🔄 一键同步全网官方模型</button>
               <button id="refresh-gateway-btn" class="ghost-btn">🔄 刷新配置</button>
             </div>
           </div>
@@ -799,6 +814,22 @@
           <input id="new-proj-name" placeholder="工程别名（如 前端微服务工程）" />
           <input id="new-proj-path" placeholder="本地绝对路径（如 e:\pro\agent-learning 或 d:\projects\my-app）" />
           <button id="save-project-btn" class="primary-btn" style="margin-top: 10px;">关 联 并 载 入 工 程</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal 12: 添加厂商自定义模型弹窗 -->
+    <div id="custom-model-modal" class="modal hidden">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2 id="custom-model-modal-title">➕ 为厂商添加自定义模型</h2>
+          <button class="close-modal-btn ghost-btn">✕</button>
+        </div>
+        <div class="form-group" style="margin-top: 10px;">
+          <input id="custom-model-provider-hidden" type="hidden" />
+          <input id="custom-model-id" placeholder="模型标识 ID（必填，如 deepseek-v3、qwen-max-latest、my-finetuned）" />
+          <input id="custom-model-name" placeholder="展示名称（可选，如 DeepSeek V3 最新版）" />
+          <button id="save-custom-model-btn" class="primary-btn" style="margin-top: 10px;">保 存 自 定 义 模 型</button>
         </div>
       </div>
     </div>

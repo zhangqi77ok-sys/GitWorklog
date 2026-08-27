@@ -31,7 +31,7 @@ class ProviderItem(BaseModel):
     has_key: bool
     protocol: str
     enabled: int
-    models: list[dict[str, str]] = []
+    models: list[dict[str, Any]] = []
 
 
 class UpdateProviderRequest(BaseModel):
@@ -62,12 +62,17 @@ class TestConnectivityRequest(BaseModel):
     model_name: str | None = None
 
 
+class CustomModelRequest(BaseModel):
+    model_id: str
+    model_name: str = ""
+
+
 @router.get("/providers", response_model=R[list[ProviderItem]])
 def get_providers(session: DbDep, _: CurrentUser) -> R[list[ProviderItem]]:
-    """获取所有支持的 LLM 厂商配置列表及预置模型。"""
-    recs = list_providers(session)
-    preset_map = {p["provider_code"]: p.get("models", []) for p in PRESET_PROVIDERS}
+    """获取所有支持的 LLM 厂商配置列表及合并后的全量模型（预置 + 官方同步 + 自定义）。"""
+    from app.platform.gateway.service import get_provider_models
 
+    recs = list_providers(session)
     result = []
     for r in recs:
         masked_key = ""
@@ -76,6 +81,7 @@ def get_providers(session: DbDep, _: CurrentUser) -> R[list[ProviderItem]]:
                 r.api_key[:6] + "******" + r.api_key[-4:] if len(r.api_key) > 10 else "******"
             )
 
+        merged_models = get_provider_models(session, r.provider_code)
         result.append(
             ProviderItem(
                 id=r.id,
@@ -86,10 +92,75 @@ def get_providers(session: DbDep, _: CurrentUser) -> R[list[ProviderItem]]:
                 has_key=bool(r.api_key),
                 protocol=r.protocol,
                 enabled=r.enabled,
-                models=preset_map.get(r.provider_code, []),
+                models=merged_models,
             )
         )
     return R.ok(result)
+
+
+@router.post("/providers/{provider_code}/models")
+def create_custom_model(
+    provider_code: str,
+    req: CustomModelRequest,
+    session: DbDep,
+    _: CurrentUser,
+) -> R[list[dict[str, Any]]]:
+    """为指定厂商添加自定义模型。"""
+    from app.platform.gateway.service import add_custom_model
+
+    try:
+        updated = add_custom_model(
+            session,
+            provider_code=provider_code,
+            model_id=req.model_id,
+            model_name=req.model_name,
+        )
+        return R.ok(updated)
+    except ValueError as e:
+        return R.fail(400, str(e))
+
+
+@router.delete("/providers/{provider_code}/models/{model_id}")
+def remove_custom_model(
+    provider_code: str,
+    model_id: str,
+    session: DbDep,
+    _: CurrentUser,
+) -> R[list[dict[str, Any]]]:
+    """移除厂商自定义模型。"""
+    from app.platform.gateway.service import delete_custom_model
+
+    try:
+        updated = delete_custom_model(session, provider_code, model_id)
+        return R.ok(updated)
+    except ValueError as e:
+        return R.fail(400, str(e))
+
+
+
+@router.post("/providers/{provider_code}/sync-models")
+def sync_provider_official_models(
+    provider_code: str,
+    session: DbDep,
+    _: CurrentUser,
+) -> R[dict[str, Any]]:
+    """对单个厂商执行官方最新模型列表同步。"""
+    from app.platform.gateway.service import sync_official_models
+
+    res = sync_official_models(session, provider_code)
+    return R.ok(res)
+
+
+@router.post("/sync-models")
+def sync_all_official_models(
+    session: DbDep,
+    _: CurrentUser,
+) -> R[dict[str, Any]]:
+    """对所有预置厂商一键执行官方模型列表同步。"""
+    from app.platform.gateway.service import sync_official_models
+
+    res = sync_official_models(session)
+    return R.ok(res)
 
 
 @router.put("/providers/{provider_code}")
@@ -164,3 +235,4 @@ def probe_model(req: TestConnectivityRequest, session: DbDep, _: CurrentUser) ->
             "latency_ms": latency,
         }
     )
+

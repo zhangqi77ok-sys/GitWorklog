@@ -86,6 +86,9 @@ def get_engine() -> Engine:
             with contextlib.suppress(Exception):
                 with _engine.begin() as conn:
                     conn.execute(text("ALTER TABLE agentx_file ADD COLUMN kb_id INT DEFAULT 0"))
+            with contextlib.suppress(Exception):
+                with _engine.begin() as conn:
+                    conn.execute(text("ALTER TABLE agentx_llm_provider ADD COLUMN models_json TEXT"))
         except Exception:
             import contextlib
             import os
@@ -101,6 +104,9 @@ def get_engine() -> Engine:
             with contextlib.suppress(Exception):
                 with _engine.begin() as conn:
                     conn.execute(text("ALTER TABLE agentx_file ADD COLUMN kb_id INT DEFAULT 0"))
+            with contextlib.suppress(Exception):
+                with _engine.begin() as conn:
+                    conn.execute(text("ALTER TABLE agentx_llm_provider ADD COLUMN models_json TEXT"))
     return _engine
 
 

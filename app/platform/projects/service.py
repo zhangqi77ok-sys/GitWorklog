@@ -159,17 +159,19 @@ def save_project_file(project_path: str, rel_path: str, content: str) -> bool:
 
 
 def add_custom_project(name: str, path: str) -> dict[str, Any]:
-    """添加自定义本地工程目录。"""
+    """添加或直接载入任意自定义本地工程目录。"""
     p = Path(path).resolve()
     if not p.exists() or not p.is_dir():
         raise ValueError(f"指定的目录不存在或不是有效文件夹: {path}")
 
-    proj_id = p.name.lower().replace(" ", "-")
+    proj_name = name.strip() if name and name.strip() else p.name
+    proj_id = p.name.lower().replace(" ", "-") or "custom-proj"
     for existing in DEFAULT_PROJECTS:
         if str(Path(existing["path"]).resolve()) == str(p):
             return {**existing, "git": get_git_info(str(p))}
 
-    entry = {"id": proj_id, "name": f"{name} ({p.name})", "path": str(p)}
+    entry = {"id": proj_id, "name": f"{proj_name} ({p.name})", "path": str(p)}
     DEFAULT_PROJECTS.append(entry)
     return {**entry, "git": get_git_info(str(p))}
+
 

@@ -26,6 +26,12 @@ const state = {
   currentChunkData: null,
   currentChunkTab: "children",
   currentVectorData: null,
+  providers: [],
+  routes: [],
+  selectedChatProvider: "dashscope",
+  selectedChatModel: "qwen3.7-flash",
+  selectedCodexProvider: "dashscope",
+  selectedCodexModel: "qwen3.7-flash",
 };
 
 window.addEventListener("DOMContentLoaded", () => {
@@ -53,6 +59,30 @@ function initEventListeners() {
   if ($("kb-clear-all-btn")) $("kb-clear-all-btn").onclick = clearSelectedKbFiles;
   if ($("kb-search-input")) $("kb-search-input").oninput = (e) => renderKbPopover(e.target.value.trim());
   if ($("kb-check-all-scope")) $("kb-check-all-scope").onchange = handleMasterKbToggle;
+
+  if ($("chat-provider-select")) {
+    $("chat-provider-select").onchange = (e) => {
+      state.selectedChatProvider = e.target.value;
+      updateChatModelOptions();
+    };
+  }
+  if ($("chat-model-select")) {
+    $("chat-model-select").onchange = (e) => {
+      state.selectedChatModel = e.target.value;
+    };
+  }
+
+  if ($("codex-provider-select")) {
+    $("codex-provider-select").onchange = (e) => {
+      state.selectedCodexProvider = e.target.value;
+      updateCodexModelOptions();
+    };
+  }
+  if ($("codex-model-select")) {
+    $("codex-model-select").onchange = (e) => {
+      state.selectedCodexModel = e.target.value;
+    };
+  }
 
   if ($("attach-file-btn")) $("attach-file-btn").onclick = () => $("chat-file-input").click();
   if ($("chat-file-input")) $("chat-file-input").onchange = handleChatFileUpload;
@@ -97,9 +127,13 @@ function initEventListeners() {
   if ($("codex-send-btn")) $("codex-send-btn").onclick = sendCodexChat;
   if ($("add-project-btn")) $("add-project-btn").onclick = () => $("project-add-modal").classList.remove("hidden");
   if ($("save-project-btn")) $("save-project-btn").onclick = saveCustomProject;
+  if ($("load-direct-path-btn")) $("load-direct-path-btn").onclick = loadDirectPathProject;
   if ($("launch-desktop-btn")) $("launch-desktop-btn").onclick = launchDesktopClient;
 
   if ($("refresh-gateway-btn")) $("refresh-gateway-btn").onclick = loadGatewayConfig;
+  if ($("sync-all-models-btn")) $("sync-all-models-btn").onclick = syncAllOfficialModels;
+  if ($("save-custom-model-btn")) $("save-custom-model-btn").onclick = saveCustomModel;
+
   if ($("add-user-btn")) $("add-user-btn").onclick = () => $("user-modal").classList.remove("hidden");
   if ($("save-user-btn")) $("save-user-btn").onclick = saveNewUser;
 
@@ -356,6 +390,8 @@ async function send() {
         all_kb: state.allKbSelected,
         kb_ids: kbIds,
         file_ids: kbFileIds,
+        provider: state.selectedChatProvider,
+        model: state.selectedChatModel,
       }),
     });
     const targetEl = document.querySelector(`#${assistantBubbleId} .message-content`);
@@ -1065,9 +1101,29 @@ function renderProjectsSelect() {
   sel.innerHTML = state.projects.map((p) => `<option value="${escapeHtml(p.path)}">${escapeHtml(p.name)}</option>`).join("");
 }
 
+async function loadDirectPathProject() {
+  const pathInput = $("codex-direct-path-input");
+  if (!pathInput) return;
+  const dirPath = pathInput.value.trim();
+  if (!dirPath) return alert("请输入任意本地有效文件夹路径");
+  try {
+    const res = await apiFetch("/api/projects/add", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "", path: dirPath }),
+    });
+    const json = await res.json();
+    if (json.code === 0) {
+      await loadProjects();
+      switchProject(dirPath);
+    } else alert("载入目录失败: " + json.message);
+  } catch (e) { alert("载入异常: " + e.message); }
+}
+
 async function switchProject(projectPath) {
   state.currentProject = projectPath;
   if ($("project-select")) $("project-select").value = projectPath;
+  if ($("codex-direct-path-input")) $("codex-direct-path-input").value = projectPath;
   try {
     const [gitRes, treeRes] = await Promise.all([
       apiFetch(`/api/projects/git?project_path=${encodeURIComponent(projectPath)}`),
@@ -1161,7 +1217,7 @@ async function saveCurrentFileCode() {
 async function saveCustomProject() {
   const name = $("new-proj-name").value.trim();
   const path = $("new-proj-path").value.trim();
-  if (!name || !path) return alert("请输入工程别名与本地路径");
+  if (!path) return alert("请输入本地工程路径");
   try {
     const res = await apiFetch("/api/projects/add", {
       method: "POST",
@@ -1171,7 +1227,7 @@ async function saveCustomProject() {
     const json = await res.json();
     if (json.code === 0) {
       $("project-add-modal").classList.add("hidden");
-      loadProjects();
+      await loadProjects();
       switchProject(path);
     }
   } catch (e) { alert("添加工程失败: " + e.message); }
@@ -1192,7 +1248,7 @@ async function sendCodexChat() {
   const assistantMsgId = "codex-msg-" + Date.now();
   box.innerHTML += `
     <div style="margin-bottom:12px;" id="${assistantMsgId}">
-      <div style="font-weight:700; color:var(--primary); margin-bottom:2px;">🤖 Codex 编程智能体:</div>
+      <div style="font-weight:700; color:var(--primary); margin-bottom:2px;">🤖 Codex 编程智能体 (${escapeHtml(state.selectedCodexModel)}):</div>
       <div class="codex-bubble-content markdown-body">编写代码中...</div>
     </div>
   `;
@@ -1204,7 +1260,12 @@ async function sendCodexChat() {
     const res = await apiFetch("/api/chat/stream", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query: fullPrompt, conversation_id: "codex-session" }),
+      body: JSON.stringify({
+        query: fullPrompt,
+        conversation_id: "codex-session",
+        provider: state.selectedCodexProvider,
+        model: state.selectedCodexModel,
+      }),
     });
     const targetEl = document.querySelector(`#${assistantMsgId} .codex-bubble-content`);
     let fullText = "";
@@ -1322,7 +1383,7 @@ async function clearUserMemory() {
   } catch (e) { alert("清空失败: " + e.message); }
 }
 
-// Gateway & Users & Travel & Timeline
+// Gateway & Model Selectors & Users & Travel & Timeline
 async function loadGatewayConfig() {
   try {
     const [routesRes, providersRes] = await Promise.all([
@@ -1331,9 +1392,64 @@ async function loadGatewayConfig() {
     ]);
     const routesJson = await routesRes.json();
     const providersJson = await providersRes.json();
-    if (routesJson.code === 0) renderGatewayRoutes(routesJson.data || []);
-    if (providersJson.code === 0) renderGatewayProviders(providersJson.data || []);
+    if (routesJson.code === 0) {
+      state.routes = routesJson.data || [];
+      renderGatewayRoutes(state.routes);
+    }
+    if (providersJson.code === 0) {
+      state.providers = providersJson.data || [];
+      renderGatewayProviders(state.providers);
+      populateModelSelectors();
+    }
   } catch (e) { console.error("加载网关配置失败:", e); }
+}
+
+function populateModelSelectors() {
+  const chatP = $("chat-provider-select");
+  const codexP = $("codex-provider-select");
+  if (!state.providers.length) return;
+
+  const optionsHtml = state.providers.map((p) => `<option value="${escapeHtml(p.provider_code)}">${escapeHtml(p.name)}</option>`).join("");
+  if (chatP) {
+    chatP.innerHTML = optionsHtml;
+    chatP.value = state.selectedChatProvider || state.providers[0].provider_code;
+    updateChatModelOptions();
+  }
+  if (codexP) {
+    codexP.innerHTML = optionsHtml;
+    codexP.value = state.selectedCodexProvider || state.providers[0].provider_code;
+    updateCodexModelOptions();
+  }
+}
+
+function updateChatModelOptions() {
+  const pCode = $("chat-provider-select") ? $("chat-provider-select").value : state.selectedChatProvider;
+  state.selectedChatProvider = pCode;
+  const p = state.providers.find((x) => x.provider_code === pCode);
+  const mSel = $("chat-model-select");
+  if (!mSel || !p) return;
+  const models = p.models || [];
+  mSel.innerHTML = models.map((m) => `<option value="${escapeHtml(m.id)}">${escapeHtml(m.name || m.id)}</option>`).join("");
+  if (models.length > 0) {
+    const hasCurrent = models.some((m) => m.id === state.selectedChatModel);
+    if (!hasCurrent) state.selectedChatModel = models[0].id;
+    mSel.value = state.selectedChatModel;
+  }
+}
+
+function updateCodexModelOptions() {
+  const pCode = $("codex-provider-select") ? $("codex-provider-select").value : state.selectedCodexProvider;
+  state.selectedCodexProvider = pCode;
+  const p = state.providers.find((x) => x.provider_code === pCode);
+  const mSel = $("codex-model-select");
+  if (!mSel || !p) return;
+  const models = p.models || [];
+  mSel.innerHTML = models.map((m) => `<option value="${escapeHtml(m.id)}">${escapeHtml(m.name || m.id)}</option>`).join("");
+  if (models.length > 0) {
+    const hasCurrent = models.some((m) => m.id === state.selectedCodexModel);
+    if (!hasCurrent) state.selectedCodexModel = models[0].id;
+    mSel.value = state.selectedCodexModel;
+  }
 }
 
 function renderGatewayRoutes(routes) {
@@ -1342,7 +1458,7 @@ function renderGatewayRoutes(routes) {
   tbody.innerHTML = routes.map((r) => `
     <tr>
       <td style="font-weight:600; color:var(--text-main);">${escapeHtml(r.feature_name || r.feature_key)}</td>
-      <td><span class="starter-tag">${escapeHtml(r.provider_code || r.provider || "bailian")}</span></td>
+      <td><span class="starter-tag">${escapeHtml(r.provider_code || r.provider || "dashscope")}</span></td>
       <td style="font-family:var(--font-mono); color:var(--accent-cyan); font-weight:600;">${escapeHtml(r.model_name || r.model || "qwen3.7-flash")}</td>
       <td>${r.temperature !== undefined ? r.temperature : 0.3}</td>
       <td>${r.max_tokens || 4096}</td>
@@ -1354,16 +1470,97 @@ function renderGatewayRoutes(routes) {
 function renderGatewayProviders(providers) {
   const grid = $("providers-grid");
   if (!grid) return;
-  grid.innerHTML = providers.map((p) => `
-    <div class="provider-card">
-      <div class="provider-header">
-        <span class="provider-name">${escapeHtml(p.name)}</span>
-        <span class="starter-tag">${p.models ? p.models.length : 0} 个预设模型</span>
+  grid.innerHTML = providers.map((p) => {
+    const modelsList = p.models || [];
+    const modelsHtml = modelsList.map((m) => `
+      <span class="provider-model-tag ${m.custom ? "custom" : ""}" title="${escapeHtml(m.name || m.id)}">
+        <span>${m.custom ? "🏷️ " : ""}${escapeHtml(m.id)}</span>
+        ${m.custom ? `<button class="session-del-btn" style="opacity:1; margin-left:2px;" onclick="deleteCustomModel('${p.provider_code}', '${m.id}')">✕</button>` : ""}
+      </span>
+    `).join(" ");
+
+    return `
+      <div class="provider-card">
+        <div class="provider-header">
+          <span class="provider-name">${escapeHtml(p.name)}</span>
+          <span class="starter-tag">${modelsList.length} 个可用模型</span>
+        </div>
+        <div style="font-size:12px; color:var(--text-muted); line-height:1.4;">${escapeHtml(p.description || "兼容 OpenAI / Anthropic 标准协议")}</div>
+        <div style="font-family:var(--font-mono); font-size:11px; color:var(--text-dim); background:var(--bg-code); padding:6px 8px; border-radius:4px;">Endpoint: ${escapeHtml(p.base_url || "https://...")}</div>
+        
+        <div style="display:flex; flex-wrap:wrap; gap:4px; margin-top:4px; max-height:100px; overflow-y:auto;">
+          ${modelsHtml || '<span style="font-size:11px; color:var(--text-dim)">暂未配置模型</span>'}
+        </div>
+
+        <div class="skill-footer" style="margin-top:8px; padding-top:8px;">
+          <button class="action-pill-btn" onclick="openAddCustomModelModal('${p.provider_code}', '${escapeHtml(p.name)}')">➕ 自定义模型</button>
+          <button class="action-pill-btn" onclick="syncProviderOfficialModels('${p.provider_code}')">🔄 同步官方模型</button>
+        </div>
       </div>
-      <div style="font-size:12px; color:var(--text-muted); line-height:1.4;">${escapeHtml(p.description || "LLM 服务商")}</div>
-      <div style="font-family:var(--font-mono); font-size:11px; color:var(--text-dim); background:var(--bg-code); padding:6px 8px; border-radius:4px;">Endpoint: ${escapeHtml(p.base_url || "https://...")}</div>
-    </div>
-  `).join("");
+    `;
+  }).join("");
+}
+
+function openAddCustomModelModal(providerCode, providerName) {
+  $("custom-model-provider-hidden").value = providerCode;
+  $("custom-model-modal-title").textContent = `➕ 为 ${providerName} 添加自定义模型`;
+  $("custom-model-id").value = "";
+  $("custom-model-name").value = "";
+  $("custom-model-modal").classList.remove("hidden");
+}
+
+async function saveCustomModel() {
+  const providerCode = $("custom-model-provider-hidden").value;
+  const modelId = $("custom-model-id").value.trim();
+  const modelName = $("custom-model-name").value.trim();
+  if (!modelId) return alert("请输入模型标识 ID");
+  try {
+    const res = await apiFetch(`/api/gateway/providers/${providerCode}/models`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model_id: modelId, model_name: modelName }),
+    });
+    const json = await res.json();
+    if (json.code === 0) {
+      $("custom-model-modal").classList.add("hidden");
+      loadGatewayConfig();
+    } else alert("保存失败: " + json.message);
+  } catch (e) { alert("操作异常: " + e.message); }
+}
+
+async function deleteCustomModel(providerCode, modelId) {
+  if (!confirm(`确定删除自定义模型 [${modelId}] 吗？`)) return;
+  try {
+    const res = await apiFetch(`/api/gateway/providers/${providerCode}/models/${encodeURIComponent(modelId)}`, {
+      method: "DELETE",
+    });
+    const json = await res.json();
+    if (json.code === 0) loadGatewayConfig();
+  } catch (e) { alert("删除失败: " + e.message); }
+}
+
+async function syncProviderOfficialModels(providerCode) {
+  try {
+    const res = await apiFetch(`/api/gateway/providers/${providerCode}/sync-models`, {
+      method: "POST",
+    });
+    const json = await res.json();
+    if (json.code === 0) {
+      alert(`[官方同步成功] 厂商 [${providerCode}] 共同步到 ${json.data.total_synced} 个最新模型！`);
+      loadGatewayConfig();
+    }
+  } catch (e) { alert("同步失败: " + e.message); }
+}
+
+async function syncAllOfficialModels() {
+  try {
+    const res = await apiFetch("/api/gateway/sync-models", { method: "POST" });
+    const json = await res.json();
+    if (json.code === 0) {
+      alert(`[全网官方模型同步完成] 共同步更新了 ${json.data.total_synced} 个模型！`);
+      loadGatewayConfig();
+    }
+  } catch (e) { alert("全量同步失败: " + e.message); }
 }
 
 async function loadTravelBoard() {

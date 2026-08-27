@@ -54,6 +54,9 @@ class ChatRequest(BaseModel):
     all_kb: bool = False
     # 对上一次 USER_INTERACTION 提问的答复；带上则恢复挂起的执行（P1-M6）
     resume: str | None = None
+    # 动态指定大模型厂商与模型名称（如 dashscope/qwen3.7-flash, deepseek/deepseek-reasoner 等）
+    provider: str | None = None
+    model: str | None = None
 
 
 
@@ -130,10 +133,34 @@ class _RequestContext:
 
 
 class _ChatFactory:
-    """包一层 DomainAgentFactory：data 域缺 live 依赖时安全降级而非 500。"""
+    """包一层 DomainAgentFactory：按请求指定或默认网关路由构建 LLM。"""
 
-    def __init__(self, ctx: _RequestContext, checkpointer: Any = None) -> None:
-        self._inner = DomainAgentFactory(ctx, checkpointer=checkpointer)
+    def __init__(
+        self,
+        ctx: _RequestContext,
+        checkpointer: Any = None,
+        provider_code: str | None = None,
+        model_name: str | None = None,
+    ) -> None:
+        def _custom_model_builder() -> Any:
+            with session_scope() as session:
+                from app.platform.gateway.service import (
+                    get_model_by_provider_and_name,
+                    get_model_for_feature,
+                )
+
+                if provider_code and model_name:
+                    return get_model_by_provider_and_name(
+                        session,
+                        provider_code=provider_code,
+                        model_name=model_name,
+                        streaming=True,
+                    )
+                return get_model_for_feature(session, "chat_default", streaming=True)
+
+        self._inner = DomainAgentFactory(
+            ctx, model_builder=_custom_model_builder, checkpointer=checkpointer
+        )
 
     def build(self, domain: str) -> Any | None:
         try:
@@ -144,6 +171,7 @@ class _ChatFactory:
         except Exception as exc:  # 宽捕获是刻意的：装配失败降级，不让聊天接口 500
             logger.exception("agent_build_failed", domain=domain, error=str(exc))
             return None
+
 
 
 def _identify(authorization: str | None) -> int | None:
@@ -404,9 +432,15 @@ async def chat(
     provider = _RequestContext(user_id or 0)
     supervisor = Supervisor(
         _build_pipeline(),
-        _ChatFactory(provider, checkpointer=_checkpointer()),
+        _ChatFactory(
+            provider,
+            checkpointer=_checkpointer(),
+            provider_code=req.provider,
+            model_name=req.model,
+        ),
         hooks=_build_hooks(persist),
     )
+
 
     async def _gen():  # type: ignore[no-untyped-def]
         accumulated_reply = ""
