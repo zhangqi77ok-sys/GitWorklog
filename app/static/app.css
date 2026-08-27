@@ -217,7 +217,7 @@ html, body { width: 100%; height: 100%; font-family: var(--font-sans); backgroun
 .kb-group-files { padding-left: 16px; display: flex; flex-direction: column; gap: 3px; }
 .kb-file-item-row { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text-sub); }
 
-/* Antigravity Codex Multi-Column Workspace: 左侧工程目录 (210px)，中间编程对话 (400px，上：输入框，下：实时对话流)，右侧代码编辑器 (1fr) */
+/* Antigravity Codex Multi-Column Workspace: 左侧工程目录 (210px)，中间编程对话 (400px，上：实时对话流，下：输入框)，右侧代码编辑器 (1fr) */
 .coding-workspace-grid { display: grid !important; grid-template-columns: 210px 400px 1fr !important; gap: 12px; height: calc(100vh - 48px) !important; padding: 12px 14px; overflow: hidden; background: #080c14; }
 .card-pane { background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 10px; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35); height: 100%; min-width: 0; }
 .code-pane-title { height: 38px; padding: 0 12px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border-subtle); background: rgba(255, 255, 255, 0.02); font-size: 12px; font-weight: 600; color: var(--text-main); flex-shrink: 0; }
@@ -230,18 +230,7 @@ html, body { width: 100%; height: 100%; font-family: var(--font-sans); backgroun
 .tree-node:hover { background: rgba(255, 255, 255, 0.06); color: var(--text-main); }
 .tree-node.file.active { background: rgba(99, 102, 241, 0.22); color: #38bdf8; font-weight: 600; border-left: 2px solid var(--primary); }
 
-/* Codex Composer (Top of Chat Pane) */
-.codex-composer-top { padding: 10px 12px; border-bottom: 1px solid var(--border-subtle); display: flex; flex-direction: column; gap: 8px; background: rgba(255, 255, 255, 0.015); flex-shrink: 0; }
-.codex-composer-top textarea { width: 100%; height: 62px; background: rgba(9, 13, 22, 0.85); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 6px; color: var(--text-main); padding: 8px 10px; font-size: 12px; line-height: 1.5; resize: none; outline: none; font-family: inherit; transition: border 0.15s; }
-.codex-composer-top textarea:focus { border-color: var(--primary); box-shadow: 0 0 12px rgba(99, 102, 241, 0.25); }
-.codex-composer-footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.codex-quick-prompts { display: flex; flex-wrap: wrap; gap: 4px; }
-.quick-chip { background: rgba(255, 255, 255, 0.04); border: 1px solid var(--border-subtle); border-radius: 4px; color: var(--text-muted); font-size: 11px; padding: 2px 7px; cursor: pointer; transition: all 0.15s; }
-.quick-chip:hover { background: rgba(99, 102, 241, 0.15); color: var(--accent-cyan); border-color: rgba(99, 102, 241, 0.3); }
-.composer-send-btn { background: var(--primary-gradient); border: 1px solid rgba(255, 255, 255, 0.2); color: #fff; font-size: 12px; font-weight: 600; padding: 5px 12px; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; transition: all 0.15s; }
-.composer-send-btn:hover { filter: brightness(1.1); box-shadow: 0 0 12px rgba(99, 102, 241, 0.35); }
-
-/* Stream Messages Header & Box (Bottom of Chat Pane) */
+/* Stream Messages Header & Box (Top & Center of Chat Pane) */
 .codex-stream-header { padding: 6px 12px; background: rgba(255, 255, 255, 0.02); border-bottom: 1px solid var(--border-subtle); font-size: 11px; color: var(--text-dim); display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
 .status-badge { font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 4px; }
 .status-badge.ready { color: var(--accent-emerald); background: rgba(16, 185, 129, 0.1); }
@@ -251,6 +240,17 @@ html, body { width: 100%; height: 100%; font-family: var(--font-sans); backgroun
 .codex-bubble-content { color: var(--text-main); }
 .codex-bubble-content pre { background: var(--bg-code); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 8px 10px; overflow-x: auto; font-family: var(--font-mono); font-size: 11.5px; line-height: 1.5; color: #38bdf8; margin: 6px 0; }
 .codex-bubble-content code { font-family: var(--font-mono); font-size: 11.5px; background: rgba(255, 255, 255, 0.08); padding: 2px 4px; border-radius: 4px; color: #38bdf8; }
+
+/* Codex Composer (Bottom of Chat Pane) */
+.codex-composer-bottom { padding: 10px 12px; border-top: 1px solid var(--border-subtle); display: flex; flex-direction: column; gap: 6px; background: rgba(13, 19, 33, 0.95); flex-shrink: 0; }
+.codex-composer-bottom textarea { width: 100%; height: 60px; background: rgba(9, 13, 22, 0.85); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 6px; color: var(--text-main); padding: 8px 10px; font-size: 12px; line-height: 1.5; resize: none; outline: none; font-family: inherit; transition: border 0.15s; }
+.codex-composer-bottom textarea:focus { border-color: var(--primary); box-shadow: 0 0 12px rgba(99, 102, 241, 0.25); }
+.codex-composer-footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.codex-quick-prompts { display: flex; flex-wrap: wrap; gap: 4px; }
+.quick-chip { background: rgba(255, 255, 255, 0.04); border: 1px solid var(--border-subtle); border-radius: 4px; color: var(--text-muted); font-size: 11px; padding: 2px 7px; cursor: pointer; transition: all 0.15s; }
+.quick-chip:hover { background: rgba(99, 102, 241, 0.15); color: var(--accent-cyan); border-color: rgba(99, 102, 241, 0.3); }
+.composer-send-btn { background: var(--primary-gradient); border: 1px solid rgba(255, 255, 255, 0.2); color: #fff; font-size: 12px; font-weight: 600; padding: 5px 12px; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; transition: all 0.15s; }
+.composer-send-btn:hover { filter: brightness(1.1); box-shadow: 0 0 12px rgba(99, 102, 241, 0.35); }
 
 /* Code Editor Pane */
 .editor-tab-bar { height: 38px; padding: 0 12px; display: flex; align-items: center; justify-content: space-between; background: rgba(255, 255, 255, 0.02); border-bottom: 1px solid var(--border-subtle); flex-shrink: 0; }

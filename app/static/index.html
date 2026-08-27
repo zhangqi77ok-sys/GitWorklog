@@ -307,7 +307,7 @@
                   </div>
                 </div>
 
-                <!-- 2. Codex 编程智能体对话区 (输入在上面，对话框在下面) -->
+                <!-- 2. Codex 编程智能体对话区 (上方：对话流与实时渲染，下方：输入框) -->
                 <div class="codex-chat-pane card-pane">
                   <div class="code-pane-title">
                     <div style="display: flex; align-items: center; gap: 6px;">
@@ -320,26 +320,29 @@
                     </div>
                   </div>
 
-                  <!-- 输入放对话框上面 -->
-                  <div class="codex-composer-top">
-                    <textarea id="codex-query-input" placeholder="输入开发指令（如：为当前文件生成单测，或重构当前模块）..." rows="3"></textarea>
-                    <div class="codex-composer-footer">
-                      <div class="codex-quick-prompts">
-                        <button class="quick-chip" onclick="useCodexPrompt('请为当前选中的代码文件编写完整的 PyTest 单元测试用例')">🧪 生成单测</button>
-                        <button class="quick-chip" onclick="useCodexPrompt('请对当前代码进行性能优化与异常边界重构')">⚡ 优化重构</button>
-                        <button class="quick-chip" onclick="useCodexPrompt('请对当前模块进行架构分析与规范审查')">🔍 架构审查</button>
-                      </div>
-                      <button id="codex-send-btn" class="composer-send-btn">🚀 发送指令</button>
-                    </div>
-                  </div>
-
-                  <!-- 对话框放下面 (实时渲染消息流) -->
+                  <!-- 顶部状态栏 -->
                   <div class="codex-stream-header">
-                    <span>💬 对话流与实时代码生成</span>
+                    <span>💬 实时生成与交互流</span>
                     <span id="codex-status-tag" class="status-badge ready">🟢 就绪</span>
                   </div>
+
+                  <!-- 对话流放上方 (主滚动区，实时渲染消息与代码) -->
                   <div id="codex-messages" class="codex-messages-box">
-                    <div class="empty-tip">在上方输入开发指令，Codex 将基于当前工程与分支上下文生成代码并实时渲染。</div>
+                    <div class="empty-tip">在下方输入开发指令，Codex 将基于当前工程与分支上下文生成代码并实时渲染。</div>
+                  </div>
+
+                  <!-- 输入框放下面 (Antigravity 标准底部交互区) -->
+                  <div class="codex-composer-bottom">
+                    <div class="codex-quick-prompts" style="margin-bottom: 6px;">
+                      <button class="quick-chip" onclick="useCodexPrompt('请为当前选中的代码文件编写完整的 PyTest 单元测试用例')">🧪 生成单测</button>
+                      <button class="quick-chip" onclick="useCodexPrompt('请对当前代码进行性能优化与异常边界重构')">⚡ 优化重构</button>
+                      <button class="quick-chip" onclick="useCodexPrompt('请对当前模块进行架构分析与规范审查')">🔍 架构审查</button>
+                    </div>
+                    <textarea id="codex-query-input" placeholder="输入开发指令（支持 Enter 发送，Shift+Enter 换行）..." rows="3"></textarea>
+                    <div class="codex-composer-footer" style="margin-top: 6px;">
+                      <span style="font-size: 11px; color: var(--text-dim);">Enter 发送 / Shift+Enter 换行</span>
+                      <button id="codex-send-btn" class="composer-send-btn">🚀 发送指令</button>
+                    </div>
                   </div>
                 </div>
 
