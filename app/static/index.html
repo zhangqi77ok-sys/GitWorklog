@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>统一智能体平台 (Unified Agent Platform)</title>
+  <link rel="stylesheet" href="/static/app.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- 登录面板 -->
+    <section id="login-panel" class="panel">
+      <div class="login-card">
+        <div class="brand-logo">🤖</div>
+        <h1>统一智能体平台</h1>
+        <p class="sub">差旅多 Agent × 数据分析（Text2SQL）× 技能生态 × 知识库 RAG</p>
+        <div class="form-group">
+          <input id="username" placeholder="用户名" autocomplete="username" value="admin" />
+          <input id="password" type="password" placeholder="密码" autocomplete="current-password" value="admin123" />
+          <button id="login-btn" class="primary-btn">登 录</button>
+        </div>
+        <div id="login-error" class="error"></div>
+        <div class="login-tips">演示账号：admin / admin123</div>
+      </div>
+    </section>
+
+    <!-- 主工作台 (Modern Desktop App Shell) -->
+    <section id="main-panel" class="panel hidden app-layout">
+      <!-- 左侧极简应用导航栏 (Sidebar Navigation Rail) -->
+      <aside class="app-sidebar">
+        <!-- 品牌标识与当前状态 -->
+        <div class="sidebar-brand">
+          <div class="brand-avatar">⚡</div>
+          <div class="brand-meta">
+            <div class="brand-name">AgentX Studio</div>
+            <div class="brand-status">
+              <span class="pulse-dot"></span>
+              <span class="status-text">Qwen3.7-Flash · 就绪</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 导航分组与菜单 -->
+        <nav class="sidebar-nav">
+          <div class="nav-section-title">核心工作流</div>
+          <button class="nav-item active" data-tab="chat-view">
+            <span class="nav-icon">💬</span>
+            <span class="nav-label">智能对话</span>
+          </button>
+          <button class="nav-item" data-tab="coding-view">
+            <span class="nav-icon">💻</span>
+            <span class="nav-label">Codex 编程</span>
+          </button>
+          <button class="nav-item" data-tab="files-view">
+            <span class="nav-icon">📁</span>
+            <span class="nav-label">知识库与 RAG</span>
+          </button>
+
+          <div class="nav-section-title">认知与生态</div>
+          <button class="nav-item" data-tab="memory-view">
+            <span class="nav-icon">🧠</span>
+            <span class="nav-label">记忆与画像图谱</span>
+          </button>
+          <button class="nav-item" data-tab="gateway-view">
+            <span class="nav-icon">🔌</span>
+            <span class="nav-label">API 与模型网关</span>
+          </button>
+          <button class="nav-item" data-tab="skills-view">
+            <span class="nav-icon">🧩</span>
+            <span class="nav-label">技能生态管理</span>
+          </button>
+
+          <div class="nav-section-title">业务与管控</div>
+          <button class="nav-item" data-tab="travel-view">
+            <span class="nav-icon">✈️</span>
+            <span class="nav-label">差旅业务看板</span>
+          </button>
+          <button class="nav-item" data-tab="sys-view">
+            <span class="nav-icon">⚙️</span>
+            <span class="nav-label">系统与权限</span>
+          </button>
+        </nav>
+
+        <!-- 底部用户信息与操作区 -->
+        <div class="sidebar-footer">
+          <div class="user-profile-card">
+            <div class="user-avatar-circle">👤</div>
+            <div class="user-info-text">
+              <span id="who" class="user-display-name">admin</span>
+              <span class="user-role-badge">Super Admin</span>
+            </div>
+          </div>
+          <div class="footer-action-buttons">
+            <button id="timeline-btn" class="footer-icon-btn" title="查看会话执行轨迹">⏱️</button>
+            <button id="logout-btn" class="footer-icon-btn danger" title="退出登录">🚪</button>
+          </div>
+        </div>
+      </aside>
+
+      <!-- 右侧主工作流容器 -->
+      <main class="main-content">
+        <!-- 视图 1：智能对话（含左侧会话历史侧边栏） -->
+        <div id="chat-view" class="view-pane active chat-layout">
+          <!-- 会话历史侧边栏 -->
+          <aside class="session-sidebar">
+            <button id="new-chat-btn" class="new-chat-btn">
+              <span class="btn-icon">➕</span>
+              <span>开启新会话</span>
+            </button>
+            <div class="session-header-title">最近对话</div>
+            <div id="session-list" class="session-list">
+              <div class="empty-tip">加载会话中...</div>
+            </div>
+          </aside>
+
+          <!-- 聊天主区域 -->
+          <div class="chat-main-area">
+            <!-- 消息流区域（已彻底移除上方冗余技能栏） -->
+            <div id="messages" class="messages-container">
+              <!-- 空白引导开场卡片 -->
+              <div id="chat-empty-state" class="empty-state">
+                <div class="empty-hero-icon">✨</div>
+                <h2 class="empty-hero-title">统一企业智能体协同平台</h2>
+                <p class="empty-desc">基于各大主流大模型与自进化记忆图谱，提供差旅协同、数据分析、代码重构与知识库精准问答。在输入框键入 <code>/</code> 可随时调度垂直技能。</p>
+                
+                <div class="starter-grid">
+                  <div class="starter-card" onclick="useStarter('/data-analysis 统计上月各部门的销售额与订单总数')">
+                    <div class="starter-card-top">
+                      <span class="starter-icon">📊</span>
+                      <span class="starter-tag">Text2SQL</span>
+                    </div>
+                    <div class="starter-title">数据指标统计分析</div>
+                    <div class="starter-text">统计上月各部门的销售额与订单总数</div>
+                  </div>
+
+                  <div class="starter-card" onclick="useStarter('/flight-booking 帮我查询明天北京到上海的机票')">
+                    <div class="starter-card-top">
+                      <span class="starter-icon">✈️</span>
+                      <span class="starter-tag">差旅预订</span>
+                    </div>
+                    <div class="starter-title">智能航班比价预订</div>
+                    <div class="starter-text">查询明天北京到上海的合规机票并推荐</div>
+                  </div>
+
+                  <div class="starter-card" onclick="useStarter('/hotel-booking 推荐上海陆家嘴附近的差旅协议酒店')">
+                    <div class="starter-card-top">
+                      <span class="starter-icon">🏨</span>
+                      <span class="starter-tag">住宿推荐</span>
+                    </div>
+                    <div class="starter-title">商圈协议酒店推荐</div>
+                    <div class="starter-text">推荐上海陆家嘴附近的差旅标准协议酒店</div>
+                  </div>
+
+                  <div class="starter-card" onclick="useStarter('/codex 帮我重构项目中的异常处理逻辑')">
+                    <div class="starter-card-top">
+                      <span class="starter-icon">💻</span>
+                      <span class="starter-tag">Codex 编程</span>
+                    </div>
+                    <div class="starter-title">代码重构与架构设计</div>
+                    <div class="starter-text">基于当前项目分支上下文进行编程开发</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+
+            <!-- 底部输入区域 -->
+            <div class="composer-container">
+              <!-- Slash Command 快捷技能悬浮选单 -->
+              <div id="slash-popover" class="slash-popover hidden">
+                <div class="slash-header">⚡ 快捷技能指令 (点击或键盘选择)</div>
+                <div id="slash-list" class="slash-list"></div>
+              </div>
+
+              <!-- 知识库多选弹层 -->
+              <div id="kb-popover" class="kb-popover hidden">
+                <div class="kb-popover-header">
+                  <span class="kb-popover-title">📚 选择关联知识库参考文档</span>
+                  <div class="kb-popover-actions">
+                    <button id="kb-select-all-btn" class="text-btn">全选</button>
+                    <button id="kb-clear-all-btn" class="text-btn">清空</button>
+                    <button id="kb-close-btn" class="icon-btn">✕</button>
+                  </div>
+                </div>
+                <div class="kb-search-box">
+                  <input id="kb-search-input" placeholder="搜索知识库文档..." />
+                </div>
+                <div id="kb-file-list" class="kb-file-list">
+                  <div class="empty-tip">加载知识库文档中...</div>
+                </div>
+              </div>
+
+              <!-- 知识库已挂载 Chips 标签条 -->
+              <div id="kb-selected-chips" class="kb-selected-chips hidden"></div>
+
+              <div class="composer-inner">
+                <textarea id="query" rows="2" placeholder="输入业务问题，或键入 / 唤起专属技能（如 /flight-booking、/codex）..."></textarea>
+                <div class="composer-bottom-bar">
+                  <div class="composer-left-tools">
+                    <input type="file" id="chat-file-input" class="hidden" accept=".txt,.md,.pdf,.docx,.csv,.json,.xlsx" />
+                    <button id="open-kb-btn" class="tool-btn" title="勾选关联知识库与参考文档">
+                      <span class="tool-icon">📚</span>
+                      <span>知识库</span>
+                      <span id="kb-badge-count" class="kb-badge-count hidden">0</span>
+                    </button>
+                    <button id="attach-file-btn" class="tool-btn" title="上传本地文档">
+                      <span class="tool-icon">📎</span>
+                      <span>上传</span>
+                    </button>
+                  </div>
+                  <div class="composer-right-actions">
+                    <button id="interrupt-btn" class="ghost-btn hidden danger">中 断</button>
+                    <button id="send-btn" class="send-btn" title="发送指令 (Enter)">
+                      <span>发送</span>
+                      <span class="send-icon">↑</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- 视图 2：技能管理 -->
+        <div id="skills-view" class="view-pane">
+          <div class="pane-header">
+            <div>
+              <h2>🧩 垂直领域技能生态管理</h2>
+              <p class="pane-sub">支持在线新增、导入（ZIP/MD/JSON）、编辑与删除技能，问答时支持通过 <code>/skill-name</code> 显式指定或按语义自动调用。</p>
+            </div>
+            <div class="header-actions">
+              <input type="file" id="skill-import-input" class="hidden" accept=".zip,.md,.json" />
+              <button id="import-skill-btn" class="ghost-btn">📥 导入技能包 (ZIP/MD/JSON)</button>
+              <button id="add-skill-btn" class="primary-btn">➕ 新建技能</button>
+              <button id="sync-skills-btn" class="ghost-btn">🔄 从磁盘同步 (Sync FS)</button>
+            </div>
+          </div>
+          <div id="skills-grid" class="skills-grid">
+            <div class="loading-tip">正在加载技能列表...</div>
+          </div>
+        </div>
+
+        <!-- 视图 3：企业知识库与文档 RAG -->
+        <div id="files-view" class="view-pane">
+          <div class="pane-header">
+            <div>
+              <h2>📁 企业知识库管理与 RAG 引擎</h2>
+              <p class="pane-sub">支持按业务主题建立多个专属知识库、归集并解析业务文档、父子双层分片混合检索与智能体 RAG 问答。</p>
+            </div>
+            <div class="btn-group">
+              <input type="file" id="knowledge-file-input" class="hidden" accept=".txt,.md,.pdf,.docx,.csv,.json,.xlsx" />
+              <button id="create-kb-btn" class="primary-btn">➕ 新建知识库</button>
+              <button id="upload-knowledge-btn" class="ghost-btn">📤 上传文档至当前库</button>
+            </div>
+          </div>
+
+          <!-- 知识库双列管理面板 -->
+          <div class="kb-management-grid">
+            <!-- 左侧：知识库分类列表 -->
+            <div class="kb-sidebar-col">
+              <div class="kb-col-header">
+                <h3>📚 知识库列表 (<span id="kb-count-label">0</span>)</h3>
+                <span class="memory-hint">按主题分类归集</span>
+              </div>
+              <div id="kb-list-container" class="kb-cards-container">
+                <div class="empty-tip">加载知识库列表中...</div>
+              </div>
+            </div>
+
+            <!-- 右侧：当前知识库文档列表与操作 -->
+            <div class="kb-content-col">
+              <div class="current-kb-banner">
+                <div>
+                  <h3 id="current-kb-header-title">默认知识库</h3>
+                  <p id="current-kb-header-desc" style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">通用知识库与常用参考文档集合</p>
+                </div>
+                <span id="current-kb-doc-stats" class="badge">0 篇文档 · 0 KB</span>
+              </div>
+
+              <!-- 拖拽上传区 -->
+              <div id="drop-zone" class="drop-zone">
+                <div class="drop-icon">📄</div>
+                <div class="drop-text">点击上传或将文件拖拽至此处（自动归入当前知识库）</div>
+                <div class="drop-hint">支持 PDF、DOCX、TXT、MD、CSV、JSON、XLSX 等格式，单文件上限 50MB</div>
+              </div>
+
+              <!-- 知识库 RAG 检索测试台 -->
+              <div class="rag-test-panel">
+                <div class="rag-test-header">
+                  <span class="rag-title">🔍 知识库 RAG 检索测试台 (父子分片混合检索)</span>
+                  <span class="rag-hint">测试问题与文档 Chunk 的相关度匹配</span>
+                </div>
+                <div class="rag-search-row">
+                  <input id="rag-query-input" placeholder="输入测试问题，如：报销标准上限是多少 / 华东区业务规划..." />
+                  <button id="rag-search-btn" class="primary-btn">🔍 检索测试</button>
+                </div>
+                <div id="rag-results-box" class="rag-results-box hidden"></div>
+              </div>
+
+              <!-- 文件列表表格 -->
+              <div class="table-container" style="margin-top: 14px;">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>文件名</th>
+                      <th>所属知识库</th>
+                      <th>类型</th>
+                      <th>大小</th>
+                      <th>内容摘要</th>
+                      <th>上传时间</th>
+                      <th>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody id="files-tbody">
+                    <tr><td colspan="7" class="empty-cell">暂无上传文件</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+
+        <!-- 视图 4：差旅看板 -->
+        <div id="travel-view" class="view-pane">
+          <div class="pane-header">
+            <div>
+              <h2>✈️ 差旅申请与业务看板</h2>
+              <p class="pane-sub">管理差旅申请单、审批流程与行程预订状态。</p>
+            </div>
+          </div>
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>申请单号</th>
+                  <th>出差人</th>
+                  <th>行程路线</th>
+                  <th>出发 / 返回日期</th>
+                  <th>出差事由</th>
+                  <th>状态</th>
+                </tr>
+              </thead>
+              <tbody id="travel-tbody">
+                <tr><td colspan="6" class="empty-cell">暂无差旅申请记录（可在对话框中直接说「我要去上海出差」快速创建）</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 视图 5：系统管理 -->
+        <div id="sys-view" class="view-pane">
+          <div class="pane-header">
+            <div>
+              <h2>⚙️ 用户与组织架构管理</h2>
+              <p class="pane-sub">管理系统账号、部门层级与角色数据权限（基于 RBAC & DataScope）。</p>
+            </div>
+            <button id="add-user-btn" class="primary-btn">➕ 新增用户</button>
+          </div>
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>用户 ID</th>
+                  <th>用户名</th>
+                  <th>用户昵称</th>
+                  <th>角色</th>
+                  <th>归属部门</th>
+                  <th>状态</th>
+                  <th>创建时间</th>
+                </tr>
+              </thead>
+              <tbody id="users-tbody">
+                <tr><td colspan="7" class="empty-cell">加载用户列表中...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 视图 6：用户专属知识图谱与长期记忆 -->
+        <div id="memory-view" class="view-pane">
+          <div class="pane-header">
+            <div>
+              <h2>🧠 用户专属画像图谱与长期记忆</h2>
+              <p class="pane-sub">
+                大模型在每次对话后自动分析并学习您的<strong>出行偏好、常驻城市、业务关注点与合规约束</strong>，并以知识图谱三元组持久化沉淀。后续对话将<strong>默认融入专属画像</strong>进行个性化定制回答。
+              </p>
+            </div>
+            <div class="btn-group">
+              <button id="add-memory-btn" class="primary-btn">➕ 添加特征/记忆</button>
+              <button id="refresh-memory-btn" class="ghost-btn">🔄 刷新</button>
+              <button id="clear-memory-btn" class="ghost-btn danger">🗑️ 清空画像图谱</button>
+            </div>
+          </div>
+
+          <!-- 图谱与记忆双列面板 -->
+          <div class="memory-grid-layout">
+            <!-- 左侧：动态画像特征卡片 -->
+            <div class="memory-column">
+              <div class="memory-col-header">
+                <h3>🏷️ 沉淀画像与长期特征 (<span id="memory-count-label">0</span> 项)</h3>
+                <span class="memory-hint">每次回答后自动动态学习</span>
+              </div>
+              <div id="memory-cards-container" class="memory-cards-container">
+                <div class="empty-tip">暂无沉淀画像，快去与智能体对话试试吧！</div>
+              </div>
+            </div>
+
+            <!-- 右侧：知识图谱三元组实体网络 -->
+            <div class="memory-column">
+              <div class="memory-col-header">
+                <h3>🕸️ 知识图谱实体关系网络 (<span id="graph-count-label">0</span> 条关系)</h3>
+                <span class="memory-hint">权重随提及频次自适应递增</span>
+              </div>
+              <div id="graph-network-container" class="graph-network-container">
+                <div class="empty-tip">知识图谱待激活</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 视图 7：Codex 编程工作台 -->
+        <div id="coding-view" class="view-pane">
+
+          <div class="pane-header">
+            <div>
+              <h2>💻 Codex 编程开发工作台</h2>
+              <p class="pane-sub">支持本地工程与 Git 分支选择，基于代码树上下文进行精准代码生成、重构与架构设计。</p>
+            </div>
+            <div class="btn-group">
+              <div class="project-toolbar">
+                <span style="font-size: 13px; color: var(--text-muted);">📦 项目:</span>
+                <select id="project-select" class="dropdown-select"></select>
+                <span style="font-size: 13px; color: var(--text-muted); margin-left: 10px;">🌿 分支:</span>
+                <select id="branch-select" class="dropdown-select"></select>
+                <button id="checkout-branch-btn" class="ghost-btn">切换分支</button>
+              </div>
+              <button id="launch-desktop-btn" class="primary-btn" title="启动独立原生桌面窗口">🖥️ 桌面客户端模式</button>
+            </div>
+          </div>
+
+          <div class="coding-workspace-grid">
+            <!-- 左侧：工程文件树 -->
+            <div class="code-tree-pane">
+              <div class="code-pane-title">📁 工程文件目录</div>
+              <div id="project-tree-list" class="project-tree-list">
+                <div class="empty-tip">加载工程目录树中...</div>
+              </div>
+            </div>
+
+            <!-- 中间：代码编辑器与预览 -->
+            <div class="code-editor-pane">
+              <div class="editor-header">
+                <span id="current-file-path" class="current-file-label">未选择文件</span>
+                <div class="btn-group">
+                  <button id="save-code-btn" class="primary-btn" style="padding: 4px 12px; font-size: 12px;">💾 保存文件</button>
+                </div>
+              </div>
+              <textarea id="code-editor-area" class="code-editor-textarea" placeholder="从左侧文件树选择文件进行查看与编辑..."></textarea>
+            </div>
+
+            <!-- 右侧：Codex 编程助手 -->
+            <div class="codex-chat-pane">
+              <div class="code-pane-title">🤖 Codex 编程智能体</div>
+              <div class="codex-quick-prompts">
+                <button class="starter-tag" onclick="useCodexPrompt('请为当前选中的代码文件编写完整的 PyTest 单元测试用例')">🧪 生成单测</button>
+                <button class="starter-tag" onclick="useCodexPrompt('请对当前代码进行性能优化与异常边界重构')">⚡ 优化重构</button>
+                <button class="starter-tag" onclick="useCodexPrompt('请对当前模块进行架构分析与规范审查')">🔍 架构审查</button>
+              </div>
+              <div id="codex-messages" class="codex-messages-box">
+                <div class="empty-tip">在下方输入您的开发需求，Codex 将基于当前项目与分支为您编写代码！</div>
+              </div>
+              <div class="codex-input-box">
+                <textarea id="codex-query-input" placeholder="输入编程需求（如：帮我实现一个新功能...）"></textarea>
+                <button id="codex-send-btn" class="primary-btn">发 送</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 视图 8：API 与 LLM 智能网关 -->
+        <div id="gateway-view" class="view-pane">
+          <div class="pane-header">
+            <div>
+              <h2>🔌 API 管理与 LLM 智能网关</h2>
+              <p class="pane-sub">内置各大主流模型厂商协议规则，支持按不同业务功能槽位自定义路由模型与参数配置。</p>
+            </div>
+            <div class="btn-group">
+              <button id="refresh-gateway-btn" class="ghost-btn">🔄 刷新配置</button>
+            </div>
+          </div>
+
+          <!-- 槽位模型路由映射表 -->
+          <div class="gateway-section">
+            <h3 class="gateway-section-title">🎛️ 业务功能模型路由矩阵 (Feature Model Routing)</h3>
+            <div class="table-wrapper" style="margin-top: 10px;">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>功能业务槽位</th>
+                    <th>调用厂商 (Provider)</th>
+                    <th>目标模型 (Model)</th>
+                    <th>Temperature</th>
+                    <th>Max Tokens</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody id="routes-tbody">
+                  <tr><td colspan="6" class="empty-cell">加载模型路由中...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- 厂商 API 凭据与 Base URL 管理 -->
+          <div class="gateway-section" style="margin-top: 24px;">
+            <h3 class="gateway-section-title">🏭 大模型厂商接入与 API 凭据配置</h3>
+            <div id="providers-grid" class="providers-grid" style="margin-top: 12px;">
+              <div class="empty-tip">加载厂商列表中...</div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </section>
+
+
+    <!-- Modal 1: Timeline 抽屉 -->
+    <div id="timeline-modal" class="modal hidden">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>⏱️ 会话执行轨迹 (Trace / Timeline)</h2>
+          <button class="close-modal-btn ghost-btn">✕</button>
+        </div>
+        <div id="timeline-list" class="timeline-container">
+          <div class="empty-tip">暂无轨迹数据</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal 2: Skill 详情查看 -->
+    <div id="skill-modal" class="modal hidden">
+      <div class="modal-content large">
+        <div class="modal-header">
+          <h2 id="skill-modal-title">技能详细规范</h2>
+          <button class="close-modal-btn ghost-btn">✕</button>
+        </div>
+        <div id="skill-modal-desc" class="skill-modal-desc"></div>
+        <div class="modal-code-wrapper">
+          <pre id="skill-modal-body" class="code-box"></pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal 3: 文件文本预览 -->
+    <div id="file-modal" class="modal hidden">
+      <div class="modal-content large">
+        <div class="modal-header">
+          <h2 id="file-modal-title">文件文本内容预览</h2>
+          <button class="close-modal-btn ghost-btn">✕</button>
+        </div>
+        <div class="modal-code-wrapper">
+          <pre id="file-modal-text" class="code-box"></pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal 4: 新增用户弹窗 -->
+    <div id="user-modal" class="modal hidden">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>➕ 新增系统用户</h2>
+          <button class="close-modal-btn ghost-btn">✕</button>
+        </div>
+        <div class="form-group" style="margin-top: 10px;">
+          <input id="new-user-name" placeholder="登录用户名 (如 zhangsan)" />
+          <input id="new-user-nick" placeholder="用户昵称 (如 张三)" />
+          <input id="new-user-pwd" type="password" placeholder="登录密码" value="123456" />
+          <select id="new-user-role" style="background: var(--bg-input); border: 1px solid var(--border); color: var(--text-main); padding: 12px; border-radius: var(--radius);">
+            <option value="user">普通员工 (user)</option>
+            <option value="manager">部门主管 (manager)</option>
+            <option value="admin">系统管理员 (admin)</option>
+          </select>
+          <button id="save-user-btn" class="primary-btn" style="margin-top: 10px;">保 存</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal 5: 新建/编辑 Skill 弹窗 -->
+    <div id="skill-edit-modal" class="modal hidden">
+      <div class="modal-content large">
+        <div class="modal-header">
+          <h2 id="skill-edit-modal-title">➕ 新建领域技能</h2>
+          <button class="close-modal-btn ghost-btn">✕</button>
+        </div>
+        <div class="form-group" style="margin-top: 10px;">
+          <input id="skill-edit-name" placeholder="技能英文标识（必填，如 crm-assistant，支持 /crm-assistant 调用）" />
+          <input id="skill-edit-desc" placeholder="技能中文名称与简要描述（必填，如 客户关系与跟进管理助手）" />
+          <label style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">详细 SOP 引导词与规范说明 (Markdown / Prompt)：</label>
+          <textarea id="skill-edit-body" rows="8" placeholder="填写该技能针对大模型的专属指导规范、步骤约束和执行标准..."></textarea>
+          <button id="save-skill-btn" class="primary-btn" style="margin-top: 10px;">保 存 技 能</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal 6: 新增用户记忆/特征弹窗 -->
+    <div id="memory-add-modal" class="modal hidden">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>➕ 手动添加用户特征与偏好</h2>
+          <button class="close-modal-btn ghost-btn">✕</button>
+        </div>
+        <div class="form-group" style="margin-top: 10px;">
+          <select id="new-mem-type" style="background: var(--bg-input); border: 1px solid var(--border); color: var(--text-main); padding: 12px; border-radius: var(--radius);">
+            <option value="preference">出行/生活偏好 (preference)</option>
+            <option value="trait">常驻地/固有属性 (trait)</option>
+            <option value="topic">业务关注领域 (topic)</option>
+            <option value="restriction">标准与约束限制 (restriction)</option>
+          </select>
+          <input id="new-mem-key" placeholder="特征键标识（如 preferred_airline, home_city, budget_limit）" />
+          <textarea id="new-mem-val" rows="3" placeholder="特征具体内容（如 偏好中国国航早班机靠窗、常驻北京、住宿预算不超过500元）"></textarea>
+          <button id="save-memory-btn" class="primary-btn" style="margin-top: 10px;">保 存 特 征</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal 7: 新建知识库集合弹窗 -->
+    <div id="kb-create-modal" class="modal hidden">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>➕ 新建企业知识库集合</h2>
+          <button class="close-modal-btn ghost-btn">✕</button>
+        </div>
+        <div class="form-group" style="margin-top: 10px;">
+          <input id="new-kb-name" placeholder="知识库名称（如：企业财务与差旅报销规范库）" />
+          <textarea id="new-kb-desc" rows="3" placeholder="知识库描述与收录范围说明（如：收录2026年最新差旅审批报销标准、发票合规指引与预订说明）"></textarea>
+          <button id="save-kb-btn" class="primary-btn" style="margin-top: 10px;">创 建 知 识 库</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+
+  <!-- 引入内置 Markdown 渲染引擎 -->
+  <script src="/static/marked.min.js"></script>
+  <!-- 主逻辑脚本 -->
+  <script src="/static/app.js"></script>
+</body>
+</html>
