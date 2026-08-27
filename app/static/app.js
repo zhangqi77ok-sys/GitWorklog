@@ -125,9 +125,25 @@ function initEventListeners() {
   if ($("checkout-branch-btn")) $("checkout-branch-btn").onclick = checkoutCurrentBranch;
   if ($("save-code-btn")) $("save-code-btn").onclick = saveCurrentFileCode;
   if ($("codex-send-btn")) $("codex-send-btn").onclick = sendCodexChat;
+  if ($("codex-query-input")) {
+    $("codex-query-input").onkeydown = (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        sendCodexChat();
+      }
+    };
+  }
   if ($("add-project-btn")) $("add-project-btn").onclick = () => $("project-add-modal").classList.remove("hidden");
   if ($("save-project-btn")) $("save-project-btn").onclick = saveCustomProject;
   if ($("load-direct-path-btn")) $("load-direct-path-btn").onclick = loadDirectPathProject;
+  if ($("codex-direct-path-input")) {
+    $("codex-direct-path-input").onkeydown = (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        loadDirectPathProject();
+      }
+    };
+  }
   if ($("launch-desktop-btn")) $("launch-desktop-btn").onclick = launchDesktopClient;
 
   if ($("refresh-gateway-btn")) $("refresh-gateway-btn").onclick = loadGatewayConfig;
@@ -405,14 +421,21 @@ async function send() {
       const lines = chunk.split("\n");
       for (const line of lines) {
         if (line.startsWith("data: ")) {
+          const raw = line.slice(6).trim();
+          if (!raw || raw === "[DONE]") continue;
           try {
-            const data = JSON.parse(line.slice(6));
-            if (data.chunk) {
-              fullText += data.chunk;
-              targetEl.innerHTML = window.marked ? marked.parse(fullText) : fullText;
+            const data = JSON.parse(raw);
+            const text = data.text !== undefined ? data.text : (data.chunk !== undefined ? data.chunk : (data.content !== undefined ? data.content : ""));
+            if (text) {
+              fullText += text;
+              targetEl.innerHTML = window.marked ? marked.parse(fullText) : escapeHtml(fullText);
               container.scrollTop = container.scrollHeight;
             }
-          } catch (e) {}
+          } catch (e) {
+            fullText += raw;
+            targetEl.innerHTML = window.marked ? marked.parse(fullText) : escapeHtml(fullText);
+            container.scrollTop = container.scrollHeight;
+          }
         }
       }
     }
@@ -1239,17 +1262,23 @@ async function sendCodexChat() {
   const query = $("codex-query-input").value.trim();
   if (!query) return;
   const box = $("codex-messages");
+  const statusTag = $("codex-status-tag");
+  if (statusTag) statusTag.textContent = "⚡ 代码生成中...";
+
   box.innerHTML += `
-    <div style="margin-bottom:12px;">
-      <div style="font-weight:700; color:var(--accent-cyan); margin-bottom:2px;">👨‍💻 开发者指令:</div>
-      <div style="background:rgba(255,255,255,0.03); padding:8px 10px; border-radius:6px;">${escapeHtml(query)}</div>
+    <div class="codex-user-bubble">
+      <div style="font-weight:700; color:var(--accent-cyan); font-size:11px; margin-bottom:4px;">👨‍💻 开发者指令</div>
+      <div>${escapeHtml(query)}</div>
     </div>
   `;
   const assistantMsgId = "codex-msg-" + Date.now();
   box.innerHTML += `
-    <div style="margin-bottom:12px;" id="${assistantMsgId}">
-      <div style="font-weight:700; color:var(--primary); margin-bottom:2px;">🤖 Codex 编程智能体 (${escapeHtml(state.selectedCodexModel)}):</div>
-      <div class="codex-bubble-content markdown-body">编写代码中...</div>
+    <div class="codex-assistant-bubble" id="${assistantMsgId}">
+      <div style="font-weight:700; color:var(--primary); font-size:11px; margin-bottom:6px; display:flex; align-items:center; justify-content:space-between;">
+        <span>🤖 Codex 编程智能体 (${escapeHtml(state.selectedCodexModel)})</span>
+        <span style="font-size:10px; color:var(--text-dim);">${new Date().toLocaleTimeString()}</span>
+      </div>
+      <div class="codex-bubble-content markdown-body">思考中...</div>
     </div>
   `;
   box.scrollTop = box.scrollHeight;
@@ -1278,20 +1307,29 @@ async function sendCodexChat() {
       const lines = chunk.split("\n");
       for (const line of lines) {
         if (line.startsWith("data: ")) {
+          const raw = line.slice(6).trim();
+          if (!raw || raw === "[DONE]") continue;
           try {
-            const data = JSON.parse(line.slice(6));
-            if (data.chunk) {
-              fullText += data.chunk;
-              targetEl.innerHTML = window.marked ? marked.parse(fullText) : fullText;
+            const data = JSON.parse(raw);
+            const text = data.text !== undefined ? data.text : (data.chunk !== undefined ? data.chunk : (data.content !== undefined ? data.content : ""));
+            if (text) {
+              fullText += text;
+              targetEl.innerHTML = window.marked ? marked.parse(fullText) : escapeHtml(fullText);
               box.scrollTop = box.scrollHeight;
             }
-          } catch (e) {}
+          } catch (e) {
+            fullText += raw;
+            targetEl.innerHTML = window.marked ? marked.parse(fullText) : escapeHtml(fullText);
+            box.scrollTop = box.scrollHeight;
+          }
         }
       }
     }
+    if (statusTag) statusTag.textContent = "✅ 就绪";
   } catch (e) {
     const targetEl = document.querySelector(`#${assistantMsgId} .codex-bubble-content`);
-    if (targetEl) targetEl.textContent = "执行失败: " + e.message;
+    if (targetEl) targetEl.innerHTML = `<span style="color:var(--accent-rose)">执行失败: ${e.message}</span>`;
+    if (statusTag) statusTag.textContent = "❌ 异常";
   }
 }
 

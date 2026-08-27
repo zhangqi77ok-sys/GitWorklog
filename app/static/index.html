@@ -319,17 +319,27 @@
                       <select id="codex-model-select" class="dropdown-select compact" style="max-width: 140px; font-size: 11px;"></select>
                     </div>
                   </div>
-                  <div class="codex-quick-prompts">
-                    <button class="starter-tag" onclick="useCodexPrompt('请为当前选中的代码文件编写完整的 PyTest 单元测试用例')">🧪 生成单测</button>
-                    <button class="starter-tag" onclick="useCodexPrompt('请对当前代码进行性能优化与异常边界重构')">⚡ 优化重构</button>
-                    <button class="starter-tag" onclick="useCodexPrompt('请对当前模块进行架构分析与规范审查')">🔍 架构审查</button>
+
+                  <!-- 输入放对话框上面 -->
+                  <div class="codex-input-box">
+                    <textarea id="codex-query-input" placeholder="输入编程需求（如：帮我实现一个新功能，或对选中的文件进行重构）..." rows="3"></textarea>
+                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+                      <div class="codex-quick-prompts" style="padding: 0; border-bottom: none;">
+                        <button class="starter-tag" onclick="useCodexPrompt('请为当前选中的代码文件编写完整的 PyTest 单元测试用例')">🧪 生成单测</button>
+                        <button class="starter-tag" onclick="useCodexPrompt('请对当前代码进行性能优化与异常边界重构')">⚡ 优化重构</button>
+                        <button class="starter-tag" onclick="useCodexPrompt('请对当前模块进行架构分析与规范审查')">🔍 架构审查</button>
+                      </div>
+                      <button id="codex-send-btn" class="primary-btn" style="padding: 6px 14px;">🚀 发送指令</button>
+                    </div>
+                  </div>
+
+                  <!-- 对话框放下面（实时渲染消息流） -->
+                  <div class="codex-messages-header" style="padding: 6px 14px; background: rgba(255,255,255,0.02); border-bottom: 1px solid var(--border-subtle); font-size: 11px; color: var(--text-dim); display: flex; justify-content: space-between;">
+                    <span>💬 对话流与实时代码生成</span>
+                    <span id="codex-status-tag" style="color: var(--accent-cyan);">就绪</span>
                   </div>
                   <div id="codex-messages" class="codex-messages-box">
-                    <div class="empty-tip">在下方输入您的开发需求，Codex 将基于当前项目与分支为您编写代码！</div>
-                  </div>
-                  <div class="codex-input-box">
-                    <textarea id="codex-query-input" placeholder="输入编程需求（如：帮我实现一个新功能...）"></textarea>
-                    <button id="codex-send-btn" class="primary-btn">发送</button>
+                    <div class="empty-tip">在上方输入您的开发需求，Codex 将基于当前项目与分支为您编写代码并实时渲染！</div>
                   </div>
                 </div>
               </div>
