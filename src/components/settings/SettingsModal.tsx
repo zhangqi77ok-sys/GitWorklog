@@ -1,9 +1,10 @@
-import React, { useState } from "react";
-import { SettingsTab } from "../../types";
+import React, { useState, useEffect } from "react";
+import { SettingsTab, LLMChannel } from "../../types";
 import { CockpitGatewayPane } from "./CockpitGatewayPane";
 import { SkillManagerPane } from "./SkillManagerPane";
 import { McpManagerPane } from "./McpManagerPane";
 import { GeneralPreferencesPane } from "./GeneralPreferencesPane";
+import { llmConfigService } from "../../services/llmConfigService";
 import {
   Rocket,
   Puzzle,
@@ -33,6 +34,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [activeTab, setActiveTab] = useState<SettingsTab>("gateway");
   // 默认点进来在仪表盘 (dashboard)
   const [activeSubTab, setActiveSubTab] = useState<string>("dashboard");
+  const [channels, setChannels] = useState<LLMChannel[]>([]);
+
+  useEffect(() => {
+    const loadChannels = () => setChannels(llmConfigService.getChannels());
+    loadChannels();
+    window.addEventListener("llm-config-updated", loadChannels);
+    return () => window.removeEventListener("llm-config-updated", loadChannels);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -153,9 +162,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
           {/* 二级厂商/功能子侧边栏 (仅在 LLM 模型网关标签下展示) */}
           {activeTab === "gateway" && (
-            <aside className="w-44 bg-[#f4efea] border-r border-[#e5dfd8] p-2.5 flex flex-col justify-between shrink-0 select-none">
+            <aside className="w-48 bg-[#f4efea] border-r border-[#e5dfd8] p-2.5 flex flex-col justify-between shrink-0 select-none">
               <div className="flex flex-col gap-1 text-xs">
-                {/* 1. 仪表盘 (默认选中) */}
+                {/* 1. 仪表盘 (总览) */}
                 <button
                   onClick={() => setActiveSubTab("dashboard")}
                   className={`px-3 py-2 rounded-lg flex items-center gap-2 cursor-pointer transition-all ${
@@ -168,79 +177,88 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <span>仪表盘 (总览)</span>
                 </button>
 
-                {/* 2. 中转站 / 渠道管理 */}
+                {/* 2. 中转站 / 全部渠道 */}
                 <button
                   onClick={() => setActiveSubTab("relay")}
-                  className={`px-3 py-2 rounded-lg flex items-center gap-2 cursor-pointer transition-all ${
+                  className={`px-3 py-2 rounded-lg flex items-center justify-between cursor-pointer transition-all ${
                     activeSubTab === "relay"
                       ? "bg-white text-[#d96b27] font-bold shadow-2xs border border-[#e5dfd8]"
                       : "text-[#645e57] hover:bg-[#ebe5df] hover:text-[#1e1b18]"
                   }`}
                 >
-                  <GitFork size={14} className={activeSubTab === "relay" ? "text-[#d96b27]" : ""} />
-                  <span>中转站 (渠道)</span>
+                  <div className="flex items-center gap-2">
+                    <GitFork size={14} className={activeSubTab === "relay" ? "text-[#d96b27]" : ""} />
+                    <span>中转站 (渠道)</span>
+                  </div>
+                  <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-[#e7e2d9] text-[#645e57]">
+                    {channels.length}
+                  </span>
                 </button>
 
                 <div className="h-[1px] bg-[#e5dfd8] my-1"></div>
 
-                <span className="text-[9px] font-bold text-[#9c948a] px-2 py-0.5 uppercase tracking-wider">
-                  快速筛选厂商
-                </span>
+                <div className="flex justify-between items-center px-2 py-0.5">
+                  <span className="text-[9px] font-bold text-[#9c948a] uppercase tracking-wider">
+                    快速筛选厂商
+                  </span>
+                  {activeSubTab !== "dashboard" && activeSubTab !== "relay" && (
+                    <button
+                      onClick={() => setActiveSubTab("relay")}
+                      className="text-[10px] text-[#d96b27] hover:underline cursor-pointer"
+                    >
+                      查看全部
+                    </button>
+                  )}
+                </div>
 
-                <button
-                  onClick={() => setActiveSubTab("claude")}
-                  className={`px-3 py-1.5 rounded-md flex items-center gap-2 cursor-pointer transition-colors ${
-                    activeSubTab === "claude"
-                      ? "bg-white text-[#d96b27] font-semibold border border-[#e5dfd8]"
-                      : "text-[#645e57] hover:bg-[#ebe5df]"
-                  }`}
-                >
-                  <Bot size={13} /> Claude 官方
-                </button>
+                {/* 动态真实厂商列表 */}
+                <div className="flex flex-col gap-0.5 max-h-[290px] overflow-y-auto pr-0.5">
+                  {channels.map((chan) => {
+                    const isSelected =
+                      activeSubTab === chan.id ||
+                      (activeSubTab === "bailian" && (chan.id.includes("bailian") || chan.name.includes("百炼"))) ||
+                      (activeSubTab === "deepseek" && (chan.id.includes("deepseek") || chan.name.includes("DeepSeek"))) ||
+                      (activeSubTab === "claude" && (chan.id.includes("anthropic") || chan.name.includes("Claude"))) ||
+                      (activeSubTab === "antigravity" && (chan.id.includes("antigravity") || chan.name.includes("Antigravity"))) ||
+                      (activeSubTab === "gemini" && (chan.id.includes("antigravity") || chan.id.includes("gemini") || chan.name.includes("Antigravity"))) ||
+                      (activeSubTab === "ollama" && (chan.id.includes("ollama") || chan.name.includes("Ollama")));
 
-                <button
-                  onClick={() => setActiveSubTab("deepseek")}
-                  className={`px-3 py-1.5 rounded-md flex items-center gap-2 cursor-pointer transition-colors ${
-                    activeSubTab === "deepseek"
-                      ? "bg-white text-[#d96b27] font-semibold border border-[#e5dfd8]"
-                      : "text-[#645e57] hover:bg-[#ebe5df]"
-                  }`}
-                >
-                  <Zap size={13} /> DeepSeek 官方
-                </button>
+                    // 提取更精简的厂商短名
+                    const shortName = chan.name
+                      .replace(" (DashScope / 通义千问)", "")
+                      .replace(" (支持 OAuth / RT)", "")
+                      .replace(" (本地大模型)", "")
+                      .replace(" (硅基流动)", "")
+                      .replace(" (Claude)", "");
 
-                <button
-                  onClick={() => setActiveSubTab("bailian")}
-                  className={`px-3 py-1.5 rounded-md flex items-center gap-2 cursor-pointer transition-colors ${
-                    activeSubTab === "bailian"
-                      ? "bg-white text-[#d96b27] font-semibold border border-[#e5dfd8]"
-                      : "text-[#645e57] hover:bg-[#ebe5df]"
-                  }`}
-                >
-                  <Zap size={13} /> 阿里百炼
-                </button>
-
-                <button
-                  onClick={() => setActiveSubTab("gemini")}
-                  className={`px-3 py-1.5 rounded-md flex items-center gap-2 cursor-pointer transition-colors ${
-                    activeSubTab === "gemini"
-                      ? "bg-white text-[#d96b27] font-semibold border border-[#e5dfd8]"
-                      : "text-[#645e57] hover:bg-[#ebe5df]"
-                  }`}
-                >
-                  <Leaf size={13} /> Gemini (OAuth)
-                </button>
-
-                <button
-                  onClick={() => setActiveSubTab("ollama")}
-                  className={`px-3 py-1.5 rounded-md flex items-center gap-2 cursor-pointer transition-colors ${
-                    activeSubTab === "ollama"
-                      ? "bg-white text-[#d96b27] font-semibold border border-[#e5dfd8]"
-                      : "text-[#645e57] hover:bg-[#ebe5df]"
-                  }`}
-                >
-                  <Bot size={13} /> Ollama 本地
-                </button>
+                    return (
+                      <button
+                        key={chan.id}
+                        onClick={() => setActiveSubTab(chan.id)}
+                        className={`w-full px-2.5 py-1.5 rounded-md flex items-center justify-between cursor-pointer transition-colors text-left ${
+                          isSelected
+                            ? "bg-white text-[#d96b27] font-semibold border border-[#e5dfd8] shadow-2xs"
+                            : "text-[#645e57] hover:bg-[#ebe5df] hover:text-[#1e1b18]"
+                        }`}
+                        title={chan.name}
+                      >
+                        <div className="flex items-center gap-1.5 truncate">
+                          {chan.id.includes("antigravity") || chan.id.includes("gemini") ? (
+                            <Leaf size={12} className={isSelected ? "text-[#d96b27]" : "text-[#10b981]"} />
+                          ) : chan.id.includes("deepseek") || chan.id.includes("bailian") ? (
+                            <Zap size={12} className={isSelected ? "text-[#d96b27]" : "text-[#d97706]"} />
+                          ) : (
+                            <Bot size={12} className={isSelected ? "text-[#d96b27]" : "text-[#78716c]"} />
+                          )}
+                          <span className="truncate">{shortName}</span>
+                        </div>
+                        {chan.latencyMs ? (
+                          <span className="text-[9px] font-mono text-[#059669] shrink-0">{chan.latencyMs}ms</span>
+                        ) : null}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
               <div className="pt-2 border-t border-[#e5dfd8] flex flex-col gap-1 text-xs text-[#645e57]">

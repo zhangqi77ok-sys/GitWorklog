@@ -364,13 +364,18 @@ export const CockpitGatewayPane: React.FC<CockpitGatewayPaneProps> = ({
 
   // 根据二级子标签过滤渠道
   const filteredChannels = channels.filter((c) => {
-    if (activeSubTab === "dashboard" || activeSubTab === "relay") return true;
-    if (activeSubTab === "claude") return c.id.includes("anthropic") || c.name.includes("Claude");
-    if (activeSubTab === "deepseek") return c.id.includes("deepseek") || c.name.includes("DeepSeek");
-    if (activeSubTab === "bailian") return c.id.includes("bailian") || c.name.includes("百炼");
-    if (activeSubTab === "gemini") return c.id.includes("gemini") || c.name.includes("Gemini");
-    if (activeSubTab === "ollama") return c.id.includes("ollama") || c.name.includes("Ollama");
-    return true;
+    if (activeSubTab === "dashboard" || activeSubTab === "relay" || activeSubTab === "all") return true;
+    if (activeSubTab === c.id) return true;
+    if (activeSubTab === "bailian" || activeSubTab === "chan-bailian") return c.id.includes("bailian") || c.name.includes("百炼");
+    if (activeSubTab === "deepseek" || activeSubTab === "chan-deepseek") return c.id.includes("deepseek") || c.name.includes("DeepSeek");
+    if (activeSubTab === "antigravity" || activeSubTab === "chan-antigravity" || activeSubTab === "gemini")
+      return c.id.includes("antigravity") || c.id.includes("gemini") || c.name.includes("Antigravity") || c.name.includes("Gemini");
+    if (activeSubTab === "claude" || activeSubTab === "chan-anthropic") return c.id.includes("anthropic") || c.name.includes("Claude");
+    if (activeSubTab === "openai" || activeSubTab === "chan-openai") return c.id.includes("openai") || c.name.includes("OpenAI");
+    if (activeSubTab === "siliconflow" || activeSubTab === "chan-siliconflow") return c.id.includes("siliconflow") || c.name.includes("硅基流动");
+    if (activeSubTab === "ollama" || activeSubTab === "chan-ollama") return c.id.includes("ollama") || c.name.includes("Ollama");
+    if (activeSubTab === "oneapi" || activeSubTab === "chan-oneapi") return c.id.includes("oneapi") || c.name.includes("New API") || c.name.includes("One API");
+    return c.id === activeSubTab || c.name.toLowerCase().includes(activeSubTab.toLowerCase());
   });
 
   // ================= 视图 1: 仪表盘 (Dashboard Overview) =================
@@ -479,9 +484,10 @@ export const CockpitGatewayPane: React.FC<CockpitGatewayPaneProps> = ({
               <div
                 key={chan.id}
                 onClick={() => {
-                  if (onNavigateSubTab) onNavigateSubTab("relay");
+                  if (onNavigateSubTab) onNavigateSubTab(chan.id);
                 }}
                 className="p-3.5 border border-[#e5dfd8] hover:border-[#d96b27] rounded-xl bg-white hover:bg-[#faf8f5] transition-all cursor-pointer flex justify-between items-center shadow-2xs group"
+                title={`点击直达【${chan.name}】单厂商配置`}
               >
                 <div className="flex items-center gap-2.5">
                   <div className="w-8 h-8 rounded-lg bg-[#fef3eb] text-[#d96b27] flex items-center justify-center font-bold">
@@ -524,8 +530,8 @@ export const CockpitGatewayPane: React.FC<CockpitGatewayPaneProps> = ({
             <span className="text-[10px] text-[#059669] font-mono">● 实时监听中</span>
           </div>
           <div className="font-mono text-[11px] text-[#475569] space-y-1 bg-white p-2.5 rounded-lg border border-[#e7e2d9]">
-            <p className="text-[#059669]">[Gateway 200 OK] 路由分发 ➔ DeepSeek 官方 (deepseek-reasoner) · 耗时 38ms</p>
-            <p className="text-[#2563eb]">[Gemini Auth] Access Token 自动保活刷新成功 · 换取有效期 3600s</p>
+            <p className="text-[#059669]">[Gateway 200 OK] 路由分发 ➔ 阿里百炼 (qwen-plus-latest) · 耗时 18ms</p>
+            <p className="text-[#2563eb]">[Antigravity OAuth] Token 自动保活刷新成功 · 换取有效期 3600s</p>
             <p className="text-[#d97706]">[Compactor] 会话达到 95% 阈值 · 自动执行分层语义摘要 (节省 86% Tokens)</p>
           </div>
         </div>
@@ -568,17 +574,64 @@ export const CockpitGatewayPane: React.FC<CockpitGatewayPaneProps> = ({
           </div>
         </div>
         <div className="flex-1 bg-[#1e1b18] text-[#38bdf8] p-4 rounded-xl font-mono text-xs overflow-y-auto space-y-1.5 border border-[#3e3830]">
-          <p className="text-gray-400">[2026-08-28 13:45:10] Cockpit Tools LLM Gateway Initialized (Native Mode)</p>
-          <p className="text-[#10b981]">[2026-08-28 13:45:12] Channel 'chan-deepseek' Ping OK: 38ms</p>
-          <p className="text-[#10b981]">[2026-08-28 13:45:13] Channel 'chan-bailian' Ping OK: 18ms</p>
-          <p className="text-[#38bdf8]">[2026-08-28 13:45:15] Channel 'chan-gemini' OAuth Token refreshed: active (expires in 3590s)</p>
-          <p className="text-[#fbbf24]">[2026-08-28 13:45:20] Context Compactor: 95% threshold guard active on all models</p>
+          <p className="text-gray-400">[2026-08-28 17:45:10] Cockpit Tools LLM Gateway Initialized (Native Mode)</p>
+          <p className="text-[#10b981]">[2026-08-28 17:45:12] Channel 'chan-deepseek' Ping OK: 38ms</p>
+          <p className="text-[#10b981]">[2026-08-28 17:45:13] Channel 'chan-bailian' Ping OK: 18ms</p>
+          <p className="text-[#38bdf8]">[2026-08-28 17:45:15] Channel 'chan-antigravity' OAuth Token refreshed: active (expires in 3590s)</p>
+          <p className="text-[#fbbf24]">[2026-08-28 17:45:20] Context Compactor: 95% threshold guard active on all models</p>
         </div>
       </div>
     );
   }
 
-  // ================= 视图 4: 渠道管理 / 中转站 (Channel List View) =================
+  // ================= 视图 4: 高级设置 =================
+  if (activeSubTab === "settings") {
+    return (
+      <div className="flex-1 flex flex-col p-6 overflow-y-auto bg-white text-[#1e1b18] select-none text-xs gap-5">
+        <div className="flex justify-between items-center border-b border-[#e5dfd8] pb-4">
+          <div className="flex items-center gap-2">
+            <Sliders className="text-[#d96b27]" size={18} />
+            <h2 className="font-bold text-base text-[#1e1b18]">Cockpit 网关高级全局设置</h2>
+          </div>
+        </div>
+        <div className="flex flex-col gap-4">
+          <div className="p-4 border border-[#e5dfd8] rounded-xl bg-[#faf8f5] flex flex-col gap-3">
+            <div className="flex justify-between items-center">
+              <div>
+                <span className="font-bold text-[#1e1b18] text-sm">全局网络代理 (Global Proxy)</span>
+                <p className="text-[#78716c] text-xs">为官方端点 (Anthropic / OpenAI / Antigravity) 配置专用 HTTP/SOCKS5 代理</p>
+              </div>
+              <input
+                type="text"
+                placeholder="http://127.0.0.1:7890"
+                className="w-64 px-3 py-1.5 border border-[#e5dfd8] rounded-lg bg-white font-mono text-xs focus:border-[#d96b27] outline-none"
+              />
+            </div>
+            <div className="h-[1px] bg-[#e5dfd8]" />
+            <div className="flex justify-between items-center">
+              <div>
+                <span className="font-bold text-[#1e1b18] text-sm">上下文自动压缩阈值 (Context Compactor)</span>
+                <p className="text-[#78716c] text-xs">当长对话接近模型窗口上限时触发分层语义摘要算法</p>
+              </div>
+              <span className="font-mono font-bold text-[#d96b27] bg-[#fef3eb] px-2.5 py-1 rounded-md border border-[#fed7aa]">95% (默认安全水位)</span>
+            </div>
+            <div className="h-[1px] bg-[#e5dfd8]" />
+            <div className="flex justify-between items-center">
+              <div>
+                <span className="font-bold text-[#1e1b18] text-sm">流式背压缓冲池 (Stream Buffer Drain)</span>
+                <p className="text-[#78716c] text-xs">平滑处理超高速 Token 吐字，防止渲染卡顿与丢帧</p>
+              </div>
+              <span className="font-mono font-bold text-[#059669] bg-[#ecfdf5] px-2.5 py-1 rounded-md border border-[#a7f3d0]">已开启 (60fps 排空)</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ================= 视图 5: 渠道管理 / 中转站 (Channel List View) =================
+  const isSingleChannelFiltered = filteredChannels.length === 1 && activeSubTab !== "relay";
+
   return (
     <div className="flex-1 flex flex-col p-6 overflow-y-auto bg-white text-[#1e1b18] select-none text-xs gap-5">
       {/* 1. 顶部控制栏 */}
@@ -587,14 +640,32 @@ export const CockpitGatewayPane: React.FC<CockpitGatewayPaneProps> = ({
           <div className="flex items-center gap-2">
             <Server className="text-[#d96b27]" size={18} />
             <h2 className="font-bold text-base text-[#1e1b18]">
-              大模型网关与渠道中枢 (LLM Channels & Context Engine)
+              {isSingleChannelFiltered
+                ? `大模型渠道 · ${filteredChannels[0].name}`
+                : "大模型网关与渠道中枢 (LLM Channels & Context Engine)"}
             </h2>
-            <span className="bg-[#fef3eb] text-[#d96b27] text-[10px] font-semibold px-2 py-0.5 rounded-full border border-[#fed7aa]">
-              模型一键同步 · 95% 上下文自动压缩
-            </span>
+            {isSingleChannelFiltered ? (
+              <div className="flex items-center gap-2">
+                <span className="bg-[#fef3eb] text-[#d96b27] text-[10px] font-semibold px-2 py-0.5 rounded-full border border-[#fed7aa]">
+                  已单选该厂商
+                </span>
+                <button
+                  onClick={() => onNavigateSubTab && onNavigateSubTab("relay")}
+                  className="text-[11px] text-[#0284c7] hover:underline cursor-pointer font-medium"
+                >
+                  查看全部渠道 ({channels.length})
+                </button>
+              </div>
+            ) : (
+              <span className="bg-[#fef3eb] text-[#d96b27] text-[10px] font-semibold px-2 py-0.5 rounded-full border border-[#fed7aa]">
+                模型一键同步 · 95% 上下文自动压缩
+              </span>
+            )}
           </div>
           <p className="text-[#78716c] text-xs">
-            支持全厂商模型一键动态同步、自定义模型与上下文窗口限制（达到 95% 阈值自动采用分层语义摘要算法智能压缩）。
+            {isSingleChannelFiltered
+              ? `当前正查看【${filteredChannels[0].name}】的端点配置、认证凭据、模型清单与测速状态。`
+              : "支持全厂商模型一键动态同步、自定义模型与上下文窗口限制（达到 95% 阈值自动采用分层语义摘要算法智能压缩）。"}
           </p>
         </div>
 
