@@ -1752,16 +1752,30 @@ Instructions:
                 )}
               </button>
 
-              {/* 4. 真实 Git 分支交互中枢 (点击查看/切换本地与远程分支，执行 Pull/Push/Fetch/Status) */}
-              <button
-                type="button"
-                onClick={() => setIsGitModalOpen(true)}
-                className="h-6.5 px-2 bg-[#f0f9ff] hover:bg-[#e0f2fe] text-[#0284c7] border border-[#bae6fd] hover:border-[#7dd3fc] rounded-md text-[11px] font-semibold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
-                title="点击打开 Git 分支管理与操作中枢 (切换分支/新建分支/Pull/Push/Status)"
-              >
-                <GitBranch size={11} className="text-[#0284c7]" />
-                <span className="max-w-[90px] truncate">{detectedGitBranch || "main"}</span>
-              </button>
+              {/* 4. 真实 Git 分支交互中枢 (IntelliJ IDEA 风格浮层菜单) */}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setIsGitModalOpen((prev) => !prev)}
+                  className={`h-6.5 px-2 rounded-md text-[11px] font-semibold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs border ${
+                    isGitModalOpen
+                      ? "bg-[#e0f2fe] text-[#0369a1] border-[#7dd3fc]"
+                      : "bg-[#f0f9ff] hover:bg-[#e0f2fe] text-[#0284c7] border-[#bae6fd] hover:border-[#7dd3fc]"
+                  }`}
+                  title="点击打开 Git 分支操作浮层 (切换分支/新建分支/Pull/Push/Status)"
+                >
+                  <GitBranch size={11} className="text-[#0284c7]" />
+                  <span className="max-w-[90px] truncate">{detectedGitBranch || "main"}</span>
+                </button>
+
+                {/* ⑂ IntelliJ IDEA 风格 Git 分支管理与快捷操作浮层 */}
+                <GitBranchModal
+                  isOpen={isGitModalOpen}
+                  onClose={() => setIsGitModalOpen(false)}
+                  projectName={currentProjectName}
+                  onBranchSwitched={(newB) => setDetectedGitBranch(newB)}
+                />
+              </div>
 
               {/* 5. 深度思考开关 */}
               <button
@@ -1978,14 +1992,6 @@ Instructions:
         isOpen={isKgModalOpen}
         onClose={() => setIsKgModalOpen(false)}
         projectName={currentProjectName}
-      />
-
-      {/* ⑂ 真实 Git 分支管理与版本控制操作中枢模态弹窗 (Git Branch & Action Modal) */}
-      <GitBranchModal
-        isOpen={isGitModalOpen}
-        onClose={() => setIsGitModalOpen(false)}
-        projectName={currentProjectName}
-        onBranchSwitched={(newB) => setDetectedGitBranch(newB)}
       />
     </section>
   );
