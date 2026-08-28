@@ -1,6 +1,6 @@
 [package]
 name = "codemind-hub"
-version = "2.11.0"
+version = "0.10.0"
 description = "CodeMind-Hub Cockpit Studio Tauri Native App"
 authors = ["CodeMind Team"]
 edition = "2021"

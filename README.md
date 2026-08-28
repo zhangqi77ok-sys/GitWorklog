@@ -1,4 +1,4 @@
-﻿# CodeMind Studio · Cockpit Agentic Desktop Studio (v2.11.0)
+# CodeMind Studio · Cockpit Agentic Desktop Studio (v0.10.0)
 
 > **新一代桌面端智能编程与多智能体协同开发工作台**  
 > 基于 **React 19 + Tauri v2 + Rust** 打造，深度融合 **Google Antigravity 智能体网关**、**真实工程知识图谱 (Graph-RAG)**、**长期与短期双层记忆系统**、**5 星严谨度认知对齐** 与 **IntelliJ IDEA 风格 Git 中枢**。
@@ -113,7 +113,7 @@ cargo build --release
 cd ..
 
 # 3. 制作绿色离线分发包并打包 Win32 安装向导
-# 使用 gcc 编译 setup_wizard.c 生成 CodeMind-Studio-Tauri-Setup-v2.11.0.exe
+# 使用 gcc 编译 setup_wizard.c 生成 CodeMind-Studio-Tauri-Setup-v0.10.0.exe
 ```
 
 ---

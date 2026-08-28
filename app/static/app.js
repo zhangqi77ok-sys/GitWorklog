@@ -492,7 +492,7 @@ function selectCockpitProvider(providerKey) {
   const label = document.getElementById("active-provider-label");
   const ver = document.getElementById("active-provider-ver");
   if (label) label.innerText = `⚡ ${providerKey.toUpperCase()}`;
-  if (ver) ver.innerText = `${providerKey} v2.11.0.0`;
+  if (ver) ver.innerText = `${providerKey} v0.10.0`;
 
   if (cachedSettingsData.providers) {
     renderCockpitAccountsGrid(cachedSettingsData.providers, providerKey);

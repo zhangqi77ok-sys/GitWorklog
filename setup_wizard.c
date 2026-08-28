@@ -250,7 +250,7 @@ static DWORD WINAPI InstallThread(LPVOID lpParam) {
     const wchar_t* uninstPath = L"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\CodeMindStudio";
     if (RegCreateKeyExW(HKEY_CURRENT_USER, uninstPath, 0, NULL, 0, KEY_WRITE, NULL, &hKey, NULL) == ERROR_SUCCESS) {
         const wchar_t* dispName = L"CodeMind Studio · Cockpit Coding Studio";
-        const wchar_t* dispVer = L"2.11.0";
+        const wchar_t* dispVer = L"0.10.0";
         const wchar_t* pub = L"CodeMind AI Team";
         RegSetValueExW(hKey, L"DisplayName", 0, REG_SZ, (const BYTE*)dispName, (DWORD)((wcslen(dispName) + 1) * sizeof(wchar_t)));
         RegSetValueExW(hKey, L"DisplayVersion", 0, REG_SZ, (const BYTE*)dispVer, (DWORD)((wcslen(dispVer) + 1) * sizeof(wchar_t)));
@@ -364,7 +364,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         TextOutW(hdc, 28, 16, titleMain, (int)wcslen(titleMain));
 
         // 顶部副标题文字
-        const wchar_t* titleSub = L"Cockpit LLM 生产级流式网关 · AI 协同桌面工作台 (v2.11.0)";
+        const wchar_t* titleSub = L"Cockpit LLM 生产级流式网关 · AI 协同桌面工作台 (v0.10.0)";
         SelectObject(hdc, g_hFontHeaderSub);
         SetTextColor(hdc, RGB(161, 161, 170));
         TextOutW(hdc, 28, 48, titleSub, (int)wcslen(titleSub));
@@ -475,7 +475,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLi
     HWND hWnd = CreateWindowExW(
         WS_EX_DLGMODALFRAME,
         L"CodeMindStudioInstallerClass",
-        L"CodeMind Studio v2.11.0 安装向导",
+        L"CodeMind Studio v0.10.0 安装向导",
         WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_VISIBLE,
         x, y, w, h,
         NULL, NULL, hInstance, NULL

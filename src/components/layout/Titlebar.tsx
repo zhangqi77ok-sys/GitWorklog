@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { ChevronRight } from "lucide-react";
 
 interface TitlebarProps {
@@ -34,7 +34,7 @@ export const Titlebar: React.FC<TitlebarProps> = () => {
       <div className="flex items-center gap-2">
         <div className="bg-white border border-[#e5dfd8] px-2.5 py-0.5 rounded-full text-[11px] text-[#645e57] flex items-center gap-1.5 shadow-2xs">
           <span className="w-1.5 h-1.5 rounded-full bg-[#10b981]"></span>
-          <span>Tauri Native v2.11 · 生产就绪</span>
+          <span>Tauri Native v0.10 · 生产就绪</span>
         </div>
       </div>
 

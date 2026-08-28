@@ -36,7 +36,7 @@ class CockpitProviderRegistry:
         self.providers = {
             "antigravity": {
                 "name": "Antigravity",
-                "version": "v2.11.0.0",
+                "version": "v0.10.0",
                 "accounts": [
                     {
                         "id": "acc-1",
