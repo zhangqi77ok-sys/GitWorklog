@@ -969,7 +969,7 @@ export const CockpitGatewayPane: React.FC<CockpitGatewayPaneProps> = ({
                     className="p-2 border border-[#d0c7bd] rounded-lg text-xs outline-none focus:border-[#d96b27] bg-white cursor-pointer"
                   >
                     <option value="openai">OpenAI 兼容协议 (/v1/chat/completions)</option>
-                    <option value="gemini">Google Gemini 协议 (支持 OAuth / RT)</option>
+                    <option value="gemini">Google Antigravity 协议 (支持 OAuth / RT)</option>
                     <option value="anthropic">Anthropic 原生协议 (/v1/messages)</option>
                     <option value="ollama">Ollama 本地大模型协议</option>
                     <option value="custom">自定义反向代理</option>
@@ -989,18 +989,18 @@ export const CockpitGatewayPane: React.FC<CockpitGatewayPaneProps> = ({
                       channel: { ...editModal.channel, baseUrl: e.target.value },
                     })
                   }
-                  placeholder="如: https://api.deepseek.com/v1 或 https://generativelanguage.googleapis.com/v1beta/openai"
+                  placeholder="如: https://generativelanguage.googleapis.com/v1beta/openai 或 https://api.deepseek.com/v1"
                   className="p-2 border border-[#d0c7bd] rounded-lg font-mono text-xs outline-none focus:border-[#d96b27]"
                 />
               </div>
 
-              {/* ===== Gemini 专属高级认证配置面板 ===== */}
+              {/* ===== Antigravity 专属高级认证配置面板 ===== */}
               {editModal.channel.type === "gemini" ? (
                 <div className="bg-[#f8fafc] border border-[#cbd5e1] rounded-xl p-3.5 flex flex-col gap-3">
                   <div className="flex justify-between items-center border-b border-[#e2e8f0] pb-2">
                     <span className="font-bold text-[#1e293b] flex items-center gap-1.5">
                       <ShieldCheck size={14} className="text-[#2563eb]" />
-                      Gemini 认证模式 (参考 Cockpit Tools)
+                      Antigravity 认证模式 (参考 Cockpit Tools)
                     </span>
                     {/* 认证模式切换 Tabs */}
                     <div className="flex bg-[#e2e8f0] p-0.5 rounded-lg text-[11px]">
@@ -1101,7 +1101,7 @@ export const CockpitGatewayPane: React.FC<CockpitGatewayPaneProps> = ({
                       <div className="flex flex-col gap-1">
                         <div className="flex justify-between items-center">
                           <label className="font-semibold text-[#1e293b]">
-                            Google Refresh Token (RT 长期有效令牌)：
+                            Google Antigravity Refresh Token (RT 长期有效令牌)：
                           </label>
                           <button
                             type="button"

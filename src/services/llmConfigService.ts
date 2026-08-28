@@ -140,8 +140,8 @@ export const DEFAULT_CHANNELS: LLMChannel[] = [
     icon: "openai",
   },
   {
-    id: "chan-gemini",
-    name: "Google Gemini 官方 (支持 OAuth / RT)",
+    id: "chan-antigravity",
+    name: "Google Antigravity 官方 (支持 OAuth / RT)",
     type: "gemini",
     baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
     apiKey: "",
@@ -150,7 +150,7 @@ export const DEFAULT_CHANNELS: LLMChannel[] = [
       refreshToken: "",
       clientId: COCKPIT_GOOGLE_CLIENT_ID,
       clientSecret: COCKPIT_GOOGLE_CLIENT_SECRET,
-      accountEmail: "gemini_dev@gmail.com",
+      accountEmail: "antigravity_dev@gmail.com",
       accessToken: "",
       lastRefreshedAt: "未刷新",
     },
@@ -158,14 +158,20 @@ export const DEFAULT_CHANNELS: LLMChannel[] = [
     modelMetas: [
       {
         id: "gemini-2.5-pro",
-        name: "Gemini 2.5 Pro (百万上下文)",
+        name: "Antigravity 2.5 Pro (DeepMind 核心百万上下文)",
         contextWindow: 1000000,
         maxOutputTokens: 65536,
         supportsThinking: true,
       },
       {
         id: "gemini-2.0-flash",
-        name: "Gemini 2.0 Flash",
+        name: "Antigravity 2.0 Flash (急速响应)",
+        contextWindow: 1000000,
+        maxOutputTokens: 8192,
+      },
+      {
+        id: "gemini-1.5-pro",
+        name: "Antigravity 1.5 Pro (深度推理)",
         contextWindow: 1000000,
         maxOutputTokens: 8192,
       },
