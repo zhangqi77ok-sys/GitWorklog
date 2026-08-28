@@ -399,13 +399,24 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
     }
   }, [messages, activeSessionId]);
 
-  // 滚动至最新消息
+  // 使用 rAF 节流执行平滑滚底 (防止高频 Token 流式吐字拖垮 UI 渲染线程)
+  const scrollRafIdRef = useRef<number | null>(null);
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (scrollRafIdRef.current) return;
+    scrollRafIdRef.current = requestAnimationFrame(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      scrollRafIdRef.current = null;
+    });
   };
 
   useEffect(() => {
     scrollToBottom();
+    return () => {
+      if (scrollRafIdRef.current) {
+        cancelAnimationFrame(scrollRafIdRef.current);
+        scrollRafIdRef.current = null;
+      }
+    };
   }, [messages, isGenerating]);
 
   // 计算当前 Token 占用与上下文容量

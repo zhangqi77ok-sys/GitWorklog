@@ -112,23 +112,23 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
     return () => window.removeEventListener("session-status-changed", handleStatusChange);
   }, [currentActiveId]);
 
-  // 辅助函数：渲染会话三态圆标
+  // 辅助函数：渲染会话三态圆标 (GPU 加速动画与零布局抖动)
   const renderSessionStatusBadge = (status?: "running" | "idle" | "error") => {
     if (status === "running") {
       return (
         <span className="w-2.5 h-2.5 flex items-center justify-center shrink-0" title="正在生成与推理中...">
-          <span className="w-2 h-2 rounded-full border-1.5 border-emerald-500 border-t-transparent animate-spin"></span>
+          <span className="w-2 h-2 rounded-full border-1.5 border-emerald-500 border-t-transparent animate-spin will-change-transform"></span>
         </span>
       );
     }
     if (status === "error") {
       return (
-        <span className="w-2 h-2 rounded-full bg-red-500 shrink-0 shadow-xs" title="会话执行失败/异常"></span>
+        <span className="w-2 h-2 rounded-full bg-red-500 shrink-0 shadow-xs will-change-opacity" title="会话执行失败/异常"></span>
       );
     }
     // 空闲会话: 蓝色圆标
     return (
-      <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0 shadow-xs" title="空闲就绪会话"></span>
+      <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0 shadow-xs will-change-opacity" title="空闲就绪会话"></span>
     );
   };
 

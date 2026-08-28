@@ -79,11 +79,32 @@ export class NativeService {
   }
 
   /**
-   * 6. 真实探测当前工程所在目录的 Git 分支
+   * 6. 批量合并查询工作区快照 (IPC Batching: 单次获取Git分支与文件清单)
+   */
+  public async getWorkspaceSnapshot(path?: string): Promise<{
+    git_branch: string | null;
+    files: string[];
+    is_git: boolean;
+  } | null> {
+    if (this.isTauriEnv()) {
+      try {
+        return await invoke<any>("get_workspace_snapshot", { path });
+      } catch (e) {
+        console.warn("Tauri get_workspace_snapshot error:", e);
+      }
+    }
+    return null;
+  }
+
+  /**
+   * 7. 真实探测当前工程所在目录的 Git 分支
    */
   public async getGitBranch(cwd?: string): Promise<string | null> {
     if (this.isTauriEnv()) {
       try {
+        const snap = await this.getWorkspaceSnapshot(cwd);
+        if (snap?.git_branch) return snap.git_branch;
+
         const output = await this.executeCommand("git branch --show-current", cwd);
         const branch = output.trim();
         if (branch && !branch.includes("fatal") && !branch.includes("error")) {

@@ -1,4 +1,4 @@
-use tauri::Manager;
+﻿use tauri::Manager;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
@@ -11,6 +11,14 @@ pub struct FileEntry {
     pub is_dir: bool,
     pub size: u64,
     pub children: Option<Vec<FileEntry>>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct WorkspaceSnapshot {
+    pub git_branch: Option<String>,
+    pub files: Vec<String>,
+    pub is_git: bool,
+    pub timestamp: u64,
 }
 
 mod commands {
@@ -48,7 +56,48 @@ mod commands {
         }
     }
 
-    // 2. 真实读取磁盘目录树
+    // 2. 批量合并查询工作区快照 (IPC Batching: 单次调用获取Git分支与文件清单，减少IPC往返)
+    #[tauri::command]
+    pub fn get_workspace_snapshot(path: Option<String>) -> Result<WorkspaceSnapshot, String> {
+        let working_dir = path.unwrap_or_else(|| ".".to_string());
+        
+        let mut git_cmd = Command::new("git");
+        git_cmd.creation_flags(CREATE_NO_WINDOW)
+            .args(["branch", "--show-current"])
+            .current_dir(&working_dir);
+        
+        let (git_branch, is_git) = match git_cmd.output() {
+            Ok(out) if out.status.success() => {
+                let branch = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                if !branch.is_empty() {
+                    (Some(branch), true)
+                } else {
+                    (None, false)
+                }
+            },
+            _ => (None, false),
+        };
+
+        let mut files = Vec::new();
+        let root = Path::new(&working_dir);
+        if let Ok(entries) = fs::read_dir(root) {
+            for entry in entries.flatten() {
+                let name = entry.file_name().to_string_lossy().to_string();
+                if name != ".git" && name != "node_modules" && name != "target" {
+                    files.push(name);
+                }
+            }
+        }
+
+        Ok(WorkspaceSnapshot {
+            git_branch,
+            files,
+            is_git,
+            timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0),
+        })
+    }
+
+    // 3. 真实读取磁盘目录树
     #[tauri::command]
     pub fn list_directory_tree(path: String, max_depth: Option<usize>) -> Result<Vec<FileEntry>, String> {
         let root = Path::new(&path);
@@ -108,13 +157,13 @@ mod commands {
         Ok(entries)
     }
 
-    // 3. 真实读取本地文件内容
+    // 4. 真实读取本地文件内容
     #[tauri::command]
     pub fn read_file_content(path: String) -> Result<String, String> {
         fs::read_to_string(&path).map_err(|e| format!("读取文件失败 ({}): {}", path, e))
     }
 
-    // 4. 真实写入本地文件内容
+    // 5. 真实写入本地文件内容
     #[tauri::command]
     pub fn write_file_content(path: String, content: String) -> Result<bool, String> {
         if let Some(parent) = Path::new(&path).parent() {
@@ -125,7 +174,7 @@ mod commands {
             .map_err(|e| format!("写入文件失败 ({}): {}", path, e))
     }
 
-    // 5. 真实执行系统终端命令 (后台静默执行，无控制台黑框)
+    // 6. 真实执行系统终端命令 (后台静默执行，无控制台黑框)
     #[tauri::command]
     pub fn execute_system_command(command: String, cwd: Option<String>) -> Result<String, String> {
         let working_dir = cwd.unwrap_or_else(|| ".".to_string());
@@ -152,6 +201,7 @@ pub fn run() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             commands::pick_folder_native,
+            commands::get_workspace_snapshot,
             commands::list_directory_tree,
             commands::read_file_content,
             commands::write_file_content,
