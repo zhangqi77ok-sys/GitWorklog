@@ -50,6 +50,7 @@ static HBRUSH g_hBrushBrand;
 
 static BOOL g_bInstalling = FALSE;
 static BOOL g_bFinished = FALSE;
+static BOOL g_bLaunched = FALSE;
 static wchar_t g_InstallDir[MAX_PATH];
 
 static void SetStatusText(const wchar_t* text) {
@@ -58,21 +59,35 @@ static void SetStatusText(const wchar_t* text) {
 }
 
 static void LaunchInstalledApp() {
+    if (g_bLaunched) return;
+    g_bLaunched = TRUE;
+
+    wchar_t cleanDir[MAX_PATH];
+    wcscpy(cleanDir, g_InstallDir);
+    for (int i = 0; cleanDir[i]; i++) {
+        if (cleanDir[i] == L'/') cleanDir[i] = L'\\';
+    }
+    size_t len = wcslen(cleanDir);
+    while (len > 0 && (cleanDir[len - 1] == L'\\' || cleanDir[len - 1] == L' ')) {
+        cleanDir[len - 1] = L'\0';
+        len--;
+    }
+
     wchar_t targetExe[MAX_PATH];
-    swprintf(targetExe, MAX_PATH, L"%s\\CodeMind-Studio.exe", g_InstallDir);
+    swprintf(targetExe, MAX_PATH, L"%s\\CodeMind-Studio.exe", cleanDir);
     
-    // 优先使用 ShellExecuteW
-    HINSTANCE hInst = ShellExecuteW(NULL, L"open", targetExe, NULL, g_InstallDir, SW_SHOWNORMAL);
+    // 1. 优先使用 ShellExecuteW 拉起原生应用
+    HINSTANCE hInst = ShellExecuteW(NULL, L"open", targetExe, NULL, cleanDir, SW_SHOWNORMAL);
     if ((INT_PTR)hInst <= 32) {
-        // Fallback: CreateProcessW
+        // 2. 备用: CreateProcessW
         STARTUPINFOW si;
         PROCESS_INFORMATION pi;
         ZeroMemory(&si, sizeof(si));
         si.cb = sizeof(si);
         ZeroMemory(&pi, sizeof(pi));
-        wchar_t cmd[MAX_PATH + 4];
-        swprintf(cmd, MAX_PATH + 4, L"\"%s\"", targetExe);
-        if (CreateProcessW(NULL, cmd, NULL, NULL, FALSE, 0, NULL, g_InstallDir, &si, &pi)) {
+        wchar_t cmd[MAX_PATH + 8];
+        swprintf(cmd, MAX_PATH + 8, L"\"%s\"", targetExe);
+        if (CreateProcessW(NULL, cmd, NULL, NULL, FALSE, 0, NULL, cleanDir, &si, &pi)) {
             CloseHandle(pi.hProcess);
             CloseHandle(pi.hThread);
         }
@@ -82,8 +97,17 @@ static void LaunchInstalledApp() {
 static DWORD WINAPI InstallThread(LPVOID lpParam) {
     HWND hWnd = (HWND)lpParam;
 
-    // 1. 获取安装路径
+    // 1. 获取并规范化安装路径
     GetWindowTextW(g_hPathEdit, g_InstallDir, MAX_PATH);
+    for (int i = 0; g_InstallDir[i]; i++) {
+        if (g_InstallDir[i] == L'/') g_InstallDir[i] = L'\\';
+    }
+    size_t dlen = wcslen(g_InstallDir);
+    while (dlen > 0 && (g_InstallDir[dlen - 1] == L'\\' || g_InstallDir[dlen - 1] == L' ')) {
+        g_InstallDir[dlen - 1] = L'\0';
+        dlen--;
+    }
+
     if (wcslen(g_InstallDir) == 0) {
         MessageBoxW(hWnd, L"请选择有效的安装路径！", L"提示", MB_OK | MB_ICONWARNING);
         EnableWindow(g_hBtnInstall, TRUE);
@@ -98,37 +122,47 @@ static DWORD WINAPI InstallThread(LPVOID lpParam) {
     // 创建目录
     SHCreateDirectoryExW(NULL, g_InstallDir, NULL);
 
-    // 2. 从资源中提取 app_payload.zip
-    SetStatusText(L"正在解压核心组件与 React 19 工作台...");
+    // 2. 从内嵌资源解压 app_payload.zip
+    SetStatusText(L"正在解压 CodeMind Studio 核心执行程序与 WebView2 运行时...");
     SendMessage(g_hProgress, PBM_SETPOS, 25, 0);
 
-    HRSRC hRes = FindResourceA(NULL, MAKEINTRESOURCEA(100), MAKEINTRESOURCEA(10));
+    HRSRC hRes = FindResourceW(NULL, MAKEINTRESOURCEW(100), L"ZIPFILE");
     if (!hRes) {
-        MessageBoxW(hWnd, L"无法定位安装包资源！", L"错误", MB_OK | MB_ICONERROR);
+        MessageBoxW(hWnd, L"未找到安装包内嵌资源，请重新下载安装程序！", L"安装失败", MB_OK | MB_ICONERROR);
         g_bInstalling = FALSE;
+        EnableWindow(g_hBtnCancel, TRUE);
         return 0;
     }
 
-    HGLOBAL hData = LoadResource(NULL, hRes);
+    HGLOBAL hMem = LoadResource(NULL, hRes);
     DWORD dwSize = SizeofResource(NULL, hRes);
-    void* pData = LockResource(hData);
+    LPVOID pData = LockResource(hMem);
 
-    wchar_t tempDir[MAX_PATH];
-    wchar_t tempZipPath[MAX_PATH];
-    GetTempPathW(MAX_PATH, tempDir);
-    swprintf(tempZipPath, MAX_PATH, L"%s\\codemind_setup_payload.zip", tempDir);
+    wchar_t tempZip[MAX_PATH];
+    wchar_t tempPath[MAX_PATH];
+    GetTempPathW(MAX_PATH, tempPath);
+    swprintf(tempZip, MAX_PATH, L"%scodemind_pkg_%lu.zip", tempPath, GetTickCount());
 
-    FILE* fp = _wfopen(tempZipPath, L"wb");
+    FILE* fp = _wfopen(tempZip, L"wb");
     if (fp) {
         fwrite(pData, 1, dwSize, fp);
         fclose(fp);
+    } else {
+        MessageBoxW(hWnd, L"写入临时安装文件失败，请检查磁盘空间与权限！", L"错误", MB_OK | MB_ICONERROR);
+        g_bInstalling = FALSE;
+        EnableWindow(g_hBtnCancel, TRUE);
+        return 0;
     }
 
-    SendMessage(g_hProgress, PBM_SETPOS, 45, 0);
+    SendMessage(g_hProgress, PBM_SETPOS, 50, 0);
+    SetStatusText(L"正在解包应用文件并配置运行环境...");
 
-    // 3. 使用 Windows 原生高速 tar.exe 执行毫秒级解压
-    wchar_t tarCmd[2048];
-    swprintf(tarCmd, 2048, L"tar.exe -xf \"%s\" -C \"%s\"", tempZipPath, g_InstallDir);
+    // 3. 执行 PowerShell 原生解压 (无外部依赖)
+    wchar_t psCmd[2048];
+    swprintf(psCmd, 2048, 
+        L"powershell.exe -NoProfile -ExecutionPolicy Bypass -Command \"Expand-Archive -Path '%s' -DestinationPath '%s' -Force; Remove-Item -Path '%s' -Force\"",
+        tempZip, g_InstallDir, tempZip
+    );
 
     STARTUPINFOW si;
     PROCESS_INFORMATION pi;
@@ -138,14 +172,11 @@ static DWORD WINAPI InstallThread(LPVOID lpParam) {
     si.wShowWindow = SW_HIDE;
     ZeroMemory(&pi, sizeof(pi));
 
-    if (CreateProcessW(NULL, tarCmd, NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi)) {
+    if (CreateProcessW(NULL, psCmd, NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi)) {
         WaitForSingleObject(pi.hProcess, INFINITE);
         CloseHandle(pi.hProcess);
         CloseHandle(pi.hThread);
     }
-
-    // 删除临时压缩包
-    DeleteFileW(tempZipPath);
 
     SendMessage(g_hProgress, PBM_SETPOS, 75, 0);
 
@@ -245,24 +276,30 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         icex.dwICC = ICC_PROGRESS_CLASS | ICC_STANDARD_CLASSES;
         InitCommonControlsEx(&icex);
 
-        // 高清 ClearType 字体创建 (Segoe UI / 微软雅黑)
+        // 高清 ClearType 字体创建 (微软雅黑 UI)
         g_hFontHeaderTitle = CreateFontW(22, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, L"Microsoft YaHei UI");
-        g_hFontHeaderSub = CreateFontW(14, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, L"Microsoft YaHei UI");
-        g_hFontBold = CreateFontW(15, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, L"Microsoft YaHei UI");
-        g_hFontNormal = CreateFontW(14, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, L"Microsoft YaHei UI");
-        g_hFontSmall = CreateFontW(13, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, L"Microsoft YaHei UI");
+        g_hFontHeaderSub = CreateFontW(13, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, L"Microsoft YaHei UI");
+        g_hFontBold = CreateFontW(14, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, L"Microsoft YaHei UI");
+        g_hFontNormal = CreateFontW(13, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, L"Microsoft YaHei UI");
+        g_hFontSmall = CreateFontW(12, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, L"Microsoft YaHei UI");
 
         // 现代化调色画刷
-        g_hBrushBg = CreateSolidBrush(RGB(248, 246, 243));     // #F8F6F3 极简现代浅灰背景
-        g_hBrushHeader = CreateSolidBrush(RGB(24, 24, 27));    // #18181B 高级深灰暗调顶部
-        g_hBrushCard = CreateSolidBrush(RGB(255, 255, 255));   // #FFFFFF 白色卡片
+        g_hBrushBg = CreateSolidBrush(RGB(248, 246, 243));     // #F8F6F3 浅灰底色
+        g_hBrushHeader = CreateSolidBrush(RGB(24, 24, 27));    // #18181B 高级暗黑标题栏
+        g_hBrushCard = CreateSolidBrush(RGB(255, 255, 255));   // #FFFFFF 白色输入框
         g_hBrushBrand = CreateSolidBrush(RGB(217, 107, 39));   // #D96B27 品牌橙
 
-        // 默认安装路径
-        wchar_t localApp[MAX_PATH];
+        // 智能检测推荐安装盘符 (优先 F:\ > D:\ > C:\)
         wchar_t defPath[MAX_PATH];
-        GetEnvironmentVariableW(L"LOCALAPPDATA", localApp, MAX_PATH);
-        swprintf(defPath, MAX_PATH, L"%s\\Programs\\CodeMind-Studio", localApp);
+        if (GetDriveTypeW(L"F:\\") != DRIVE_NO_ROOT_DIR && GetDriveTypeW(L"F:\\") != DRIVE_UNKNOWN) {
+            swprintf(defPath, MAX_PATH, L"F:\\Programs\\CodeMind-Studio");
+        } else if (GetDriveTypeW(L"D:\\") != DRIVE_NO_ROOT_DIR && GetDriveTypeW(L"D:\\") != DRIVE_UNKNOWN) {
+            swprintf(defPath, MAX_PATH, L"D:\\Programs\\CodeMind-Studio");
+        } else {
+            wchar_t localApp[MAX_PATH];
+            GetEnvironmentVariableW(L"LOCALAPPDATA", localApp, MAX_PATH);
+            swprintf(defPath, MAX_PATH, L"%s\\Programs\\CodeMind-Studio", localApp);
+        }
 
         // 控件创建
         HWND hLblPath = CreateWindowW(L"STATIC", L"安装目标文件夹：", WS_CHILD | WS_VISIBLE, 32, 100, 200, 20, hWnd, NULL, NULL, NULL);
@@ -305,24 +342,26 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         HDC hdc = BeginPaint(hWnd, &ps);
 
         // 1. 绘制顶部高级暗色品牌横幅 (Header Banner)
-        RECT rcHeader = { 0, 0, 610, 80 };
+        RECT rcHeader = { 0, 0, 620, 80 };
         FillRect(hdc, &rcHeader, g_hBrushHeader);
 
         // 顶部品牌橙色标识条
-        RECT rcAccent = { 0, 77, 610, 80 };
+        RECT rcAccent = { 0, 77, 620, 80 };
         FillRect(hdc, &rcAccent, g_hBrushBrand);
 
         SetBkMode(hdc, TRANSPARENT);
         
-        // 顶部标题文字
+        // 顶部标题文字 (完整输出，防止截断)
+        const wchar_t* titleMain = L"CodeMind Studio 客户端安装向导";
         SelectObject(hdc, g_hFontHeaderTitle);
         SetTextColor(hdc, RGB(255, 255, 255));
-        TextOutW(hdc, 28, 16, L"CodeMind Studio 客户端安装向导", 20);
+        TextOutW(hdc, 28, 16, titleMain, (int)wcslen(titleMain));
 
         // 顶部副标题文字
+        const wchar_t* titleSub = L"Cockpit LLM 生产级流式网关 · AI 协同桌面工作台 (v2.11.0)";
         SelectObject(hdc, g_hFontHeaderSub);
         SetTextColor(hdc, RGB(161, 161, 170));
-        TextOutW(hdc, 28, 48, L"Cockpit LLM 生产级流式网关 · AI 协同桌面工作台 (v2.11.0)", 42);
+        TextOutW(hdc, 28, 48, titleSub, (int)wcslen(titleSub));
 
         EndPaint(hWnd, &ps);
         break;
@@ -364,7 +403,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         }
         else if (wmId == ID_BTN_INSTALL) {
             if (g_bFinished) {
-                // 如果安装完成且勾选了启动，立即拉起应用
+                // 点击“完成并运行”：若勾选了启动，立即拉起应用
                 if (SendMessageW(g_hChkLaunch, BM_GETCHECK, 0, 0) == BST_CHECKED) {
                     LaunchInstalledApp();
                 }
@@ -390,7 +429,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         break;
     }
     case WM_DESTROY:
-        // 如果安装已完成且用户直接关闭窗口，只要勾选了启动同样启动
+        // 如果安装已完成且勾选了启动，无论点击完成还是直接叉掉窗口均确保拉起
         if (g_bFinished && SendMessageW(g_hChkLaunch, BM_GETCHECK, 0, 0) == BST_CHECKED) {
             LaunchInstalledApp();
         }
@@ -422,8 +461,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLi
 
     RegisterClassW(&wc);
 
-    int w = 618;
-    int h = 438;
+    int w = 620;
+    int h = 440;
     int x = (GetSystemMetrics(SM_CXSCREEN) - w) / 2;
     int y = (GetSystemMetrics(SM_CYSCREEN) - h) / 2;
 
@@ -446,5 +485,6 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLi
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
     }
+
     return (int)msg.wParam;
 }
