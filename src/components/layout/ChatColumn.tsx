@@ -463,6 +463,208 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
     });
   };
 
+  // 行内格式化解析器 (支持加粗、斜体、行内代码)
+  const renderInlineFormatted = (text: string) => {
+    if (!text) return null;
+    const tokens = text.split(/(\*\*.*?\*\*|\*.*?\*|`.*?`)/g);
+    return tokens.map((tok, i) => {
+      if (tok.startsWith("**") && tok.endsWith("**") && tok.length >= 4) {
+        return (
+          <strong key={i} className="font-bold text-[#1e1b18]">
+            {tok.slice(2, -2)}
+          </strong>
+        );
+      }
+      if (tok.startsWith("*") && tok.endsWith("*") && tok.length >= 2 && !tok.startsWith("**")) {
+        return (
+          <em key={i} className="italic text-[#4b5563]">
+            {tok.slice(1, -1)}
+          </em>
+        );
+      }
+      if (tok.startsWith("`") && tok.endsWith("`") && tok.length >= 2) {
+        return (
+          <code
+            key={i}
+            className="px-1.5 py-0.5 rounded bg-[#f4efea] text-[#c2410c] font-mono text-[11px] border border-[#e5dfd8] mx-0.5 inline-block"
+          >
+            {tok.slice(1, -1)}
+          </code>
+        );
+      }
+      return <span key={i}>{tok}</span>;
+    });
+  };
+
+  // 表格渲染器 (支持 Markdown 标准表格语法 | col1 | col2 | 与分隔符)
+  const renderTableBlock = (tableLines: string[], keyPrefix: string | number) => {
+    if (tableLines.length < 2) return null;
+    const headerLine = tableLines[0];
+    const dataLines = tableLines.slice(2);
+
+    const parseRow = (line: string) =>
+      line
+        .trim()
+        .replace(/^\|/, "")
+        .replace(/\|$/, "")
+        .split("|")
+        .map((c) => c.trim());
+
+    const headers = parseRow(headerLine);
+
+    return (
+      <div key={keyPrefix} className="my-2.5 overflow-x-auto rounded-xl border border-[#e5dfd8] bg-white shadow-2xs">
+        <table className="min-w-full text-xs divide-y divide-[#e5dfd8]">
+          <thead className="bg-[#fbf9f6] text-[#4b5563] font-semibold select-none">
+            <tr>
+              {headers.map((h, hIdx) => (
+                <th key={hIdx} className="px-3 py-2 text-left font-bold text-[#1e1b18] border-r border-[#e5dfd8] last:border-r-0">
+                  {renderInlineFormatted(h)}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-[#f4efea] text-[#374151]">
+            {dataLines.map((rowStr, rIdx) => {
+              const cells = parseRow(rowStr);
+              return (
+                <tr key={rIdx} className={rIdx % 2 === 0 ? "bg-white hover:bg-[#fef9f5]" : "bg-[#faf8f5]/60 hover:bg-[#fef9f5]"}>
+                  {cells.map((cell, cIdx) => (
+                    <td key={cIdx} className="px-3 py-2 border-r border-[#f4efea] last:border-r-0 leading-relaxed">
+                      {renderInlineFormatted(cell)}
+                    </td>
+                  ))}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    );
+  };
+
+  // 文本段落语法树解析器 (处理标题、列表、引用框、水平分割线、普通段落与表格)
+  const renderTextParagraph = (text: string, partIdx: number) => {
+    const lines = text.split("\n");
+    const elements: React.ReactNode[] = [];
+    let currentTable: string[] = [];
+
+    const flushTable = () => {
+      if (currentTable.length > 0) {
+        elements.push(renderTableBlock(currentTable, `tbl-${partIdx}-${elements.length}`));
+        currentTable = [];
+      }
+    };
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const trimmed = line.trim();
+
+      // 表格行识别
+      if (trimmed.startsWith("|") && trimmed.endsWith("|") && trimmed.includes("|")) {
+        currentTable.push(trimmed);
+        continue;
+      } else {
+        flushTable();
+      }
+
+      if (!trimmed) {
+        elements.push(<div key={`empty-${i}`} className="h-1.5" />);
+        continue;
+      }
+
+      // 水平分割线
+      if (trimmed === "---" || trimmed === "***" || trimmed === "___") {
+        elements.push(<hr key={`hr-${i}`} className="my-2 border-[#e5dfd8]" />);
+        continue;
+      }
+
+      // 标题级别 1~4
+      if (trimmed.startsWith("#### ")) {
+        elements.push(
+          <h4 key={`h4-${i}`} className="text-[11px] font-bold text-[#1e1b18] mt-2 mb-0.5 flex items-center gap-1">
+            {renderInlineFormatted(trimmed.slice(5))}
+          </h4>
+        );
+        continue;
+      }
+      if (trimmed.startsWith("### ")) {
+        elements.push(
+          <h3 key={`h3-${i}`} className="text-xs font-bold text-[#1e1b18] mt-2.5 mb-1 flex items-center gap-1.5 text-[#b45309]">
+            {renderInlineFormatted(trimmed.slice(4))}
+          </h3>
+        );
+        continue;
+      }
+      if (trimmed.startsWith("## ")) {
+        elements.push(
+          <h2 key={`h2-${i}`} className="text-sm font-bold text-[#1e1b18] mt-3 mb-1.5 flex items-center gap-1.5 border-b border-[#f4efea] pb-1">
+            {renderInlineFormatted(trimmed.slice(3))}
+          </h2>
+        );
+        continue;
+      }
+      if (trimmed.startsWith("# ")) {
+        elements.push(
+          <h1 key={`h1-${i}`} className="text-base font-bold text-[#1e1b18] mt-3 mb-1.5 flex items-center gap-1.5 border-b border-[#e5dfd8] pb-1">
+            {renderInlineFormatted(trimmed.slice(2))}
+          </h1>
+        );
+        continue;
+      }
+
+      // 重点提醒 / 引用框 (> 或 ⚠️ 或 💡 或 📌)
+      if (trimmed.startsWith("> ") || trimmed.startsWith("⚠️") || trimmed.startsWith("💡") || trimmed.startsWith("📌") || trimmed.startsWith("❌")) {
+        const content = trimmed.startsWith("> ") ? trimmed.slice(2) : trimmed;
+        elements.push(
+          <div key={`callout-${i}`} className="my-1.5 p-2.5 rounded-xl bg-[#fffbeb] border-l-3 border-[#f59e0b] text-[#92400e] text-[11px] leading-relaxed">
+            {renderInlineFormatted(content)}
+          </div>
+        );
+        continue;
+      }
+
+      // 无序列表 (- 或 *)
+      if (trimmed.startsWith("- ") || trimmed.startsWith("* ")) {
+        elements.push(
+          <div key={`bullet-${i}`} className="flex items-start gap-2 my-0.5 pl-1.5">
+            <span className="text-[#d96b27] font-bold select-none text-[10px] mt-0.5">•</span>
+            <div className="flex-1 leading-relaxed text-[#374151]">
+              {renderInlineFormatted(trimmed.slice(2))}
+            </div>
+          </div>
+        );
+        continue;
+      }
+
+      // 有序列表 (1. , 2. )
+      const numMatch = trimmed.match(/^(\d+)\.\s+(.*)$/);
+      if (numMatch) {
+        elements.push(
+          <div key={`num-${i}`} className="flex items-start gap-1.5 my-0.5 pl-1.5">
+            <span className="text-[#d96b27] font-semibold text-[10px] select-none min-w-4 mt-0.5">
+              {numMatch[1]}.
+            </span>
+            <div className="flex-1 leading-relaxed text-[#374151]">
+              {renderInlineFormatted(numMatch[2])}
+            </div>
+          </div>
+        );
+        continue;
+      }
+
+      // 常规正文段落
+      elements.push(
+        <div key={`p-${i}`} className="leading-relaxed text-[#1e1b18] my-0.5">
+          {renderInlineFormatted(trimmed)}
+        </div>
+      );
+    }
+
+    flushTable();
+    return <div key={partIdx} className="flex flex-col gap-0.5">{elements}</div>;
+  };
+
   // 渲染格式化 Markdown 与代码块 (带行号、复制与一键插入编辑器按钮)
   const renderFormattedMarkdown = (content: string) => {
     if (!content) return null;
@@ -478,7 +680,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
         return (
           <div
             key={partIdx}
-            className="my-2 rounded-xl overflow-hidden border border-[#e5dfd8] bg-[#18181b] text-white font-mono text-[11px] shadow-sm select-text"
+            className="my-2.5 rounded-xl overflow-hidden border border-[#e5dfd8] bg-[#18181b] text-white font-mono text-[11px] shadow-sm select-text"
           >
             <div className="h-7 bg-[#27272a] px-3 flex items-center justify-between border-b border-[#3f3f46] text-[10px] text-[#a1a1aa] select-none">
               <span className="font-semibold text-[#38bdf8] uppercase">{lang || "code"}</span>
@@ -523,11 +725,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
         );
       }
 
-      return (
-        <div key={partIdx} className="whitespace-pre-wrap leading-relaxed">
-          {part}
-        </div>
-      );
+      return renderTextParagraph(part, partIdx);
     });
   };
 
@@ -830,19 +1028,11 @@ Instructions:
         width !== undefined ? "shrink-0" : "flex-1"
       }`}
     >
-      {/* 顶部标题与状态 */}
+      {/* 顶部标题 */}
       <div className="px-4 py-2.5 border-b border-[#e5dfd8] flex justify-between items-center text-xs bg-[#faf8f5]">
         <div className="flex items-center gap-1.5 font-bold text-[#1e1b18]">
           <Sparkles size={13} className="text-[#d96b27]" />
           <span>AI 编程协同 · {currentProjectName}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          {activeChannel && (
-            <span className="text-[10px] text-[#475569] bg-[#f1f5f9] border border-[#cbd5e1] px-2 py-0.5 rounded-md font-mono flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#10b981]"></span>
-              {activeChannel.name.split(" ")[0]} · {activeModel}
-            </span>
-          )}
         </div>
       </div>
 

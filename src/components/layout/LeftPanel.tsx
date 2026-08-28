@@ -179,17 +179,31 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
     );
   };
 
-  // 新建会话
+  // 新建会话模态弹窗状态
+  const [isNewSessionModalOpen, setIsNewSessionModalOpen] = useState(false);
+  const [newSessionTargetProject, setNewSessionTargetProject] = useState<ProjectFolder | null>(null);
+  const [newSessionTitleInput, setNewSessionTitleInput] = useState("New AI Coding Task");
+
+  // 打开现代化新建会话弹窗
   const handleAddSession = (e: React.MouseEvent, proj: ProjectFolder) => {
     e.stopPropagation();
-    const newTitle = prompt(`为项目【${proj.name}】新建会话：`, "New AI Coding Task");
-    if (!newTitle?.trim()) return;
+    setNewSessionTargetProject(proj);
+    setNewSessionTitleInput(`AI 对话任务 #${(proj.sessions?.length || 0) + 1}`);
+    setIsNewSessionModalOpen(true);
+  };
+
+  // 确认创建新会话
+  const handleConfirmCreateSession = () => {
+    if (!newSessionTargetProject || !newSessionTitleInput.trim()) return;
+    const title = newSessionTitleInput.trim();
+    const proj = newSessionTargetProject;
 
     const newSess: ProjectSession = {
       id: `sess-${Date.now()}`,
-      title: newTitle.trim(),
+      title,
       time: "刚刚",
       projectFolder: proj.name,
+      status: "idle",
     };
 
     setProjects((prev) =>
@@ -200,6 +214,8 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
       )
     );
     setCurrentActiveId(newSess.id);
+    setIsNewSessionModalOpen(false);
+
     if (onSelectSession) onSelectSession(newSess.id, newSess.title, proj.name);
     window.dispatchEvent(
       new CustomEvent("project-switched", {
@@ -657,6 +673,78 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
           );
         })}
       </div>
+
+      {/* 现代化新建会话模态弹窗 (与系统整体风格保持一致) */}
+      {isNewSessionModalOpen && newSessionTargetProject && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4 animate-in fade-in">
+          <div className="bg-white border border-[#e5dfd8] rounded-2xl shadow-2xl w-full max-w-sm flex flex-col overflow-hidden animate-in zoom-in-95">
+            {/* 弹窗头部 */}
+            <div className="px-4 py-3 border-b border-[#f4efea] flex justify-between items-center bg-[#faf8f5]">
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded-lg bg-[#fef3eb] text-[#d96b27] flex items-center justify-center font-bold text-xs">
+                  <Plus size={14} />
+                </div>
+                <div>
+                  <h3 className="text-xs font-bold text-[#1e1b18]">
+                    新建 AI 协同会话
+                  </h3>
+                  <p className="text-[10px] text-[#78716c]">
+                    归属于项目：{newSessionTargetProject.name}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsNewSessionModalOpen(false)}
+                className="w-6 h-6 rounded-lg hover:bg-[#ebe5df] flex items-center justify-center text-[#78716c] hover:text-[#1e1b18] cursor-pointer"
+              >
+                <X size={13} />
+              </button>
+            </div>
+
+            {/* 弹窗内容 */}
+            <div className="p-4 flex flex-col gap-2">
+              <label className="text-[11px] font-semibold text-[#4b5563]">
+                会话名称 / 任务主题：
+              </label>
+              <input
+                type="text"
+                autoFocus
+                value={newSessionTitleInput}
+                onChange={(e) => setNewSessionTitleInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleConfirmCreateSession();
+                  } else if (e.key === "Escape") {
+                    setIsNewSessionModalOpen(false);
+                  }
+                }}
+                placeholder="例如: 接口重构与单元测试 / 架构排查..."
+                className="w-full px-3 py-2 border border-[#e5dfd8] focus:border-[#d96b27] focus:ring-2 focus:ring-[#fed7aa]/50 rounded-xl text-xs outline-none bg-[#faf8f5] text-[#1e1b18]"
+              />
+            </div>
+
+            {/* 弹窗底部操作条 */}
+            <div className="px-4 py-2.5 border-t border-[#f4efea] bg-[#faf8f5] flex justify-end items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setIsNewSessionModalOpen(false)}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium text-[#6b7280] hover:bg-[#ebe5df] cursor-pointer transition-colors"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmCreateSession}
+                className="bg-[#d96b27] hover:bg-[#b85417] text-white px-4 py-1.5 rounded-lg text-xs font-semibold cursor-pointer shadow-sm transition-all"
+              >
+                创建会话
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </aside>
   );
 };

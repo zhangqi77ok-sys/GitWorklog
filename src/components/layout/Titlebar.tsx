@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from "react";
-import { Settings, Play, ChevronRight } from "lucide-react";
+﻿import React, { useState, useEffect } from "react";
+import { ChevronRight } from "lucide-react";
 
 interface TitlebarProps {
-  onOpenSettings: () => void;
+  onOpenSettings?: () => void;
 }
 
-export const Titlebar: React.FC<TitlebarProps> = ({ onOpenSettings }) => {
+export const Titlebar: React.FC<TitlebarProps> = () => {
   const [currentProject, setCurrentProject] = useState("agent-learning");
 
   useEffect(() => {
@@ -38,25 +38,8 @@ export const Titlebar: React.FC<TitlebarProps> = ({ onOpenSettings }) => {
         </div>
       </div>
 
-      {/* 右侧：单测运行与设置入口 */}
-      <div className="flex items-center gap-1.5 text-xs">
-        <button
-          onClick={() => {
-            window.dispatchEvent(new CustomEvent("run-tests-requested"));
-          }}
-          className="bg-white hover:bg-[#f4efea] border border-[#e5dfd8] text-[#1e1b18] px-2.5 py-1 rounded-md font-semibold flex items-center gap-1 cursor-pointer transition-colors"
-        >
-          <Play size={11} className="text-[#10b981] fill-[#10b981]" /> 运行验证
-        </button>
-
-        <button
-          onClick={onOpenSettings}
-          title="全局设置 (Ctrl+,)"
-          className="w-7 h-7 rounded-md bg-white hover:bg-[#f4efea] border border-[#e5dfd8] flex items-center justify-center text-[#645e57] hover:text-[#1e1b18] cursor-pointer transition-colors"
-        >
-          <Settings size={14} />
-        </button>
-      </div>
+      {/* 右侧空白占位，保持视觉极简 */}
+      <div className="w-12" />
     </header>
   );
 };
