@@ -140,6 +140,7 @@ export class NativeService {
     isGit: boolean;
     localBranches: string[];
     remoteBranches: string[];
+    tags: string[];
     uncommittedFiles: string[];
     rawStatus: string;
   }> {
@@ -151,6 +152,7 @@ export class NativeService {
           isGit: false,
           localBranches: ["main"],
           remoteBranches: [],
+          tags: [],
           uncommittedFiles: [],
           rawStatus: "非 Git 版本控制工程",
         };
@@ -178,6 +180,13 @@ export class NativeService {
           .filter((b) => b && !b.includes("->"));
       } catch (e) {}
 
+      // 获取所有标签 (Tags)
+      let tags: string[] = [];
+      try {
+        const tagOut = await this.executeCommand("git tag -l", cwd);
+        tags = tagOut.split("\n").map((t) => t.trim()).filter(Boolean);
+      } catch (e) {}
+
       // 获取未提交变更
       let uncommittedFiles: string[] = [];
       let rawStatus = "";
@@ -194,6 +203,7 @@ export class NativeService {
         isGit: true,
         localBranches: localBranches.length > 0 ? localBranches : [currBranch],
         remoteBranches,
+        tags,
         uncommittedFiles,
         rawStatus,
       };
@@ -203,6 +213,7 @@ export class NativeService {
         isGit: false,
         localBranches: ["main"],
         remoteBranches: [],
+        tags: [],
         uncommittedFiles: [],
         rawStatus: "检测 Git 仓库异常",
       };
@@ -221,6 +232,21 @@ export class NativeService {
    */
   public async createAndCheckoutBranch(branchName: string, cwd?: string): Promise<string> {
     return this.executeCommand(`git checkout -b ${branchName}`, cwd);
+  }
+
+  /**
+   * 删除 Git 分支 (git branch -d / -D <branch>)
+   */
+  public async deleteBranch(branchName: string, force = false, cwd?: string): Promise<string> {
+    const flag = force ? "-D" : "-d";
+    return this.executeCommand(`git branch ${flag} ${branchName}`, cwd);
+  }
+
+  /**
+   * 合并分支到当前分支 (git merge <branch>)
+   */
+  public async mergeBranch(branchName: string, cwd?: string): Promise<string> {
+    return this.executeCommand(`git merge ${branchName}`, cwd);
   }
 
   /**
