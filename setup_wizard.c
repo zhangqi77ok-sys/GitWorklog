@@ -1,4 +1,4 @@
-﻿#define WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
 #define UNICODE
 #define _UNICODE
 #include <windows.h>
@@ -126,7 +126,13 @@ static DWORD WINAPI InstallThread(LPVOID lpParam) {
     SetStatusText(L"正在解压 CodeMind Studio 核心执行程序与 WebView2 运行时...");
     SendMessage(g_hProgress, PBM_SETPOS, 25, 0);
 
-    HRSRC hRes = FindResourceW(NULL, MAKEINTRESOURCEW(100), L"ZIPFILE");
+    HRSRC hRes = FindResourceW(NULL, MAKEINTRESOURCEW(100), RT_RCDATA);
+    if (!hRes) {
+        hRes = FindResourceW(NULL, MAKEINTRESOURCEW(100), L"RCDATA");
+    }
+    if (!hRes) {
+        hRes = FindResourceW(NULL, MAKEINTRESOURCEW(100), L"ZIPFILE");
+    }
     if (!hRes) {
         MessageBoxW(hWnd, L"未找到安装包内嵌资源，请重新下载安装程序！", L"安装失败", MB_OK | MB_ICONERROR);
         g_bInstalling = FALSE;
