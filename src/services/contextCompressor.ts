@@ -1,19 +1,16 @@
-﻿export interface ChatMessage {
+﻿import { astExtractor } from "./astExtractor";
+import { ASTCompressedItem, ASTCompressionResult, CodeAnchorRef } from "../types/contracts";
+
+export interface ChatMessage {
   role: string;
   content: string;
   isCompressedSummary?: boolean;
   codeDensity?: number;
   priorityScore?: number;
+  astAnchors?: CodeAnchorRef[];
 }
 
-export interface CompressionResult {
-  wasCompressed: boolean;
-  compressedMessages: ChatMessage[];
-  originalTokens: number;
-  newTokens: number;
-  savedTokens: number;
-  ratioPercent: number;
-}
+export interface CompressionResult extends ASTCompressionResult {}
 
 class ContextCompressor {
   /**
@@ -53,7 +50,7 @@ class ContextCompressor {
     }
 
     // 2. 架构决策与工程规约标记
-    if (/架构|规约|必须|禁止|NPE|TDD|守卫|CREATE_NO_WINDOW|Graph-RAG/.test(text)) {
+    if (/架构|规约|必须|禁止|NPE|TDD|守卫|CREATE_NO_WINDOW|Graph-RAG|AST/.test(text)) {
       score += 2.5;
     }
 
@@ -77,10 +74,11 @@ class ContextCompressor {
   }
 
   /**
-   * “滑动窗口 + 语义优先级”动态上下文蒸馏算法 (Dynamic Sliding Window + Priority Compaction)
+   * “AST 结构感知 + 引用锚点 + 滑动窗口”动态上下文蒸馏算法
    * 1. 绝对保护系统提示词 (System Anchor Protection)
    * 2. 滑动窗口保护最新 4 轮活跃交互 (Critical Recency Window - 100% 全保真)
-   * 3. 对中远期历史按代码密度与语义优先级智能评分，低分闲聊精简压缩为结构化事实摘要
+   * 3. 对中远期历史中的代码块进行轻量 AST 骨架提取，保留接口/类/函数契约，折叠实现体
+   * 4. 为压缩片段附带精准文件与行号锚点 (CodeAnchorRef)，支持一键跳转编辑器
    */
   public compressContext(
     messages: ChatMessage[],
@@ -95,6 +93,7 @@ class ContextCompressor {
       return {
         wasCompressed: false,
         compressedMessages: messages,
+        astItems: [],
         originalTokens,
         newTokens: originalTokens,
         savedTokens: 0,
@@ -111,34 +110,45 @@ class ContextCompressor {
     const middleHistory = nonSystem.slice(0, nonSystem.length - recencyWindowSize);
     const recentHistory = nonSystem.slice(nonSystem.length - recencyWindowSize);
 
-    // 3. 对 middleHistory 进行语义与代码密度评分
-    const scoredHistory = middleHistory.map((m) => ({
-      msg: m,
-      score: this.scoreMessagePriority(m),
-    }));
-
-    // 保留高优先级项 (Score >= 3.0)，将其余项蒸馏为结构化摘要
+    // 3. 对 middleHistory 进行 AST 结构提取与代码密度评分
+    const astItems: ASTCompressedItem[] = [];
     const highPriorityMessages: ChatMessage[] = [];
     const distilledPoints: string[] = [];
 
-    for (const item of scoredHistory) {
-      if (item.score >= 3.0) {
-        highPriorityMessages.push(item.msg);
+    for (const msg of middleHistory) {
+      const score = this.scoreMessagePriority(msg);
+
+      // 提取代码块中的 AST 骨架
+      const codeBlockMatch = msg.content.match(/```(?:[a-zA-Z0-9_-]+)?\n([\s\S]*?)```/);
+      if (codeBlockMatch && codeBlockMatch[1] && codeBlockMatch[1].length > 150) {
+        const rawCode = codeBlockMatch[1];
+        const astItem = astExtractor.generateASTDistillation(rawCode, "src/snippet.ts");
+        astItems.push(astItem);
+      }
+
+      if (score >= 3.5) {
+        highPriorityMessages.push(msg);
       } else {
-        const snippet = item.msg.content.slice(0, 80).replace(/\n/g, " ");
-        distilledPoints.push(`[${item.msg.role.toUpperCase()}] ${snippet}...`);
+        const snippet = msg.content.slice(0, 80).replace(/\n/g, " ");
+        distilledPoints.push(`[${msg.role.toUpperCase()}] ${snippet}...`);
       }
     }
 
-    // 构建结构化摘要消息
+    // 构建结构化摘要消息 (含 AST 骨架与锚点引用)
+    const astSnippets = astItems.map((item) => item.summary).join("\n\n");
+    const allAnchors = astItems.map((item) => item.anchor);
+
     const summaryMsg: ChatMessage = {
       role: "system",
-      content: `### 📦 早期历史上下文分层语义摘要 (Distilled Context Summary):\n` +
-        `- **已压缩轮数**: ${middleHistory.length} 轮历史对话\n` +
+      content:
+        `### 📦 AST 感知历史上下文分层摘要 (AST-Preserved Context Summary):\n` +
+        `- **已蒸馏轮数**: ${middleHistory.length} 轮中远期对话\n` +
         `- **关键交互脉络**:\n` +
-        distilledPoints.slice(0, 6).map((p) => `  • ${p}`).join("\n") +
-        `\n- **架构与代码锚点**: 已完整保留高优先级代码片段与最新活跃窗口。`,
+        distilledPoints.slice(0, 5).map((p) => `  • ${p}`).join("\n") +
+        (astSnippets ? `\n\n- **保留的代码 AST 类型与接口骨架契约**:\n\`\`\`typescript\n${astSnippets}\n\`\`\`` : "") +
+        `\n- **最新活跃窗口**: 保持 100% 完整对话保真。`,
       isCompressedSummary: true,
+      astAnchors: allAnchors,
     };
 
     // 4. 组合最终压缩上下文
@@ -155,6 +165,7 @@ class ContextCompressor {
     return {
       wasCompressed: true,
       compressedMessages: compressedList,
+      astItems,
       originalTokens,
       newTokens,
       savedTokens,

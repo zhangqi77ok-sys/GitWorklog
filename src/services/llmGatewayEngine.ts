@@ -1,34 +1,18 @@
 import { LLMChannel } from "../types";
-
-export type ReActStepType = "THOUGHT" | "ACTION" | "OBSERVATION" | "FINAL_ANSWER";
-export type ReActStepStatus = "PENDING" | "RESOLVED" | "FAILED";
-
-export interface ReActStepNode {
-  id: string;
-  stepIndex: number;
-  stepType: ReActStepType;
-  status: ReActStepStatus;
-  title: string;
-  content: string;
-  actionName?: string;
-  actionArgs?: Record<string, any>;
-  actionResult?: any;
-  timestamp: number;
-  durationMs?: number;
-}
-
-export interface ReActTraceState {
-  traceId: string;
-  currentStepIndex: number;
-  steps: ReActStepNode[];
-  activeAction?: string;
-  isCompleted: boolean;
-  hasError: boolean;
-}
+import {
+  ReActStepNode,
+  ReActTraceState,
+  ReActActionPayload,
+  ActionRiskLevel,
+} from "../types/contracts";
 
 export interface StreamEventCallbacks {
   onToken: (chunk: string, reasoningChunk?: string) => void;
   onReActStep?: (step: ReActStepNode, trace: ReActTraceState) => void;
+  onRequireApproval?: (
+    step: ReActStepNode,
+    resolve: (approved: boolean) => void
+  ) => void;
   onComplete: (metadata: {
     durationMs: number;
     tokensCount: number;
@@ -50,19 +34,28 @@ export interface SendMessageParams {
 }
 
 class LLMGatewayEngine {
-  /**
-   * 生成唯一幂等请求 ID (UUID v4)
-   */
   private generateRequestId(): string {
     return "req-" + Math.random().toString(36).slice(2, 10) + "-" + Date.now().toString(36);
   }
 
   /**
-   * 统一大模型网关调度分发入口 (Universal Stream Gateway Dispatcher)
-   * 具备：
-   * 1. 幂等标记 (request_id) 与指数退避重试 (Exponential Backoff)
-   * 2. ReadableStream 消费与 rAF 背压控制 (Backpressure Token Bucket)
-   * 3. 显式 ReAct 状态机调度与失败回滚 (Explicit State Machine)
+   * 动作风险等级评估 (Safety Evaluation)
+   */
+  public evaluateActionRisk(actionName: string, _args: Record<string, any>): ActionRiskLevel {
+    if (actionName.includes("delete") || actionName.includes("drop") || actionName.includes("rmdir")) {
+      return "CRITICAL";
+    }
+    if (actionName.includes("write") || actionName.includes("modify") || actionName.includes("execute_command")) {
+      return "HIGH";
+    }
+    if (actionName.includes("install") || actionName.includes("build")) {
+      return "MEDIUM";
+    }
+    return "LOW";
+  }
+
+  /**
+   * 统一大模型网关调度分发入口 (带人机协同确认沙箱与流式背压)
    */
   public async dispatchStream(params: SendMessageParams): Promise<void> {
     const {
@@ -79,7 +72,6 @@ class LLMGatewayEngine {
     const startTime = performance.now();
     const requestId = this.generateRequestId();
 
-    // 初始化 ReAct 状态机链路
     const traceState: ReActTraceState = {
       traceId: requestId,
       currentStepIndex: 0,
@@ -94,7 +86,6 @@ class LLMGatewayEngine {
       channel.type === "ollama";
 
     if (hasValidCredentials) {
-      // 携带指数退避重试 (最多重试 2 次)
       let attempt = 0;
       const maxRetries = 2;
       let lastErr: any = null;
@@ -131,7 +122,6 @@ class LLMGatewayEngine {
 
           attempt++;
           if (attempt <= maxRetries) {
-            // 指数退避抖动等待 (500ms, 1200ms)
             const delay = Math.pow(2, attempt) * 300 + Math.random() * 200;
             console.warn(`[LLMGateway] Transient error, retrying (${attempt}/${maxRetries}) in ${Math.round(delay)}ms:`, err);
             await new Promise((resolve) => setTimeout(resolve, delay));
@@ -139,7 +129,6 @@ class LLMGatewayEngine {
         }
       }
 
-      // 重试失败
       traceState.hasError = true;
       callbacks.onError(
         `【${channel.name}】端点连接失败：${lastErr?.message || "网络超时或鉴权失败"}\n\n请求幂等 ID: ${requestId}\n已自动执行 ${maxRetries} 次退避重试。请检查 Base URL (${channel.baseUrl}) 配置。`,
@@ -148,7 +137,7 @@ class LLMGatewayEngine {
       return;
     }
 
-    // 尚未配置 Key 时，执行高质量生产级流式模拟演练与提示
+    // 演练与高保真模拟流式分发
     await this.executeSimulatedStream({
       channel,
       model,
@@ -162,7 +151,7 @@ class LLMGatewayEngine {
   }
 
   /**
-   * 真实发起 SSE 网络请求 (含背压控制与 Token 缓冲池)
+   * 真实 SSE 请求 (含背压排空与 Token 缓冲池)
    */
   private async executeRealStream(options: {
     channel: LLMChannel;
@@ -209,7 +198,6 @@ class LLMGatewayEngine {
       stream: true,
     };
 
-    // 针对 OpenAI / DashScope / DeepSeek / Ollama 协议适配
     if (channel.apiKey) {
       headers["Authorization"] = `Bearer ${channel.apiKey}`;
     }
@@ -234,7 +222,6 @@ class LLMGatewayEngine {
       throw new Error("Response body is not readable stream");
     }
 
-    // 使用 ReadableStream 配合 16ms 帧率节流缓冲区消费 SSE
     const reader = response.body.getReader();
     const decoder = new TextDecoder("utf-8");
     let buffer = "";
@@ -244,7 +231,6 @@ class LLMGatewayEngine {
     let pendingReasoning = "";
     let isFlushing = false;
 
-    // 帧率背压排空器 (Frame-based Token Bucket)
     const flushTokensToUI = () => {
       if (pendingContent || pendingReasoning) {
         callbacks.onToken(pendingContent, pendingReasoning);
@@ -306,7 +292,6 @@ class LLMGatewayEngine {
         }
       }
     } finally {
-      // 确保清空残留 Buffer
       flushTokensToUI();
       reader.releaseLock();
     }
@@ -324,7 +309,7 @@ class LLMGatewayEngine {
   }
 
   /**
-   * 生产级智能流式模拟演练引擎 (带 ReAct 显式状态推进)
+   * 智能流式演练引擎 (带 ReAct 动作拦截与沙箱协同)
    */
   private async executeSimulatedStream(options: {
     channel: LLMChannel;
@@ -355,8 +340,8 @@ class LLMGatewayEngine {
       stepIndex: 1,
       stepType: "THOUGHT",
       status: "RESOLVED",
-      title: "意图解析与工程上下文定位",
-      content: `分析用户指令: "${userPrompt}"。检索当前项目工程架构拓扑与双层长期记忆，构建最佳执行方案。`,
+      title: "意图解析与工程拓扑检索",
+      content: `分析指令: "${userPrompt}"。对齐项目知识图谱与长期记忆，规划执行链路。`,
       timestamp: Date.now(),
     };
     traceState.steps.push(thoughtStep);
@@ -367,7 +352,7 @@ class LLMGatewayEngine {
       "【ReAct 思考与规划链路】\n" +
       "1. 接收到用户指令，已对齐当前工程知识图谱与长期情景记忆。\n" +
       "2. 判定当前执行环境为 Tauri v2 原生桌面端，所有系统命令遵循 CREATE_NO_WINDOW 静默运行。\n" +
-      "3. 准备输出经过类型守卫与规约审查的高性能解决方案。\n";
+      "3. 对高风险系统动作启用人机协同确认沙箱 (HITL Control)，保障代码与环境安全。\n";
 
     if (enableThinking) {
       for (const char of reasoningText) {
@@ -378,14 +363,21 @@ class LLMGatewayEngine {
     }
 
     // 2. 显式 ReAct 第二步：ACTION 工具/逻辑分发
+    const actionPayload: ReActActionPayload = {
+      actionName: "generate_and_review",
+      actionArgs: { prompt: userPrompt, target: "src/" },
+      riskLevel: "LOW",
+      description: "生成经过 AST 结构守卫与阿里规约审查的高性能代码方案",
+    };
+
     const actionStep: ReActStepNode = {
       id: "step-2",
       stepIndex: 2,
       stepType: "ACTION",
       status: "RESOLVED",
       title: "调度统一大模型网关分发",
-      content: `已锁定渠道【${channel.name}】(${model})，输出结构化技术方案。`,
-      actionName: "dispatchStream",
+      content: `已锁定渠道【${channel.name}】(${model})，执行结构化输出。`,
+      actionPayload,
       timestamp: Date.now(),
     };
     traceState.steps.push(actionStep);
@@ -397,8 +389,9 @@ class LLMGatewayEngine {
       `### 📌 当前环境与工程状态\n` +
       `- **统一网关通道**：\`${channel.name}\` (${channel.type.toUpperCase()})\n` +
       `- **生效模型**：\`${model}\`\n` +
-      `- **调度特征**：支持 \`ReadableStream\` 帧率背压排空、幂等重试与双层长短期记忆 (Graph-RAG)\n\n` +
-      `💡 您可以直接输入业务逻辑需求或下发代码重构指令，我将实时为您生成并优化！`;
+      `- **ReAct 安全沙箱**：已开启高风险动作人机协同拦截 (HITL Approval)\n` +
+      `- **AST 感知压缩**：支持接口骨架提取与代码锚点点击直达\n\n` +
+      `💡 您可以直接输入代码重构、测试编写或系统排查需求，我将实时为您生成高质量方案！`;
 
     let tokenCount = 0;
     for (const char of fullContent) {

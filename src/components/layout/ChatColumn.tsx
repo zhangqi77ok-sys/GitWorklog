@@ -463,6 +463,74 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
     });
   };
 
+  // 渲染格式化 Markdown 与代码块 (带行号、复制与一键插入编辑器按钮)
+  const renderFormattedMarkdown = (content: string) => {
+    if (!content) return null;
+    const parts = content.split(/(```[\s\S]*?```)/g);
+
+    return parts.map((part, partIdx) => {
+      if (part.startsWith("```") && part.endsWith("```")) {
+        const firstLineEnd = part.indexOf("\n");
+        const lang = firstLineEnd !== -1 ? part.slice(3, firstLineEnd).trim() : "";
+        const code = firstLineEnd !== -1 ? part.slice(firstLineEnd + 1, -3) : part.slice(3, -3);
+        const lines = code.split("\n");
+
+        return (
+          <div
+            key={partIdx}
+            className="my-2 rounded-xl overflow-hidden border border-[#e5dfd8] bg-[#18181b] text-white font-mono text-[11px] shadow-sm select-text"
+          >
+            <div className="h-7 bg-[#27272a] px-3 flex items-center justify-between border-b border-[#3f3f46] text-[10px] text-[#a1a1aa] select-none">
+              <span className="font-semibold text-[#38bdf8] uppercase">{lang || "code"}</span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => navigator.clipboard.writeText(code)}
+                  className="hover:text-white flex items-center gap-1 cursor-pointer transition-colors"
+                  title="复制代码"
+                >
+                  <Copy size={10} /> 复制
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    window.dispatchEvent(
+                      new CustomEvent("open-workspace-file", {
+                        detail: {
+                          name: `snippet_${partIdx}.${lang || "ts"}`,
+                          content: code,
+                          path: `src/snippet_${partIdx}.${lang || "ts"}`,
+                        },
+                      })
+                    );
+                  }}
+                  className="hover:text-[#d96b27] flex items-center gap-1 cursor-pointer transition-colors text-[#fb923c]"
+                  title="插入到右侧代码工作区"
+                >
+                  <Code size={10} /> ‹/› 插入编辑器
+                </button>
+              </div>
+            </div>
+            <div className="p-3 overflow-x-auto leading-relaxed select-text flex">
+              <div className="text-[#52525b] pr-3 select-none text-right border-r border-[#27272a] mr-3 font-mono">
+                {lines.map((_, i) => (
+                  <div key={i}>{i + 1}</div>
+                ))}
+              </div>
+              <pre className="flex-1 font-mono text-[#e4e4e7] overflow-x-auto">{code}</pre>
+            </div>
+          </div>
+        );
+      }
+
+      return (
+        <div key={partIdx} className="whitespace-pre-wrap leading-relaxed">
+          {part}
+        </div>
+      );
+    });
+  };
+
   useEffect(() => {
     scrollToBottom();
     return () => {
@@ -877,8 +945,8 @@ Instructions:
                   </div>
                 </div>
               ) : (
-                <div className="text-[#1e1b18] whitespace-pre-wrap leading-relaxed">
-                  {m.content}
+                <div className="text-[#1e1b18] leading-relaxed">
+                  {renderFormattedMarkdown(m.content)}
                   {/* 流式打字光标 */}
                   {m.status === "streaming" && (
                     <span className="inline-block w-2 h-3.5 bg-[#d96b27] ml-1 animate-pulse align-middle" />
