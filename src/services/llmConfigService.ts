@@ -315,11 +315,32 @@ class LLMConfigService {
       if (stored) {
         const parsed = JSON.parse(stored);
         if (parsed && Array.isArray(parsed.channels) && parsed.channels.length > 0) {
-          // 自动合并新预设渠道 (如阿里百炼)
-          const existingIds = new Set(parsed.channels.map((c: LLMChannel) => c.id));
+          // 自动升级旧版 chan-gemini 到 chan-antigravity
+          const normalizedChannels = parsed.channels.map((c: LLMChannel) => {
+            if (c.id === "chan-gemini" || c.name.includes("Gemini 官方")) {
+              const antigravityDef = DEFAULT_CHANNELS.find((d) => d.id === "chan-antigravity")!;
+              return {
+                ...c,
+                id: "chan-antigravity",
+                name: "Google Antigravity 官方 (支持 OAuth / RT)",
+                type: "gemini" as const,
+                models: antigravityDef.models,
+                modelMetas: antigravityDef.modelMetas,
+                geminiAuth: c.geminiAuth || antigravityDef.geminiAuth,
+              };
+            }
+            return c;
+          });
+
+          // 自动合并新预设渠道 (如阿里百炼 / Antigravity)
+          const existingIds = new Set(normalizedChannels.map((c: LLMChannel) => c.id));
           const missingDefaults = DEFAULT_CHANNELS.filter((def) => !existingIds.has(def.id));
-          const mergedChannels = [...parsed.channels, ...missingDefaults];
-          return { ...DEFAULT_CONFIG, ...parsed, channels: mergedChannels };
+          const mergedChannels = [...normalizedChannels, ...missingDefaults];
+          
+          let activeChannelId = parsed.activeChannelId;
+          if (activeChannelId === "chan-gemini") activeChannelId = "chan-antigravity";
+
+          return { ...DEFAULT_CONFIG, ...parsed, activeChannelId, channels: mergedChannels };
         }
       }
     } catch (e) {

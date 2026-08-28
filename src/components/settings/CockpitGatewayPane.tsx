@@ -19,7 +19,6 @@ import {
   RefreshCw,
   FileJson,
   ShieldCheck,
-  ExternalLink,
   Layers,
   Sparkles,
   Sliders,
@@ -83,11 +82,13 @@ export const CockpitGatewayPane: React.FC<CockpitGatewayPaneProps> = ({
     ok?: boolean;
   } | null>(null);
 
-  // Gemini 模态框内部专属交互状态
+  // Antigravity / Gemini 模态框内部专属交互状态
   const [showRt, setShowRt] = useState(false);
   const [isRefreshingRt, setIsRefreshingRt] = useState(false);
   const [rtRefreshResult, setRtRefreshResult] = useState<string | null>(null);
-  const [customAuthCode, setCustomAuthCode] = useState("");
+  const [callbackUrlInput, setCallbackUrlInput] = useState("");
+  const [isExchangingCode, setIsExchangingCode] = useState(false);
+  const [copiedOAuthUrl, setCopiedOAuthUrl] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -921,7 +922,7 @@ export const CockpitGatewayPane: React.FC<CockpitGatewayPaneProps> = ({
                       }}
                       className="p-1.5 bg-[#faf8f5] hover:bg-[#f4efea] border border-[#e5dfd8] hover:border-[#d96b27] rounded-lg text-left text-[11px] font-medium text-[#1e1b18] truncate cursor-pointer transition-colors"
                     >
-                      {preset.name.split(" ")[0]}
+                      {preset.name.includes("Antigravity") ? "Antigravity" : preset.name.split(" ")[0]}
                     </button>
                   ))}
                 </div>
@@ -940,7 +941,7 @@ export const CockpitGatewayPane: React.FC<CockpitGatewayPaneProps> = ({
                         channel: { ...editModal.channel, name: e.target.value },
                       })
                     }
-                    placeholder="如: DeepSeek 官方 / Gemini OAuth"
+                    placeholder="如: DeepSeek 官方 / Google Antigravity 官方"
                     className="p-2 border border-[#d0c7bd] rounded-lg text-xs outline-none focus:border-[#d96b27]"
                   />
                 </div>
@@ -1203,13 +1204,56 @@ export const CockpitGatewayPane: React.FC<CockpitGatewayPaneProps> = ({
                     </div>
                   )}
 
-                  {/* 2. Google OAuth 网页授权视图 */}
+                  {/* 2. Google Antigravity OAuth 网页授权视图 (完整对齐 Cockpit Tools 架构) */}
                   {editModal.channel.geminiAuth?.mode === "google_oauth" && (
-                    <div className="flex flex-col gap-2.5">
-                      <p className="text-[#64748b] text-[11px]">
-                        点击下方按钮将在浏览器中拉起 Google 官方授权页面，登录授权后将自动换取长期 Refresh Token。
-                      </p>
-                      <div className="flex items-center gap-2">
+                    <div className="flex flex-col gap-3">
+                      {/* 待授权账号输入 */}
+                      <div className="bg-white border border-[#e2e8f0] rounded-xl p-3 flex flex-col gap-2 shadow-2xs">
+                        <label className="text-[#64748b] font-medium text-[11px]">待授权账号:</label>
+                        <input
+                          type="text"
+                          value={editModal.channel.geminiAuth.accountEmail || ""}
+                          onChange={(e) =>
+                            setEditModal((prev) => ({
+                              ...prev,
+                              channel: {
+                                ...prev.channel,
+                                geminiAuth: {
+                                  ...prev.channel.geminiAuth!,
+                                  accountEmail: e.target.value,
+                                },
+                              },
+                            }))
+                          }
+                          placeholder="输入 Google / Antigravity 账号邮箱"
+                          className="w-full bg-[#f8fafc] border border-[#cbd5e1] rounded-lg px-3 py-1.5 text-xs text-[#1e293b] outline-none focus:border-[#2563eb]"
+                        />
+                        <div className="flex justify-between items-center pt-0.5">
+                          <button
+                            type="button"
+                            onClick={() => alert("📄 账号备注已保存！")}
+                            className="text-[11px] text-[#64748b] bg-white border border-[#cbd5e1] hover:bg-[#f1f5f9] px-2.5 py-1 rounded-md cursor-pointer transition-colors"
+                          >
+                            📄 加备注
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => alert("📄 待授权卡片已暂存为草稿！")}
+                            className="text-[11px] text-[#64748b] bg-white border border-[#cbd5e1] hover:bg-[#f1f5f9] px-2.5 py-1 rounded-md cursor-pointer transition-colors"
+                          >
+                            📄 保存待授权卡片
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* 推荐提示 */}
+                      <div className="bg-[#eff6ff] border border-[#bfdbfe] rounded-lg p-2.5 flex items-center gap-2 text-[#1e40af] text-[11px]">
+                        <Globe size={14} className="text-[#2563eb] shrink-0" />
+                        <span>推荐使用浏览器完成 Google 官方授权</span>
+                      </div>
+
+                      {/* 授权操作按钮 */}
+                      <div className="flex gap-2">
                         <button
                           type="button"
                           onClick={() => {
@@ -1218,26 +1262,24 @@ export const CockpitGatewayPane: React.FC<CockpitGatewayPaneProps> = ({
                             );
                             window.open(authUrl, "_blank");
                           }}
-                          className="px-3 py-1.5 bg-[#0f172a] hover:bg-[#1e293b] text-white rounded-lg font-medium flex items-center gap-1.5 cursor-pointer shadow-sm"
+                          className="flex-1 bg-[#2563eb] hover:bg-[#1d4ed8] text-white font-semibold py-2 rounded-lg flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs transition-colors"
                         >
-                          <ExternalLink size={12} />
-                          <span>打开 Google 授权登录窗口</span>
+                          <Globe size={13} />
+                          <span>开始 OAuth 授权</span>
                         </button>
-                      </div>
-                      <div className="flex flex-col gap-1 pt-1">
-                        <span className="text-[#64748b]">若网页返回了 Authorization Code，请粘贴至此：</span>
-                        <div className="flex gap-2">
-                          <input
-                            type="text"
-                            value={customAuthCode}
-                            onChange={(e) => setCustomAuthCode(e.target.value)}
-                            placeholder="4/0AWgav..."
-                            className="flex-1 p-2 border border-[#cbd5e1] rounded-lg font-mono text-xs bg-white outline-none"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (customAuthCode.trim()) {
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (!callbackUrlInput.trim()) {
+                              alert("请先在下方输入或粘贴完整的回调地址！");
+                              return;
+                            }
+                            setIsExchangingCode(true);
+                            try {
+                              const clientId = editModal.channel.geminiAuth?.clientId || COCKPIT_GOOGLE_CLIENT_ID;
+                              const clientSecret = editModal.channel.geminiAuth?.clientSecret || COCKPIT_GOOGLE_CLIENT_SECRET;
+                              const res = await geminiAuthService.exchangeCodeForTokens(callbackUrlInput, clientId, clientSecret);
+                              if (res.ok && res.refreshToken) {
                                 setEditModal((prev) => ({
                                   ...prev,
                                   channel: {
@@ -1245,16 +1287,103 @@ export const CockpitGatewayPane: React.FC<CockpitGatewayPaneProps> = ({
                                     geminiAuth: {
                                       ...prev.channel.geminiAuth!,
                                       mode: "oauth_rt",
-                                      refreshToken: customAuthCode.trim(),
+                                      refreshToken: res.refreshToken!,
+                                      accessToken: res.accessToken,
                                     },
                                   },
                                 }));
-                                alert("已将授权码录入，请切换至 RT 视图点击刷新！");
+                                alert("✅ Google Antigravity OAuth 授权成功！已换取长期有效 Refresh Token 并自动注入！");
+                              } else {
+                                alert(`❌ 授权失败: ${res.error}`);
+                              }
+                            } catch (err: any) {
+                              alert(`❌ 异常: ${err.message || err}`);
+                            } finally {
+                              setIsExchangingCode(false);
+                            }
+                          }}
+                          disabled={isExchangingCode}
+                          className="bg-white hover:bg-[#f8fafc] border border-[#cbd5e1] text-[#1e293b] font-semibold px-4 py-2 rounded-lg flex items-center justify-center gap-1.5 cursor-pointer transition-colors shadow-2xs"
+                        >
+                          <CheckCircle2 size={13} className={isExchangingCode ? "animate-spin text-[#2563eb]" : "text-[#10b981]"} />
+                          <span>{isExchangingCode ? "正在换取令牌..." : "我已授权，继续"}</span>
+                        </button>
+                      </div>
+
+                      {/* 授权链接复制 */}
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[#64748b] text-[11px]">授权链接 (可直接复制至浏览器打开):</label>
+                        <div className="bg-white border border-[#cbd5e1] rounded-lg p-2 flex items-center justify-between gap-2">
+                          <span className="font-mono text-[10px] text-[#475569] truncate">
+                            {geminiAuthService.buildGoogleOAuthUrl(editModal.channel.geminiAuth?.clientId)}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const url = geminiAuthService.buildGoogleOAuthUrl(editModal.channel.geminiAuth?.clientId);
+                              navigator.clipboard.writeText(url);
+                              setCopiedOAuthUrl(true);
+                              setTimeout(() => setCopiedOAuthUrl(false), 2000);
+                            }}
+                            className="bg-[#f8fafc] hover:bg-[#e2e8f0] border border-[#cbd5e1] px-2 py-0.5 rounded text-[11px] text-[#1e293b] flex items-center gap-1 cursor-pointer shrink-0 transition-colors"
+                          >
+                            {copiedOAuthUrl ? <Check size={11} className="text-[#10b981]" /> : <Copy size={11} />}
+                            <span>{copiedOAuthUrl ? "已复制" : "复制"}</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* 手动输入回调地址 */}
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[#64748b] text-[11px]">手动输入回调地址:</label>
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={callbackUrlInput}
+                            onChange={(e) => setCallbackUrlInput(e.target.value)}
+                            placeholder="粘贴完整回调地址，例如: http://localhost:1455/auth/callback?code=...&state=..."
+                            className="flex-1 p-2 border border-[#cbd5e1] rounded-lg font-mono text-[11px] bg-white outline-none focus:border-[#2563eb]"
+                          />
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              if (!callbackUrlInput.trim()) {
+                                alert("请先粘贴完整的回调地址！");
+                                return;
+                              }
+                              setIsExchangingCode(true);
+                              try {
+                                const clientId = editModal.channel.geminiAuth?.clientId || COCKPIT_GOOGLE_CLIENT_ID;
+                                const clientSecret = editModal.channel.geminiAuth?.clientSecret || COCKPIT_GOOGLE_CLIENT_SECRET;
+                                const res = await geminiAuthService.exchangeCodeForTokens(callbackUrlInput, clientId, clientSecret);
+                                if (res.ok && res.refreshToken) {
+                                  setEditModal((prev) => ({
+                                    ...prev,
+                                    channel: {
+                                      ...prev.channel,
+                                      geminiAuth: {
+                                        ...prev.channel.geminiAuth!,
+                                        mode: "oauth_rt",
+                                        refreshToken: res.refreshToken!,
+                                        accessToken: res.accessToken,
+                                      },
+                                    },
+                                  }));
+                                  alert("✅ Google Antigravity OAuth 授权成功！已换取长期有效 Refresh Token 并自动注入！");
+                                } else {
+                                  alert(`❌ 授权失败: ${res.error}`);
+                                }
+                              } catch (err: any) {
+                                alert(`❌ 异常: ${err.message || err}`);
+                              } finally {
+                                setIsExchangingCode(false);
                               }
                             }}
-                            className="px-3 py-1 bg-[#2563eb] text-white rounded-lg font-medium cursor-pointer"
+                            disabled={isExchangingCode}
+                            className="bg-[#2563eb] hover:bg-[#1d4ed8] text-white px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
                           >
-                            导入
+                            <CheckCircle2 size={12} className={isExchangingCode ? "animate-spin" : ""} />
+                            <span>我已授权，继续</span>
                           </button>
                         </div>
                       </div>

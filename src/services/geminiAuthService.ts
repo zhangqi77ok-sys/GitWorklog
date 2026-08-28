@@ -1,8 +1,8 @@
 import { GeminiAuthCredentials } from "../types";
 
-// Cockpit Tools 与开源生态兼容的 Google OAuth 默认凭据客户端
+// Cockpit Tools 与 Antigravity 官方 Google OAuth 默认凭据客户端
 export const COCKPIT_GOOGLE_CLIENT_ID =
-  "764086051850-6qr4p6gpi6hn506pt8ejuq83di341hur.apps.googleusercontent.com";
+  "1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com";
 export const COCKPIT_GOOGLE_CLIENT_SECRET = "d-FL95Q19q7MQmFpd7hHD0Ty";
 
 export const GOOGLE_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
@@ -94,6 +94,54 @@ class GeminiAuthService {
   }
 
   /**
+   * 从回调 URL 或授权码 Code 换取 Refresh Token 和 Access Token (对应 Cockpit Tools "我已授权，继续" 逻辑)
+   */
+  public async exchangeCodeForTokens(
+    codeOrUrl: string,
+    clientId = COCKPIT_GOOGLE_CLIENT_ID,
+    clientSecret = COCKPIT_GOOGLE_CLIENT_SECRET
+  ): Promise<{ ok: boolean; refreshToken?: string; accessToken?: string; error?: string }> {
+    let code = codeOrUrl.trim();
+    if (code.includes("code=")) {
+      try {
+        const url = new URL(code);
+        code = url.searchParams.get("code") || code;
+      } catch (e) {
+        const match = code.match(/[?&]code=([^&]+)/);
+        if (match) code = decodeURIComponent(match[1]);
+      }
+    }
+
+    try {
+      const params = new URLSearchParams();
+      params.append("client_id", clientId);
+      params.append("client_secret", clientSecret);
+      params.append("code", code);
+      params.append("grant_type", "authorization_code");
+      params.append("redirect_uri", "http://localhost:1455/auth/callback");
+
+      const response = await fetch(GOOGLE_TOKEN_ENDPOINT, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: params.toString(),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        return { ok: false, error: data.error_description || data.error || "授权码换取令牌失败" };
+      }
+
+      return {
+        ok: true,
+        refreshToken: data.refresh_token,
+        accessToken: data.access_token,
+      };
+    } catch (err: any) {
+      return { ok: false, error: err.message || "网络请求异常" };
+    }
+  }
+
+  /**
    * 解析 Google 凭据 JSON 文件 (支持 application_default_credentials / client_secret / Cockpit 格式)
    */
   public parseCredentialsJson(jsonStr: string): Partial<GeminiAuthCredentials> | null {
@@ -147,15 +195,17 @@ class GeminiAuthService {
   }
 
   /**
-   * 生成 Google OAuth 2.0 授权 URL
+   * 生成 Google OAuth 2.0 授权 URL (对齐 Cockpit Tools Antigravity)
    */
   public buildGoogleOAuthUrl(customClientId?: string): string {
     const clientId = customClientId?.trim() || COCKPIT_GOOGLE_CLIENT_ID;
-    const redirectUri = "http://localhost:8085/oauth/callback";
+    const redirectUri = "http://localhost:1455/auth/callback";
     const scopes = [
       "https://www.googleapis.com/auth/generative-language",
       "https://www.googleapis.com/auth/userinfo.email",
       "openid",
+      "email",
+      "profile",
     ].join(" ");
 
     const url = new URL("https://accounts.google.com/o/oauth2/v2/auth");

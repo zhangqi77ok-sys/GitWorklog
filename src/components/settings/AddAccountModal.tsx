@@ -1,6 +1,8 @@
 import React, { useState } from "react";
 import { AuthMode } from "../../types";
 import { X, Globe, Key, Database, Copy, Check } from "lucide-react";
+import { geminiAuthService } from "../../services/geminiAuthService";
+import { llmConfigService } from "../../services/llmConfigService";
 
 interface AddAccountModalProps {
   isOpen: boolean;
@@ -17,11 +19,11 @@ export const AddAccountModal: React.FC<AddAccountModalProps> = ({
   const [email, setEmail] = useState("");
   const [callbackUrl, setCallbackUrl] = useState("");
   const [copied, setCopied] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   if (!isOpen) return null;
 
-  const authUrl =
-    "https://accounts.google.com/o/oauth2/v2/auth?client_id=1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com&redirect_uri=http://localhost:1455/auth/callback&response_type=code&scope=openid%20email%20profile";
+  const authUrl = geminiAuthService.buildGoogleOAuthUrl();
 
   const handleCopy = () => {
     navigator.clipboard.writeText(authUrl);
@@ -30,7 +32,7 @@ export const AddAccountModal: React.FC<AddAccountModalProps> = ({
   };
 
   const handleStartOAuth = () => {
-    window.open("https://accounts.google.com/o/oauth2/v2/auth?client_id=demo", "_blank");
+    window.open(authUrl, "_blank");
   };
 
   return (
@@ -162,21 +164,51 @@ export const AddAccountModal: React.FC<AddAccountModalProps> = ({
                 value={callbackUrl}
                 onChange={(e) => setCallbackUrl(e.target.value)}
                 placeholder="粘贴完整回调地址，例如: http://localhost:1455/auth/callback?code=..."
-                className="flex-1 bg-white border border-[#cbd5e1] rounded-md px-2.5 py-1.5 text-xs text-[#1e1b18] outline-none focus:border-[#d96b27]"
+                className="flex-1 bg-white border border-[#cbd5e1] rounded-md px-2.5 py-1.5 text-xs text-[#1e1b18] outline-none focus:border-[#d96b27] font-mono text-[11px]"
               />
               <button
-                onClick={() => {
-                  if (callbackUrl) {
-                    alert("✅ 回调地址已解析并成功绑定凭据！");
-                    onSuccess();
-                    onClose();
-                  } else {
+                type="button"
+                disabled={isProcessing}
+                onClick={async () => {
+                  if (!callbackUrl.trim()) {
                     alert("请先粘贴完整的回调地址！");
+                    return;
+                  }
+                  setIsProcessing(true);
+                  try {
+                    const res = await geminiAuthService.exchangeCodeForTokens(callbackUrl);
+                    if (res.ok && res.refreshToken) {
+                      // 自动更新 Antigravity 渠道配置
+                      const channels = llmConfigService.getChannels();
+                      const antigravityChan = channels.find((c) => c.id === "chan-antigravity" || c.type === "gemini");
+                      if (antigravityChan) {
+                        llmConfigService.addOrUpdateChannel({
+                          ...antigravityChan,
+                          geminiAuth: {
+                            ...antigravityChan.geminiAuth!,
+                            mode: "oauth_rt",
+                            refreshToken: res.refreshToken,
+                            accessToken: res.accessToken,
+                            accountEmail: email || "antigravity_account@google.com",
+                            lastRefreshedAt: "刚刚",
+                          },
+                        });
+                      }
+                      alert("✅ Google Antigravity OAuth 授权成功！已换取长期 Refresh Token 并纳管到网关！");
+                      onSuccess();
+                      onClose();
+                    } else {
+                      alert(`❌ 授权失败: ${res.error}`);
+                    }
+                  } catch (err: any) {
+                    alert(`❌ 异常: ${err.message || err}`);
+                  } finally {
+                    setIsProcessing(false);
                   }
                 }}
-                className="bg-white hover:bg-[#f8fafc] border border-[#cbd5e1] text-[#1e1b18] font-semibold px-3 py-1.5 rounded-md text-xs cursor-pointer whitespace-nowrap"
+                className="bg-[#d96b27] hover:bg-[#b85417] text-white font-semibold px-3 py-1.5 rounded-md text-xs cursor-pointer whitespace-nowrap disabled:opacity-50"
               >
-                ✓ 我已授权，继续
+                {isProcessing ? "正在换取令牌..." : "✓ 我已授权，继续"}
               </button>
             </div>
           </div>
