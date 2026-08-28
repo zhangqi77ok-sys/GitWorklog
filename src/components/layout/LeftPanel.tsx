@@ -7,7 +7,10 @@ import {
   SlidersHorizontal,
   FolderPlus,
   Search,
-  X
+  X,
+  Edit3,
+  Trash2,
+  RefreshCw,
 } from "lucide-react";
 import { nativeService } from "../../services/nativeService";
 
@@ -68,7 +71,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
   activeSessionId = "sess-1",
   onSelectSession,
 }) => {
-  // 从本地持久化加载真实项目列表，彻底过滤掉任何历史残留的 demo 数据
+  // 从本地持久化加载真实项目列表
   const [projects, setProjects] = useState<ProjectFolder[]>(() => {
     try {
       localStorage.removeItem("codemind_real_projects_v1");
@@ -91,6 +94,35 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
 
   const [currentActiveId, setCurrentActiveId] = useState<string>(activeSessionId);
   const [showAllMap, setShowAllMap] = useState<Record<string, boolean>>({});
+
+  // 项目与会话菜单状态
+  const [projectMenuOpenId, setProjectMenuOpenId] = useState<string | null>(null);
+  const [sessionMenuOpenId, setSessionMenuOpenId] = useState<string | null>(null);
+
+  // 重命名弹窗状态
+  const [renameModal, setRenameModal] = useState<{
+    isOpen: boolean;
+    type: "project" | "session";
+    targetId: string;
+    targetProjId?: string;
+    currentName: string;
+  }>({
+    isOpen: false,
+    type: "project",
+    targetId: "",
+    currentName: "",
+  });
+  const [renameInput, setRenameInput] = useState("");
+
+  // 点击外部收起项目/会话操作菜单
+  useEffect(() => {
+    const handleMenuClickOutside = () => {
+      setProjectMenuOpenId(null);
+      setSessionMenuOpenId(null);
+    };
+    window.addEventListener("click", handleMenuClickOutside);
+    return () => window.removeEventListener("click", handleMenuClickOutside);
+  }, []);
 
   // 深度同步外部 activeSessionId 属性
   useEffect(() => {
@@ -119,7 +151,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
     return () => window.removeEventListener("session-status-changed", handleStatusChange);
   }, [currentActiveId, activeSessionId]);
 
-  // 辅助函数：渲染会话三态圆标 (GPU 加速动画与高对比度渲染)
+  // 辅助函数：渲染会话三态圆标
   const renderSessionStatusBadge = (status?: "running" | "idle" | "error") => {
     const currentStatus = status || "idle";
     if (currentStatus === "running") {
@@ -134,7 +166,6 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
         <span className="w-2.5 h-2.5 rounded-full bg-red-500 shrink-0 shadow-xs will-change-opacity animate-pulse" title="会话执行失败/异常 (Error)"></span>
       );
     }
-    // 空闲会话: 实心蓝色圆标
     return (
       <span className="w-2.5 h-2.5 rounded-full bg-blue-500 shrink-0 shadow-xs will-change-opacity" title="空闲就绪会话 (Idle)"></span>
     );
@@ -184,7 +215,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
   const [newSessionTargetProject, setNewSessionTargetProject] = useState<ProjectFolder | null>(null);
   const [newSessionTitleInput, setNewSessionTitleInput] = useState("New AI Coding Task");
 
-  // 打开现代化新建会话弹窗
+  // 打开新建会话弹窗
   const handleAddSession = (e: React.MouseEvent, proj: ProjectFolder) => {
     e.stopPropagation();
     setNewSessionTargetProject(proj);
@@ -233,7 +264,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
     );
   };
 
-  // 真实选择 Windows 文件夹并深度读取项目内容 (采用 Tauri 原生无浏览器权限弹窗方式)
+  // 真实选择 Windows 文件夹并深度读取项目内容 (支持多次添加同名项目，每个生成独立唯一ID)
   const handleOpenWindowsFolderDialog = async () => {
     try {
       const selectedPath = await nativeService.pickFolder();
@@ -262,8 +293,9 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
           realFiles = ["src/index.ts", "package.json", "README.md"];
         }
 
+        // 使用 Date.now() + 随机数保证同一名称项目可重复独立添加
         const newProj: ProjectFolder = {
-          id: `proj-${Date.now()}`,
+          id: `proj-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
           name: folderName,
           path: selectedPath,
           isExpanded: true,
@@ -320,6 +352,144 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
     );
   };
 
+  // 移除项目 (Remove Project)
+  const handleRemoveProject = (projId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setProjects((prev) => {
+      const remaining = prev.filter((p) => p.id !== projId);
+      if (remaining.length > 0) {
+        const firstProj = remaining[0];
+        if (firstProj.sessions.length > 0) {
+          const firstSess = firstProj.sessions[0];
+          setCurrentActiveId(firstSess.id);
+          if (onSelectSession) onSelectSession(firstSess.id, firstSess.title, firstProj.name);
+        }
+      }
+      return remaining;
+    });
+    setProjectMenuOpenId(null);
+  };
+
+  // 移除会话 (Remove Session)
+  const handleRemoveSession = (projId: string, sessId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setProjects((prev) =>
+      prev.map((p) => {
+        if (p.id !== projId) return p;
+        const newSessions = p.sessions.filter((s) => s.id !== sessId);
+        // 如果删光了，自动补一个初始会话
+        if (newSessions.length === 0) {
+          const fallbackSess: ProjectSession = {
+            id: `sess-${Date.now()}`,
+            title: `AI 初始对话 (${p.name})`,
+            time: "刚刚",
+            projectFolder: p.name,
+            status: "idle",
+          };
+          if (sessId === currentActiveId) {
+            setCurrentActiveId(fallbackSess.id);
+            if (onSelectSession) onSelectSession(fallbackSess.id, fallbackSess.title, p.name);
+          }
+          return { ...p, sessions: [fallbackSess] };
+        }
+        if (sessId === currentActiveId) {
+          const nextSess = newSessions[0];
+          setCurrentActiveId(nextSess.id);
+          if (onSelectSession) onSelectSession(nextSess.id, nextSess.title, p.name);
+        }
+        return { ...p, sessions: newSessions };
+      })
+    );
+    setSessionMenuOpenId(null);
+  };
+
+  // 打开重命名弹窗
+  const handleOpenRenameModal = (
+    type: "project" | "session",
+    targetId: string,
+    currentName: string,
+    targetProjId?: string,
+    e?: React.MouseEvent
+  ) => {
+    if (e) e.stopPropagation();
+    setRenameModal({
+      isOpen: true,
+      type,
+      targetId,
+      targetProjId,
+      currentName,
+    });
+    setRenameInput(currentName);
+    setProjectMenuOpenId(null);
+    setSessionMenuOpenId(null);
+  };
+
+  // 确认重命名
+  const handleConfirmRename = () => {
+    if (!renameInput.trim()) return;
+    const val = renameInput.trim();
+
+    if (renameModal.type === "project") {
+      setProjects((prev) =>
+        prev.map((p) => (p.id === renameModal.targetId ? { ...p, name: val } : p))
+      );
+    } else {
+      setProjects((prev) =>
+        prev.map((p) => {
+          if (p.id !== renameModal.targetProjId) return p;
+          return {
+            ...p,
+            sessions: p.sessions.map((s) =>
+              s.id === renameModal.targetId ? { ...s, title: val } : s
+            ),
+          };
+        })
+      );
+    }
+    setRenameModal((prev) => ({ ...prev, isOpen: false }));
+  };
+
+  // 重新扫描项目磁盘文件
+  const handleRescanProjectDisk = async (proj: ProjectFolder, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const targetPath =
+      proj.path ||
+      (proj.name === "geek-boot-parent" ? "d:/weihu/geek-boot-parent" : "d:/weihu/agent-learning");
+    try {
+      const tree = await nativeService.listDirectoryTree(targetPath);
+      const flatten = (entries: any[], prefix = ""): string[] => {
+        let res: string[] = [];
+        for (const entry of entries) {
+          const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+          if (entry.is_dir) {
+            res.push(`${rel}/`);
+            if (entry.children) res = res.concat(flatten(entry.children, rel));
+          } else {
+            res.push(rel);
+          }
+        }
+        return res;
+      };
+      const files = flatten(tree);
+      setProjects((prev) =>
+        prev.map((p) => (p.id === proj.id ? { ...p, files } : p))
+      );
+      window.dispatchEvent(
+        new CustomEvent("project-switched", {
+          detail: {
+            projectName: proj.name,
+            fullPath: targetPath,
+            files,
+            sessionTitle: proj.sessions[0]?.title || "",
+          },
+        })
+      );
+    } catch (err) {
+      console.warn("Rescan disk failed:", err);
+    }
+    setProjectMenuOpenId(null);
+  };
+
   // 聚合所有会话以供筛选
   const allSessions: ProjectSession[] = projects.flatMap((p) =>
     p.sessions.map((s) => ({ ...s, projectFolder: p.name }))
@@ -370,7 +540,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
           <button
             onClick={handleOpenWindowsFolderDialog}
             className="w-6 h-6 rounded-md hover:bg-[#ebe5df] flex items-center justify-center cursor-pointer transition-colors text-[#374151]"
-            title="从 Windows 系统选择并打开项目文件夹"
+            title="从 Windows 系统选择并打开项目文件夹 (支持同名项目重复添加)"
           >
             <FolderPlus size={14} />
           </button>
@@ -478,15 +648,15 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
                   <div className="flex items-center gap-2 min-w-0 pr-2">
                     {renderSessionStatusBadge(sess.status)}
                     <div className="flex flex-col min-w-0">
-                      <span className="font-medium text-xs text-[#1e1b18] group-hover:text-[#d96b27] truncate">
+                      <span className="truncate font-medium text-[#1e1b18] group-hover:text-[#d96b27]">
                         {sess.title}
                       </span>
-                      <span className="text-[9px] text-[#9ca3af] truncate">
+                      <span className="text-[10px] text-[#9ca3af] truncate">
                         {sess.projectFolder}
                       </span>
                     </div>
                   </div>
-                  <span className="text-[9px] text-[#9ca3af] shrink-0 font-mono">
+                  <span className="text-[10px] text-[#9ca3af] shrink-0 font-normal">
                     {sess.time}
                   </span>
                 </div>
@@ -505,8 +675,10 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
               ? proj.sessions.slice(0, 6)
               : proj.sessions;
 
+          const isProjectMenuOpen = projectMenuOpenId === proj.id;
+
           return (
-            <div key={proj.id} className="flex flex-col gap-0.5">
+            <div key={proj.id} className="flex flex-col gap-0.5 relative">
               {/* 1. 项目文件夹行 */}
               <div
                 onClick={() => toggleFolder(proj.id)}
@@ -531,10 +703,10 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
-                      alert(`工作区选项: ${proj.name}\n已加载文件数: ${proj.files?.length || 0}`);
+                      setProjectMenuOpenId((prev) => (prev === proj.id ? null : proj.id));
                     }}
                     className="w-5 h-5 rounded hover:bg-[#ded7ce] flex items-center justify-center text-[#6b7280] cursor-pointer"
-                    title="更多选项"
+                    title="项目操作 (重命名/删除/刷新)"
                   >
                     <MoreVertical size={12} />
                   </button>
@@ -549,17 +721,56 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
                 </div>
               </div>
 
+              {/* 项目级更多操作弹出菜单 (Popover) */}
+              {isProjectMenuOpen && (
+                <div
+                  onClick={(e) => e.stopPropagation()}
+                  className="absolute top-8 right-2 z-50 w-36 bg-white border border-[#e5dfd8] rounded-xl shadow-xl p-1 flex flex-col gap-0.5 text-xs text-[#1e1b18] animate-in fade-in zoom-in-95"
+                >
+                  <button
+                    onClick={(e) => handleAddSession(e, proj)}
+                    className="w-full px-2.5 py-1.5 rounded-lg flex items-center gap-2 hover:bg-[#faf8f5] text-[#334155] cursor-pointer transition-colors"
+                  >
+                    <Plus size={12} className="text-[#d96b27]" />
+                    <span>新建会话</span>
+                  </button>
+                  <button
+                    onClick={(e) => handleOpenRenameModal("project", proj.id, proj.name, undefined, e)}
+                    className="w-full px-2.5 py-1.5 rounded-lg flex items-center gap-2 hover:bg-[#faf8f5] text-[#334155] cursor-pointer transition-colors"
+                  >
+                    <Edit3 size={12} className="text-[#2563eb]" />
+                    <span>重命名项目</span>
+                  </button>
+                  <button
+                    onClick={(e) => handleRescanProjectDisk(proj, e)}
+                    className="w-full px-2.5 py-1.5 rounded-lg flex items-center gap-2 hover:bg-[#faf8f5] text-[#334155] cursor-pointer transition-colors"
+                  >
+                    <RefreshCw size={12} className="text-[#10b981]" />
+                    <span>刷新磁盘文件</span>
+                  </button>
+                  <div className="w-full h-[1px] bg-[#f1f5f9] my-0.5" />
+                  <button
+                    onClick={(e) => handleRemoveProject(proj.id, e)}
+                    className="w-full px-2.5 py-1.5 rounded-lg flex items-center gap-2 hover:bg-[#fee2e2] text-[#ef4444] cursor-pointer transition-colors"
+                  >
+                    <Trash2 size={12} />
+                    <span>移除该项目</span>
+                  </button>
+                </div>
+              )}
+
               {/* 2. 项目下的会话子列表 (缩进) */}
               {proj.isExpanded && (
                 <div className="flex flex-col gap-0.5 pl-2 mt-0.5">
                   {displaySessions.map((sess) => {
                     const isActive = currentActiveId === sess.id;
+                    const isSessionMenuOpen = sessionMenuOpenId === sess.id;
 
                     return (
                       <div
                         key={sess.id}
                         onClick={() => handleSelectSession(sess, proj)}
-                        className={`group flex items-center justify-between px-2.5 py-1.5 rounded-lg cursor-pointer transition-all ${
+                        className={`group relative flex items-center justify-between px-2.5 py-1.5 rounded-lg cursor-pointer transition-all ${
                           isActive
                             ? "bg-[#e5e7eb] text-[#111827] font-medium shadow-2xs"
                             : "text-[#4b5563] hover:bg-[#ebe5df]/60 hover:text-[#111827]"
@@ -571,9 +782,50 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
                             {sess.title}
                           </span>
                         </div>
-                        <span className="text-[10px] text-[#9ca3af] shrink-0 font-normal">
-                          {sess.time}
-                        </span>
+
+                        <div className="flex items-center gap-1 shrink-0">
+                          <span className="text-[10px] text-[#9ca3af] font-normal group-hover:hidden">
+                            {sess.time}
+                          </span>
+
+                          {/* 悬浮操作按钮组 */}
+                          <div className="hidden group-hover:flex items-center gap-0.5">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSessionMenuOpenId((prev) => (prev === sess.id ? null : sess.id));
+                              }}
+                              className="w-4.5 h-4.5 rounded hover:bg-[#ded7ce] flex items-center justify-center text-[#6b7280] cursor-pointer"
+                              title="会话操作"
+                            >
+                              <MoreVertical size={11} />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* 会话级操作菜单 */}
+                        {isSessionMenuOpen && (
+                          <div
+                            onClick={(e) => e.stopPropagation()}
+                            className="absolute top-7 right-2 z-50 w-28 bg-white border border-[#e5dfd8] rounded-xl shadow-xl p-1 flex flex-col gap-0.5 text-xs text-[#1e1b18] animate-in fade-in zoom-in-95"
+                          >
+                            <button
+                              onClick={(e) => handleOpenRenameModal("session", sess.id, sess.title, proj.id, e)}
+                              className="w-full px-2 py-1 rounded-lg flex items-center gap-1.5 hover:bg-[#faf8f5] text-[#334155] cursor-pointer transition-colors"
+                            >
+                              <Edit3 size={11} className="text-[#2563eb]" />
+                              <span>重命名</span>
+                            </button>
+                            <button
+                              onClick={(e) => handleRemoveSession(proj.id, sess.id, e)}
+                              className="w-full px-2 py-1 rounded-lg flex items-center gap-1.5 hover:bg-[#fee2e2] text-[#ef4444] cursor-pointer transition-colors"
+                            >
+                              <Trash2 size={11} />
+                              <span>删除会话</span>
+                            </button>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -601,6 +853,67 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
           );
         })}
       </div>
+
+      {/* 统一重命名模态弹窗 */}
+      {renameModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4 animate-in fade-in">
+          <div className="bg-white border border-[#e5dfd8] rounded-2xl shadow-2xl w-full max-w-sm flex flex-col overflow-hidden animate-in zoom-in-95">
+            <div className="px-4 py-3 border-b border-[#f4efea] flex justify-between items-center bg-[#faf8f5]">
+              <div className="flex items-center gap-2">
+                <Edit3 size={14} className="text-[#d96b27]" />
+                <h3 className="text-xs font-bold text-[#1e1b18]">
+                  {renameModal.type === "project" ? "重命名项目工作区" : "重命名会话标题"}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setRenameModal((prev) => ({ ...prev, isOpen: false }))}
+                className="w-6 h-6 rounded-lg hover:bg-[#ebe5df] flex items-center justify-center text-[#78716c] hover:text-[#1e1b18] cursor-pointer"
+              >
+                <X size={13} />
+              </button>
+            </div>
+
+            <div className="p-4 flex flex-col gap-2">
+              <label className="text-[11px] font-semibold text-[#4b5563]">
+                请输入新名称：
+              </label>
+              <input
+                type="text"
+                autoFocus
+                value={renameInput}
+                onChange={(e) => setRenameInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleConfirmRename();
+                  } else if (e.key === "Escape") {
+                    setRenameModal((prev) => ({ ...prev, isOpen: false }));
+                  }
+                }}
+                className="w-full px-3 py-2 border border-[#e5dfd8] focus:border-[#d96b27] rounded-xl text-xs outline-none bg-[#faf8f5] font-medium"
+              />
+            </div>
+
+            <div className="px-4 py-3 border-t border-[#f4efea] bg-[#faf8f5] flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setRenameModal((prev) => ({ ...prev, isOpen: false }))}
+                className="px-3 py-1.5 rounded-xl border border-[#e5dfd8] hover:bg-[#ebe5df] text-[#4b5563] text-xs font-medium cursor-pointer transition-colors"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmRename}
+                className="px-4 py-1.5 rounded-xl bg-[#d96b27] hover:bg-[#b85417] text-white text-xs font-semibold cursor-pointer shadow-xs transition-colors"
+              >
+                保存变更
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 现代化新建会话模态弹窗 (与系统整体风格保持一致) */}
       {isNewSessionModalOpen && newSessionTargetProject && (
@@ -648,26 +961,26 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
                     setIsNewSessionModalOpen(false);
                   }
                 }}
-                placeholder="例如: 接口重构与单元测试 / 架构排查..."
-                className="w-full px-3 py-2 border border-[#e5dfd8] focus:border-[#d96b27] focus:ring-2 focus:ring-[#fed7aa]/50 rounded-xl text-xs outline-none bg-[#faf8f5] text-[#1e1b18]"
+                placeholder="例如：重构用户鉴权拦截器..."
+                className="w-full px-3 py-2 border border-[#e5dfd8] focus:border-[#d96b27] rounded-xl text-xs outline-none bg-[#faf8f5]"
               />
             </div>
 
-            {/* 弹窗底部操作条 */}
-            <div className="px-4 py-2.5 border-t border-[#f4efea] bg-[#faf8f5] flex justify-end items-center gap-2">
+            {/* 弹窗底部 */}
+            <div className="px-4 py-3 border-t border-[#f4efea] bg-[#faf8f5] flex justify-end gap-2">
               <button
                 type="button"
                 onClick={() => setIsNewSessionModalOpen(false)}
-                className="px-3 py-1.5 rounded-lg text-xs font-medium text-[#6b7280] hover:bg-[#ebe5df] cursor-pointer transition-colors"
+                className="px-3 py-1.5 rounded-xl border border-[#e5dfd8] hover:bg-[#ebe5df] text-[#4b5563] text-xs font-medium cursor-pointer transition-colors"
               >
                 取消
               </button>
               <button
                 type="button"
                 onClick={handleConfirmCreateSession}
-                className="bg-[#d96b27] hover:bg-[#b85417] text-white px-4 py-1.5 rounded-lg text-xs font-semibold cursor-pointer shadow-sm transition-all"
+                className="px-4 py-1.5 rounded-xl bg-[#d96b27] hover:bg-[#b85417] text-white text-xs font-semibold cursor-pointer shadow-xs transition-colors"
               >
-                创建会话
+                立即创建
               </button>
             </div>
           </div>

@@ -30,6 +30,11 @@ import {
   Network,
   Star,
   ExternalLink,
+  ArrowUp,
+  ArrowDown,
+  Edit3,
+  Trash2,
+  ListOrdered,
 } from "lucide-react";
 import { LLMChannel } from "../../types";
 import { llmConfigService } from "../../services/llmConfigService";
@@ -194,6 +199,16 @@ export interface StandardMessage extends ChatMessage {
   webSearchCitations?: WebSearchResult[];
 }
 
+export interface QueuedQuestion {
+  id: string;
+  text: string;
+  images: { id: string; name: string; dataUrl: string; size: number }[];
+  attachedFiles: string[];
+  isThinkingEnabled: boolean;
+  isWebSearchEnabled: boolean;
+  createdAt: number;
+}
+
 interface ChatColumnProps {
   width?: number;
   activeSessionId?: string;
@@ -239,6 +254,11 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
   const [isWebSearchEnabled, setIsWebSearchEnabled] = useState(false);
   const [isGitModalOpen, setIsGitModalOpen] = useState(false);
   const [compressionNotice, setCompressionNotice] = useState<string | null>(null);
+
+  // 问题排队流水线队列状态 (Queue Pipeline)
+  const [questionQueue, setQuestionQueue] = useState<QueuedQuestion[]>([]);
+  const [editingQueueId, setEditingQueueId] = useState<string | null>(null);
+  const [editingQueueText, setEditingQueueText] = useState("");
 
   // 回车发送模式：默认 "enter" (Enter发送，Shift+Enter换行)，可切换 "ctrl_enter" (Ctrl+Enter发送)
   const [sendShortcut, setSendShortcut] = useState<"enter" | "ctrl_enter">(() => {
@@ -872,20 +892,23 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
   };
 
   // 核心统一网关发送与真实流式调度
-  const handleSend = async () => {
-    if (!input.trim() || isGenerating) return;
-    const userPrompt = input.trim();
-    const imagesToAttach = [...pastedImages];
-    setInput("");
-    setPastedImages([]);
-
+  const executeQuestionPayload = async (payload: {
+    promptText: string;
+    imagesToAttach: { id: string; name: string; dataUrl: string; size: number }[];
+    filesToAttach: string[];
+    thinking: boolean;
+    webSearch: boolean;
+  }) => {
+    const { promptText, imagesToAttach, filesToAttach, thinking, webSearch } = payload;
     const targetChan = activeChannel || channels[0];
     const targetModel = activeModel;
 
     // 1. 追加用户消息 (含图片附件提示)
-    let displayPrompt = userPrompt;
+    let displayPrompt = promptText;
     if (imagesToAttach.length > 0) {
-      displayPrompt = `[🖼️ 已挂载 ${imagesToAttach.length} 张图片附件: ${imagesToAttach.map((img) => img.name).join(", ")}]\n\n` + userPrompt;
+      displayPrompt =
+        `[🖼️ 已挂载 ${imagesToAttach.length} 张图片附件: ${imagesToAttach.map((img) => img.name).join(", ")}]\n\n` +
+        promptText;
     }
 
     const userMsg: StandardMessage = {
@@ -905,7 +928,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
 
     // 生产级互联网实时搜索抓取 (若用户开启了联网模式)
     let webSearchPromptContext = "";
-    if (isWebSearchEnabled) {
+    if (webSearch) {
       try {
         const citations = await webSearchService.search(userMsg.content);
         if (citations && citations.length > 0) {
@@ -961,7 +984,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
 Current Workspace Project: "${currentProjectName}"
 Git Branch: ${detectedGitBranch || "None (Not a git repository)"}
 Project Files: ${availableFiles.slice(0, 15).join(", ")}
-${attachedFiles.length > 0 ? `Attached Context Files: ${attachedFiles.join(", ")}` : "No explicit files attached."}
+${filesToAttach.length > 0 ? `Attached Context Files: ${filesToAttach.join(", ")}` : "No explicit files attached."}
 
 ${graphContext}
 ${memoryContext}
@@ -983,7 +1006,7 @@ Instructions:
       channel: targetChan,
       model: targetModel,
       messages: requestMessages,
-      enableThinking: isThinkingEnabled,
+      enableThinking: thinking,
       abortSignal: controller.signal,
       callbacks: {
         onToken: (contentChunk, reasoningChunk) => {
@@ -1049,6 +1072,113 @@ Instructions:
           });
         },
       },
+    });
+  };
+
+  // 用户点击发送 / 回车发送统一入口 (支持生成中队列模式)
+  const handleSend = async () => {
+    if (!input.trim()) return;
+
+    if (isGenerating) {
+      // 正在生成中：将新问题推入待发送流水线队列 (Pipeline Queue)
+      const queuedItem: QueuedQuestion = {
+        id: `queue-${Date.now()}-${Math.random()}`,
+        text: input.trim(),
+        images: [...pastedImages],
+        attachedFiles: [...attachedFiles],
+        isThinkingEnabled,
+        isWebSearchEnabled,
+        createdAt: Date.now(),
+      };
+      setQuestionQueue((prev) => [...prev, queuedItem]);
+      setInput("");
+      setPastedImages([]);
+      return;
+    }
+
+    const userPrompt = input.trim();
+    const imagesToAttach = [...pastedImages];
+    const filesToAttach = [...attachedFiles];
+    const thinking = isThinkingEnabled;
+    const webSearch = isWebSearchEnabled;
+
+    setInput("");
+    setPastedImages([]);
+
+    await executeQuestionPayload({
+      promptText: userPrompt,
+      imagesToAttach,
+      filesToAttach,
+      thinking,
+      webSearch,
+    });
+  };
+
+  // 队列调度监听器：当前任务完成且队列中有待办问题时，自动弹出队首执行
+  useEffect(() => {
+    if (!isGenerating && questionQueue.length > 0) {
+      const nextQ = questionQueue[0];
+      setQuestionQueue((prev) => prev.slice(1));
+      executeQuestionPayload({
+        promptText: nextQ.text,
+        imagesToAttach: nextQ.images,
+        filesToAttach: nextQ.attachedFiles,
+        thinking: nextQ.isThinkingEnabled,
+        webSearch: nextQ.isWebSearchEnabled,
+      });
+    }
+  }, [isGenerating, questionQueue]);
+
+  // 队列项操作：修改
+  const handleStartEditQueue = (id: string, currentText: string) => {
+    setEditingQueueId(id);
+    setEditingQueueText(currentText);
+  };
+
+  const handleSaveQueueEdit = (id: string) => {
+    if (!editingQueueText.trim()) return;
+    setQuestionQueue((prev) =>
+      prev.map((q) => (q.id === id ? { ...q, text: editingQueueText.trim() } : q))
+    );
+    setEditingQueueId(null);
+  };
+
+  // 队列项操作：删除
+  const handleDeleteQueueItem = (id: string) => {
+    setQuestionQueue((prev) => prev.filter((q) => q.id !== id));
+  };
+
+  // 队列项操作：上移
+  const handleMoveQueueUp = (index: number) => {
+    if (index <= 0) return;
+    setQuestionQueue((prev) => {
+      const copy = [...prev];
+      const temp = copy[index - 1];
+      copy[index - 1] = copy[index];
+      copy[index] = temp;
+      return copy;
+    });
+  };
+
+  // 队列项操作：下移
+  const handleMoveQueueDown = (index: number) => {
+    setQuestionQueue((prev) => {
+      if (index >= prev.length - 1) return prev;
+      const copy = [...prev];
+      const temp = copy[index + 1];
+      copy[index + 1] = copy[index];
+      copy[index] = temp;
+      return copy;
+    });
+  };
+
+  // 队列项操作：插队优先
+  const handleMoveQueueToFront = (index: number) => {
+    if (index === 0) return;
+    setQuestionQueue((prev) => {
+      const copy = [...prev];
+      const [item] = copy.splice(index, 1);
+      return [item, ...copy];
     });
   };
 
@@ -1472,6 +1602,144 @@ Instructions:
           </div>
         )}
 
+        {/* ⏳ 待执行问题流水线队列面板 (Question Queue Pipeline Panel) */}
+        {questionQueue.length > 0 && (
+          <div className="bg-[#fffbeb] border border-[#fde68a] rounded-xl p-2.5 flex flex-col gap-2 shadow-xs animate-in fade-in slide-in-from-bottom-2 text-xs">
+            <div className="flex justify-between items-center text-[#b45309] font-semibold border-b border-[#fef3c7] pb-1.5">
+              <div className="flex items-center gap-1.5">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                </span>
+                <span className="font-bold flex items-center gap-1">
+                  <ListOrdered size={12} className="text-[#d97706]" /> 待执行问题队列 ({questionQueue.length})
+                </span>
+                <span className="text-[10px] text-[#d97706] font-normal hidden sm:inline">
+                  · 当前回答完成后将按序自动执行
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setQuestionQueue([])}
+                className="text-[10px] text-[#d97706] hover:text-[#b45309] hover:underline cursor-pointer"
+              >
+                清空队列
+              </button>
+            </div>
+
+            <div className="flex flex-col gap-1 max-h-36 overflow-y-auto pr-1">
+              {questionQueue.map((item, idx) => {
+                const isEditing = editingQueueId === item.id;
+
+                return (
+                  <div
+                    key={item.id}
+                    className="bg-white border border-[#fef08a] rounded-lg p-2 flex items-center justify-between gap-2 shadow-2xs group"
+                  >
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <span className="bg-[#fef3eb] text-[#d96b27] font-mono font-bold text-[10px] px-1.5 py-0.5 rounded shrink-0">
+                        #{idx + 1}
+                      </span>
+
+                      {isEditing ? (
+                        <div className="flex items-center gap-1.5 flex-1">
+                          <input
+                            type="text"
+                            autoFocus
+                            value={editingQueueText}
+                            onChange={(e) => setEditingQueueText(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") handleSaveQueueEdit(item.id);
+                              else if (e.key === "Escape") setEditingQueueId(null);
+                            }}
+                            className="flex-1 px-2 py-1 border border-[#d96b27] rounded text-xs outline-none font-medium bg-[#faf8f5]"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleSaveQueueEdit(item.id)}
+                            className="px-2 py-1 bg-[#d96b27] text-white rounded text-[10px] font-semibold cursor-pointer"
+                          >
+                            保存
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditingQueueId(null)}
+                            className="px-1.5 py-1 text-[#64748b] hover:bg-[#f1f5f9] rounded text-[10px] cursor-pointer"
+                          >
+                            取消
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="text-[#1e1b18] truncate text-xs font-medium">
+                          {item.text}
+                        </span>
+                      )}
+                    </div>
+
+                    {!isEditing && (
+                      <div className="flex items-center gap-1 shrink-0">
+                        {/* 上移 */}
+                        <button
+                          type="button"
+                          onClick={() => handleMoveQueueUp(idx)}
+                          disabled={idx === 0}
+                          className="w-5 h-5 rounded hover:bg-[#fef3eb] disabled:opacity-30 disabled:hover:bg-transparent flex items-center justify-center text-[#78716c] hover:text-[#d96b27] cursor-pointer disabled:cursor-default"
+                          title="向上移动"
+                        >
+                          <ArrowUp size={11} />
+                        </button>
+
+                        {/* 下移 */}
+                        <button
+                          type="button"
+                          onClick={() => handleMoveQueueDown(idx)}
+                          disabled={idx === questionQueue.length - 1}
+                          className="w-5 h-5 rounded hover:bg-[#fef3eb] disabled:opacity-30 disabled:hover:bg-transparent flex items-center justify-center text-[#78716c] hover:text-[#d96b27] cursor-pointer disabled:cursor-default"
+                          title="向下移动"
+                        >
+                          <ArrowDown size={11} />
+                        </button>
+
+                        {/* 插队优先 */}
+                        {idx > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => handleMoveQueueToFront(idx)}
+                            className="px-1.5 py-0.5 rounded bg-[#fef3eb] hover:bg-[#fed7aa] text-[#c2410c] text-[10px] font-semibold cursor-pointer"
+                            title="插队至最前优先执行"
+                          >
+                            ⚡ 插队
+                          </button>
+                        )}
+
+                        {/* 编辑 */}
+                        <button
+                          type="button"
+                          onClick={() => handleStartEditQueue(item.id, item.text)}
+                          className="w-5 h-5 rounded hover:bg-[#eff6ff] flex items-center justify-center text-[#2563eb] cursor-pointer"
+                          title="编辑该问题"
+                        >
+                          <Edit3 size={11} />
+                        </button>
+
+                        {/* 删除 */}
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteQueueItem(item.id)}
+                          className="w-5 h-5 rounded hover:bg-[#fee2e2] flex items-center justify-center text-[#ef4444] cursor-pointer"
+                          title="从队列中移除"
+                        >
+                          <Trash2 size={11} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* 核心输入框容器 (含 / 键触发的 Skill / MCP 智能联想菜单) */}
         <div className="bg-white border border-[#d0c7bd] focus-within:border-[#d96b27] focus-within:ring-2 focus-within:ring-[#fed7aa]/50 rounded-xl p-2.5 flex flex-col gap-2 shadow-2xs transition-all relative">
           
@@ -1868,14 +2136,28 @@ Instructions:
               </button>
 
               {isGenerating ? (
-                <button
-                  type="button"
-                  onClick={handleStopGenerating}
-                  className="bg-[#ef4444] hover:bg-[#dc2626] text-white px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all shadow-sm active:scale-95 animate-pulse"
-                >
-                  <Square size={11} />
-                  <span>停止生成</span>
-                </button>
+                <div className="flex items-center gap-1.5">
+                  {input.trim().length > 0 && (
+                    <button
+                      type="button"
+                      onClick={handleSend}
+                      className="bg-[#f59e0b] hover:bg-[#d97706] text-white px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all shadow-sm active:scale-95 animate-in fade-in"
+                      title="将新问题加入执行队列，当前回答完成后自动执行"
+                    >
+                      <ListOrdered size={11} />
+                      <span>加入队列 (#{questionQueue.length + 1})</span>
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleStopGenerating}
+                    className="bg-[#ef4444] hover:bg-[#dc2626] text-white px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all shadow-sm active:scale-95 animate-pulse"
+                    title="立即中断当前流式生成"
+                  >
+                    <Square size={11} />
+                    <span>停止生成</span>
+                  </button>
+                </div>
               ) : (
                 <button
                   type="button"
