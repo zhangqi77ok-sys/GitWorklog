@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Terminal, FileCode, Play, Save, Check } from "lucide-react";
+import { Terminal, FileCode, Play, Save, Check, X, PanelRightClose } from "lucide-react";
 import { nativeService } from "../../services/nativeService";
 
 interface EditorWorkspaceProps {
   terminalHeight: number;
   onTerminalResizeMouseDown: (e: React.MouseEvent) => void;
   isTerminalDragging: boolean;
+  onCloseWorkspace?: () => void;
 }
 
 interface OpenTab {
@@ -20,6 +21,7 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
   terminalHeight,
   onTerminalResizeMouseDown,
   isTerminalDragging,
+  onCloseWorkspace,
 }) => {
   const [tabs, setTabs] = useState<OpenTab[]>([
     {
@@ -80,30 +82,33 @@ export const AccountCard = () => {
   const activeTab = tabs.find((t) => t.id === activeTabId) || tabs[0];
   const terminalEndRef = useRef<HTMLDivElement>(null);
 
-  // 监听打开文件事件
+  // 监听打开文件事件 (来自对话框中代码卡片或文件点击)
   useEffect(() => {
     const handleOpenFile = async (e: any) => {
-      const { path, name } = e.detail || {};
-      if (!path) return;
+      const { path, name, content: initialContent } = e.detail || {};
+      if (!path && !name) return;
 
-      const existing = tabs.find((t) => t.path === path);
+      const targetPath = path || name;
+      const existing = tabs.find((t) => t.path === targetPath || t.name === name);
       if (existing) {
         setActiveTabId(existing.id);
         return;
       }
 
-      let content = "";
-      try {
-        content = await nativeService.readFile(path);
-      } catch (err) {
-        content = `// 无法读取文件内容: ${path}\n// 请确认文件存在且可读`;
+      let content = initialContent || "";
+      if (!content && path) {
+        try {
+          content = await nativeService.readFile(path);
+        } catch (err) {
+          content = `// 文件已打开: ${path}\n// 暂未读取到磁盘内容`;
+        }
       }
 
       const newTab: OpenTab = {
         id: `tab-${Date.now()}`,
-        name: name || path.split("/").pop() || "file",
-        path,
-        content,
+        name: name || targetPath.split("/").pop() || "file",
+        path: targetPath,
+        content: content || "// CodeMind Generated Workspace File\n",
       };
       setTabs((prev) => [...prev, newTab]);
       setActiveTabId(newTab.id);
@@ -112,6 +117,17 @@ export const AccountCard = () => {
     window.addEventListener("open-workspace-file", handleOpenFile);
     return () => window.removeEventListener("open-workspace-file", handleOpenFile);
   }, [tabs]);
+
+  // 关闭单个标签页
+  const handleCloseTab = (tabIdToClose: string) => {
+    const newTabs = tabs.filter((t) => t.id !== tabIdToClose);
+    setTabs(newTabs);
+    if (activeTabId === tabIdToClose && newTabs.length > 0) {
+      setActiveTabId(newTabs[newTabs.length - 1].id);
+    } else if (newTabs.length === 0 && onCloseWorkspace) {
+      onCloseWorkspace();
+    }
+  };
 
   // 监听运行验证事件
   useEffect(() => {
@@ -166,8 +182,8 @@ export const AccountCard = () => {
   };
 
   return (
-    <main className="flex-1 bg-[#faf8f5] flex flex-col justify-between overflow-hidden relative">
-      {/* 顶部标签页 */}
+    <main className="flex-1 bg-[#faf8f5] flex flex-col justify-between overflow-hidden relative border-l border-[#e5dfd8]">
+      {/* 顶部标签页与关闭操作条 */}
       <div className="h-9 bg-[#f4efea] border-b border-[#e5dfd8] px-3 flex items-center justify-between shrink-0 text-xs select-none">
         <div className="flex items-center gap-1 overflow-x-auto">
           {tabs.map((tab) => {
@@ -176,21 +192,32 @@ export const AccountCard = () => {
               <div
                 key={tab.id}
                 onClick={() => setActiveTabId(tab.id)}
-                className={`px-3 py-1.5 rounded-t-md font-medium flex items-center gap-1.5 cursor-pointer transition-colors ${
+                className={`group px-3 py-1.5 rounded-t-md font-medium flex items-center gap-1.5 cursor-pointer transition-colors ${
                   isActive
                     ? "bg-white border-t-2 border-t-[#d96b27] border-x border-b-transparent border-[#e5dfd8] text-[#1e1b18] font-semibold shadow-2xs"
                     : "text-[#645e57] hover:bg-[#ebe5df]"
                 }`}
               >
                 <FileCode size={13} className={isActive ? "text-[#d96b27]" : ""} />
-                <span className="truncate max-w-[180px]">{tab.name}</span>
+                <span className="truncate max-w-[150px]">{tab.name}</span>
                 {tab.isDirty && <span className="w-1.5 h-1.5 rounded-full bg-[#d96b27]" />}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleCloseTab(tab.id);
+                  }}
+                  className="w-4 h-4 rounded hover:bg-[#e5dfd8] text-[#78716c] hover:text-[#1e1b18] flex items-center justify-center opacity-70 group-hover:opacity-100 transition-opacity ml-1"
+                  title="关闭此标签"
+                >
+                  <X size={10} />
+                </button>
               </div>
             );
           })}
         </div>
 
-        {/* 顶部快捷操作 */}
+        {/* 顶部快捷操作与关闭右侧面板按钮 */}
         <div className="flex items-center gap-2 text-[11px]">
           {saveStatus && (
             <span className="text-[#059669] flex items-center gap-1 animate-in fade-in">
@@ -199,49 +226,67 @@ export const AccountCard = () => {
           )}
           <button
             onClick={handleSaveCurrentFile}
-            className="px-2 py-0.5 bg-white hover:bg-[#f4efea] border border-[#e5dfd8] rounded text-[#645e57] hover:text-[#1e1b18] flex items-center gap-1 cursor-pointer"
+            className="px-2 py-0.5 bg-white hover:bg-[#f4efea] border border-[#e5dfd8] rounded text-[#645e57] hover:text-[#1e1b18] flex items-center gap-1 cursor-pointer transition-colors"
             title="保存文件 (Ctrl+S)"
           >
             <Save size={11} /> 保存
           </button>
+
+          {onCloseWorkspace && (
+            <button
+              onClick={onCloseWorkspace}
+              className="px-2 py-0.5 bg-[#f4efea] hover:bg-[#ebe5df] border border-[#e5dfd8] text-[#78716c] hover:text-[#dc2626] rounded flex items-center gap-1 cursor-pointer transition-colors"
+              title="关闭并收起右侧工作区面板"
+            >
+              <PanelRightClose size={12} />
+              <span>关闭</span>
+            </button>
+          )}
         </div>
       </div>
 
       {/* 真实代码编辑与预览区 */}
-      <div className="flex-1 flex overflow-hidden bg-white select-text font-mono text-xs">
-        {/* 行号栏 */}
-        <div className="w-11 bg-[#faf8f5] border-r border-[#f4efea] py-3 text-right pr-2.5 text-[#a8a29e] select-none leading-relaxed">
-          {activeTab.content.split("\n").map((_, i) => (
-            <div key={i}>{i + 1}</div>
-          ))}
+      {activeTab ? (
+        <div className="flex-1 flex overflow-hidden bg-white select-text font-mono text-xs">
+          {/* 行号栏 */}
+          <div className="w-11 bg-[#faf8f5] border-r border-[#f4efea] py-3 text-right pr-2.5 text-[#a8a29e] select-none leading-relaxed">
+            {activeTab.content.split("\n").map((_, i) => (
+              <div key={i}>{i + 1}</div>
+            ))}
+          </div>
+
+          {/* 代码输入与高亮区 */}
+          <textarea
+            value={activeTab.content}
+            onChange={(e) => {
+              const val = e.target.value;
+              setTabs((prev) =>
+                prev.map((t) =>
+                  t.id === activeTab.id ? { ...t, content: val, isDirty: true } : t
+                )
+              );
+            }}
+            onKeyDown={(e) => {
+              if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+                e.preventDefault();
+                handleSaveCurrentFile();
+              }
+            }}
+            className="flex-1 p-3 bg-transparent text-[#1e1b18] outline-none resize-none font-mono leading-relaxed selection:bg-[#fed7aa]"
+            spellCheck={false}
+          />
         </div>
+      ) : (
+        <div className="flex-1 flex flex-col items-center justify-center text-[#78716c] text-xs gap-2">
+          <FileCode size={24} className="opacity-40" />
+          <span>当前没有打开的代码文件</span>
+        </div>
+      )}
 
-        {/* 代码输入与高亮区 */}
-        <textarea
-          value={activeTab.content}
-          onChange={(e) => {
-            const val = e.target.value;
-            setTabs((prev) =>
-              prev.map((t) =>
-                t.id === activeTab.id ? { ...t, content: val, isDirty: true } : t
-              )
-            );
-          }}
-          onKeyDown={(e) => {
-            if ((e.ctrlKey || e.metaKey) && e.key === "s") {
-              e.preventDefault();
-              handleSaveCurrentFile();
-            }
-          }}
-          className="flex-1 p-3 outline-none resize-none leading-relaxed text-[#1e1b18] font-mono text-xs bg-transparent"
-          spellCheck={false}
-        />
-      </div>
-
-      {/* 代码区与终端之间的上下拖拽把手 (Row Resize Handle) */}
+      {/* 终端高度调整分割线 */}
       <div
         onMouseDown={onTerminalResizeMouseDown}
-        className={`h-1.5 w-full cursor-row-resize relative z-10 transition-colors ${
+        className={`h-1.5 w-full cursor-row-resize relative z-20 shrink-0 transition-colors ${
           isTerminalDragging ? "bg-[#d96b27]" : "bg-[#e5dfd8] hover:bg-[#d96b27]"
         }`}
         title="按住鼠标拖拽调整终端高度"
@@ -249,43 +294,39 @@ export const AccountCard = () => {
         <div className="absolute inset-x-0 -top-1 -bottom-1 cursor-row-resize" />
       </div>
 
-      {/* 底部：真实集成沙箱终端 */}
+      {/* 底部原生沙箱终端 */}
       <div
         style={{ height: `${terminalHeight}px` }}
-        className="bg-[#1e1b18] text-white flex flex-col shrink-0 overflow-hidden select-text font-mono text-xs"
+        className="bg-[#18181b] border-t border-[#27272a] flex flex-col shrink-0 font-mono text-[11px] select-text"
       >
-        <div className="px-3 py-1.5 bg-[#2d2823] border-b border-[#3e3830] flex justify-between items-center text-xs select-none">
-          <div className="flex items-center gap-1.5 font-bold text-gray-300">
-            <Terminal size={13} className="text-[#10b981]" />
-            <span>Tauri Native Sandbox Terminal</span>
-          </div>
-
+        <div className="h-7 bg-[#27272a] px-3 flex items-center justify-between text-[#a1a1aa] select-none border-b border-[#3f3f46]">
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => runVerificationCommand("pytest -v")}
-              disabled={isExecutingCmd}
-              className="px-2 py-0.5 bg-[#3e3830] hover:bg-[#4a443a] text-gray-200 rounded text-[10px] font-semibold flex items-center gap-1 cursor-pointer"
-            >
-              <Play size={9} className="text-[#10b981] fill-[#10b981]" />
-              <span>{isExecutingCmd ? "运行中..." : "运行 PyTest 验证"}</span>
-            </button>
-            <span className="text-[10px] text-gray-400 font-mono">拖拽中缝调整高度</span>
+            <Terminal size={12} className="text-[#38bdf8]" />
+            <span className="font-semibold text-white">Tauri Native Sandbox Terminal</span>
           </div>
+          <button
+            onClick={() => runVerificationCommand("pytest -v; cargo check")}
+            className="hover:text-white flex items-center gap-1 cursor-pointer transition-colors text-[10px] text-[#4ade80]"
+            title="运行本地自动化验证测试套件"
+          >
+            <Play size={10} /> 运行 PyTest 验证
+          </button>
         </div>
 
-        {/* 终端输出日志 */}
-        <div className="p-3 text-[#38bdf8] flex-1 overflow-y-auto space-y-1 scrollbar-thin">
+        <div className="flex-1 p-3 overflow-y-auto text-[#d4d4d8] leading-tight space-y-1 scrollbar-thin">
           {terminalLogs.map((log, index) => (
             <div
               key={index}
               className={
-                log.includes("PASSED") || log.includes("Healthy") || log.includes("successfully")
-                  ? "text-[#10b981]"
-                  : log.includes("Error") || log.includes("FAILED")
-                  ? "text-[#ef4444]"
-                  : log.startsWith("[")
-                  ? "text-[#94a3b8]"
-                  : "text-[#38bdf8]"
+                log.includes("PASSED") || log.includes("✔")
+                  ? "text-[#4ade80]"
+                  : log.includes("Ping")
+                  ? "text-[#38bdf8]"
+                  : log.includes("Memory")
+                  ? "text-[#e879f9]"
+                  : log.includes("Error")
+                  ? "text-[#f87171]"
+                  : "text-[#d4d4d8]"
               }
             >
               {log}
@@ -294,22 +335,20 @@ export const AccountCard = () => {
           <div ref={terminalEndRef} />
         </div>
 
-        {/* 终端交互输入栏 */}
-        <div className="px-3 py-1.5 bg-[#25201b] border-t border-[#3e3830] flex items-center gap-2 text-xs">
-          <span className="text-[#10b981] font-bold">$</span>
+        <div className="h-8 bg-[#18181b] border-t border-[#27272a] px-3 flex items-center gap-2">
+          <span className="text-[#4ade80]">$</span>
           <input
             type="text"
             value={terminalInput}
             onChange={(e) => setTerminalInput(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter" && terminalInput.trim()) {
-                const cmd = terminalInput.trim();
+                runVerificationCommand(terminalInput);
                 setTerminalInput("");
-                runVerificationCommand(cmd);
               }
             }}
             placeholder="输入系统命令 (如: cargo test / pytest / git status) 并回车执行..."
-            className="flex-1 bg-transparent text-gray-200 outline-none text-xs font-mono placeholder:text-gray-600"
+            className="flex-1 bg-transparent text-white outline-none placeholder:text-[#52525b]"
           />
         </div>
       </div>

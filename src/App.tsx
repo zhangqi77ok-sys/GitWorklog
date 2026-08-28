@@ -112,6 +112,25 @@ export function App() {
     setIsDraggingTerminal(true);
   };
 
+  // 右侧代码工作区默认关闭 (isRightPanelOpen: false)，触发点击对话框内容或文件时才展开
+  const [isRightPanelOpen, setIsRightPanelOpen] = useState(false);
+
+  // 监听打开文件事件，自动展开右侧面板
+  useEffect(() => {
+    const handleOpenFile = () => {
+      setIsRightPanelOpen(true);
+    };
+    const handleToggle = () => {
+      setIsRightPanelOpen((prev) => !prev);
+    };
+    window.addEventListener("open-workspace-file", handleOpenFile);
+    window.addEventListener("toggle-editor-workspace", handleToggle);
+    return () => {
+      window.removeEventListener("open-workspace-file", handleOpenFile);
+      window.removeEventListener("toggle-editor-workspace", handleToggle);
+    };
+  }, []);
+
   // 监听 Ctrl+, 快捷键打开设置中枢，Esc 关闭
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -131,7 +150,7 @@ export function App() {
       {/* 1. 顶部标题栏 */}
       <Titlebar onOpenSettings={() => setIsSettingsOpen(true)} />
 
-      {/* 2. 主工作区：Activity Bar + Left Panel + Resize1 + Chat Column + Resize2 + Editor Workspace */}
+      {/* 2. 主工作区：Activity Bar + Left Panel + Resize1 + Chat Column + (Optional: Resize2 + Editor Workspace) */}
       <div className="flex-1 flex overflow-hidden relative">
         <ActivityBar
           activeView={activeView}
@@ -159,34 +178,40 @@ export function App() {
           <div className="absolute inset-y-0 -left-1 -right-1 cursor-col-resize" />
         </div>
 
-        {/* AI 对话栏 (支持宽度伸缩、知识图谱与双层长短期记忆) */}
+        {/* AI 对话栏 (右侧未打开时自适应填满，右侧打开时支持宽度伸缩) */}
         <ChatColumn
-          width={chatWidth}
+          width={isRightPanelOpen ? chatWidth : undefined}
           activeSessionId={activeSessionId}
           sessionTitle={activeSessionTitle}
           projectName={currentProjectName}
           onOpenSettings={() => setIsSettingsOpen(true)}
         />
 
-        {/* 分割条 2: 对话栏与代码工作区之间 (Col Resize) */}
-        <div
-          onMouseDown={handleStartDragChat}
-          className={`w-1.5 h-full cursor-col-resize relative z-20 shrink-0 transition-colors ${
-            isDraggingChat
-              ? "bg-[#d96b27]"
-              : "bg-[#e5dfd8] hover:bg-[#d96b27]"
-          }`}
-          title="按住鼠标拖拽调整 AI 对话栏宽度"
-        >
-          <div className="absolute inset-y-0 -left-1 -right-1 cursor-col-resize" />
-        </div>
+        {/* 右侧代码工作区：仅在触发打开时渲染 */}
+        {isRightPanelOpen && (
+          <>
+            {/* 分割条 2: 对话栏与代码工作区之间 (Col Resize) */}
+            <div
+              onMouseDown={handleStartDragChat}
+              className={`w-1.5 h-full cursor-col-resize relative z-20 shrink-0 transition-colors ${
+                isDraggingChat
+                  ? "bg-[#d96b27]"
+                  : "bg-[#e5dfd8] hover:bg-[#d96b27]"
+              }`}
+              title="按住鼠标拖拽调整 AI 对话栏宽度"
+            >
+              <div className="absolute inset-y-0 -left-1 -right-1 cursor-col-resize" />
+            </div>
 
-        {/* 右侧代码编辑器与沙箱终端 (支持终端高度上下伸缩) */}
-        <EditorWorkspace
-          terminalHeight={terminalHeight}
-          onTerminalResizeMouseDown={handleStartDragTerminal}
-          isTerminalDragging={isDraggingTerminal}
-        />
+            {/* 右侧代码编辑器与沙箱终端 (支持终端高度上下伸缩与关闭面板) */}
+            <EditorWorkspace
+              terminalHeight={terminalHeight}
+              onTerminalResizeMouseDown={handleStartDragTerminal}
+              isTerminalDragging={isDraggingTerminal}
+              onCloseWorkspace={() => setIsRightPanelOpen(false)}
+            />
+          </>
+        )}
       </div>
 
       {/* 3. Settings 全局设置中枢 (含 Cockpit Tools / SKILL / MCP) */}

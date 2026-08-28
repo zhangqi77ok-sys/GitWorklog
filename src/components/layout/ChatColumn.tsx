@@ -27,7 +27,7 @@ import {
   Search,
   FolderPlus,
   Compass,
-  Network
+  Network,
 } from "lucide-react";
 import { LLMChannel } from "../../types";
 import { llmConfigService } from "../../services/llmConfigService";
@@ -188,7 +188,7 @@ export interface StandardMessage extends ChatMessage {
 }
 
 interface ChatColumnProps {
-  width: number;
+  width?: number;
   activeSessionId?: string;
   sessionTitle?: string;
   projectName?: string;
@@ -344,6 +344,60 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
     }
     setAttachedFiles((prev) => Array.from(new Set([...prev, ...names])));
     setIsFileModalOpen(false);
+  };
+
+  // 粘贴图片附件状态与多模态检测
+  const [pastedImages, setPastedImages] = useState<
+    { id: string; name: string; dataUrl: string; size: number }[]
+  >([]);
+
+  // 视觉多模态检测支持判定 (判断模型是否支持图片输入)
+  const isVisionSupported = (modelName: string): boolean => {
+    const m = modelName.toLowerCase();
+    return (
+      m.includes("vl") ||
+      m.includes("vision") ||
+      m.includes("gpt-4o") ||
+      m.includes("gpt-4-turbo") ||
+      m.includes("gemini-1.5") ||
+      m.includes("gemini-2.0") ||
+      m.includes("claude-3") ||
+      m.includes("qwen-vl")
+    );
+  };
+
+  // 处理剪贴板粘贴事件 (支持直接 Ctrl+V 粘贴截图、图片与拖入文件)
+  const handlePaste = (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item.type.indexOf("image") !== -1) {
+        const file = item.getAsFile();
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = (loadEvt) => {
+            const dataUrl = loadEvt.target?.result as string;
+            setPastedImages((prev) => [
+              ...prev,
+              {
+                id: `img-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                name: file.name || `screenshot_${Date.now()}.png`,
+                dataUrl,
+                size: file.size,
+              },
+            ]);
+          };
+          reader.readAsDataURL(file);
+        }
+      } else if (item.kind === "file") {
+        const file = item.getAsFile();
+        if (file) {
+          setAttachedFiles((prev) => Array.from(new Set([...prev, file.name])));
+        }
+      }
+    }
   };
 
   // 流式生成与中断控制器
@@ -511,15 +565,22 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
   const handleSend = async () => {
     if (!input.trim() || isGenerating) return;
     const userPrompt = input.trim();
+    const imagesToAttach = [...pastedImages];
     setInput("");
+    setPastedImages([]);
 
     const targetChan = activeChannel || channels[0];
     const targetModel = activeModel;
 
-    // 1. 追加用户消息
+    // 1. 追加用户消息 (含图片附件提示)
+    let displayPrompt = userPrompt;
+    if (imagesToAttach.length > 0) {
+      displayPrompt = `[🖼️ 已挂载 ${imagesToAttach.length} 张图片附件: ${imagesToAttach.map((img) => img.name).join(", ")}]\n\n` + userPrompt;
+    }
+
     const userMsg: StandardMessage = {
       role: "user",
-      content: userPrompt,
+      content: displayPrompt,
     };
 
     // 2. 预先创建 AI 回复占位卡片 (统一标准结构)
@@ -680,8 +741,10 @@ Instructions:
 
   return (
     <section
-      style={{ width: `${width}px` }}
-      className="bg-white border-r border-[#e5dfd8] flex flex-col justify-between shrink-0 relative overflow-hidden select-none"
+      style={width !== undefined ? { width: `${width}px` } : undefined}
+      className={`bg-white border-r border-[#e5dfd8] flex flex-col justify-between relative overflow-hidden select-none ${
+        width !== undefined ? "shrink-0" : "flex-1"
+      }`}
     >
       {/* 顶部标题与状态 */}
       <div className="px-4 py-2.5 border-b border-[#e5dfd8] flex justify-between items-center text-xs bg-[#faf8f5]">
@@ -844,11 +907,27 @@ Instructions:
                       )}
                     </button>
                     <button
-                      onClick={() => alert("已将代码块同步至右侧代码工作区！")}
-                      className="hover:text-[#d96b27] flex items-center gap-1 cursor-pointer"
+                      onClick={() => {
+                        let codeToInsert = m.content;
+                        const match = m.content.match(/```(?:\w+)?\n([\s\S]*?)```/);
+                        if (match && match[1]) {
+                          codeToInsert = match[1];
+                        }
+                        window.dispatchEvent(
+                          new CustomEvent("open-workspace-file", {
+                            detail: {
+                              name: "solution.ts",
+                              content: codeToInsert,
+                              path: "src/solution.ts",
+                            },
+                          })
+                        );
+                      }}
+                      className="hover:text-[#d96b27] flex items-center gap-1 cursor-pointer transition-colors"
+                      title="展开右侧工作区并载入生成代码"
                     >
                       <Code size={11} />
-                      <span>插入到代码区</span>
+                      <span>‹/› 插入到代码区</span>
                     </button>
                   </div>
 
@@ -1019,10 +1098,63 @@ Instructions:
             </div>
           )}
 
+          {/* 粘贴图片与附件预览栏 */}
+          {(pastedImages.length > 0 || attachedFiles.length > 0) && (
+            <div className="flex flex-wrap items-center gap-2 mb-2 p-1.5 bg-[#faf8f5] rounded-lg border border-[#f4efea]">
+              {pastedImages.map((img) => (
+                <div key={img.id} className="relative group shrink-0">
+                  <img
+                    src={img.dataUrl}
+                    alt={img.name}
+                    className="w-14 h-14 object-cover rounded-md border border-[#e5dfd8] shadow-2xs"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setPastedImages((prev) => prev.filter((p) => p.id !== img.id))}
+                    className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-red-500 text-white rounded-full flex items-center justify-center text-[10px] cursor-pointer shadow-xs hover:bg-red-600 transition-colors"
+                    title="移除图片"
+                  >
+                    <X size={10} />
+                  </button>
+                </div>
+              ))}
+
+              {attachedFiles.map((file) => (
+                <span
+                  key={file}
+                  className="inline-flex items-center gap-1 px-2 py-1 bg-[#eff6ff] text-[#1d4ed8] border border-[#bfdbfe] rounded-md text-[11px] font-mono"
+                >
+                  <Paperclip size={11} />
+                  <span className="max-w-[120px] truncate">{file.split("/").pop()}</span>
+                  <button
+                    type="button"
+                    onClick={() => toggleAttachFile(file)}
+                    className="hover:text-red-500 cursor-pointer ml-0.5"
+                  >
+                    <X size={10} />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* 若粘贴了图片但当前模型不支持视觉多模态，给出醒目提示 */}
+          {pastedImages.length > 0 && !isVisionSupported(activeModel) && (
+            <div className="mb-2 px-2.5 py-1.5 bg-[#fffbeb] border border-[#fde68a] rounded-lg text-[11px] text-[#b45309] flex items-center justify-between gap-2 animate-in fade-in">
+              <div className="flex items-center gap-1.5">
+                <AlertTriangle size={13} className="text-[#d97706] shrink-0" />
+                <span>
+                  ⚠️ 当前模型【<b>{activeModel}</b>】暂未开启多模态视觉 (Vision)。已挂载图片，建议切换至【<b>qwen-vl-max / gpt-4o / gemini-2.0-flash / claude-3-5-sonnet</b>】。
+                </span>
+              </div>
+            </div>
+          )}
+
           <textarea
             ref={textareaRef}
             value={input}
             onChange={handleInputChange}
+            onPaste={handlePaste}
             onKeyDown={(e) => {
               if (isSlashMenuOpen && filteredSlashItems.length > 0) {
                 if (e.key === "ArrowDown") {
@@ -1061,8 +1193,8 @@ Instructions:
             }}
             placeholder={
               sendShortcut === "enter"
-                ? "输入代码指令、问题或输入 / 选择 Skill / MCP... (Enter 发送，Shift+Enter 换行)"
-                : "输入代码指令、问题或输入 / 选择 Skill / MCP... (Ctrl+Enter 发送)"
+                ? "输入代码指令、问题或输入 / 选择 Skill / MCP... (支持 Ctrl+V 粘贴图片与文件，Enter 发送)"
+                : "输入代码指令、问题或输入 / 选择 Skill / MCP... (支持 Ctrl+V 粘贴图片与文件，Ctrl+Enter 发送)"
             }
             className="w-full text-xs text-[#1e1b18] outline-none resize-none h-16 leading-relaxed select-text"
           />
