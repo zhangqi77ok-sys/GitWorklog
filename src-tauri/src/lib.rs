@@ -1,4 +1,4 @@
-﻿use tauri::Manager;
+use tauri::Manager;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
@@ -194,6 +194,66 @@ mod commands {
             Err(format!("Error (exit code {:?}):\nstdout: {}\nstderr: {}", output.status.code(), stdout, stderr))
         }
     }
+
+    // 7. 生产级互联网搜索检索命令 (跨平台多引擎抓取与结构化提取)
+    #[tauri::command]
+    pub fn native_web_search(query: String) -> Result<String, String> {
+        let ps_script = format!(
+            r#"
+            [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12;
+            $encoded = [System.Uri]::EscapeDataString('{}');
+            $url = "https://html.duckduckgo.com/html/?q=$encoded";
+            $wc = New-Object System.Net.WebClient;
+            $wc.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+            $html = "";
+            try {{
+                $html = $wc.DownloadString($url);
+            }} catch {{
+                Write-Output "[]";
+                exit 0;
+            }}
+
+            $results = @();
+            $pattern = 'class="result__a"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>[\s\S]*?class="result__snippet"[^>]*>([\s\S]*?)<\/a>';
+            $regex = New-Object System.Text.RegularExpressions.Regex($pattern);
+            $match = $regex.Match($html);
+
+            while ($match.Success -and $results.Count -lt 6) {{
+                $rawUrl = $match.Groups[1].Value;
+                $title = [System.Net.WebUtility]::HtmlDecode($match.Groups[2].Value) -replace '<[^>]+>', '';
+                $snippet = [System.Net.WebUtility]::HtmlDecode($match.Groups[3].Value) -replace '<[^>]+>', '';
+                
+                $realUrl = $rawUrl;
+                if ($rawUrl -match 'uddg=([^&]+)') {{
+                    $realUrl = [System.Uri]::UnescapeDataString($matches[1]);
+                }}
+                
+                $results += @{{
+                    title = $title.Trim();
+                    snippet = $snippet.Trim();
+                    url = $realUrl.Trim();
+                    source = "WebSearch";
+                }};
+                $match = $match.NextMatch();
+            }}
+
+            $results | ConvertTo-Json -Compress
+            "#,
+            query.replace("'", "''")
+        );
+
+        let mut cmd = Command::new("powershell");
+        cmd.creation_flags(CREATE_NO_WINDOW)
+            .args(["-NoProfile", "-WindowStyle", "Hidden", "-Command", &ps_script]);
+
+        let output = cmd.output().map_err(|e| e.to_string())?;
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if stdout.is_empty() {
+            Ok("[]".to_string())
+        } else {
+            Ok(stdout)
+        }
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -205,7 +265,8 @@ pub fn run() {
             commands::list_directory_tree,
             commands::read_file_content,
             commands::write_file_content,
-            commands::execute_system_command
+            commands::execute_system_command,
+            commands::native_web_search
         ])
         .setup(|app| {
             if let Some(window) = app.get_webview_window("main") {

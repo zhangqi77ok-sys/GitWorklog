@@ -28,6 +28,8 @@ import {
   FolderPlus,
   Compass,
   Network,
+  Star,
+  ExternalLink,
 } from "lucide-react";
 import { LLMChannel } from "../../types";
 import { llmConfigService } from "../../services/llmConfigService";
@@ -36,6 +38,7 @@ import { llmGatewayEngine } from "../../services/llmGatewayEngine";
 import { nativeService } from "../../services/nativeService";
 import { projectMemoryService } from "../../services/projectMemoryService";
 import { projectKnowledgeGraphService } from "../../services/projectKnowledgeGraphService";
+import { webSearchService, WebSearchResult } from "../../services/webSearchService";
 import { KnowledgeGraphModal } from "../knowledge/KnowledgeGraphModal";
 
 export interface SlashItem {
@@ -185,6 +188,9 @@ export interface StandardMessage extends ChatMessage {
   status?: "streaming" | "completed" | "error" | "aborted";
   errorDetail?: string;
   statusCode?: number;
+  rating?: 1 | 2 | 3 | 4 | 5;
+  ratingToast?: string;
+  webSearchCitations?: WebSearchResult[];
 }
 
 interface ChatColumnProps {
@@ -859,6 +865,20 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
       status: "streaming",
     };
 
+    // 生产级互联网实时搜索抓取 (若用户开启了联网模式)
+    let webSearchPromptContext = "";
+    if (isWebSearchEnabled) {
+      try {
+        const citations = await webSearchService.search(userMsg.content);
+        if (citations && citations.length > 0) {
+          assistantPlaceholder.webSearchCitations = citations;
+          webSearchPromptContext = "\n\n" + webSearchService.formatSearchResultsForContext(citations);
+        }
+      } catch (searchErr) {
+        console.warn("[ChatColumn] Web search error:", searchErr);
+      }
+    }
+
     const currentHistory = [...messages, userMsg];
     setMessages([...currentHistory, assistantPlaceholder]);
     setIsGenerating(true);
@@ -892,7 +912,13 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
           relevantMemories.map((m) => `• [${m.category.toUpperCase()}] ${m.summary}`).join("\n")
         : "";
 
-    // 3. 构建 ReAct 智能体系统上下文 (融合知识图谱与双层记忆)
+    // 3. 检索动态严谨度约束 (根据用户此前对同类话题的 1~5 星打分自适应对齐)
+    const strictnessConstraint = projectMemoryService.getDynamicStrictnessConstraint(
+      currentProjectName,
+      userMsg.content
+    );
+
+    // 4. 构建 ReAct 智能体系统上下文 (融合知识图谱、双层记忆、严谨度认知与实时联网搜索)
     const reactSystemPrompt = `You are CodeMind AI, an expert ReAct (Reasoning + Acting) software engineering assistant.
 Current Workspace Project: "${currentProjectName}"
 Git Branch: ${detectedGitBranch || "None (Not a git repository)"}
@@ -901,9 +927,11 @@ ${attachedFiles.length > 0 ? `Attached Context Files: ${attachedFiles.join(", ")
 
 ${graphContext}
 ${memoryContext}
+${strictnessConstraint.constraintPrompt}
+${webSearchPromptContext}
 
 Instructions:
-1. Always ground your technical answers in the current project codebase, knowledge graph topology, and architectural memories.
+1. Always ground your technical answers in the current project codebase, knowledge graph topology, real-time web search facts, and architectural memories.
 2. Follow the ReAct paradigm: Analyze intent -> Plan -> Produce clean, production-grade solutions.
 3. Respond in concise, professional Simplified Chinese (简体中文).`;
 
@@ -912,7 +940,7 @@ Instructions:
       ...currentHistory.map((m) => ({ role: m.role, content: m.content })),
     ];
 
-    // 4. 调度网关流式引擎
+    // 5. 调度网关流式引擎
     await llmGatewayEngine.dispatchStream({
       channel: targetChan,
       model: targetModel,
@@ -1006,6 +1034,49 @@ Instructions:
       }
       return updated;
     });
+  };
+
+  // 处理对 AI 输出内容的 1~5 星打分并进行严谨度认知对齐
+  const handleRateMessage = (idx: number, starVal: 1 | 2 | 3 | 4 | 5) => {
+    const target = messages[idx];
+    if (!target || target.role !== "assistant") return;
+
+    let userQuery = "AI 编程协同任务";
+    for (let i = idx - 1; i >= 0; i--) {
+      if (messages[i].role === "user") {
+        userQuery = messages[i].content;
+        break;
+      }
+    }
+
+    const res = projectMemoryService.recordRatingFeedback(
+      currentProjectName,
+      userQuery,
+      target.content,
+      starVal
+    );
+
+    setMessages((prev) => {
+      const updated = [...prev];
+      if (updated[idx]) {
+        updated[idx] = {
+          ...updated[idx],
+          rating: starVal,
+          ratingToast: res.message,
+        };
+      }
+      return updated;
+    });
+
+    setTimeout(() => {
+      setMessages((prev) => {
+        const updated = [...prev];
+        if (updated[idx]) {
+          updated[idx] = { ...updated[idx], ratingToast: undefined };
+        }
+        return updated;
+      });
+    }, 4500);
   };
 
   // 复制单条消息
@@ -1130,6 +1201,33 @@ Instructions:
                 </div>
               )}
 
+              {/* Layer 2.5: 实时互联网搜索检索引用卡片 (Web Search Citations) */}
+              {m.webSearchCitations && m.webSearchCitations.length > 0 && (
+                <div className="bg-[#f0fdf4] border border-[#bbf7d0] rounded-lg p-2.5 flex flex-col gap-1.5 text-xs animate-in fade-in">
+                  <div className="flex items-center justify-between text-[#166534] font-semibold text-[11px]">
+                    <div className="flex items-center gap-1.5">
+                      <Globe size={12} className="text-[#16a34a]" />
+                      <span>🌐 实时互联网搜索检索已融合 ({m.webSearchCitations.length} 篇权威参考源)</span>
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-1 pl-2 border-l-2 border-[#86efac] text-[11px] text-[#14532d]">
+                    {m.webSearchCitations.map((c, cIdx) => (
+                      <a
+                        key={cIdx}
+                        href={c.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="hover:underline flex items-center justify-between group/link py-0.5"
+                        title={c.snippet}
+                      >
+                        <span className="truncate flex-1 font-medium">[{cIdx + 1}] {c.title}</span>
+                        <ExternalLink size={10} className="shrink-0 ml-1 opacity-70 group-hover/link:opacity-100 text-[#16a34a]" />
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Layer 3: 实时正文 Markdown / 代码流式渲染区 */}
               {m.status === "error" ? (
                 /* 错误与未配置 Key 诊断卡片 */
@@ -1160,9 +1258,9 @@ Instructions:
                 </div>
               )}
 
-              {/* Layer 4: 统一标准化快捷操作栏 */}
+              {/* Layer 4: 统一标准化快捷操作栏与 5 星严谨度打分 */}
               {m.content && m.status !== "streaming" && (
-                <div className="pt-2 border-t border-[#f4efea] flex justify-between items-center text-[10px] text-[#78716c]">
+                <div className="pt-2 border-t border-[#f4efea] flex justify-between items-center text-[10px] text-[#78716c] flex-wrap gap-2">
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => handleCopyMessage(m.content, idx)}
@@ -1203,15 +1301,51 @@ Instructions:
                       <Code size={11} />
                       <span>‹/› 插入到代码区</span>
                     </button>
+                    <button
+                      onClick={handleSend}
+                      className="hover:text-[#1e1b18] flex items-center gap-1 cursor-pointer ml-1"
+                      title="重新生成本次回答"
+                    >
+                      <RotateCcw size={10} />
+                      <span>重新生成</span>
+                    </button>
                   </div>
 
-                  <button
-                    onClick={handleSend}
-                    className="hover:text-[#1e1b18] flex items-center gap-1 cursor-pointer"
-                  >
-                    <RotateCcw size={10} />
-                    <span>重新生成</span>
-                  </button>
+                  {/* 5 星严谨度评价与认知对齐组件 */}
+                  <div className="flex items-center gap-1.5 ml-auto">
+                    <span className="text-[10px] text-[#78716c] select-none">严谨度评价:</span>
+                    <div className="flex items-center gap-0.5">
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <button
+                          key={star}
+                          type="button"
+                          onClick={() => handleRateMessage(idx, star as any)}
+                          title={
+                            star <= 2
+                              ? `${star}星: 质量欠佳/存在缺陷 (下次关联话题将触发最高严谨度自检与防守)`
+                              : star === 3
+                              ? "3星: 基本可用"
+                              : `${star}星: 高品质交付 (沉淀为黄金范本规范)`
+                          }
+                          className="p-0.5 hover:scale-125 transition-transform cursor-pointer"
+                        >
+                          <Star
+                            size={12}
+                            className={
+                              m.rating && m.rating >= star
+                                ? "fill-[#f59e0b] text-[#f59e0b]"
+                                : "text-[#d1d5db] hover:text-[#f59e0b]"
+                            }
+                          />
+                        </button>
+                      ))}
+                    </div>
+                    {m.ratingToast && (
+                      <span className="text-[10px] text-[#d96b27] font-semibold animate-in fade-in ml-1 max-w-[220px] truncate" title={m.ratingToast}>
+                        {m.ratingToast}
+                      </span>
+                    )}
+                  </div>
                 </div>
               )}
             </div>

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * CodeMind Studio 统一类型契约体系 (Universal Type Contract System)
  * DX & Contract-First Single Source of Truth
  */
@@ -87,4 +87,23 @@ export interface SessionStatusEventDetail {
   sessionId?: string;
   status: SessionLifecycleStatus;
   errorMessage?: string;
+}
+
+// 5. 五星评分与严谨度动态约束契约
+export type MessageRating = 1 | 2 | 3 | 4 | 5;
+
+export interface RatingFeedbackRecord {
+  id: string;
+  rating: MessageRating;
+  projectName: string;
+  userQuery: string;
+  assistantSummary: string;
+  timestamp: number;
+  strictnessMode: "CRITICAL_RIGOR" | "STANDARD" | "GOLDEN_TEMPLATE";
+}
+
+export interface StrictnessConstraint {
+  level: "CRITICAL_RIGOR" | "STANDARD" | "GOLDEN_TEMPLATE";
+  shouldInject: boolean;
+  promptConstraint: string;
 }

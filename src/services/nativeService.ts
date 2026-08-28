@@ -1,4 +1,4 @@
-﻿import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "@tauri-apps/api/core";
 import { IPCResponse } from "../types/contracts";
 
 export interface FileEntry {
@@ -130,6 +130,22 @@ export class NativeService {
       return null;
     }
     return null;
+  }
+
+  /**
+   * 8. 生产级互联网实时搜索检索
+   */
+  public async webSearch(query: string): Promise<Array<{ title: string; snippet: string; url: string; source: string }>> {
+    const res = await this.safeInvoke<string>("native_web_search", { query });
+    if (res.success && res.data) {
+      try {
+        const parsed = JSON.parse(res.data);
+        return Array.isArray(parsed) ? parsed : [parsed];
+      } catch (e) {
+        return [];
+      }
+    }
+    return [];
   }
 }
 
