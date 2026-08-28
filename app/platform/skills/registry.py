@@ -11,6 +11,13 @@ class SkillRegistry:
     def list_skills(self) -> list[dict[str, Any]]:
         return list(self._skills)
 
+    def toggle_skill(self, skill_id: str, enabled: bool) -> bool:
+        for s in self._skills:
+            if s["id"] == skill_id:
+                s["enabled"] = enabled
+                return True
+        return False
+
 _skill_registry = SkillRegistry()
 def get_skill_registry() -> SkillRegistry:
     return _skill_registry

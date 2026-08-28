@@ -180,3 +180,28 @@ async def test_self_correcting_loop_engine():
     assert "Tester" in agent_names
     assert "Auditor" in agent_names
     assert "IronMan" in agent_names
+
+def test_skills_and_mcp_endpoints():
+    # 1. 技能列表与启停
+    skills_resp = client.get("/skills")
+    assert skills_resp.status_code == 200
+    skills = skills_resp.json()["data"]
+    assert len(skills) >= 3
+    target_skill = skills[0]["id"]
+    
+    toggle_skill_resp = client.post("/skills/toggle", json={"skill_id": target_skill, "enabled": False})
+    assert toggle_skill_resp.status_code == 200
+    assert toggle_skill_resp.json()["code"] == 0
+    assert toggle_skill_resp.json()["data"] is True
+
+    # 2. MCP 工具列表与启停
+    mcp_resp = client.get("/mcp")
+    assert mcp_resp.status_code == 200
+    mcp_tools = mcp_resp.json()["data"]
+    assert len(mcp_tools) >= 3
+    target_mcp = mcp_tools[0]["id"]
+
+    toggle_mcp_resp = client.post("/mcp/toggle", json={"tool_id": target_mcp, "enabled": False})
+    assert toggle_mcp_resp.status_code == 200
+    assert toggle_mcp_resp.json()["code"] == 0
+    assert toggle_mcp_resp.json()["data"] is True

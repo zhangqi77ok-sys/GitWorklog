@@ -7,3 +7,22 @@ build/
 *.egg-info/
 data/*.db
 .tempmediaStorage/
+
+# Node & Frontend
+node_modules/
+dist_package/
+dist_tauri_package/
+
+# Rust
+src-tauri/target/
+target/
+
+# Binaries & Zip Archives
+*.exe
+*.dll
+*.zip
+*.o
+*.log
+.idea/
+.vscode/
+

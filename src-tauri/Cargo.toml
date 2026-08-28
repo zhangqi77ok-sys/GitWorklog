@@ -1,0 +1,21 @@
+[package]
+name = "codemind-hub"
+version = "2.11.0"
+description = "CodeMind-Hub Cockpit Studio Tauri Native App"
+authors = ["CodeMind Team"]
+edition = "2021"
+
+[lib]
+name = "codemind_hub_lib"
+crate-type = ["staticlib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.0.5", features = [] }
+
+[dependencies]
+tauri = { version = "2.2.4", features = [] }
+tauri-plugin-shell = "2.2.0"
+tauri-plugin-dialog = "2.2.0"
+tauri-plugin-fs = "2.2.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"

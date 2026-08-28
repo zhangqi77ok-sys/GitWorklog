@@ -11,6 +11,13 @@ class MCPRegistry:
     def list_tools(self) -> list[dict[str, Any]]:
         return list(self._tools)
 
+    def toggle_tool(self, tool_id: str, enabled: bool) -> bool:
+        for t in self._tools:
+            if t["id"] == tool_id:
+                t["enabled"] = enabled
+                return True
+        return False
+
 _mcp_registry = MCPRegistry()
 def get_mcp_registry() -> MCPRegistry:
     return _mcp_registry

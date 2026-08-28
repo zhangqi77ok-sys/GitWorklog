@@ -74,17 +74,19 @@ def get_static_dir() -> str:
             os.path.join(exe_dir, "static"),
         ])
     
-    # 源码模式候选项
+    # 源码模式候选项 (优先挂载最新 React 19 构建产物 dist)
+    root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     curr_dir = os.path.dirname(os.path.abspath(__file__))
     candidates.extend([
+        os.path.join(root_dir, "dist"),
         os.path.join(curr_dir, "static"),
         os.path.join(curr_dir, "..", "app", "static"),
+        os.path.join(os.getcwd(), "dist"),
         os.path.join(os.getcwd(), "app", "static"),
-        os.path.join(os.getcwd(), "static"),
     ])
 
     for c in candidates:
-        if c and os.path.isdir(c):
+        if c and os.path.isdir(c) and os.path.exists(os.path.join(c, "index.html")):
             return os.path.abspath(c)
     
     # 兜底：自动创建
@@ -93,4 +95,5 @@ def get_static_dir() -> str:
     return fallback
 
 static_dir_path = get_static_dir()
+print(f"[Static] Assets mounted from: {static_dir_path}")
 app.mount("/", StaticFiles(directory=static_dir_path, html=True), name="static")

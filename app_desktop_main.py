@@ -16,6 +16,13 @@ import time
 import urllib.request
 import uvicorn
 
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stderr.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
 if getattr(sys, "frozen", False):
     BASE_DIR = os.path.dirname(sys.executable)
     BUNDLE_DIR = sys._MEIPASS  # type: ignore
