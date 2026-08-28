@@ -26,13 +26,17 @@ import {
   CheckCheck,
   Search,
   FolderPlus,
-  Compass
+  Compass,
+  Network
 } from "lucide-react";
 import { LLMChannel } from "../../types";
 import { llmConfigService } from "../../services/llmConfigService";
 import { contextCompressor, ChatMessage } from "../../services/contextCompressor";
 import { llmGatewayEngine } from "../../services/llmGatewayEngine";
 import { nativeService } from "../../services/nativeService";
+import { projectMemoryService } from "../../services/projectMemoryService";
+import { projectKnowledgeGraphService } from "../../services/projectKnowledgeGraphService";
+import { KnowledgeGraphModal } from "../knowledge/KnowledgeGraphModal";
 
 export interface SlashItem {
   id: string;
@@ -185,10 +189,19 @@ export interface StandardMessage extends ChatMessage {
 
 interface ChatColumnProps {
   width: number;
+  activeSessionId?: string;
+  sessionTitle?: string;
+  projectName?: string;
   onOpenSettings?: () => void;
 }
 
-export const ChatColumn: React.FC<ChatColumnProps> = ({ width, onOpenSettings }) => {
+export const ChatColumn: React.FC<ChatColumnProps> = ({
+  width,
+  activeSessionId = "sess-1",
+  sessionTitle,
+  projectName = "agent-learning",
+  onOpenSettings,
+}) => {
   const [input, setInput] = useState("");
   const [channels, setChannels] = useState<LLMChannel[]>([]);
   const [activeChannel, setActiveChannel] = useState<LLMChannel | undefined>(undefined);
@@ -197,6 +210,9 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({ width, onOpenSettings })
   const [isChannelDropdownOpen, setIsChannelDropdownOpen] = useState(false);
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
   const [detectedGitBranch, setDetectedGitBranch] = useState<string | null>(null);
+
+  // 知识图谱查看弹窗状态
+  const [isKgModalOpen, setIsKgModalOpen] = useState(false);
 
   // 文件选择模态弹窗状态 (独立弹窗选择文件)
   const [isFileModalOpen, setIsFileModalOpen] = useState(false);
@@ -340,16 +356,48 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({ width, onOpenSettings })
   const channelDropdownRef = useRef<HTMLDivElement>(null);
   const modelDropdownRef = useRef<HTMLDivElement>(null);
 
-  const [messages, setMessages] = useState<StandardMessage[]>([
-    {
-      role: "assistant",
-      channelName: "阿里百炼 (DashScope)",
-      modelName: "qwen-plus-latest",
-      content:
-        "您好！我是 CodeMind 统一大模型编程助手。已为您接入 **New API / Cockpit 级生产级流式网关**。\n\n• 所有厂商输出采用统一标准结构回显（性能元数据、深度推理链、语法高亮与操作条）\n• 实时 **SSE 逐 Token 流式输出**，支持一键停止中断与长程上下文自动压缩。",
-      status: "completed",
-    },
-  ]);
+  // 加载指定会话的消息历史 (短期高保真记忆持久化)
+  const [messages, setMessages] = useState<StandardMessage[]>(() => {
+    const saved = projectMemoryService.getSessionMessages(activeSessionId);
+    if (saved && saved.length > 0) return saved as StandardMessage[];
+    return [
+      {
+        role: "assistant",
+        channelName: "阿里百炼 (DashScope)",
+        modelName: "qwen-plus-latest",
+        content:
+          "您好！我是 CodeMind 统一大模型编程助手。已为您接入 **New API / Cockpit 级生产级流式网关**。\n\n• 所有厂商输出采用统一标准结构回显（性能元数据、深度推理链、语法高亮与操作条）\n• 实时 **SSE 逐 Token 流式输出**，已融合 **工程知识图谱 (Graph-RAG)** 与 **双层长短期记忆机制**。",
+        status: "completed",
+      },
+    ];
+  });
+
+  // 当活跃会话 ID 切换时，平滑切换并加载对应会话的历史记录 (绝不丢失之前回答)
+  useEffect(() => {
+    const sid = activeSessionId || "sess-1";
+    const saved = projectMemoryService.getSessionMessages(sid);
+    if (saved && saved.length > 0) {
+      setMessages(saved as StandardMessage[]);
+    } else {
+      setMessages([
+        {
+          role: "assistant",
+          channelName: activeChannel?.name || "阿里百炼 (DashScope)",
+          modelName: activeModel,
+          content: `已为您就绪新会话【${sessionTitle || sid}】。已挂载 **【${projectName}】** 真实工程知识图谱与长期情景记忆！`,
+          status: "completed",
+        },
+      ]);
+    }
+  }, [activeSessionId]);
+
+  // 消息变更时自动同步写入持久化存储
+  useEffect(() => {
+    const sid = activeSessionId || "sess-1";
+    if (messages.length > 0) {
+      projectMemoryService.saveSessionMessages(sid, messages);
+    }
+  }, [messages, activeSessionId]);
 
   // 滚动至最新消息
   const scrollToBottom = () => {
@@ -390,13 +438,13 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({ width, onOpenSettings })
     "package.json",
     "README.md"
   ]);
-  const [currentProjectName, setCurrentProjectName] = useState("agent-learning");
+  const [currentProjectName, setCurrentProjectName] = useState(projectName);
 
   useEffect(() => {
     const handleProjectSwitched = async (e: any) => {
-      const { projectName, files, fullPath } = e.detail || {};
-      if (projectName) {
-        setCurrentProjectName(projectName);
+      const { projectName: pName, files, fullPath } = e.detail || {};
+      if (pName) {
+        setCurrentProjectName(pName);
         if (Array.isArray(files) && files.length > 0) {
           setAvailableFiles(files);
         }
@@ -406,21 +454,6 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({ width, onOpenSettings })
         // 探测新项目所在路径的 Git 分支
         const realBranch = await nativeService.getGitBranch(fullPath);
         setDetectedGitBranch(realBranch);
-
-        // 真实解析项目结构并输出专属项目分析问候
-        const displayFiles = Array.isArray(files) && files.length > 0
-          ? files.slice(0, 6)
-          : ["src/main.ts", "package.json", "README.md"];
-
-        setMessages([
-          {
-            role: "assistant",
-            channelName: activeChannel?.name || "阿里百炼 (DashScope)",
-            modelName: activeModel,
-            content: `已成功读取并加载项目 **【${projectName}】** 真实工程内容！\n\n📁 **已挂载工程文件 (${files?.length || displayFiles.length} 个文件)**：\n${displayFiles.map((f: string) => `• \`${f}\``).join("\n")}\n\n💡 **AI 编程助手已就绪**：您可以直接提问或下发功能开发指令，我将实时为您生成并优化代码！`,
-            status: "completed",
-          },
-        ]);
       }
     };
     window.addEventListener("project-switched", handleProjectSwitched);
@@ -498,15 +531,37 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({ width, onOpenSettings })
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
-    // 构建 ReAct 智能体系统上下文 (包含当前工程、Git分支与文件清单)
+    // 1. 意图驱动检索真实工程知识图谱 (Graph-RAG)
+    const graphContext = projectKnowledgeGraphService.queryRelevantGraphContext(
+      currentProjectName,
+      userMsg.content,
+      availableFiles
+    );
+
+    // 2. 意图驱动检索项目长期情景记忆 (LTM)
+    const relevantMemories = projectMemoryService.queryRelevantMemories(
+      currentProjectName,
+      userMsg.content,
+      3
+    );
+    const memoryContext =
+      relevantMemories.length > 0
+        ? `\n### 🧠 【${currentProjectName}】长期情景与架构记忆 (Project Long-Term Memory):\n` +
+          relevantMemories.map((m) => `• [${m.category.toUpperCase()}] ${m.summary}`).join("\n")
+        : "";
+
+    // 3. 构建 ReAct 智能体系统上下文 (融合知识图谱与双层记忆)
     const reactSystemPrompt = `You are CodeMind AI, an expert ReAct (Reasoning + Acting) software engineering assistant.
 Current Workspace Project: "${currentProjectName}"
 Git Branch: ${detectedGitBranch || "None (Not a git repository)"}
 Project Files: ${availableFiles.slice(0, 15).join(", ")}
 ${attachedFiles.length > 0 ? `Attached Context Files: ${attachedFiles.join(", ")}` : "No explicit files attached."}
 
+${graphContext}
+${memoryContext}
+
 Instructions:
-1. Always ground your technical answers in the current project codebase and architecture.
+1. Always ground your technical answers in the current project codebase, knowledge graph topology, and architectural memories.
 2. Follow the ReAct paradigm: Analyze intent -> Plan -> Produce clean, production-grade solutions.
 3. Respond in concise, professional Simplified Chinese (简体中文).`;
 
@@ -515,7 +570,7 @@ Instructions:
       ...currentHistory.map((m) => ({ role: m.role, content: m.content })),
     ];
 
-    // 3. 调度网关流式引擎
+    // 4. 调度网关流式引擎
     await llmGatewayEngine.dispatchStream({
       channel: targetChan,
       model: targetModel,
@@ -551,6 +606,13 @@ Instructions:
               target.durationMs = meta.durationMs;
               target.tokensCount = meta.tokensCount;
               target.tokensPerSec = meta.tokensPerSec;
+
+              // 自动提取长期情景记忆沉淀到项目存储库
+              projectMemoryService.autoExtractMemoriesFromTurn(
+                currentProjectName,
+                userMsg.content,
+                target.content
+              );
             }
             return updated;
           });
@@ -1177,6 +1239,17 @@ Instructions:
                 <Globe size={11} className={isWebSearchEnabled ? "text-[#16a34a]" : "text-[#94a3b8]"} />
                 <span>联网</span>
               </button>
+
+              {/* 7. 真实工程知识图谱查看器 (Graph-RAG) */}
+              <button
+                type="button"
+                onClick={() => setIsKgModalOpen(true)}
+                title="查看当前项目的真实工程知识图谱 (Graph-RAG)"
+                className="h-6.5 px-2 bg-[#fdf4ff] text-[#a21caf] hover:bg-[#fae8ff] border border-[#f5d0fe] rounded-md text-[11px] font-semibold flex items-center gap-1 cursor-pointer transition-colors"
+              >
+                <Network size={11} className="text-[#c026d3]" />
+                <span>知识图谱</span>
+              </button>
             </div>
 
             {/* 发送 / 停止生成按钮与快捷键切换器 */}
@@ -1346,6 +1419,13 @@ Instructions:
           </div>
         </div>
       )}
+
+      {/* 🕸️ 真实工程知识图谱可视化模态弹窗 (Project Knowledge Graph Modal) */}
+      <KnowledgeGraphModal
+        isOpen={isKgModalOpen}
+        onClose={() => setIsKgModalOpen(false)}
+        projectName={currentProjectName}
+      />
     </section>
   );
 };

@@ -10,6 +10,17 @@ export function App() {
   const [activeView, setActiveView] = useState("chat");
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
+  // 会话与项目状态管理
+  const [activeSessionId, setActiveSessionId] = useState("sess-1");
+  const [activeSessionTitle, setActiveSessionTitle] = useState("AI 编程协同初始会话");
+  const [currentProjectName, setCurrentProjectName] = useState("agent-learning");
+
+  const handleSelectSession = (sessionId: string, sessionTitle: string, projectName?: string) => {
+    setActiveSessionId(sessionId);
+    setActiveSessionTitle(sessionTitle);
+    if (projectName) setCurrentProjectName(projectName);
+  };
+
   // 1. 伸缩区块尺寸状态 (默认值与范围限制)
   const [leftWidth, setLeftWidth] = useState(240);       // 左侧栏宽度 (180px ~ 480px)
   const [chatWidth, setChatWidth] = useState(440);       // AI 对话栏宽度 (320px ~ 750px)
@@ -129,7 +140,11 @@ export function App() {
         />
 
         {/* 左侧工作区导航 (支持宽度伸缩) */}
-        <LeftPanel width={leftWidth} />
+        <LeftPanel
+          width={leftWidth}
+          activeSessionId={activeSessionId}
+          onSelectSession={handleSelectSession}
+        />
 
         {/* 分割条 1: 左侧栏与对话栏之间 (Col Resize) */}
         <div
@@ -144,8 +159,14 @@ export function App() {
           <div className="absolute inset-y-0 -left-1 -right-1 cursor-col-resize" />
         </div>
 
-        {/* AI 对话栏 (支持宽度伸缩与真实厂商/模型工具条) */}
-        <ChatColumn width={chatWidth} onOpenSettings={() => setIsSettingsOpen(true)} />
+        {/* AI 对话栏 (支持宽度伸缩、知识图谱与双层长短期记忆) */}
+        <ChatColumn
+          width={chatWidth}
+          activeSessionId={activeSessionId}
+          sessionTitle={activeSessionTitle}
+          projectName={currentProjectName}
+          onOpenSettings={() => setIsSettingsOpen(true)}
+        />
 
         {/* 分割条 2: 对话栏与代码工作区之间 (Col Resize) */}
         <div
