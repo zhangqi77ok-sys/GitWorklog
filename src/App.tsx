@@ -6,6 +6,7 @@ import { ChatColumn } from "./components/layout/ChatColumn";
 import { EditorWorkspace } from "./components/layout/EditorWorkspace";
 import { SettingsModal } from "./components/settings/SettingsModal";
 import { ErrorBoundary } from "./components/common/ErrorBoundary";
+import { CustomContextMenu } from "./components/common/CustomContextMenu";
 
 export function App() {
   const [activeView, setActiveView] = useState("chat");
@@ -221,6 +222,9 @@ export function App() {
           isOpen={isSettingsOpen}
           onClose={() => setIsSettingsOpen(false)}
         />
+
+        {/* 4. 原生桌面级右键菜单 (剪切/复制/粘贴/全选/删除) */}
+        <CustomContextMenu />
       </div>
     </ErrorBoundary>
   );
