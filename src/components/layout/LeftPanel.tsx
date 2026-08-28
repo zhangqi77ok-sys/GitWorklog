@@ -228,104 +228,8 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
     );
   };
 
-  // 真实选择 Windows 文件夹并深度读取项目内容
+  // 真实选择 Windows 文件夹并深度读取项目内容 (采用 Tauri 原生无浏览器权限弹窗方式)
   const handleOpenWindowsFolderDialog = async () => {
-    // 1. 优先使用现代 File System Access API 深度扫描项目文件
-    if (typeof (window as any).showDirectoryPicker === "function") {
-      try {
-        const dirHandle = await (window as any).showDirectoryPicker();
-        if (dirHandle && dirHandle.name) {
-          const folderName = dirHandle.name;
-          const detectedFiles: string[] = [];
-          let mainCodeSample = "";
-
-          // 真实递归扫描项目前两层文件
-          try {
-            for await (const entry of dirHandle.values()) {
-              if (entry.kind === "file") {
-                detectedFiles.push(entry.name);
-                // 尝试读取 package.json / pom.xml / README.md / main.py
-                if (
-                  entry.name === "package.json" ||
-                  entry.name === "pom.xml" ||
-                  entry.name === "README.md" ||
-                  entry.name.endsWith(".py") ||
-                  entry.name.endsWith(".ts")
-                ) {
-                  const fileData = await (entry as any).getFile();
-                  const text = await fileData.text();
-                  if (!mainCodeSample && text) {
-                    mainCodeSample = text.slice(0, 1500);
-                  }
-                }
-              } else if (entry.kind === "directory" && !entry.name.startsWith(".")) {
-                detectedFiles.push(`${entry.name}/`);
-                try {
-                  for await (const subEntry of (entry as any).values()) {
-                    if (subEntry.kind === "file") {
-                      detectedFiles.push(`${entry.name}/${subEntry.name}`);
-                    }
-                  }
-                } catch (e) {}
-              }
-            }
-          } catch (scanErr) {
-            console.warn("Scan directory failed:", scanErr);
-          }
-
-          // 如果扫描到的文件较少，补充常见项目文件
-          if (detectedFiles.length === 0) {
-            detectedFiles.push(
-              "src/main.ts",
-              "src/App.tsx",
-              "package.json",
-              "README.md",
-              "tsconfig.json"
-            );
-          }
-
-          const newProj: ProjectFolder = {
-            id: `proj-${Date.now()}`,
-            name: folderName,
-            isExpanded: true,
-            files: detectedFiles,
-            sessions: [
-              {
-                id: `sess-${Date.now()}`,
-                title: `Project Initial Session (${folderName})`,
-                time: "刚刚",
-                projectFolder: folderName,
-              },
-            ],
-          };
-
-          setProjects((prev) => [newProj, ...prev]);
-          setCurrentActiveId(newProj.sessions[0].id);
-          if (onSelectSession)
-            onSelectSession(newProj.sessions[0].id, newProj.sessions[0].title, folderName);
-
-          // 触发全局项目已加载事件，同步工程文件与代码
-          window.dispatchEvent(
-            new CustomEvent("project-switched", {
-              detail: {
-                projectName: folderName,
-                files: detectedFiles,
-                sessionTitle: newProj.sessions[0].title,
-                codeSample: mainCodeSample,
-              },
-            })
-          );
-          return;
-        }
-      } catch (err: any) {
-        if (err.name === "AbortError") {
-          return; // 用户取消
-        }
-        console.warn("showDirectoryPicker fallback:", err);
-      }
-    }
-
-    // 2. 备用：调用 Rust 后端静默原生对话框
     try {
       const selectedPath = await nativeService.pickFolder();
       if (selectedPath) {
@@ -352,6 +256,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
               title: `Project Initial Session (${folderName})`,
               time: "刚刚",
               projectFolder: folderName,
+              status: "idle",
             },
           ],
         };

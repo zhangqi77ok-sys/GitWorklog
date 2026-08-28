@@ -114,7 +114,7 @@ export class NativeService {
   }
 
   /**
-   * 7. 真实探测当前工程所在目录的 Git 分支
+   * 7. 真实探测当前工程所在目录的 Git 分支与详细信息
    */
   public async getGitBranch(cwd?: string): Promise<string | null> {
     const snap = await this.getWorkspaceSnapshot(cwd);
@@ -130,6 +130,118 @@ export class NativeService {
       return null;
     }
     return null;
+  }
+
+  /**
+   * 获取完整的真实 Git 仓库状态、本地分支、远程分支与未提交变更
+   */
+  public async getFullGitStatus(cwd?: string): Promise<{
+    currentBranch: string;
+    isGit: boolean;
+    localBranches: string[];
+    remoteBranches: string[];
+    uncommittedFiles: string[];
+    rawStatus: string;
+  }> {
+    try {
+      const currBranch = await this.getGitBranch(cwd);
+      if (!currBranch) {
+        return {
+          currentBranch: "main",
+          isGit: false,
+          localBranches: ["main"],
+          remoteBranches: [],
+          uncommittedFiles: [],
+          rawStatus: "非 Git 版本控制工程",
+        };
+      }
+
+      // 获取所有本地分支
+      let localBranches: string[] = [];
+      try {
+        const branchOut = await this.executeCommand("git branch", cwd);
+        localBranches = branchOut
+          .split("\n")
+          .map((b) => b.replace(/^\*/, "").trim())
+          .filter(Boolean);
+      } catch (e) {
+        localBranches = [currBranch];
+      }
+
+      // 获取所有远程分支
+      let remoteBranches: string[] = [];
+      try {
+        const remoteOut = await this.executeCommand("git branch -r", cwd);
+        remoteBranches = remoteOut
+          .split("\n")
+          .map((b) => b.trim())
+          .filter((b) => b && !b.includes("->"));
+      } catch (e) {}
+
+      // 获取未提交变更
+      let uncommittedFiles: string[] = [];
+      let rawStatus = "";
+      try {
+        rawStatus = await this.executeCommand("git status --short", cwd);
+        uncommittedFiles = rawStatus
+          .split("\n")
+          .map((line) => line.trim())
+          .filter(Boolean);
+      } catch (e) {}
+
+      return {
+        currentBranch: currBranch,
+        isGit: true,
+        localBranches: localBranches.length > 0 ? localBranches : [currBranch],
+        remoteBranches,
+        uncommittedFiles,
+        rawStatus,
+      };
+    } catch (err) {
+      return {
+        currentBranch: "main",
+        isGit: false,
+        localBranches: ["main"],
+        remoteBranches: [],
+        uncommittedFiles: [],
+        rawStatus: "检测 Git 仓库异常",
+      };
+    }
+  }
+
+  /**
+   * 切换 Git 分支 (git checkout <branch>)
+   */
+  public async checkoutBranch(branchName: string, cwd?: string): Promise<string> {
+    return this.executeCommand(`git checkout ${branchName}`, cwd);
+  }
+
+  /**
+   * 新建并切换 Git 分支 (git checkout -b <branch>)
+   */
+  public async createAndCheckoutBranch(branchName: string, cwd?: string): Promise<string> {
+    return this.executeCommand(`git checkout -b ${branchName}`, cwd);
+  }
+
+  /**
+   * 执行 Git Pull (拉取远程更新)
+   */
+  public async gitPull(cwd?: string): Promise<string> {
+    return this.executeCommand("git pull", cwd);
+  }
+
+  /**
+   * 执行 Git Push (推送本地提交)
+   */
+  public async gitPush(cwd?: string): Promise<string> {
+    return this.executeCommand("git push", cwd);
+  }
+
+  /**
+   * 执行 Git Fetch (获取远程最新索引)
+   */
+  public async gitFetch(cwd?: string): Promise<string> {
+    return this.executeCommand("git fetch", cwd);
   }
 
   /**
