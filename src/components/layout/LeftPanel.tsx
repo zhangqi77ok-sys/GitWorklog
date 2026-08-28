@@ -217,10 +217,15 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
     setIsNewSessionModalOpen(false);
 
     if (onSelectSession) onSelectSession(newSess.id, newSess.title, proj.name);
+    const targetPath =
+      proj.path ||
+      (proj.name === "geek-boot-parent" ? "d:/weihu/geek-boot-parent" : "d:/weihu/agent-learning");
+
     window.dispatchEvent(
       new CustomEvent("project-switched", {
         detail: {
           projectName: proj.name,
+          fullPath: targetPath,
           files: proj.files || [],
           sessionTitle: newSess.title,
         },
@@ -239,7 +244,20 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
         let realFiles: string[] = [];
         try {
           const tree = await nativeService.listDirectoryTree(selectedPath);
-          realFiles = tree.map((f) => (f.is_dir ? `${f.name}/` : f.name));
+          const flatten = (entries: any[], prefix = ""): string[] => {
+            let res: string[] = [];
+            for (const e of entries) {
+              const rel = prefix ? `${prefix}/${e.name}` : e.name;
+              if (e.is_dir) {
+                res.push(`${rel}/`);
+                if (e.children) res = res.concat(flatten(e.children, rel));
+              } else {
+                res.push(rel);
+              }
+            }
+            return res;
+          };
+          realFiles = flatten(tree);
         } catch (e) {
           realFiles = ["src/index.ts", "package.json", "README.md"];
         }
@@ -285,11 +303,16 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
 
   const handleSelectSession = (sess: ProjectSession, proj: ProjectFolder) => {
     setCurrentActiveId(sess.id);
+    const targetPath =
+      proj.path ||
+      (proj.name === "geek-boot-parent" ? "d:/weihu/geek-boot-parent" : "d:/weihu/agent-learning");
+
     if (onSelectSession) onSelectSession(sess.id, sess.title, proj.name);
     window.dispatchEvent(
       new CustomEvent("project-switched", {
         detail: {
           projectName: proj.name,
+          fullPath: targetPath,
           files: proj.files || [],
           sessionTitle: sess.title,
         },

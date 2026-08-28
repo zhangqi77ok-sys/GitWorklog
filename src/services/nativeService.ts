@@ -158,14 +158,14 @@ export class NativeService {
         };
       }
 
-      // 获取所有本地分支
+      // 获取所有本地分支 (对齐 open-source 工具规范，支持 worktree '+' 与当前分支 '*' 标记)
       let localBranches: string[] = [];
       try {
-        const branchOut = await this.executeCommand("git branch", cwd);
+        const branchOut = await this.executeCommand("git branch --no-color", cwd);
         localBranches = branchOut
           .split("\n")
-          .map((b) => b.replace(/^\*/, "").trim())
-          .filter(Boolean);
+          .map((b) => b.replace(/^[\*\+\s]+/, "").trim())
+          .filter((b) => b && !b.startsWith("("));
       } catch (e) {
         localBranches = [currBranch];
       }
@@ -173,11 +173,11 @@ export class NativeService {
       // 获取所有远程分支
       let remoteBranches: string[] = [];
       try {
-        const remoteOut = await this.executeCommand("git branch -r", cwd);
+        const remoteOut = await this.executeCommand("git branch -r --no-color", cwd);
         remoteBranches = remoteOut
           .split("\n")
-          .map((b) => b.trim())
-          .filter((b) => b && !b.includes("->"));
+          .map((b) => b.replace(/^[\*\+\s]+/, "").trim())
+          .filter((b) => b && !b.includes("->") && !b.startsWith("("));
       } catch (e) {}
 
       // 获取所有标签 (Tags)

@@ -768,30 +768,66 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
     return () => window.removeEventListener("llm-config-updated", handleUpdate);
   }, []);
 
-  const [availableFiles, setAvailableFiles] = useState<string[]>([
-    "src/App.tsx",
-    "src/components/layout/ChatColumn.tsx",
-    "src/components/layout/LeftPanel.tsx",
-    "src/services/llmGatewayEngine.ts",
-    "src-tauri/tauri.conf.json",
-    "package.json",
-    "README.md"
-  ]);
   const [currentProjectName, setCurrentProjectName] = useState(projectName);
+  const [currentProjectPath, setCurrentProjectPath] = useState<string | undefined>(
+    projectName === "geek-boot-parent" ? "d:/weihu/geek-boot-parent" : undefined
+  );
+  const [availableFiles, setAvailableFiles] = useState<string[]>([]);
+
+  // 动态深度扫描当前工程磁盘真实文件
+  const scanDiskFiles = async (targetPath?: string, pName?: string) => {
+    const projName = pName || currentProjectName;
+    const resolved =
+      targetPath ||
+      currentProjectPath ||
+      (projName === "geek-boot-parent" ? "d:/weihu/geek-boot-parent" : "d:/weihu/agent-learning");
+
+    try {
+      const tree = await nativeService.listDirectoryTree(resolved, 4);
+      const flatten = (entries: any[], prefix = ""): string[] => {
+        let res: string[] = [];
+        for (const e of entries) {
+          const rel = prefix ? `${prefix}/${e.name}` : e.name;
+          if (e.is_dir) {
+            res.push(`${rel}/`);
+            if (e.children) res = res.concat(flatten(e.children, rel));
+          } else {
+            res.push(rel);
+          }
+        }
+        return res;
+      };
+      const files = flatten(tree);
+      if (files.length > 0) {
+        setAvailableFiles(files);
+      }
+    } catch (err) {
+      console.warn("Failed to scan disk directory tree:", err);
+    }
+  };
+
+  useEffect(() => {
+    scanDiskFiles();
+  }, [currentProjectName, currentProjectPath]);
 
   useEffect(() => {
     const handleProjectSwitched = async (e: any) => {
       const { projectName: pName, files, fullPath } = e.detail || {};
       if (pName) {
         setCurrentProjectName(pName);
+        const resolvedPath = fullPath || (pName === "geek-boot-parent" ? "d:/weihu/geek-boot-parent" : undefined);
+        setCurrentProjectPath(resolvedPath);
+
         if (Array.isArray(files) && files.length > 0) {
           setAvailableFiles(files);
+        } else {
+          await scanDiskFiles(resolvedPath, pName);
         }
         // 切换项目时不默认关联文件，由用户自主点击添加
         setAttachedFiles([]);
 
         // 探测新项目所在路径的 Git 分支
-        const realBranch = await nativeService.getGitBranch(fullPath);
+        const realBranch = await nativeService.getGitBranch(resolvedPath);
         setDetectedGitBranch(realBranch);
       }
     };
@@ -1773,6 +1809,7 @@ Instructions:
                   isOpen={isGitModalOpen}
                   onClose={() => setIsGitModalOpen(false)}
                   projectName={currentProjectName}
+                  projectPath={currentProjectPath}
                   onBranchSwitched={(newB) => setDetectedGitBranch(newB)}
                 />
               </div>

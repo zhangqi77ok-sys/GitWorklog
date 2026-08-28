@@ -25,6 +25,7 @@ interface GitBranchPopoverProps {
   isOpen: boolean;
   onClose: () => void;
   projectName: string;
+  projectPath?: string;
   onBranchSwitched?: (newBranch: string) => void;
 }
 
@@ -86,6 +87,7 @@ export const GitBranchModal: React.FC<GitBranchPopoverProps> = ({
   isOpen,
   onClose,
   projectName,
+  projectPath,
   onBranchSwitched,
 }) => {
   const [loading, setLoading] = useState(false);
@@ -103,9 +105,18 @@ export const GitBranchModal: React.FC<GitBranchPopoverProps> = ({
     "develop": true,
     "release": true,
     "fix": true,
+    "hotfix": true,
+    "arm": true,
+    "feat": true,
+    "codex": true,
   });
 
   const popoverRef = useRef<HTMLDivElement>(null);
+
+  // 动态推导工程物理根目录
+  const resolvedPath =
+    projectPath ||
+    (projectName === "geek-boot-parent" ? "d:/weihu/geek-boot-parent" : undefined);
 
   const [gitData, setGitData] = useState<{
     currentBranch: string;
@@ -128,7 +139,7 @@ export const GitBranchModal: React.FC<GitBranchPopoverProps> = ({
   const refreshGitStatus = async () => {
     setLoading(true);
     try {
-      const data = await nativeService.getFullGitStatus();
+      const data = await nativeService.getFullGitStatus(resolvedPath);
       setGitData(data);
     } catch (err: any) {
       console.warn("Refresh git status failed:", err);
@@ -145,20 +156,29 @@ export const GitBranchModal: React.FC<GitBranchPopoverProps> = ({
       setSearchQuery("");
       setSelectedBranch(null);
     }
-  }, [isOpen]);
+  }, [isOpen, resolvedPath, projectName]);
 
-  // 点击外部自动收起
+  // 点击外部自动收起与 Esc 键盘监听
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
         onClose();
       }
     };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onClose();
+      }
+    };
+
     if (isOpen) {
       document.addEventListener("mousedown", handleClickOutside);
+      window.addEventListener("keydown", handleKeyDown);
     }
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
+      window.removeEventListener("keydown", handleKeyDown);
     };
   }, [isOpen, onClose]);
 
@@ -187,7 +207,7 @@ export const GitBranchModal: React.FC<GitBranchPopoverProps> = ({
     if (branch === gitData.currentBranch) return;
     setActionLoading(`checkout-${branch}`);
     try {
-      await nativeService.checkoutBranch(branch);
+      await nativeService.checkoutBranch(branch, resolvedPath);
       showToast("success", `已成功检出并切换至: ${branch}`);
       await refreshGitStatus();
       if (onBranchSwitched) onBranchSwitched(branch);
@@ -205,7 +225,7 @@ export const GitBranchModal: React.FC<GitBranchPopoverProps> = ({
     const branchName = newBranchInput.trim().replace(/\s+/g, "-");
     setActionLoading("create-branch");
     try {
-      await nativeService.createAndCheckoutBranch(branchName);
+      await nativeService.createAndCheckoutBranch(branchName, resolvedPath);
       showToast("success", `已创建并检出分支: ${branchName}`);
       setNewBranchInput("");
       setIsCreatingBranch(false);
@@ -223,7 +243,7 @@ export const GitBranchModal: React.FC<GitBranchPopoverProps> = ({
   const handlePull = async () => {
     setActionLoading("pull");
     try {
-      const out = await nativeService.gitPull();
+      const out = await nativeService.gitPull(resolvedPath);
       showToast("success", `Pull 完成: ${out.slice(0, 60)}`);
       await refreshGitStatus();
     } catch (err: any) {
@@ -237,7 +257,7 @@ export const GitBranchModal: React.FC<GitBranchPopoverProps> = ({
   const handlePush = async () => {
     setActionLoading("push");
     try {
-      await nativeService.gitPush();
+      await nativeService.gitPush(resolvedPath);
       showToast("success", `Push 成功推送到远程仓库`);
       await refreshGitStatus();
     } catch (err: any) {
@@ -251,7 +271,7 @@ export const GitBranchModal: React.FC<GitBranchPopoverProps> = ({
   const handleFetch = async () => {
     setActionLoading("fetch");
     try {
-      await nativeService.gitFetch();
+      await nativeService.gitFetch(resolvedPath);
       showToast("success", "Fetch 成功同步远程索引");
       await refreshGitStatus();
     } catch (err: any) {
@@ -269,7 +289,7 @@ export const GitBranchModal: React.FC<GitBranchPopoverProps> = ({
     }
     setActionLoading(`delete-${branch}`);
     try {
-      await nativeService.deleteBranch(branch, true);
+      await nativeService.deleteBranch(branch, true, resolvedPath);
       showToast("success", `已删除本地分支: ${branch}`);
       setSelectedBranch(null);
       await refreshGitStatus();
@@ -284,7 +304,7 @@ export const GitBranchModal: React.FC<GitBranchPopoverProps> = ({
   const handleMergeBranch = async (branch: string) => {
     setActionLoading(`merge-${branch}`);
     try {
-      const out = await nativeService.mergeBranch(branch);
+      const out = await nativeService.mergeBranch(branch, resolvedPath);
       showToast("success", `合并完成: ${out.slice(0, 60)}`);
       await refreshGitStatus();
     } catch (err: any) {
