@@ -92,12 +92,19 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
   const [currentActiveId, setCurrentActiveId] = useState<string>(activeSessionId);
   const [showAllMap, setShowAllMap] = useState<Record<string, boolean>>({});
 
+  // 深度同步外部 activeSessionId 属性
+  useEffect(() => {
+    if (activeSessionId) {
+      setCurrentActiveId(activeSessionId);
+    }
+  }, [activeSessionId]);
+
   // 监听当前活跃会话状态变化 (运行中绿色转动、空闲蓝色、失败红色)
   useEffect(() => {
     const handleStatusChange = (e: any) => {
       const { sessionId, status } = e.detail || {};
-      if (status) {
-        const targetId = sessionId || currentActiveId;
+      const targetId = sessionId || currentActiveId || activeSessionId;
+      if (status && targetId) {
         setProjects((prev) =>
           prev.map((proj) => ({
             ...proj,
@@ -110,25 +117,26 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
     };
     window.addEventListener("session-status-changed", handleStatusChange);
     return () => window.removeEventListener("session-status-changed", handleStatusChange);
-  }, [currentActiveId]);
+  }, [currentActiveId, activeSessionId]);
 
-  // 辅助函数：渲染会话三态圆标 (GPU 加速动画与零布局抖动)
+  // 辅助函数：渲染会话三态圆标 (GPU 加速动画与高对比度渲染)
   const renderSessionStatusBadge = (status?: "running" | "idle" | "error") => {
-    if (status === "running") {
+    const currentStatus = status || "idle";
+    if (currentStatus === "running") {
       return (
-        <span className="w-2.5 h-2.5 flex items-center justify-center shrink-0" title="正在生成与推理中...">
-          <span className="w-2 h-2 rounded-full border-1.5 border-emerald-500 border-t-transparent animate-spin will-change-transform"></span>
+        <span className="w-3 h-3 flex items-center justify-center shrink-0" title="正在生成与推理中 (Running)...">
+          <span className="w-2.5 h-2.5 rounded-full border-2 border-emerald-500 border-t-transparent animate-spin will-change-transform"></span>
         </span>
       );
     }
-    if (status === "error") {
+    if (currentStatus === "error") {
       return (
-        <span className="w-2 h-2 rounded-full bg-red-500 shrink-0 shadow-xs will-change-opacity" title="会话执行失败/异常"></span>
+        <span className="w-2.5 h-2.5 rounded-full bg-red-500 shrink-0 shadow-xs will-change-opacity animate-pulse" title="会话执行失败/异常 (Error)"></span>
       );
     }
-    // 空闲会话: 蓝色圆标
+    // 空闲会话: 实心蓝色圆标
     return (
-      <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0 shadow-xs will-change-opacity" title="空闲就绪会话"></span>
+      <span className="w-2.5 h-2.5 rounded-full bg-blue-500 shrink-0 shadow-xs will-change-opacity" title="空闲就绪会话 (Idle)"></span>
     );
   };
 

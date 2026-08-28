@@ -665,7 +665,11 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
     setMessages([...currentHistory, assistantPlaceholder]);
     setIsGenerating(true);
     // 派发运行中状态 (绿色旋转圆标)
-    window.dispatchEvent(new CustomEvent("session-status-changed", { detail: { status: "running" } }));
+    window.dispatchEvent(
+      new CustomEvent("session-status-changed", {
+        detail: { sessionId: activeSessionId, status: "running" },
+      })
+    );
 
     // 创建中断控制器
     const controller = new AbortController();
@@ -737,7 +741,11 @@ Instructions:
         onComplete: (meta) => {
           setIsGenerating(false);
           // 派发空闲状态 (蓝色圆标)
-          window.dispatchEvent(new CustomEvent("session-status-changed", { detail: { status: "idle" } }));
+          window.dispatchEvent(
+            new CustomEvent("session-status-changed", {
+              detail: { sessionId: activeSessionId, status: "idle" },
+            })
+          );
           setMessages((prev) => {
             const updated = [...prev];
             const target = updated[updated.length - 1];
@@ -760,7 +768,11 @@ Instructions:
         onError: (errMsg, statusCode) => {
           setIsGenerating(false);
           // 派发失败状态 (红色圆标)
-          window.dispatchEvent(new CustomEvent("session-status-changed", { detail: { status: "error" } }));
+          window.dispatchEvent(
+            new CustomEvent("session-status-changed", {
+              detail: { sessionId: activeSessionId, status: "error" },
+            })
+          );
           setMessages((prev) => {
             const updated = [...prev];
             const target = updated[updated.length - 1];
@@ -783,7 +795,11 @@ Instructions:
       abortControllerRef.current = null;
     }
     setIsGenerating(false);
-    window.dispatchEvent(new CustomEvent("session-status-changed", { detail: { status: "idle" } }));
+    window.dispatchEvent(
+      new CustomEvent("session-status-changed", {
+        detail: { sessionId: activeSessionId, status: "idle" },
+      })
+    );
     setMessages((prev) => {
       const updated = [...prev];
       const target = updated[updated.length - 1];
