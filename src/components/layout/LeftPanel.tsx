@@ -114,16 +114,6 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
   });
   const [renameInput, setRenameInput] = useState("");
 
-  // 点击外部收起项目/会话操作菜单
-  useEffect(() => {
-    const handleMenuClickOutside = () => {
-      setProjectMenuOpenId(null);
-      setSessionMenuOpenId(null);
-    };
-    window.addEventListener("click", handleMenuClickOutside);
-    return () => window.removeEventListener("click", handleMenuClickOutside);
-  }, []);
-
   // 深度同步外部 activeSessionId 属性
   useEffect(() => {
     if (activeSessionId) {
@@ -682,6 +672,12 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
               {/* 1. 项目文件夹行 */}
               <div
                 onClick={() => toggleFolder(proj.id)}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setProjectMenuOpenId(proj.id);
+                  setSessionMenuOpenId(null);
+                }}
                 className="group flex items-center justify-between px-2 py-1.5 rounded-md hover:bg-[#ebe5df]/70 cursor-pointer transition-colors text-[#374151]"
               >
                 <div className="flex items-center gap-1.5 min-w-0">
@@ -697,66 +693,92 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
                   </span>
                 </div>
 
-                {/* 悬浮/默认操作图标: 更多与新增会话 */}
+                {/* 悬浮/默认操作图标: 新增/重命名/删除/更多 */}
                 <div className="flex items-center gap-0.5 opacity-70 group-hover:opacity-100 transition-opacity">
+                  <button
+                    type="button"
+                    onClick={(e) => handleAddSession(e, proj)}
+                    className="w-5 h-5 rounded hover:bg-[#ded7ce] flex items-center justify-center text-[#6b7280] hover:text-[#d96b27] cursor-pointer"
+                    title="在此项目下新建会话"
+                  >
+                    <Plus size={13} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => handleOpenRenameModal("project", proj.id, proj.name, undefined, e)}
+                    className="w-5 h-5 rounded hover:bg-[#ded7ce] flex items-center justify-center text-[#6b7280] hover:text-[#2563eb] cursor-pointer"
+                    title="重命名项目"
+                  >
+                    <Edit3 size={12} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => handleRemoveProject(proj.id, e)}
+                    className="w-5 h-5 rounded hover:bg-[#fee2e2] flex items-center justify-center text-[#6b7280] hover:text-[#ef4444] cursor-pointer"
+                    title="移除项目"
+                  >
+                    <Trash2 size={12} />
+                  </button>
                   <button
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
                       setProjectMenuOpenId((prev) => (prev === proj.id ? null : proj.id));
+                      setSessionMenuOpenId(null);
                     }}
                     className="w-5 h-5 rounded hover:bg-[#ded7ce] flex items-center justify-center text-[#6b7280] cursor-pointer"
-                    title="项目操作 (重命名/删除/刷新)"
+                    title="更多选项"
                   >
                     <MoreVertical size={12} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={(e) => handleAddSession(e, proj)}
-                    className="w-5 h-5 rounded hover:bg-[#ded7ce] flex items-center justify-center text-[#6b7280] cursor-pointer"
-                    title="在此项目下新建会话"
-                  >
-                    <Plus size={13} />
                   </button>
                 </div>
               </div>
 
               {/* 项目级更多操作弹出菜单 (Popover) */}
               {isProjectMenuOpen && (
-                <div
-                  onClick={(e) => e.stopPropagation()}
-                  className="absolute top-8 right-2 z-50 w-36 bg-white border border-[#e5dfd8] rounded-xl shadow-xl p-1 flex flex-col gap-0.5 text-xs text-[#1e1b18] animate-in fade-in zoom-in-95"
-                >
-                  <button
-                    onClick={(e) => handleAddSession(e, proj)}
-                    className="w-full px-2.5 py-1.5 rounded-lg flex items-center gap-2 hover:bg-[#faf8f5] text-[#334155] cursor-pointer transition-colors"
+                <>
+                  <div
+                    className="fixed inset-0 z-40 bg-transparent"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setProjectMenuOpenId(null);
+                    }}
+                  />
+                  <div
+                    onClick={(e) => e.stopPropagation()}
+                    className="absolute top-8 right-2 z-50 w-36 bg-white border border-[#e5dfd8] rounded-xl shadow-xl p-1 flex flex-col gap-0.5 text-xs text-[#1e1b18] animate-in fade-in zoom-in-95"
                   >
-                    <Plus size={12} className="text-[#d96b27]" />
-                    <span>新建会话</span>
-                  </button>
-                  <button
-                    onClick={(e) => handleOpenRenameModal("project", proj.id, proj.name, undefined, e)}
-                    className="w-full px-2.5 py-1.5 rounded-lg flex items-center gap-2 hover:bg-[#faf8f5] text-[#334155] cursor-pointer transition-colors"
-                  >
-                    <Edit3 size={12} className="text-[#2563eb]" />
-                    <span>重命名项目</span>
-                  </button>
-                  <button
-                    onClick={(e) => handleRescanProjectDisk(proj, e)}
-                    className="w-full px-2.5 py-1.5 rounded-lg flex items-center gap-2 hover:bg-[#faf8f5] text-[#334155] cursor-pointer transition-colors"
-                  >
-                    <RefreshCw size={12} className="text-[#10b981]" />
-                    <span>刷新磁盘文件</span>
-                  </button>
-                  <div className="w-full h-[1px] bg-[#f1f5f9] my-0.5" />
-                  <button
-                    onClick={(e) => handleRemoveProject(proj.id, e)}
-                    className="w-full px-2.5 py-1.5 rounded-lg flex items-center gap-2 hover:bg-[#fee2e2] text-[#ef4444] cursor-pointer transition-colors"
-                  >
-                    <Trash2 size={12} />
-                    <span>移除该项目</span>
-                  </button>
-                </div>
+                    <button
+                      onClick={(e) => handleAddSession(e, proj)}
+                      className="w-full px-2.5 py-1.5 rounded-lg flex items-center gap-2 hover:bg-[#faf8f5] text-[#334155] cursor-pointer transition-colors"
+                    >
+                      <Plus size={12} className="text-[#d96b27]" />
+                      <span>新建会话</span>
+                    </button>
+                    <button
+                      onClick={(e) => handleOpenRenameModal("project", proj.id, proj.name, undefined, e)}
+                      className="w-full px-2.5 py-1.5 rounded-lg flex items-center gap-2 hover:bg-[#faf8f5] text-[#334155] cursor-pointer transition-colors"
+                    >
+                      <Edit3 size={12} className="text-[#2563eb]" />
+                      <span>重命名项目</span>
+                    </button>
+                    <button
+                      onClick={(e) => handleRescanProjectDisk(proj, e)}
+                      className="w-full px-2.5 py-1.5 rounded-lg flex items-center gap-2 hover:bg-[#faf8f5] text-[#334155] cursor-pointer transition-colors"
+                    >
+                      <RefreshCw size={12} className="text-[#10b981]" />
+                      <span>刷新磁盘文件</span>
+                    </button>
+                    <div className="w-full h-[1px] bg-[#f1f5f9] my-0.5" />
+                    <button
+                      onClick={(e) => handleRemoveProject(proj.id, e)}
+                      className="w-full px-2.5 py-1.5 rounded-lg flex items-center gap-2 hover:bg-[#fee2e2] text-[#ef4444] cursor-pointer transition-colors"
+                    >
+                      <Trash2 size={12} />
+                      <span>移除该项目</span>
+                    </button>
+                  </div>
+                </>
               )}
 
               {/* 2. 项目下的会话子列表 (缩进) */}
@@ -770,6 +792,12 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
                       <div
                         key={sess.id}
                         onClick={() => handleSelectSession(sess, proj)}
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setSessionMenuOpenId(sess.id);
+                          setProjectMenuOpenId(null);
+                        }}
                         className={`group relative flex items-center justify-between px-2.5 py-1.5 rounded-lg cursor-pointer transition-all ${
                           isActive
                             ? "bg-[#e5e7eb] text-[#111827] font-medium shadow-2xs"
@@ -788,15 +816,32 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
                             {sess.time}
                           </span>
 
-                          {/* 悬浮操作按钮组 */}
+                          {/* 悬浮操作按钮组 (直接可见 ✏️ 重命名 / 🗑️ 删除 / ⋮ 更多) */}
                           <div className="hidden group-hover:flex items-center gap-0.5">
+                            <button
+                              type="button"
+                              onClick={(e) => handleOpenRenameModal("session", sess.id, sess.title, proj.id, e)}
+                              className="w-5 h-5 rounded hover:bg-[#ded7ce] flex items-center justify-center text-[#6b7280] hover:text-[#2563eb] cursor-pointer"
+                              title="重命名会话"
+                            >
+                              <Edit3 size={11} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => handleRemoveSession(proj.id, sess.id, e)}
+                              className="w-5 h-5 rounded hover:bg-[#fee2e2] flex items-center justify-center text-[#6b7280] hover:text-[#ef4444] cursor-pointer"
+                              title="删除会话"
+                            >
+                              <Trash2 size={11} />
+                            </button>
                             <button
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setSessionMenuOpenId((prev) => (prev === sess.id ? null : sess.id));
+                                setProjectMenuOpenId(null);
                               }}
-                              className="w-4.5 h-4.5 rounded hover:bg-[#ded7ce] flex items-center justify-center text-[#6b7280] cursor-pointer"
+                              className="w-5 h-5 rounded hover:bg-[#ded7ce] flex items-center justify-center text-[#6b7280] cursor-pointer"
                               title="会话操作"
                             >
                               <MoreVertical size={11} />
@@ -806,25 +851,34 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
 
                         {/* 会话级操作菜单 */}
                         {isSessionMenuOpen && (
-                          <div
-                            onClick={(e) => e.stopPropagation()}
-                            className="absolute top-7 right-2 z-50 w-28 bg-white border border-[#e5dfd8] rounded-xl shadow-xl p-1 flex flex-col gap-0.5 text-xs text-[#1e1b18] animate-in fade-in zoom-in-95"
-                          >
-                            <button
-                              onClick={(e) => handleOpenRenameModal("session", sess.id, sess.title, proj.id, e)}
-                              className="w-full px-2 py-1 rounded-lg flex items-center gap-1.5 hover:bg-[#faf8f5] text-[#334155] cursor-pointer transition-colors"
+                          <>
+                            <div
+                              className="fixed inset-0 z-40 bg-transparent"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSessionMenuOpenId(null);
+                              }}
+                            />
+                            <div
+                              onClick={(e) => e.stopPropagation()}
+                              className="absolute top-7 right-2 z-50 w-28 bg-white border border-[#e5dfd8] rounded-xl shadow-xl p-1 flex flex-col gap-0.5 text-xs text-[#1e1b18] animate-in fade-in zoom-in-95"
                             >
-                              <Edit3 size={11} className="text-[#2563eb]" />
-                              <span>重命名</span>
-                            </button>
-                            <button
-                              onClick={(e) => handleRemoveSession(proj.id, sess.id, e)}
-                              className="w-full px-2 py-1 rounded-lg flex items-center gap-1.5 hover:bg-[#fee2e2] text-[#ef4444] cursor-pointer transition-colors"
-                            >
-                              <Trash2 size={11} />
-                              <span>删除会话</span>
-                            </button>
-                          </div>
+                              <button
+                                onClick={(e) => handleOpenRenameModal("session", sess.id, sess.title, proj.id, e)}
+                                className="w-full px-2 py-1 rounded-lg flex items-center gap-1.5 hover:bg-[#faf8f5] text-[#334155] cursor-pointer transition-colors"
+                              >
+                                <Edit3 size={11} className="text-[#2563eb]" />
+                                <span>重命名</span>
+                              </button>
+                              <button
+                                onClick={(e) => handleRemoveSession(proj.id, sess.id, e)}
+                                className="w-full px-2 py-1 rounded-lg flex items-center gap-1.5 hover:bg-[#fee2e2] text-[#ef4444] cursor-pointer transition-colors"
+                              >
+                                <Trash2 size={11} />
+                                <span>删除会话</span>
+                              </button>
+                            </div>
+                          </>
                         )}
                       </div>
                     );
