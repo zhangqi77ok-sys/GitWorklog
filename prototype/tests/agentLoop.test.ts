@@ -31,13 +31,17 @@ describe('Agent Loop contract - action parsing', () => {
         type: 'write_file',
         target: 'src/utils/helper.ts',
         code: 'export const answer = 42;',
-        isHighRisk: false
+        isHighRisk: false,
+        riskReason: undefined,
+        tier: 'notify_after'
       },
       {
         type: 'run_command',
         target: 'git status',
         code: 'git status',
-        isHighRisk: false
+        isHighRisk: false,
+        riskReason: undefined,
+        tier: 'silent'
       }
     ]);
     expect(actions.map(action => action.id)).toEqual(parseAgentActions(content).map(action => action.id));
@@ -56,24 +60,25 @@ describe('Agent Loop contract - action parsing', () => {
   });
 });
 
-describe('Agent Loop contract - permission policies', () => {
+describe('Agent Loop contract - permission policies & scoped trust', () => {
   const safeAction = parseAgentActions('```run_command\nnpm test\n```')[0]!;
+  const safeWrite = parseAgentActions('```write_file:src/components/Card.tsx\nexport const Card = () => null;\n```')[0]!;
   const highRiskAction = parseAgentActions('```run_command\ngit push origin main\n```')[0]!;
 
-  it('requires every action in strict approval mode, including after a session-level allowance', () => {
-    expect(shouldRequireActionApproval('strict_approval', safeAction, false)).toBe(true);
-    expect(shouldRequireActionApproval('strict_approval', safeAction, true)).toBe(true);
+  it('requires every action in strict approval mode, unless covered by scoped trust', () => {
+    expect(shouldRequireActionApproval('strict_approval', safeAction, [], false)).toBe(true);
+    expect(shouldRequireActionApproval('strict_approval', safeWrite, [{ actionType: 'write_file', pathGlob: 'src/**' }], false)).toBe(false);
   });
 
   it('automatically runs only low-risk actions outside strict approval', () => {
-    expect(shouldRequireActionApproval('risk_adaptive', safeAction, false)).toBe(false);
-    expect(shouldRequireActionApproval('autonomous_agent', safeAction, false)).toBe(false);
-    expect(shouldRequireActionApproval('risk_adaptive', highRiskAction, false)).toBe(true);
+    expect(shouldRequireActionApproval('risk_adaptive', safeAction, [], false)).toBe(false);
+    expect(shouldRequireActionApproval('autonomous_agent', safeAction, [], false)).toBe(false);
+    expect(shouldRequireActionApproval('risk_adaptive', highRiskAction, [], false)).toBe(true);
   });
 
-  it('never allows a session-wide choice to bypass high-risk review', () => {
-    expect(shouldRequireActionApproval('risk_adaptive', highRiskAction, true)).toBe(true);
-    expect(shouldRequireActionApproval('autonomous_agent', highRiskAction, true)).toBe(true);
+  it('never allows a session-wide choice or scoped trust to bypass high-risk review', () => {
+    expect(shouldRequireActionApproval('risk_adaptive', highRiskAction, [{ actionType: '*', pathGlob: '*' }], true)).toBe(true);
+    expect(shouldRequireActionApproval('autonomous_agent', highRiskAction, [], true)).toBe(true);
   });
 });
 

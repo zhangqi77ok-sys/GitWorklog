@@ -320,6 +320,35 @@ export interface ChatMessage {
   permissionPolicy?: PermissionPolicy;
   actionResults?: ActionResult[];     // Agent Loop execution results for action blocks in this message
   isAgentFeedback?: boolean;          // True for Agent Loop feedback messages (shown as compact system cards)
+  checkpointRef?: string;             // Git plumbing shadow snapshot reference (e.g. refs/codemind/checkpoints/<sessionId>/<turnIndex>)
+  turnIndex?: number;                 // 1-based user conversational turn index
+}
+
+// Runtime L2 Session State Snapshot
+export interface SessionRuntimeState {
+  scrollTop: number;
+  activeFilePath?: string;
+  openTabs: string[];
+  terminalHeightPercent?: number;
+  expandedThinkingIds: string[];
+}
+
+// Runtime L3 Agent Loop Checkpoint State
+export interface AgentLoopBreakpoint {
+  sessionId: string;
+  stepIndex: number;
+  totalSteps: number;
+  pendingActions: AgentPendingAction[];
+  executedResults: ActionResult[];
+  isPaused: boolean;
+  timestamp: number;
+}
+
+// DnD Standard Drag Payload
+export interface DnDPayload {
+  dragType: 'file' | 'snippet' | 'tab' | 'panel';
+  payload: any;
+  sourceId: string;
 }
 
 export interface LiveLogItem {

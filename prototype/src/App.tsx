@@ -51,6 +51,7 @@ import {
 } from './types/contracts';
 import {
   AgentAction,
+  ActionScopeTrust,
   createActionResult,
   formatExecutionFeedback as formatAgentExecutionFeedback,
   parseAgentActions,
@@ -183,11 +184,13 @@ export const App: React.FC = () => {
   });
   const [permissionPolicy, setPermissionPolicy] = useState<PermissionPolicy>('autonomous_agent');
 
-  // Agent Loop: Promise-based approval modal state
+  // Agent Loop: Promise-based batch approval modal state & Scoped Trust map
   const [pendingApproval, setPendingApproval] = useState<{
-    action: AgentPendingAction;
-    resolve: (decision: 'allow_once' | 'reject_once' | 'allow_all_session') => void;
+    actions: AgentAction[];
+    resolve: (decision: { approvedIds: string[]; trustGlob?: string }) => void;
   } | null>(null);
+  const [scopedTrusts, setScopedTrusts] = useState<ActionScopeTrust[]>([]);
+  const [activeAutoExecutedToast, setActiveAutoExecutedToast] = useState<{ count: number; glob: string } | null>(null);
 
   // Resizable Layout & Collapse States
   const [leftPanelWidth, setLeftPanelWidth] = useState<number>(260);
@@ -271,7 +274,7 @@ export const App: React.FC = () => {
       abortControllerRef.current = null;
     }
     if (pendingApproval) {
-      pendingApproval.resolve('reject_once');
+      pendingApproval.resolve({ approvedIds: [] });
       setPendingApproval(null);
     }
     setIsStreaming(false);
@@ -628,27 +631,52 @@ export const App: React.FC = () => {
 
   const formatExecutionFeedback = formatAgentExecutionFeedback;
 
-  // The modal provides a decision only; execution remains owned by this controller.
-  const requestApproval = (action: AgentAction): Promise<'allow_once' | 'reject_once' | 'allow_all_session'> => {
+  // Batch approval for all actions in current Agent Loop turn
+  const requestBatchApproval = (actions: AgentAction[]): Promise<{ approvedIds: string[]; trustGlob?: string }> => {
     return new Promise((resolve) => {
       setPendingApproval({
-        action: {
-          id: action.id,
-          type: action.type,
-          target: action.target,
-          code: action.code,
-          isHighRisk: action.isHighRisk,
-          status: 'pending'
-        },
+        actions,
         resolve
       });
     });
   };
 
-  const handleApprovalDecision = (decision: 'allow_once' | 'reject_once' | 'allow_all_session') => {
+  const handleBatchApprovalDecision = (decision: { approvedIds: string[]; trustGlob?: string }) => {
     if (pendingApproval) {
+      if (decision.trustGlob) {
+        setScopedTrusts(prev => [...prev, { actionType: '*', pathGlob: decision.trustGlob! }]);
+      }
       pendingApproval.resolve(decision);
       setPendingApproval(null);
+    }
+  };
+
+  const handleRollbackToCheckpoint = async (checkpointRef: string, messageId: string) => {
+    const activeSession = sessions.find(s => s.id === currentSessionId) || sessions[0];
+    try {
+      addLog('INFO', 'GitPlumbing', `正在回滚到快照 ${checkpointRef}...`);
+      const res = await fetch('/api/git/revert', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectPath: activeSession.projectPath, ref: checkpointRef })
+      });
+      const data = await res.json();
+      if (data.success) {
+        // Rollback conversation state to this message
+        setSessionMessages(prev => {
+          const list = prev[currentSessionId] || [];
+          const idx = list.findIndex(m => m.id === messageId);
+          if (idx !== -1) {
+            const truncated = list.slice(0, idx + 1);
+            saveSessionMessagesToStorage({ ...prev, [currentSessionId]: truncated });
+            return { ...prev, [currentSessionId]: truncated };
+          }
+          return prev;
+        });
+        addLog('INFO', 'GitPlumbing', `✓ 成功回滚到 ${checkpointRef}，共恢复 ${data.restoredFiles?.length || 0} 个文件`);
+      }
+    } catch (e: any) {
+      addLog('ERROR', 'GitPlumbing', `回滚失败: ${e.message}`);
     }
   };
 
@@ -666,16 +694,42 @@ export const App: React.FC = () => {
     agentLoopCancelledRef.current = false;
     let allowLowRiskInSession = false;
 
+    const activeSession = sessions.find(s => s.id === currentSessionId) || sessions[0];
+    let createdCheckpointRef: string | undefined = undefined;
+
+    // Create Git Plumbing Shadow Snapshot before conversational turn begins
+    if (activeSession.projectPath) {
+      try {
+        const turnIdx = (sessionMessages[currentSessionId] || []).filter(m => m.role === 'user').length + 1;
+        const cpRes = await fetch('/api/git/checkpoint', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            projectPath: activeSession.projectPath,
+            sessionId: currentSessionId,
+            turnIndex: turnIdx,
+            summary: text.slice(0, 40)
+          })
+        });
+        const cpData = await cpRes.json();
+        if (cpData.success && cpData.ref) {
+          createdCheckpointRef = cpData.ref;
+          addLog('INFO', 'GitPlumbing', `[Checkpoint] 建立快照: ${cpData.ref}`);
+        }
+      } catch (e) {}
+    }
+
     const userMsg: ChatMessage = {
       id: `msg-${Date.now()}`,
       role: 'user',
       content: text,
       timestamp: Date.now(),
-      permissionPolicy
+      permissionPolicy,
+      checkpointRef: createdCheckpointRef,
+      turnIndex: (sessionMessages[currentSessionId] || []).filter(m => m.role === 'user').length + 1
     };
 
     const streamingModel = { ...currentModel };
-    const activeSession = sessions.find(s => s.id === currentSessionId) || sessions[0];
 
     // Keep a synchronous loop-local history; React state is display/persistence only.
     const conversationSnapshot: ChatMessage[] = [...(sessionMessages[currentSessionId] || []), userMsg];
@@ -968,8 +1022,8 @@ Tcode 已通过宿主磁盘与终端桥接将工程提供给你。` : '当前处
           break; // Exit Agent Loop
         }
 
-        // ── Execute actions with permission policy ──
-        addLog('INFO', 'AgentLoop', `[Loop #${loopCount}] 检测到 ${actions.length} 个动作，开始执行...`);
+        // ── Execute actions with Batch Decision & Scoped Trust ──
+        addLog('INFO', 'AgentLoop', `[Loop #${loopCount}] 检测到 ${actions.length} 个动作，开始评估执行策略...`);
         const results: ActionResult[] = [];
         const publishActionResult = (nextResult: ActionResult) => {
           setSessionMessages(prev => {
@@ -983,27 +1037,36 @@ Tcode 已通过宿主磁盘与终端桥接将工程提供给你。` : '当前处
           });
         };
 
+        // Determine which actions require approval in this batch
+        const actionsRequiringApproval = actions.filter(action =>
+          shouldRequireActionApproval(permissionPolicy, action, scopedTrusts, allowLowRiskInSession)
+        );
+
+        let approvedIds = new Set<string>(actions.map(a => a.id));
+
+        if (actionsRequiringApproval.length > 0) {
+          // One-turn, one batch decision
+          actions.forEach(a => publishActionResult(createActionResult(a, 'pending')));
+          const decision = await requestBatchApproval(actions);
+          approvedIds = new Set(decision.approvedIds);
+        } else {
+          // Notify after toast for safe actions
+          const safeWrites = actions.filter(a => a.type === 'write_file' && !a.isHighRisk);
+          if (safeWrites.length > 0) {
+            setActiveAutoExecutedToast({ count: safeWrites.length, glob: 'src/**' });
+            setTimeout(() => setActiveAutoExecutedToast(null), 4000);
+          }
+        }
+
         for (const action of actions) {
           if (agentLoopCancelledRef.current) break;
-          const needsApproval = shouldRequireActionApproval(permissionPolicy, action, allowLowRiskInSession);
           let result: ActionResult;
 
-          if (needsApproval) {
-            publishActionResult(createActionResult(action, 'pending'));
-            const decision = await requestApproval(action);
-            if (decision === 'allow_all_session') {
-              allowLowRiskInSession = true;
-              publishActionResult(createActionResult(action, 'executing'));
-              result = await executeActionOnHost(action);
-            } else if (decision === 'allow_once') {
-              publishActionResult(createActionResult(action, 'executing'));
-              result = await executeActionOnHost(action);
-            } else {
-              result = createActionResult(action, 'rejected');
-            }
-          } else {
+          if (approvedIds.has(action.id)) {
             publishActionResult(createActionResult(action, 'executing'));
             result = await executeActionOnHost(action);
+          } else {
+            result = createActionResult(action, 'rejected');
           }
 
           results.push(result);
@@ -1268,7 +1331,9 @@ Tcode 已通过宿主磁盘与终端桥接将工程提供给你。` : '当前处
           onSelectModel={handleSelectModel}
           permissionPolicy={permissionPolicy}
           pendingApproval={pendingApproval}
-          onApprovalDecision={handleApprovalDecision}
+          onApprovalDecision={(approvedIds, trustGlob) => handleBatchApprovalDecision({ approvedIds, trustGlob })}
+          onRejectBatchApproval={() => handleBatchApprovalDecision({ approvedIds: [] })}
+          onRollbackToCheckpoint={handleRollbackToCheckpoint}
           setPermissionPolicy={setPermissionPolicy}
           isStreaming={isStreaming}
           onStopGeneration={handleStopGeneration}

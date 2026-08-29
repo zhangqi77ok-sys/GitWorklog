@@ -500,6 +500,174 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
                 self.wfile.write(json.dumps({'error': str(e)}).encode('utf-8'))
             return
 
+        # 5. Real Git Plumbing Shadow Snapshot Creation
+        if self.path == '/api/git/checkpoint':
+            length = int(self.headers.get('Content-Length', 0))
+            body = self.rfile.read(length)
+            try:
+                payload = json.loads(body.decode('utf-8'))
+                project_path = payload.get('projectPath') or os.getcwd()
+                session_id = payload.get('sessionId', 'default')
+                turn_index = payload.get('turnIndex', 0)
+                summary = payload.get('summary', 'Auto Checkpoint')
+
+                p = Path(project_path)
+                if not (p / '.git').exists():
+                    # Fallback for non-git repository: local storage copy
+                    snapshot_dir = p / '.codemind' / 'snapshots' / session_id / str(turn_index)
+                    snapshot_dir.mkdir(parents=True, exist_ok=True)
+                    self.send_response(200)
+                    self.send_header('Access-Control-Allow-Origin', '*')
+                    self.send_header('Content-Type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps({
+                        'success': True,
+                        'isGit': False,
+                        'ref': f"fs-checkpoint-{session_id}-{turn_index}",
+                        'timestamp': int(time.time() * 1000)
+                    }).encode('utf-8'))
+                    return
+
+                # Git plumbing with isolated temporary index
+                temp_index = p / '.git' / f"index_checkpoint_{os.getpid()}_{int(time.time()*1000)}"
+                ref_name = f"refs/codemind/checkpoints/{session_id}/{turn_index}"
+
+                env = os.environ.copy()
+                env['GIT_INDEX_FILE'] = str(temp_index)
+
+                try:
+                    # 1. Read existing tree or staging into temp index
+                    run_silent_cmd(['git', 'read-tree', 'HEAD'], cwd=project_path)
+                    # 2. Stage all working tree files (including untracked) into temp index
+                    si = get_silent_startupinfo()
+                    subprocess.run(
+                        ['git', 'add', '-A'],
+                        cwd=project_path,
+                        env=env,
+                        capture_output=True,
+                        startupinfo=si if os.name == 'nt' else None,
+                        creationflags=CREATE_NO_WINDOW if os.name == 'nt' else 0
+                    )
+                    # 3. Write tree
+                    proc_wt = subprocess.run(
+                        ['git', 'write-tree'],
+                        cwd=project_path,
+                        env=env,
+                        capture_output=True,
+                        text=True,
+                        startupinfo=si if os.name == 'nt' else None,
+                        creationflags=CREATE_NO_WINDOW if os.name == 'nt' else 0
+                    )
+                    tree_hash = proc_wt.stdout.strip()
+                    if not tree_hash:
+                        raise Exception('Failed to write-tree: ' + proc_wt.stderr)
+
+                    # 4. Commit tree directly
+                    proc_ct = subprocess.run(
+                        ['git', 'commit-tree', tree_hash, '-m', f"checkpoint: {summary}"],
+                        cwd=project_path,
+                        env=env,
+                        capture_output=True,
+                        text=True,
+                        startupinfo=si if os.name == 'nt' else None,
+                        creationflags=CREATE_NO_WINDOW if os.name == 'nt' else 0
+                    )
+                    commit_hash = proc_ct.stdout.strip()
+                    if not commit_hash:
+                        raise Exception('Failed to commit-tree: ' + proc_ct.stderr)
+
+                    # 5. Update custom ref
+                    run_silent_cmd(['git', 'update-ref', ref_name, commit_hash], cwd=project_path)
+                finally:
+                    if temp_index.exists():
+                        try: temp_index.unlink()
+                        except Exception: pass
+
+                self.send_response(200)
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({
+                    'success': True,
+                    'isGit': True,
+                    'ref': ref_name,
+                    'commitHash': commit_hash,
+                    'timestamp': int(time.time() * 1000)
+                }).encode('utf-8'))
+            except Exception as e:
+                self.send_response(500)
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'error': str(e)}).encode('utf-8'))
+            return
+
+        # 6. Real Git Plumbing Shadow Revert
+        if self.path == '/api/git/revert':
+            length = int(self.headers.get('Content-Length', 0))
+            body = self.rfile.read(length)
+            try:
+                payload = json.loads(body.decode('utf-8'))
+                project_path = payload.get('projectPath') or os.getcwd()
+                ref = payload.get('ref')
+                if not ref:
+                    raise Exception('Missing checkpoint ref')
+
+                p = Path(project_path)
+                if not (p / '.git').exists():
+                    self.send_response(200)
+                    self.send_header('Access-Control-Allow-Origin', '*')
+                    self.send_header('Content-Type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps({'success': True, 'restoredFiles': []}).encode('utf-8'))
+                    return
+
+                # Auto-create pre-revert safety checkpoint first
+                pre_revert_ref = f"refs/codemind/checkpoints/pre_revert_{int(time.time()*1000)}"
+                temp_index = p / '.git' / f"index_prerevert_{os.getpid()}_{int(time.time()*1000)}"
+                env = os.environ.copy()
+                env['GIT_INDEX_FILE'] = str(temp_index)
+                si = get_silent_startupinfo()
+
+                try:
+                    subprocess.run(['git', 'add', '-A'], cwd=project_path, env=env, capture_output=True, startupinfo=si if os.name == 'nt' else None, creationflags=CREATE_NO_WINDOW if os.name == 'nt' else 0)
+                    proc_wt = subprocess.run(['git', 'write-tree'], cwd=project_path, env=env, capture_output=True, text=True, startupinfo=si if os.name == 'nt' else None, creationflags=CREATE_NO_WINDOW if os.name == 'nt' else 0)
+                    if proc_wt.returncode == 0 and proc_wt.stdout.strip():
+                        proc_ct = subprocess.run(['git', 'commit-tree', proc_wt.stdout.strip(), '-m', 'pre-revert safety snapshot'], cwd=project_path, env=env, capture_output=True, text=True, startupinfo=si if os.name == 'nt' else None, creationflags=CREATE_NO_WINDOW if os.name == 'nt' else 0)
+                        if proc_ct.returncode == 0 and proc_ct.stdout.strip():
+                            run_silent_cmd(['git', 'update-ref', pre_revert_ref, proc_ct.stdout.strip()], cwd=project_path)
+                finally:
+                    if temp_index.exists():
+                        try: temp_index.unlink()
+                        except Exception: pass
+
+                # Get changed files between working tree and checkpoint
+                proc_diff = run_silent_cmd(['git', 'diff', '--name-only', ref], cwd=project_path)
+                restored_files = [f.strip() for f in proc_diff.stdout.splitlines() if f.strip()]
+
+                # Restore files from checkpoint commit
+                run_silent_cmd(['git', 'checkout', ref, '--', '.'], cwd=project_path)
+                # Clean any untracked files that were introduced after checkpoint
+                run_silent_cmd(['git', 'clean', '-fd'], cwd=project_path)
+
+                self.send_response(200)
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({
+                    'success': True,
+                    'ref': ref,
+                    'preRevertRef': pre_revert_ref,
+                    'restoredFiles': restored_files
+                }).encode('utf-8'))
+            except Exception as e:
+                self.send_response(500)
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'error': str(e)}).encode('utf-8'))
+            return
+
         # 3. Persistent Local Storage Write to Disk (Never lost on upgrade)
         if self.path == '/api/storage':
             length = int(self.headers.get('Content-Length', 0))

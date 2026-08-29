@@ -95,7 +95,8 @@ import { PullRequestModal } from './PullRequestModal';
 import { TrajectorySnapshotModal } from './TrajectorySnapshotModal';
 import { ThinkingBlock } from './ThinkingBlock';
 import { extractThinkingFromText, SLASH_COMMANDS, SlashCommandItem, loadSavedProfile, DeveloperProfile } from '../types/contracts';
-import { GitPullRequest } from 'lucide-react';
+import { GitPullRequest, RotateCcw } from 'lucide-react';
+import type { AgentAction } from '../services/agentLoop';
 
 interface ChatColumnProps {
   rightWorkspaceOpen: boolean;
@@ -124,10 +125,11 @@ interface ChatColumnProps {
   onNavigateDiff?: (target: { fileId: string; filePath: string; targetLine: number }) => void;
   onOpenFile?: (filePath: string) => void;
   pendingApproval?: {
-    action: AgentPendingAction;
-    resolve: (decision: 'allow_once' | 'reject_once' | 'allow_all_session') => void;
+    actions: AgentAction[];
   } | null;
-  onApprovalDecision?: (decision: 'allow_once' | 'reject_once' | 'allow_all_session') => void;
+  onApprovalDecision?: (approvedActionIds: string[], trustGlob?: string) => void;
+  onRejectBatchApproval?: () => void;
+  onRollbackToCheckpoint?: (checkpointRef: string, messageId: string) => void;
 }
 
 export const ChatColumn: React.FC<ChatColumnProps> = ({
@@ -157,9 +159,39 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
   onNavigateDiff,
   onOpenFile,
   pendingApproval,
-  onApprovalDecision
+  onApprovalDecision,
+  onRejectBatchApproval,
+  onRollbackToCheckpoint
 }) => {
-  const [inputText, setInputText] = useState('');
+  const [inputText, setInputText] = useState(() => {
+    try {
+      return localStorage.getItem(`codemind_draft_${session.id}`) || '';
+    } catch (e) {
+      return '';
+    }
+  });
+
+  // L1 Input Draft 300ms Debounce Persistence per Session
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      try {
+        if (inputText.trim()) {
+          localStorage.setItem(`codemind_draft_${session.id}`, inputText);
+        } else {
+          localStorage.removeItem(`codemind_draft_${session.id}`);
+        }
+      } catch (e) {}
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [inputText, session.id]);
+
+  // Restore draft when switching session
+  useEffect(() => {
+    try {
+      const draft = localStorage.getItem(`codemind_draft_${session.id}`) || '';
+      setInputText(draft);
+    } catch (e) {}
+  }, [session.id]);
   const [pendingActionQueue, setPendingActionQueue] = useState<AgentPendingAction[]>([]);
   const [sessionAutoAllowed, setSessionAutoAllowed] = useState<boolean>(false);
   const [processedActionIds, setProcessedActionIds] = useState<Set<string>>(new Set());
@@ -937,6 +969,31 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                 {msg.role === 'user' ? `${devProfile.name || '开发者'} (You)` : 'Tcode 智能体'}
               </span>
               <span>· {new Date(msg.timestamp).toLocaleTimeString()}</span>
+
+              {/* Git Plumbing Shadow Checkpoint Rollback Anchor */}
+              {msg.role === 'user' && msg.checkpointRef && onRollbackToCheckpoint && (
+                <button
+                  onClick={() => onRollbackToCheckpoint(msg.checkpointRef!, msg.id)}
+                  title={`点击无损回滚代码与对话至本轮发起前 (快照: ${msg.checkpointRef})`}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '3px',
+                    padding: '1px 6px',
+                    borderRadius: '4px',
+                    background: 'rgba(217, 107, 39, 0.1)',
+                    border: '1px solid rgba(217, 107, 39, 0.3)',
+                    color: 'var(--accent)',
+                    fontSize: '10px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    marginLeft: '4px'
+                  }}
+                >
+                  <RotateCcw size={10} />
+                  <span>↩ 回到这里</span>
+                </button>
+              )}
               {msg.auditTag && (
                 <span style={{ padding: '1px 5px', borderRadius: '3px', background: 'var(--accent-subtle)', color: 'var(--accent)', fontSize: '10px' }}>
                   {msg.auditTag}
@@ -1681,7 +1738,21 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
             <div style={{ width: '28px', height: '2px', background: 'var(--border-subtle)', borderRadius: '1px' }} />
           </div>
 
-          {/* 2. BORDERLESS RESIZABLE TEXTAREA */}
+          {/* 2. BORDERLESS RESIZABLE TEXTAREA (Supports File/Snippet DnD Drop) */}
+          <div
+            onDragOver={e => {
+              e.preventDefault();
+              e.dataTransfer.dropEffect = 'copy';
+            }}
+            onDrop={e => {
+              e.preventDefault();
+              const fileData = e.dataTransfer.getData('text/plain') || e.dataTransfer.getData('text/uri-list');
+              if (fileData) {
+                setInputText(prev => prev ? `${prev} @${fileData}` : `@${fileData} `);
+              }
+            }}
+            style={{ width: '100%' }}
+          >
           <textarea
             placeholder={
               workMode === 'plan'
@@ -1716,6 +1787,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
               overflowY: 'auto'
             }}
           />
+          </div>
 
           {/* 3. INTEGRATED COMMAND DECK (Bottom Control Bar Inside Card) */}
           <div style={{
@@ -2663,15 +2735,12 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
         session={session}
       />
 
-      {/* 🛡️ Human-in-the-Loop Interactive Action Approval Modal (Agent Loop driven) */}
+      {/* 🛡️ Human-in-the-Loop Batch Action Approval Checklist Modal */}
       <ActionApprovalModal
-        isOpen={!!pendingApproval}
-        action={pendingApproval?.action || null}
-        currentIndex={0}
-        totalCount={pendingApproval ? 1 : 0}
-        onAllowOnce={() => onApprovalDecision?.('allow_once')}
-        onRejectOnce={() => onApprovalDecision?.('reject_once')}
-        onAllowAllInSession={() => onApprovalDecision?.('allow_all_session')}
+        isOpen={!!pendingApproval && !!pendingApproval.actions && pendingApproval.actions.length > 0}
+        actions={pendingApproval?.actions || []}
+        onApproveAll={(approvedIds, trustGlob) => onApprovalDecision?.(approvedIds, trustGlob)}
+        onRejectAll={() => onRejectBatchApproval?.()}
         onOpenFile={(path) => {
           if (onOpenFile) onOpenFile(path);
           else if (onNavigateDiff) onNavigateDiff({ fileId: path, filePath: path, targetLine: 1 });

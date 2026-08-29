@@ -31,7 +31,8 @@ body {
   font-size: 13px;
   line-height: 1.5;
   overflow: hidden;
-  user-select: none;
+  user-select: text;
+  -webkit-user-select: text;
   -webkit-font-smoothing: antialiased;
 }
 
