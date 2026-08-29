@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import os
 import shutil
 import subprocess
@@ -12,101 +10,113 @@ FRONTEND_DIST = PROTOTYPE_DIR / "dist"
 DESKTOP_ENTRY = ROOT / "src-desktop" / "desktop_app.py"
 SETUP_ENTRY = ROOT / "src-desktop" / "setup_wizard.py"
 BUILD_TEMP = ROOT / "build_temp"
-CORE_DIST_DIR = BUILD_TEMP / "installer_core"
-PAYLOAD_DIR = BUILD_TEMP / "installer_payload"
-PYINSTALLER_WORK_DIR = BUILD_TEMP / "installer_work"
-PYINSTALLER_SPEC_DIR = BUILD_TEMP / "installer_specs"
-CORE_OUTPUT = CORE_DIST_DIR / "CodeMind-Studio.exe"
+RELEASE_DIR = ROOT / "release"
+CORE_DIST_DIR = BUILD_TEMP / "core"
+PAYLOAD_DIR = BUILD_TEMP / "payload"
+WORK_CORE_DIR = BUILD_TEMP / "work_core"
+WORK_SETUP_DIR = BUILD_TEMP / "work_setup"
 
+VERSION = "1.5.0"
+CORE_EXE_NAME = "Tcode-Core.exe"
+SETUP_EXE_NAME = f"Tcode-Setup-v{VERSION}.exe"
+ZIP_NAME = f"Tcode-Setup-v{VERSION}-windows-x64.zip"
 
-def installer_output() -> Path:
-    return ROOT / "release" / "CodeMind-Studio-Setup.exe"
+CORE_OUTPUT = CORE_DIST_DIR / CORE_EXE_NAME
+INSTALLER_OUTPUT = RELEASE_DIR / SETUP_EXE_NAME
+ZIP_OUTPUT = RELEASE_DIR / ZIP_NAME
 
+PYINSTALLER_EXE = r"C:\Users\13605\AppData\Roaming\uv\python\cpython-3.12.14-windows-x86_64-none\Scripts\pyinstaller.exe"
+if not os.path.exists(PYINSTALLER_EXE):
+    PYINSTALLER_EXE = sys.executable
 
-def pyinstaller_base_command() -> list[str]:
-    return [sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean", "--windowed", "--onefile"]
-
-
-def core_command() -> list[str]:
-    return [
-        *pyinstaller_base_command(),
-        "--name", "CodeMind-Studio",
-        "--distpath", str(CORE_DIST_DIR),
-        "--workpath", str(PYINSTALLER_WORK_DIR / "core"),
-        "--specpath", str(PYINSTALLER_SPEC_DIR),
-        "--add-data", f"{FRONTEND_DIST}{os.pathsep}dist",
-        str(DESKTOP_ENTRY),
-    ]
-
-
-def setup_command() -> list[str]:
-    return [
-        *pyinstaller_base_command(),
-        "--name", "CodeMind-Studio-Setup",
-        "--distpath", str(installer_output().parent),
-        "--workpath", str(PYINSTALLER_WORK_DIR / "setup"),
-        "--specpath", str(PYINSTALLER_SPEC_DIR),
-        "--add-data", f"{PAYLOAD_DIR}{os.pathsep}payload",
-        str(SETUP_ENTRY),
-    ]
-
+def pyinstaller_base_cmd() -> list[str]:
+    if PYINSTALLER_EXE == sys.executable:
+        return [sys.executable, "-m", "PyInstaller"]
+    return [PYINSTALLER_EXE]
 
 def run(command: list[str], cwd: Path | None = None) -> None:
     print("\n> " + " ".join(f'"{part}"' if " " in part else part for part in command), flush=True)
     subprocess.run(command, cwd=cwd, check=True)
 
-
-def clean_directory(path: Path) -> None:
+def clean_dir(path: Path) -> None:
     if path.exists():
         shutil.rmtree(path)
     path.mkdir(parents=True, exist_ok=True)
 
-
-def npm_command() -> str:
-    return "npm.cmd" if os.name == "nt" else "npm"
-
-
-def verify_build_inputs() -> None:
-    missing = [path for path in (DESKTOP_ENTRY, SETUP_ENTRY) if not path.is_file()]
-    if missing:
-        raise FileNotFoundError(f"Missing desktop build input: {', '.join(str(path) for path in missing)}")
-
-
 def build() -> Path:
-    verify_build_inputs()
-    run([npm_command(), "run", "build"], cwd=PROTOTYPE_DIR)
-    run([npm_command(), "test"], cwd=PROTOTYPE_DIR)
+    print(f"=== [Tcode v{VERSION}] Starting Release Build Pipeline ===")
+    RELEASE_DIR.mkdir(parents=True, exist_ok=True)
+
+    # 1. Build & Test Frontend
+    print("\n[1/5] Building prototype frontend...")
+    run(["npm.cmd" if os.name == "nt" else "npm", "run", "build"], cwd=PROTOTYPE_DIR)
+    print("\n[2/5] Running Vitest unit tests...")
+    run(["npm.cmd" if os.name == "nt" else "npm", "test"], cwd=PROTOTYPE_DIR)
 
     if not FRONTEND_DIST.joinpath("index.html").is_file():
         raise FileNotFoundError(f"Frontend build did not create {FRONTEND_DIST / 'index.html'}")
 
-    clean_directory(CORE_DIST_DIR)
-    clean_directory(PAYLOAD_DIR)
-    clean_directory(PYINSTALLER_WORK_DIR)
-    clean_directory(PYINSTALLER_SPEC_DIR)
-    installer_output().parent.mkdir(parents=True, exist_ok=True)
+    clean_dir(CORE_DIST_DIR)
+    clean_dir(PAYLOAD_DIR)
+    clean_dir(WORK_CORE_DIR)
+    clean_dir(WORK_SETUP_DIR)
 
-    run(core_command(), cwd=ROOT)
+    # 2. Build Tcode-Core.exe
+    print(f"\n[3/5] Compiling {CORE_EXE_NAME}...")
+    core_cmd = [
+        *pyinstaller_base_cmd(),
+        "--noconfirm",
+        "--clean",
+        "--windowed",
+        "--onefile",
+        "--name=Tcode-Core",
+        f"--add-data={FRONTEND_DIST}{os.pathsep}dist",
+        f"--distpath={CORE_DIST_DIR}",
+        f"--workpath={WORK_CORE_DIR}",
+        f"--specpath={BUILD_TEMP}",
+        str(DESKTOP_ENTRY)
+    ]
+    run(core_cmd, cwd=ROOT)
     if not CORE_OUTPUT.is_file():
-        raise FileNotFoundError(f"PyInstaller did not create desktop core: {CORE_OUTPUT}")
+        raise FileNotFoundError(f"Failed to create {CORE_OUTPUT}")
 
-    shutil.copy2(CORE_OUTPUT, PAYLOAD_DIR / CORE_OUTPUT.name)
-    run(setup_command(), cwd=ROOT)
+    # 3. Inject payload
+    shutil.copy2(CORE_OUTPUT, PAYLOAD_DIR / CORE_EXE_NAME)
 
-    output = installer_output()
-    if not output.is_file() or output.stat().st_size == 0:
-        raise FileNotFoundError(f"PyInstaller did not create installer: {output}")
+    # 4. Build Tcode-Setup-v1.5.0.exe
+    print(f"\n[4/5] Compiling {SETUP_EXE_NAME} in {RELEASE_DIR}...")
+    setup_cmd = [
+        *pyinstaller_base_cmd(),
+        "--noconfirm",
+        "--clean",
+        "--windowed",
+        "--onefile",
+        f"--name=Tcode-Setup-v{VERSION}",
+        f"--add-data={PAYLOAD_DIR}{os.pathsep}payload",
+        f"--distpath={RELEASE_DIR}",
+        f"--workpath={WORK_SETUP_DIR}",
+        f"--specpath={BUILD_TEMP}",
+        str(SETUP_ENTRY)
+    ]
+    run(setup_cmd, cwd=ROOT)
 
-    print(f"\n✓ Windows installer created: {output} ({output.stat().st_size:,} bytes)")
-    return output
+    if not INSTALLER_OUTPUT.is_file() or INSTALLER_OUTPUT.stat().st_size == 0:
+        raise FileNotFoundError(f"Failed to create installer: {INSTALLER_OUTPUT}")
 
+    # 5. Create zip distribution package
+    print(f"\n[5/5] Creating {ZIP_NAME}...")
+    subprocess.run([
+        "powershell.exe", "-NoProfile", "-Command",
+        f"Compress-Archive -Path '{INSTALLER_OUTPUT}' -DestinationPath '{ZIP_OUTPUT}' -Force"
+    ], check=True)
+
+    print(f"\n✨ Successfully generated Windows installer: {INSTALLER_OUTPUT} ({INSTALLER_OUTPUT.stat().st_size:,} bytes)")
+    print(f"✨ Successfully generated Zip archive: {ZIP_OUTPUT} ({ZIP_OUTPUT.stat().st_size:,} bytes)")
+    return INSTALLER_OUTPUT
 
 if __name__ == "__main__":
     try:
         build()
-    except subprocess.CalledProcessError as error:
-        print(f"\n✕ Installer build failed with exit code {error.returncode}: {error.cmd}", file=sys.stderr)
-        raise SystemExit(error.returncode)
-    except Exception as error:
-        print(f"\n✕ Installer build failed: {error}", file=sys.stderr)
-        raise SystemExit(1)
+    except Exception as e:
+        print(f"\n✕ Build failed: {e}", file=sys.stderr)
+        sys.exit(1)
