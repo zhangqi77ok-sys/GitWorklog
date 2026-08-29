@@ -2445,3 +2445,49 @@ export function searchFuzzyMentions(query: string): MentionSearchResultItem[] {
     c.name.toLowerCase().includes(cleanQuery) || c.detail.toLowerCase().includes(cleanQuery)
   );
 }
+
+
+// ============================================================================
+// 23. STAGE 5: DESKTOP BUNDLE TARGET & MULTI-PLATFORM CONTRACTS
+// ============================================================================
+
+export type DesktopPlatformType = 'windows' | 'macos' | 'linux';
+export type DesktopArchType = 'x86_64' | 'aarch64' | 'universal';
+
+export interface DesktopPlatformConfig {
+  platform: DesktopPlatformType;
+  arch: DesktopArchType;
+  bundleFormats: string[];
+  nativeEngine: string;
+  isSandboxed: boolean;
+}
+
+export function resolveDesktopPlatformConfig(platform: DesktopPlatformType, arch: DesktopArchType = 'x86_64'): DesktopPlatformConfig {
+  if (platform === 'windows') {
+    return {
+      platform: 'windows',
+      arch: 'x86_64',
+      bundleFormats: ['nsis', 'msi'],
+      nativeEngine: 'Microsoft Edge WebView2 (DirectX)',
+      isSandboxed: true
+    };
+  }
+
+  if (platform === 'macos') {
+    return {
+      platform: 'macos',
+      arch,
+      bundleFormats: ['dmg', 'app'],
+      nativeEngine: 'WebKit (Metal)',
+      isSandboxed: true
+    };
+  }
+
+  return {
+    platform: 'linux',
+    arch: 'x86_64',
+    bundleFormats: ['deb', 'appimage'],
+    nativeEngine: 'WebKitGTK',
+    isSandboxed: true
+  };
+}

@@ -910,3 +910,22 @@ To github.com:zhangqi77ok-sys/agent-learning.git
   - `@diff` (当前工作区未暂存的修改行)；
   - `@doc` (PRD 需求与架构文档)；
 - **切片注入**：被提及的项目自动抽取核心 Interface 骨架注入 Prompt 上下文。
+
+
+---
+
+## 4.48 跨平台多架构桌面分发与热更新规约 (Desktop Multi-Platform & Updater)
+
+### 4.48.1 目标平台与分发矩阵
+1. **Windows 10/11 (当前重点)**：
+   - 架构：`x86_64` (标准 64 位)；
+   - 产物：NSIS 便携单文件 `.exe` + 企业级 Windows Installer `.msi`；
+   - 运行时依赖：Microsoft Edge WebView2 (Win10/11 内置，无需额外捆绑)；
+2. **macOS 13+ (平滑移植)**：
+   - 架构：Apple Silicon `aarch64` (M1/M2/M3/M4) + Universal Binary 双架构；
+   - 产物：Apple Disk Image `.dmg` + App Bundle `.app`；
+   - 渲染内核：macOS 原生 WebKit (Metal 硬件加速)。
+
+### 4.48.2 安全签名与增量热更新
+- **代码签名**：Windows 采用 EV 证书签名，macOS 采用 Apple Developer ID 签名并完成 Apple 公证 (Notarization)；
+- **增量热更新 (Tauri Updater)**：采用 Ed25519 签名公钥校验，静默下载差分补丁，应用重启后毫秒级就绪。
