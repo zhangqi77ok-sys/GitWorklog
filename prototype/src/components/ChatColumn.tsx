@@ -338,20 +338,38 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
   const [shareTargetMessage, setShareTargetMessage] = useState<ChatMessage | null>(null);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
 
-  // Auto-scroll to latest message
+  // Smart auto-scroll: only scroll to bottom when user is near the bottom
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
+  const scrollContainerRef = React.useRef<HTMLDivElement>(null);
+  const [isUserNearBottom, setIsUserNearBottom] = useState(true);
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+
   const scrollToBottom = (smooth = true) => {
     messagesEndRef.current?.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto', block: 'end' });
   };
 
-  // Auto-scroll when switching sessions (instant)
+  // Track user scroll position to determine if near bottom
+  const handleScrollContainer = React.useCallback(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    const nearBottom = distanceFromBottom < 150;
+    setIsUserNearBottom(nearBottom);
+    setShowScrollToBottom(!nearBottom && el.scrollHeight > el.clientHeight + 300);
+  }, []);
+
+  // Auto-scroll when switching sessions (instant, always go to bottom)
   React.useEffect(() => {
-    scrollToBottom(false);
+    setIsUserNearBottom(true);
+    setShowScrollToBottom(false);
+    setTimeout(() => scrollToBottom(false), 50);
   }, [session.id]);
 
-  // Auto-scroll on new messages & streaming tokens
+  // Auto-scroll on new messages & streaming tokens — ONLY if user is near the bottom
   React.useEffect(() => {
-    scrollToBottom(true);
+    if (isUserNearBottom) {
+      scrollToBottom(true);
+    }
   }, [messages, isStreaming, promptQueue]);
   const [availableModelList, setAvailableModelList] = useState<AIModelOption[]>(getAllAvailableModels());
   const [activeProviderTab, setActiveProviderTab] = useState<string>('opencode');
@@ -941,7 +959,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
       )}
 
       {/* Messages Stream Area */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', background: 'var(--chat-bg)' }}>
+      <div ref={scrollContainerRef} onScroll={handleScrollContainer} style={{ flex: 1, overflowY: 'auto', padding: '16px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', background: 'var(--chat-bg)', position: 'relative' }}>
         <div style={{ width: '100%', maxWidth: '960px', display: 'flex', flexDirection: 'column' }}>
         {/* Real Product Onboarding / Zero-State Welcome Screen */}
         {messages.length === 0 && (
@@ -1130,12 +1148,209 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
 
             {/* Message Body with Tag Folding, ThinkingBlock & Tool Calls */}
             {(() => {
-              const curRoundId = selectedRoundByMsgId[msg.id] || msg.activeRoundId;
-              const curRound = msg.rounds?.find(r => r.roundId === curRoundId);
-              const displayContent = curRound ? curRound.content : msg.content;
-              const parsed = parseAgentMessage(displayContent);
               const isLastAssistant = isStreaming && msg.role === 'assistant' && msg.id === messages[messages.length - 1]?.id;
+              const hasRounds = msg.rounds && msg.rounds.length > 0;
 
+              // When rounds exist, render ALL rounds sequentially (no overwriting)
+              if (hasRounds) {
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', userSelect: 'text', WebkitUserSelect: 'text' }}>
+                    {msg.rounds!.map((round, roundIdx) => {
+                      const roundParsed = parseAgentMessage(round.content || '');
+                      const isCurrentlyStreaming = isLastAssistant && roundIdx === msg.rounds!.length - 1;
+                      const phaseLabels: Record<string, string> = {
+                        understand: '🔍 理解', plan: '📋 规划', inspect: '🔎 探索',
+                        modify: '✏️ 修改', verify: '🧪 验证', fix: '🔧 修复', done: '✅ 完成'
+                      };
+                      const statusColors: Record<string, string> = {
+                        running: 'var(--accent)', passed: '#16A34A', failed: '#DC2626', blocked: '#9333EA'
+                      };
+                      const statusIcons: Record<string, string> = {
+                        running: '●', passed: '✓', failed: '✕', blocked: '⊘'
+                      };
+
+                      return (
+                        <div key={round.roundId} style={{
+                          borderLeft: `2px solid ${statusColors[round.status] || 'var(--border-subtle)'}`,
+                          paddingLeft: '12px',
+                          marginLeft: '2px',
+                          position: 'relative'
+                        }}>
+                          {/* Round Header */}
+                          <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            marginBottom: '6px',
+                            fontSize: '10.5px',
+                            fontWeight: 600
+                          }}>
+                            <span style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '3px',
+                              padding: '1px 8px',
+                              borderRadius: '10px',
+                              background: `${statusColors[round.status] || 'var(--accent)'}15`,
+                              border: `1px solid ${statusColors[round.status] || 'var(--accent)'}40`,
+                              color: statusColors[round.status] || 'var(--accent)',
+                              fontSize: '10px'
+                            }}>
+                              <span>{statusIcons[round.status] || '●'}</span>
+                              <span>Round {round.roundId}</span>
+                            </span>
+                            <span style={{ color: 'var(--text-muted)', fontSize: '10px' }}>
+                              {phaseLabels[round.phase] || round.phase} · {round.title}
+                            </span>
+                            <span style={{ color: 'var(--text-muted)', fontSize: '9.5px', marginLeft: 'auto' }}>
+                              {new Date(round.timestamp).toLocaleTimeString()}
+                            </span>
+                          </div>
+
+                          {/* Round Thinking Block */}
+                          {roundParsed.thinkingText && (
+                            <ThinkingBlock
+                              payload={{
+                                thinkingText: roundParsed.thinkingText,
+                                contentText: roundParsed.cleanContent,
+                                isThinkingFinished: !isCurrentlyStreaming,
+                                durationSeconds: 6.5,
+                                tokensCount: Math.ceil(roundParsed.thinkingText.length / 4)
+                              }}
+                              defaultExpanded={isCurrentlyStreaming}
+                            />
+                          )}
+
+                          {/* Round Tool Calls */}
+                          {roundParsed.toolCalls.length > 0 && (
+                            <div style={{
+                              borderRadius: '6px',
+                              border: '1px solid rgba(217, 107, 39, 0.3)',
+                              background: 'rgba(217, 107, 39, 0.04)',
+                              overflow: 'hidden',
+                              marginBottom: '4px'
+                            }}>
+                              <div
+                                onClick={() => setCollapsedTools(prev => ({ ...prev, [`${msg.id}-r${round.roundId}`]: !prev[`${msg.id}-r${round.roundId}`] }))}
+                                style={{
+                                  padding: '5px 10px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  background: 'rgba(217, 107, 39, 0.08)',
+                                  cursor: 'pointer',
+                                  userSelect: 'none',
+                                  fontSize: '10.5px',
+                                  fontWeight: 600,
+                                  color: 'var(--accent)'
+                                }}
+                              >
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                  <Wrench size={12} />
+                                  <span>🛠️ 工具调度: {roundParsed.toolCalls.length} 个函数 ({roundParsed.toolCalls.map((t: ParsedToolCall) => t.name).join(', ')})</span>
+                                </div>
+                                {collapsedTools[`${msg.id}-r${round.roundId}`] ? <ChevronDown size={13} /> : <ChevronUp size={13} />}
+                              </div>
+                              {!collapsedTools[`${msg.id}-r${round.roundId}`] && (
+                                <div style={{ padding: '6px 10px', display: 'flex', flexDirection: 'column', gap: '3px', fontSize: '10.5px', fontFamily: 'var(--font-mono)' }}>
+                                  {roundParsed.toolCalls.map((tc: ParsedToolCall, idx: number) => (
+                                    <div key={idx} style={{ padding: '2px 6px', borderRadius: '4px', background: 'var(--bg-base)' }}>
+                                      <span style={{ color: 'var(--accent)', fontWeight: 700 }}>▶ {tc.name}</span>
+                                      <span style={{ color: 'var(--text-muted)', marginLeft: '6px' }}>{JSON.stringify(tc.parameters)}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Round Content */}
+                          {(roundParsed.cleanContent || (!roundParsed.thinkingText && roundParsed.toolCalls.length === 0)) && (
+                            <div style={{
+                              padding: '6px 0',
+                              fontSize: '12.5px',
+                              lineHeight: 1.65,
+                              wordBreak: 'break-word',
+                              userSelect: 'text',
+                              WebkitUserSelect: 'text',
+                              cursor: 'text'
+                            }}>
+                              <MarkdownCard
+                                content={roundParsed.cleanContent || (isCurrentlyStreaming ? '正在推演并分析工程结构...' : round.content)}
+                                isStreaming={isCurrentlyStreaming && isStreaming}
+                                actionResults={round.actionResults}
+                                onOpenFile={(path) => {
+                                  if (onOpenFile) onOpenFile(path);
+                                  else if (onNavigateDiff) onNavigateDiff({ fileId: path, filePath: path, targetLine: 1 });
+                                }}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+
+                    {/* Bottom-Left Message Action Toolbar: Copy, Export, Fork */}
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      marginTop: '2px',
+                      alignSelf: 'flex-start'
+                    }}>
+                      <button
+                        onClick={() => {
+                          const allContent = msg.rounds!.map(r => `[Round ${r.roundId}] ${r.title}\n${r.content}`).join('\n\n---\n\n');
+                          navigator.clipboard.writeText(allContent);
+                          setCopiedMsgId(msg.id);
+                          setTimeout(() => setCopiedMsgId(null), 2000);
+                        }}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: '3px', padding: '3px 8px',
+                          borderRadius: '4px', background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)',
+                          color: copiedMsgId === msg.id ? '#16A34A' : 'var(--text-muted)', fontSize: '10.5px',
+                          cursor: 'pointer', transition: 'all 0.15s ease'
+                        }}
+                        title="复制全部轮次回答内容"
+                      >
+                        {copiedMsgId === msg.id ? <Check size={11} color="#16A34A" /> : <Copy size={11} />}
+                        <span>{copiedMsgId === msg.id ? '已复制' : '复制全部'}</span>
+                      </button>
+                      <button
+                        onClick={() => { setShareTargetMessage(msg); setIsShareModalOpen(true); }}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: '3px', padding: '3px 8px',
+                          borderRadius: '4px', background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)',
+                          color: 'var(--accent)', fontSize: '10.5px', fontWeight: 600,
+                          cursor: 'pointer', transition: 'all 0.15s ease'
+                        }}
+                        title="生成精美图片卡片并分享"
+                      >
+                        <Share2 size={11} color="var(--accent)" />
+                        <span>分享</span>
+                      </button>
+                      {onForkMessage && (
+                        <button
+                          onClick={() => onForkMessage(msg.id)}
+                          title="从该回答节点分叉出独立会话分支"
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: '3px', padding: '3px 8px',
+                            borderRadius: '4px', background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)',
+                            color: 'var(--accent)', fontSize: '10.5px', fontWeight: 600,
+                            cursor: 'pointer', transition: 'all 0.15s ease'
+                          }}
+                        >
+                          <GitBranch size={11} color="var(--accent)" />
+                          <span>分叉分支</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              }
+
+              // Fallback: non-round messages (user messages, single-turn assistant responses)
+              const parsed = parseAgentMessage(msg.content);
               return (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', userSelect: 'text', WebkitUserSelect: 'text' }}>
                   {/* Collapsible Thinking Process */}
@@ -1540,6 +1755,42 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
         {/* Auto-scroll anchor */}
         <div ref={messagesEndRef} style={{ height: '1px', width: '100%' }} />
         </div>
+
+        {/* Floating "Scroll to Bottom" button — appears when user scrolls up */}
+        {showScrollToBottom && (
+          <button
+            onClick={() => {
+              scrollToBottom(true);
+              setIsUserNearBottom(true);
+              setShowScrollToBottom(false);
+            }}
+            style={{
+              position: 'absolute',
+              bottom: '16px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '6px 16px',
+              borderRadius: '20px',
+              background: 'var(--bg-surface-elevated)',
+              border: '1px solid var(--border-strong)',
+              boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
+              color: 'var(--accent)',
+              fontSize: '12px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              zIndex: 50,
+              transition: 'all 0.2s ease',
+              backdropFilter: 'blur(8px)'
+            }}
+            title="回到最新消息"
+          >
+            <ChevronDown size={14} />
+            <span>↓ 回到底部</span>
+          </button>
+        )}
       </div>
 
       {/* INPUT AREA: UNIFIED COMMAND DECK (Cursor Composer / Claude Desktop Grade) */}
