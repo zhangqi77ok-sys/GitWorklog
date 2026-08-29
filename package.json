@@ -1,1 +1,32 @@
-{"name":"agent-learning","private":true,"workspaces":["prototype","src-desktop"],"scripts":{"sync:check":"node scripts/check-sync.js"}}
+﻿# CodeMind-Hub
+新一代开源极简 AI 编程桌面工作台。
+当前阶段：**Phase 0 - 产品需求定义与前端 UI/UX 原型验证**
+## 🚨 项目级三大铁律
+1. **双向强同步**：需求/原型变更必同步 \docs/\ 与 \prototype/\
+2. **严禁越界开发**：未澄清需求与原型，禁止写产品代码
+3. **真交互原型**：功能原型必须可点击流转
+## 📂 仓库结构规约 (Aligned with Physical Repo)
+\\\
+agent-learning/
+├── docs/                 # 📋 需求规约 (Phase 0 Active)
+├── prototype/           # 🎨 交互式原型工程 (Phase 0 Active)
+├── src-tauri/           # 🔧 Tauri 后端 (⚠️ Phase 1 Reserved)
+├── src-desktop/         # 🖥️ 桌面前端 (⚠️ Phase 1 Reserved)
+├── release/             # 📦 构建产物 (⚠️ Phase 1 Reserved)
+├── scripts/             # 🛠️ 架构治理脚本
+├── AGENTS.md            # 📜 核心协作铁律 (SSOT)
+└── README.md            # 📖 项目总览
+\\\
+"@ | Set-Content "README.md" -Encoding UTF8
+Write-Host "📦 [4/初始化] 创建根 Workspace package.json" -ForegroundColor Cyan
+@"
+{
+"name": "agent-learning",
+"private": true,
+"version": "0.0.0",
+"workspaces": ["prototype", "src-desktop"],
+"scripts": {
+"test:proto": "npm run test --workspace=prototype",
+"sync:check": "node scripts/check-sync.js"
+}
+}
