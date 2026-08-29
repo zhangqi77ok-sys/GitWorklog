@@ -37,17 +37,18 @@ export interface McpTool {
   enabled: boolean;
 }
 
-export type SettingsTab = "gateway" | "skills" | "mcp" | "general" | "shortcuts";
+export type SettingsTab = "gateway" | "skills" | "mcp" | "logs" | "general" | "shortcuts";
 export type CockpitSubTab = "accounts" | "models" | "wakeup" | "multi" | "sessions";
 export type AuthMode = "oauth" | "token" | "import";
 
 // 真实大模型渠道配置接口 (参考 New API / One API / Cockpit)
-export type ProtocolType = "openai" | "anthropic" | "gemini" | "ollama" | "azure" | "custom";
+export type ProtocolType = "openai" | "anthropic" | "codex" | "opencode" | "bailian" | "gemini" | "ollama" | "azure" | "custom";
+export type RelayMode = "direct" | "newapi" | "sub2api";
 
-export type GeminiAuthMode = "apikey" | "oauth_rt" | "google_oauth" | "credentials_json";
+export type GeminiAuthMode = "apikey" | "oauth_rt" | "google_oauth" | "credentials_json" | "local_ide";
 
 export interface GeminiAuthCredentials {
-  mode: GeminiAuthMode;                // 认证模式 (API Key / RT 导入 / OAuth 授权 / JSON 文件)
+  mode: GeminiAuthMode;                // 认证模式 (API Key / RT 导入 / OAuth 授权 / JSON 文件 / 本地 IDE 桥接)
   apiKey?: string;                     // 传统 API Key
   refreshToken?: string;               // 长期有效 Refresh Token (以 1// 开头)
   clientId?: string;                   // Google OAuth Client ID
@@ -56,6 +57,9 @@ export interface GeminiAuthCredentials {
   tokenExpiresAt?: number;             // Access Token 过期时间戳 (ms)
   accountEmail?: string;               // 绑定的 Google 账号邮箱 (如 user@gmail.com)
   projectId?: string;                  // GCP Project ID
+  localIdePort?: number;               // 本地 Antigravity IDE 桥接监听端口 (默认 32145)
+  useLocalIdeBridge?: boolean;         // 是否启用本地 IDE 桥接
+  localIdeStatus?: "online" | "offline" | "checking"; // 本地 IDE 探测状态
   lastRefreshedAt?: string;            // 上次刷新时间说明
 }
 
@@ -74,6 +78,9 @@ export interface LLMChannel {
   type: ProtocolType;                  // 协议类型
   baseUrl: string;                     // 真实 API Base URL (如 'https://api.deepseek.com/v1')
   apiKey: string;                      // 真实 API Key (支持加密与脱敏显示)
+  relayMode?: RelayMode;               // 中转站模式 ('direct' | 'newapi' | 'sub2api')
+  newApiChannelId?: string;            // NewAPI 中转站专用指定渠道 ID
+  sub2ApiUrl?: string;                 // sub2api 专用订阅或聚合网关端点
   geminiAuth?: GeminiAuthCredentials;  // Gemini 专属高级 OAuth / RT 认证凭据
   models: string[];                    // 该渠道支持的模型列表 (如 ['deepseek-chat', 'deepseek-reasoner'])
   modelMetas?: ModelMeta[];            // 每个模型的深度元数据与上下文窗口配置

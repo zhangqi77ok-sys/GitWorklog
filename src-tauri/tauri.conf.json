@@ -11,7 +11,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "CodeMind-Hub · Cockpit Coding Studio",
+        "title": "CodeMind-Hub \u00b7 Cockpit Coding Studio",
         "width": 1540,
         "height": 940,
         "minWidth": 1024,
@@ -37,6 +37,14 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "resources": [
+      "../WebView2Loader.dll"
+    ],
+    "windows": {
+      "nsis": {
+        "installerHooks": "nsis-hooks.nsi"
+      }
+    }
   }
 }

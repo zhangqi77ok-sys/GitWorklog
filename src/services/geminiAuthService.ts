@@ -1,9 +1,8 @@
 import { GeminiAuthCredentials } from "../types";
 
-// Cockpit Tools 与 Antigravity 官方 Google OAuth 默认凭据客户端
-export const COCKPIT_GOOGLE_CLIENT_ID =
-  "1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com";
-export const COCKPIT_GOOGLE_CLIENT_SECRET = "d-FL95Q19q7MQmFpd7hHD0Ty";
+// Google OAuth 客户端凭据占位（遵循安全脱敏规范，禁止硬编码真实密钥）
+export const COCKPIT_GOOGLE_CLIENT_ID = "";
+export const COCKPIT_GOOGLE_CLIENT_SECRET = "";
 
 export const GOOGLE_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
 export const GOOGLE_USERINFO_ENDPOINT = "https://www.googleapis.com/oauth2/v3/userinfo";
@@ -200,12 +199,14 @@ class GeminiAuthService {
   public buildGoogleOAuthUrl(customClientId?: string): string {
     const clientId = customClientId?.trim() || COCKPIT_GOOGLE_CLIENT_ID;
     const redirectUri = "http://localhost:1455/auth/callback";
+    // Antigravity 官方 OAuth scope（对齐 Cockpit Tools / sub2api，缺一不可）
     const scopes = [
-      "https://www.googleapis.com/auth/generative-language",
+      "https://www.googleapis.com/auth/cloud-platform",
       "https://www.googleapis.com/auth/userinfo.email",
+      "https://www.googleapis.com/auth/userinfo.profile",
+      "https://www.googleapis.com/auth/cclog",
+      "https://www.googleapis.com/auth/experimentsandconfigs",
       "openid",
-      "email",
-      "profile",
     ].join(" ");
 
     const url = new URL("https://accounts.google.com/o/oauth2/v2/auth");

@@ -107,3 +107,90 @@ export interface StrictnessConstraint {
   shouldInject: boolean;
   promptConstraint: string;
 }
+
+// 6. 智能体向用户提问的选项契约 (Ask Options Protocol)
+export interface AskOption {
+  id: string;
+  label: string;
+  description?: string;
+}
+
+export interface AskOptionsPayload {
+  type: "ask_options";
+  question: string;
+  options: AskOption[];
+  single_select: boolean;
+}
+// 7. 智能体文件修改工具契约 (File Modification Tool Protocol)
+export interface WriteFileToolCall {
+  type: "tool_call";
+  tool: "write_file";
+  path: string;          // 相对项目根的路径 (如 src/foo.ts)
+  content: string;       // 完整新文件内容 (非 patch)
+  description?: string;  // 修改说明
+}
+
+export type FileChangeStatus = "PENDING_APPROVAL" | "APPLIED" | "REVERTED" | "FAILED";
+
+export interface FileChangeRecord {
+  id: string;
+  toolCall: WriteFileToolCall;
+  absolutePath: string;    // 解析后的绝对路径 (供读写与展示)
+  originalContent: string; // 修改前快照 (新文件为空字符串)
+  newContent: string;
+  status: FileChangeStatus;
+  errorMessage?: string;
+  timestamp: number;
+  appliedAt?: number;
+}
+
+export interface DiffLine {
+  type: "same" | "add" | "remove";
+  text: string;
+  oldLineNumber?: number;
+  newLineNumber?: number;
+}
+// 8. 智能体工具调用展示契约 (Tool Invocation Display)
+export interface ParsedToolCall {
+  type: "tool_call";
+  tool: string;                         // write_file | skill | mcp | read_file | execute_command ...
+  name?: string;                        // skill / mcp / 工具名称
+  path?: string;                        // 文件相关路径
+  args?: Record<string, any>;           // 调用参数
+  content?: string;                     // write_file 时为完整新文件内容
+  description?: string;                 // 调用说明
+}
+
+export type ToolInvocationStatus = "COMPLETED" | "FAILED";
+
+export interface ToolInvocation {
+  id: string;
+  toolCall: ParsedToolCall;
+  status: ToolInvocationStatus;
+  errorMessage?: string;
+  timestamp: number;
+}
+// 9. 计划任务契约 (Plan Task Protocol)
+export type TaskDifficulty = "low" | "medium" | "high";
+export type TaskStatus = "pending" | "running" | "completed" | "failed";
+
+export interface PlanTaskItem {
+  id: string;
+  summary: string;          // 任务概要
+  status: TaskStatus;       // pending / running / completed / failed
+  difficulty: TaskDifficulty;
+}
+
+export interface TaskPlan {
+  id: string;
+  title: string;
+  tasks: PlanTaskItem[];
+  createdAt: number;
+}
+
+export interface ParsedPlan {
+  type: "plan";
+  title: string;
+  tasks: PlanTaskItem[];
+}
+

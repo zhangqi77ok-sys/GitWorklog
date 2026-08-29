@@ -23,6 +23,9 @@ target/
 *.zip
 *.o
 *.log
+# Temp & scratch scripts
+_*
+_*/
 .idea/
 .vscode/
 

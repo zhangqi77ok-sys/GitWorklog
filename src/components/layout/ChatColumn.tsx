@@ -2,7 +2,6 @@ import React, { useState, useRef, useEffect } from "react";
 import {
   Send,
   Bot,
-  Sparkles,
   User as UserIcon,
   ChevronDown,
   ChevronUp,
@@ -25,9 +24,9 @@ import {
   RotateCcw,
   CheckCheck,
   Search,
+  Folder,
   FolderPlus,
   Compass,
-  Network,
   Star,
   ExternalLink,
   ArrowUp,
@@ -35,6 +34,9 @@ import {
   Edit3,
   Trash2,
   ListOrdered,
+  ShieldCheck,
+  Gauge,
+  ListChecks,
 } from "lucide-react";
 import { LLMChannel } from "../../types";
 import { llmConfigService } from "../../services/llmConfigService";
@@ -44,13 +46,22 @@ import { nativeService } from "../../services/nativeService";
 import { projectMemoryService } from "../../services/projectMemoryService";
 import { projectKnowledgeGraphService } from "../../services/projectKnowledgeGraphService";
 import { webSearchService, WebSearchResult } from "../../services/webSearchService";
-import { KnowledgeGraphModal } from "../knowledge/KnowledgeGraphModal";
 import { GitBranchModal } from "../git/GitBranchModal";
+
+import { OptionsCard, parseAskOptionsBlock } from "../chat/OptionsCard";
+import { FileChangeCard, parseToolCallBlock } from "../chat/FileChangeCard";
+import { ToolCallCard } from "../chat/ToolCallCard";
+import { parsePlanBlock } from "../chat/TaskPopup";
+import { TaskPlanPanel } from "../chat/TaskPlanPanel";
+import { AskOptionsPayload, FileChangeRecord, TaskPlan, ToolInvocation, WriteFileToolCall } from "../../types/contracts";
+import { formatMessageTime, formatFullDateTime } from "../../utils/timeUtils";
+import { isOpenCodeBaseUrl } from "../../services/opencodeService";
+import { OpenCodeInstallModal } from "../opencode/OpenCodeInstallModal";
 
 export interface SlashItem {
   id: string;
   name: string;
-  category: "skill" | "mcp" | "command";
+  category: "skill" | "mcp" | "command" | "context";
   description: string;
   icon: string;
   command: string;
@@ -182,6 +193,40 @@ export const SLASH_ITEMS: SlashItem[] = [
     icon: "🔬",
     command: "/test ",
   },
+
+  // 4. Continue 风格 @ 上下文智能引用 (Context Mentions)
+  {
+    id: "ctx-file",
+    name: "@file",
+    category: "context",
+    description: "选择工程代码文件作为当前对话的精准上下文",
+    icon: "📄",
+    command: "@file ",
+  },
+  {
+    id: "ctx-git",
+    name: "@git",
+    category: "context",
+    description: "自动提取当前工作区未提交的 Git Diff 变更作为上下文",
+    icon: "🌿",
+    command: "@git:diff ",
+  },
+  {
+    id: "ctx-doc",
+    name: "@doc",
+    category: "context",
+    description: "注入项目架构与规格设计文档作为规范约束",
+    icon: "📐",
+    command: "@doc ",
+  },
+  {
+    id: "ctx-tree",
+    name: "@tree",
+    category: "context",
+    description: "注入当前项目的文件目录树结构",
+    icon: "🌳",
+    command: "@tree ",
+  },
 ];
 
 export interface StandardMessage extends ChatMessage {
@@ -197,6 +242,8 @@ export interface StandardMessage extends ChatMessage {
   rating?: 1 | 2 | 3 | 4 | 5;
   ratingToast?: string;
   webSearchCitations?: WebSearchResult[];
+  timestamp?: number;        // 消息真实时间戳（问答发生时间）
+  activityTags?: string[];   // 智能体活动标签（思考/命令/工具/文件变更）
 }
 
 export interface QueuedQuestion {
@@ -215,6 +262,10 @@ interface ChatColumnProps {
   sessionTitle?: string;
   projectName?: string;
   onOpenSettings?: () => void;
+  fileChanges: FileChangeRecord[];
+  setFileChanges: React.Dispatch<React.SetStateAction<FileChangeRecord[]>>;
+  taskPlan: TaskPlan | null;
+  setTaskPlan: React.Dispatch<React.SetStateAction<TaskPlan | null>>;
 }
 
 export const ChatColumn: React.FC<ChatColumnProps> = ({
@@ -223,6 +274,10 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
   sessionTitle,
   projectName = "agent-learning",
   onOpenSettings,
+  fileChanges,
+  setFileChanges,
+  taskPlan,
+  setTaskPlan,
 }) => {
   const [input, setInput] = useState("");
   const [channels, setChannels] = useState<LLMChannel[]>([]);
@@ -233,8 +288,11 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
   const [detectedGitBranch, setDetectedGitBranch] = useState<string | null>(null);
 
-  // 知识图谱查看弹窗状态
-  const [isKgModalOpen, setIsKgModalOpen] = useState(false);
+  // Roo Code 风格双模式：architect(架构设计) | code(高保真代码实现)
+  const [workMode, setWorkMode] = useState<"architect" | "code">("code");
+
+  // OpenCode 引擎安装进度弹窗状态
+  const [isOpenCodeInstallModalOpen, setIsOpenCodeInstallModalOpen] = useState(false);
 
   // 文件选择模态弹窗状态 (独立弹窗选择文件)
   const [isFileModalOpen, setIsFileModalOpen] = useState(false);
@@ -254,6 +312,21 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
   const [isWebSearchEnabled, setIsWebSearchEnabled] = useState(false);
   const [isGitModalOpen, setIsGitModalOpen] = useState(false);
   const [compressionNotice, setCompressionNotice] = useState<string | null>(null);
+
+  // 智能体提问选项卡片 (Ask Options Protocol) 待确认状态
+  const [pendingAsk, setPendingAsk] = useState<AskOptionsPayload | null>(null);
+
+  // 智能体通用工具调用展示记录 (skill/mcp/read_file/execute_command 等，仅展示不执行)
+  const [toolInvocations, setToolInvocations] = useState<ToolInvocation[]>([]);
+
+  // Agent 模式：approve=文件修改需人工审批（默认）；auto=直接应用可撤回
+  const [agentMode, setAgentMode] = useState<"approve" | "auto">("approve");
+  // 推理强度：low / medium / high（影响模型思考深度）
+  const [reasoningEffort, setReasoningEffort] = useState<"low" | "medium" | "high">("medium");
+
+  // Plan 模式：开启后要求智能体先输出任务计划（[[PLAN]]）
+  const [planMode, setPlanMode] = useState(false);
+
 
   // 问题排队流水线队列状态 (Queue Pipeline)
   const [questionQueue, setQuestionQueue] = useState<QueuedQuestion[]>([]);
@@ -291,7 +364,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
     );
   });
 
-  // 处理输入变化与 / 唤起
+  // 处理输入变化与 / 和 @ 唤起
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
     setInput(val);
@@ -299,9 +372,11 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
     const cursorPos = e.target.selectionStart || val.length;
     const textBeforeCursor = val.slice(0, cursorPos);
     const lastSlashIdx = textBeforeCursor.lastIndexOf("/");
+    const lastAtIdx = textBeforeCursor.lastIndexOf("@");
+    const lastTriggerIdx = Math.max(lastSlashIdx, lastAtIdx);
 
-    if (lastSlashIdx !== -1) {
-      const query = textBeforeCursor.slice(lastSlashIdx + 1);
+    if (lastTriggerIdx !== -1) {
+      const query = textBeforeCursor.slice(lastTriggerIdx + 1);
       if (!/\s/.test(query)) {
         setSlashQuery(query);
         setIsSlashMenuOpen(true);
@@ -312,16 +387,23 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
     setIsSlashMenuOpen(false);
   };
 
-  // 选中 Skill / MCP / Command 项
+  // 选中 Skill / MCP / Command / Context 项
   const handleSelectSlashItem = (item: SlashItem) => {
     if (!textareaRef.current) return;
     const cursorPos = textareaRef.current.selectionStart || input.length;
     const textBeforeCursor = input.slice(0, cursorPos);
     const textAfterCursor = input.slice(cursorPos);
     const lastSlashIdx = textBeforeCursor.lastIndexOf("/");
+    const lastAtIdx = textBeforeCursor.lastIndexOf("@");
+    const lastTriggerIdx = Math.max(lastSlashIdx, lastAtIdx);
 
-    if (lastSlashIdx !== -1) {
-      const prefix = textBeforeCursor.slice(0, lastSlashIdx);
+    if (lastTriggerIdx !== -1) {
+      const prefix = textBeforeCursor.slice(0, lastTriggerIdx);
+      if (item.id === "ctx-file") {
+        setIsFileModalOpen(true);
+        setIsSlashMenuOpen(false);
+        return;
+      }
       const newInput = `${prefix}${item.command}${textAfterCursor}`;
       setInput(newInput);
       setIsSlashMenuOpen(false);
@@ -433,7 +515,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
   const abortControllerRef = useRef<AbortController | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [copiedMsgIdx, setCopiedMsgIdx] = useState<number | null>(null);
-  const [collapsedThinking, setCollapsedThinking] = useState<Record<number, boolean>>({});
+  const [expandedThinking, setExpandedThinking] = useState<Record<number, boolean>>({});
 
   const channelDropdownRef = useRef<HTMLDivElement>(null);
   const modelDropdownRef = useRef<HTMLDivElement>(null);
@@ -441,7 +523,12 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
   // 加载指定会话的消息历史 (短期高保真记忆持久化)
   const [messages, setMessages] = useState<StandardMessage[]>(() => {
     const saved = projectMemoryService.getSessionMessages(activeSessionId);
-    if (saved && saved.length > 0) return saved as StandardMessage[];
+    if (saved && saved.length > 0) {
+      return (saved as StandardMessage[]).map((m, idx) => ({
+        ...m,
+        timestamp: m.timestamp || (Date.now() - (saved.length - idx) * 30000),
+      }));
+    }
     return [
       {
         role: "assistant",
@@ -450,6 +537,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
         content:
           "您好！我是 CodeMind 统一大模型编程助手。已为您接入 **New API / Cockpit 级生产级流式网关**。\n\n• 所有厂商输出采用统一标准结构回显（性能元数据、深度推理链、语法高亮与操作条）\n• 实时 **SSE 逐 Token 流式输出**，已融合 **工程知识图谱 (Graph-RAG)** 与 **双层长短期记忆机制**。",
         status: "completed",
+        timestamp: Date.now(),
       },
     ];
   });
@@ -459,7 +547,12 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
     const sid = activeSessionId || "sess-1";
     const saved = projectMemoryService.getSessionMessages(sid);
     if (saved && saved.length > 0) {
-      setMessages(saved as StandardMessage[]);
+      setMessages(
+        (saved as StandardMessage[]).map((m, idx) => ({
+          ...m,
+          timestamp: m.timestamp || (Date.now() - (saved.length - idx) * 30000),
+        }))
+      );
     } else {
       setMessages([
         {
@@ -468,6 +561,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
           modelName: activeModel,
           content: `已为您就绪新会话【${sessionTitle || sid}】。已挂载 **【${projectName}】** 真实工程知识图谱与长期情景记忆！`,
           status: "completed",
+          timestamp: Date.now(),
         },
       ]);
     }
@@ -911,9 +1005,17 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
         promptText;
     }
 
+    if (displayPrompt.includes("@git:diff") || displayPrompt.includes("@git")) {
+      displayPrompt += `\n\n### 🌿 【当前工作区 Git 状态与分支上下文】\n当前分支: ${detectedGitBranch || "main"}\n工作区变更已自动注入上下文，请重点针对当前变更进行分析或重构。\n`;
+    }
+    if (displayPrompt.includes("@tree")) {
+      displayPrompt += `\n\n### 🌳 【当前工程文件结构概览】\n${availableFiles.slice(0, 40).join("\n")}\n`;
+    }
+
     const userMsg: StandardMessage = {
       role: "user",
       content: displayPrompt,
+      timestamp: Date.now(),
     };
 
     // 2. 预先创建 AI 回复占位卡片 (统一标准结构)
@@ -924,6 +1026,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
       content: "",
       reasoningContent: "",
       status: "streaming",
+      timestamp: Date.now(),
     };
 
     // 生产级互联网实时搜索抓取 (若用户开启了联网模式)
@@ -990,26 +1093,51 @@ ${graphContext}
 ${memoryContext}
 ${strictnessConstraint.constraintPrompt}
 ${webSearchPromptContext}
+${
+  workMode === "architect"
+    ? `\n### 📐 【工作模式：架构设计与规划模式 (Architect Mode)】\n你当前处于架构规划模式。请严格遵循规范驱动开发 (SDD) 原则。专注于深入分析系统架构、依赖影响、契约定义与方案权衡，严禁在未获得用户确认前直接编写长篇细碎代码或发起文件修改。必须先产出清晰的高质量架构方案文档与风险预案。\n`
+    : `\n### 💻 【工作模式：编码与实现模式 (Code Mode)】\n你当前处于编码实现模式。请专注于高质量、高精度且经过深度严谨自检的代码实现。遵循 SOLID 原则与极简主义，直接输出完整、可编译且能解决问题的规范代码或文件变更。\n`
+}
 
 Instructions:
 1. Always ground your technical answers in the current project codebase, knowledge graph topology, real-time web search facts, and architectural memories.
 2. Follow the ReAct paradigm: Analyze intent -> Plan -> Produce clean, production-grade solutions.
-3. Respond in concise, professional Simplified Chinese (简体中文).`;
+3. Respond in concise, professional Simplified Chinese (简体中文).
+4. Clarification Protocol (Ask Options): When the user's request is ambiguous and multiple reasonable paths exist, ask the user to choose. At the VERY END of your reply output the marker line followed by a JSON object (do NOT wrap it in a code fence, do NOT add any text after the JSON):
+[[ASK_OPTIONS]]
+{"type":"ask_options","question":"<your question>","options":[{"id":"a","label":"<option A>"},{"id":"b","label":"<option B>"}],"single_select":true}
+- single_select=true means single choice, false means multi-select; provide 2~5 options, keep each label short (<=20 chars), add description when helpful.
+- The marker JSON is not shown to the user: the frontend renders it as clickable option cards, and after the user picks, you will receive their answer and continue.
+5. Tool Invocation Protocol: When you call a tool (write file, skill, mcp, read file, execute command), at the VERY END of your reply output the marker line followed by a JSON object (do NOT wrap it in a code fence, do NOT add any text after the JSON):
+[[TOOL_CALL]]
+{"type":"tool_call","tool":"<write_file|skill|mcp|read_file|execute_command>","name":"<tool/skill name for skill/mcp>","path":"<file path if any>","args":{...},"content":"<COMPLETE new file content for write_file>","description":"<short summary>"}
+- For write_file, content must be the ENTIRE new file content (not a diff or patch); the frontend shows the change diff and asks the user to approve BEFORE writing.
+- For skill/mcp/read_file/execute_command, the frontend shows the invocation in a collapsed card for visibility; only write_file is actually executed.
+- Output at most one marker per reply, and never combine it with the Ask Options block.
+${planMode ? `6. Plan Mode Protocol (Enabled): You MUST first output a structured task plan before doing any work. At the VERY END of your first reply output the marker line followed by a JSON object (do NOT wrap it in a code fence, do NOT add any text after the JSON):
+[[PLAN]]
+{"type":"plan","title":"<plan title>","tasks":[{"id":"1","summary":"<task summary>","status":"pending","difficulty":"<low|medium|high>"}]}
+- Provide 2~6 tasks covering the whole work; the frontend shows them in a task list popup.
+- Output the plan block only in your first reply; afterwards execute the tasks step by step.
+- Never combine the plan block with other markers in the same reply.` : ""}`;
 
     const requestMessages = [
       { role: "system", content: reactSystemPrompt },
       ...currentHistory.map((m) => ({ role: m.role, content: m.content })),
     ];
 
-    // 5. 调度网关流式引擎
+    // 5. 调度网关流式引擎 (assistantContent 累计本次流式正文，供 Ask Options 标记解析)
+    let assistantContent = "";
     await llmGatewayEngine.dispatchStream({
       channel: targetChan,
       model: targetModel,
       messages: requestMessages,
       enableThinking: thinking,
+      reasoningEffort,
       abortSignal: controller.signal,
       callbacks: {
         onToken: (contentChunk, reasoningChunk) => {
+          if (contentChunk) assistantContent += contentChunk;
           setMessages((prev) => {
             const updated = [...prev];
             const target = updated[updated.length - 1];
@@ -1033,6 +1161,24 @@ Instructions:
               detail: { sessionId: activeSessionId, status: "idle" },
             })
           );
+
+          // 解析流式正文末尾的 Ask Options / 工具调用 / 计划任务标记（互斥，至多命中一个）
+          const parsedAsk = parseAskOptionsBlock(assistantContent);
+          const parsedTool = parsedAsk ? null : parseToolCallBlock(assistantContent);
+          const parsedPlan = parsedAsk || parsedTool ? null : parsePlanBlock(assistantContent);
+
+          // 智能体活动标签：文件变更 / 命令 / 工具（渲染在消息头部 tag 行）
+          let activityTag: string | undefined;
+          if (parsedTool) {
+            if (parsedTool.toolCall.tool === "write_file") {
+              activityTag = "📄 文件变更";
+            } else if (parsedTool.toolCall.tool === "execute_command") {
+              activityTag = `⌨️ 命令${parsedTool.toolCall.name ? `: ${parsedTool.toolCall.name}` : ""}`;
+            } else {
+              activityTag = `🛠️ 工具${parsedTool.toolCall.name ? `: ${parsedTool.toolCall.name}` : ""}`;
+            }
+          }
+
           setMessages((prev) => {
             const updated = [...prev];
             const target = updated[updated.length - 1];
@@ -1041,6 +1187,14 @@ Instructions:
               target.durationMs = meta.durationMs;
               target.tokensCount = meta.tokensCount;
               target.tokensPerSec = meta.tokensPerSec;
+              if (activityTag) {
+                target.activityTags = [...(target.activityTags || []), activityTag];
+              }
+              const cleanContent =
+                parsedAsk?.cleanContent ?? parsedTool?.cleanContent ?? parsedPlan?.cleanContent;
+              if (cleanContent !== undefined) {
+                target.content = cleanContent;
+              }
 
               // 自动提取长期情景记忆沉淀到项目存储库
               projectMemoryService.autoExtractMemoriesFromTurn(
@@ -1051,6 +1205,47 @@ Instructions:
             }
             return updated;
           });
+
+          if (parsedAsk) {
+            setPendingAsk(parsedAsk.payload);
+          }
+          if (parsedTool) {
+            if (
+              parsedTool.toolCall.tool === "write_file" &&
+              parsedTool.toolCall.path &&
+              parsedTool.toolCall.content !== undefined
+            ) {
+              void handleToolCall(
+                {
+                  type: "tool_call",
+                  tool: "write_file",
+                  path: parsedTool.toolCall.path,
+                  content: parsedTool.toolCall.content,
+                  ...(parsedTool.toolCall.description
+                    ? { description: parsedTool.toolCall.description }
+                    : {}),
+                } as WriteFileToolCall,
+                agentMode
+              );
+            } else {
+              // 其他工具调用（skill/mcp/read_file/execute_command 等）仅展示，不执行
+              const invocation: ToolInvocation = {
+                id: `ti-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+                toolCall: parsedTool.toolCall,
+                status: "COMPLETED",
+                timestamp: Date.now(),
+              };
+              setToolInvocations((prev) => [...prev, invocation]);
+            }
+          }
+          if (parsedPlan) {
+            setTaskPlan({
+              id: `plan-${Date.now()}`,
+              title: parsedPlan.plan.title,
+              tasks: parsedPlan.plan.tasks,
+              createdAt: Date.now(),
+            });
+          }
         },
         onError: (errMsg, statusCode) => {
           setIsGenerating(false);
@@ -1099,7 +1294,7 @@ Instructions:
     const userPrompt = input.trim();
     const imagesToAttach = [...pastedImages];
     const filesToAttach = [...attachedFiles];
-    const thinking = isThinkingEnabled;
+    const thinking = isThinkingEnabled && reasoningEffort !== "low";
     const webSearch = isWebSearchEnabled;
 
     setInput("");
@@ -1204,6 +1399,144 @@ Instructions:
     });
   };
 
+  // 智能体提问选项卡片：用户确认选择后，把答案作为用户消息自动续问
+  const handleAskOptionsSubmit = async (
+    _selectedIds: string[],
+    selectedLabels: string[]
+  ) => {
+    if (!pendingAsk) return;
+    const payload = pendingAsk;
+    setPendingAsk(null);
+    const answerText = selectedLabels.length > 0 ? selectedLabels.join("、") : "";
+    const answerPrompt = `【回答智能体的提问】\n问题：${payload.question}\n我的选择：${answerText}`;
+    await executeQuestionPayload({
+      promptText: answerPrompt,
+      imagesToAttach: [],
+      filesToAttach: attachedFiles,
+      thinking: isThinkingEnabled,
+      webSearch: isWebSearchEnabled,
+    });
+  };
+
+  // 智能体提问选项卡片：跳过本次提问，不自动续问
+  const handleAskOptionsSkip = () => {
+    setPendingAsk(null);
+  };
+
+  // 将模型给出的相对路径解析为项目内绝对路径
+  const resolveProjectPath = (p: string): string => {
+    const root =
+      currentProjectPath ||
+      (currentProjectName === "geek-boot-parent"
+        ? "d:/weihu/geek-boot-parent"
+        : "d:/weihu/agent-learning");
+    const cleaned = p.trim().replace(/^\.\//, "");
+    if (/^[a-zA-Z]:[\\/]/.test(cleaned) || cleaned.startsWith("/") || cleaned.startsWith("\\")) {
+      return cleaned.replace(/\\/g, "/");
+    }
+    return `${root.replace(/\\/g, "/")}/${cleaned}`;
+  };
+
+  // 智能体文件修改工具：解析 TOOL_CALL，读取原文件快照并生成待审批记录
+  const handleToolCall = async (toolCall: WriteFileToolCall, mode: "approve" | "auto") => {
+    const absolutePath = resolveProjectPath(toolCall.path);
+    let originalContent = "";
+    try {
+      originalContent = await nativeService.readFile(absolutePath);
+    } catch {
+      // 文件不存在视为新文件创建，originalContent 保持空串
+    }
+    const record: FileChangeRecord = {
+      id: `fc-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      toolCall,
+      absolutePath,
+      originalContent,
+      newContent: toolCall.content,
+      status: mode === "auto" ? "APPLIED" : "PENDING_APPROVAL",
+      timestamp: Date.now(),
+    };
+    setFileChanges((prev) => [...prev, record]);
+
+    // 自动模式：不审批直接写入并打开右栏阅览（失败时置 FAILED 可见，不吞异常）
+    if (mode === "auto") {
+      try {
+        const ok = await nativeService.writeFile(absolutePath, toolCall.content);
+        if (!ok) throw new Error("文件写入返回失败");
+        setFileChanges((prev) =>
+          prev.map((r) =>
+            r.id === record.id ? { ...r, status: "APPLIED", appliedAt: Date.now() } : r
+          )
+        );
+        window.dispatchEvent(
+          new CustomEvent("open-workspace-file", {
+            detail: {
+              path: absolutePath,
+              name: toolCall.path.split("/").pop(),
+              content: toolCall.content,
+            },
+          })
+        );
+      } catch (err: any) {
+        setFileChanges((prev) =>
+          prev.map((r) =>
+            r.id === record.id
+              ? { ...r, status: "FAILED", errorMessage: err?.message || String(err) }
+              : r
+          )
+        );
+      }
+    }
+  };
+
+  // 审批通过：真实写入文件，成功后打开右栏阅览并保留撤回能力
+  const handleApplyChange = async (id: string) => {
+    const record = fileChanges.find((r) => r.id === id);
+    if (!record) return;
+    try {
+      const ok = await nativeService.writeFile(record.absolutePath, record.newContent);
+      if (!ok) throw new Error("文件写入返回失败");
+      setFileChanges((prev) =>
+        prev.map((r) => (r.id === id ? { ...r, status: "APPLIED", appliedAt: Date.now() } : r))
+      );
+      window.dispatchEvent(
+        new CustomEvent("open-workspace-file", {
+          detail: {
+            path: record.absolutePath,
+            name: record.toolCall.path.split("/").pop(),
+            content: record.newContent,
+          },
+        })
+      );
+    } catch (err: any) {
+      setFileChanges((prev) =>
+        prev.map((r) =>
+          r.id === id
+            ? { ...r, status: "FAILED", errorMessage: err?.message || String(err) }
+            : r
+        )
+      );
+    }
+  };
+
+  // 放弃：不写入，移除待审批记录
+  const handleDiscardChange = (id: string) => {
+    setFileChanges((prev) => prev.filter((r) => r.id !== id));
+  };
+
+  // 右栏阅览文件：已应用显示新内容，待审批/已撤回显示原内容
+  const handleViewFile = (record: FileChangeRecord) => {
+    const content = record.status === "APPLIED" ? record.newContent : record.originalContent;
+    window.dispatchEvent(
+      new CustomEvent("open-workspace-file", {
+        detail: {
+          path: record.absolutePath,
+          name: record.toolCall.path.split("/").pop(),
+          content,
+        },
+      })
+    );
+  };
+
   // 处理对 AI 输出内容的 1~5 星打分并进行严谨度认知对齐
   const handleRateMessage = (idx: number, starVal: 1 | 2 | 3 | 4 | 5) => {
     const target = messages[idx];
@@ -1267,11 +1600,19 @@ Instructions:
         width !== undefined ? "shrink-0" : "flex-1"
       }`}
     >
-      {/* 顶部标题 */}
-      <div className="px-4 py-2.5 border-b border-[#e5dfd8] flex justify-between items-center text-xs bg-[#faf8f5]">
-        <div className="flex items-center gap-1.5 font-bold text-[#1e1b18]">
-          <Sparkles size={13} className="text-[#d96b27]" />
-          <span>AI 编程协同 · {currentProjectName}</span>
+      {/* 顶部面包屑与状态指示栏 (完全对齐截图) */}
+      <div className="px-4 py-2 border-b border-[#e5dfd8] flex justify-between items-center text-xs bg-[#faf8f5] shrink-0">
+        <div className="flex items-center gap-1.5 text-[#645e57] text-[11px]">
+          <span className="font-semibold text-[#1e1b18]">{currentProjectName}</span>
+          <span className="text-[#9ca3af]">&gt;</span>
+          <span className="text-[#645e57] truncate max-w-[360px] font-medium">{sessionTitle || "会话详情"}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="bg-white border border-[#e5dfd8] px-2.5 py-0.5 rounded-full text-[10px] text-[#645e57] flex items-center gap-1.5 shadow-2xs font-mono">
+            <span>CodeMind-Studio-Setup.exe</span>
+            <span className="text-[#059669] font-bold">✔</span>
+            <span className="text-[#9ca3af] font-mono">就绪</span>
+          </div>
         </div>
       </div>
 
@@ -1279,7 +1620,7 @@ Instructions:
       <div className="flex-1 p-4 overflow-y-auto flex flex-col gap-4 text-xs leading-relaxed select-text">
         {messages.map((m, idx) => {
           const isUser = m.role === "user";
-          const isThinkingOpen = !collapsedThinking[idx];
+          const isThinkingOpen = !!expandedThinking[idx];
 
           if (isUser) {
             return (
@@ -1292,7 +1633,12 @@ Instructions:
                     <UserIcon size={12} className="text-[#d96b27]" />
                     <span>您</span>
                   </div>
-                  <span className="text-[10px] text-[#9c948a] font-normal">刚刚</span>
+                  <span
+                    className="text-[10px] text-[#9c948a] font-mono font-normal tracking-tight"
+                    title={formatFullDateTime(m.timestamp)}
+                  >
+                    {formatMessageTime(m.timestamp)}
+                  </span>
                 </div>
                 <div className="text-[#1e1b18] whitespace-pre-wrap">{m.content}</div>
               </div>
@@ -1343,15 +1689,39 @@ Instructions:
                       <AlertTriangle size={10} /> 调度异常
                     </span>
                   )}
+                  {m.timestamp ? (
+                    <span className="text-[#a8a29e] font-mono" title={formatFullDateTime(m.timestamp)}>
+                      {formatMessageTime(m.timestamp)}
+                    </span>
+                  ) : null}
                 </div>
               </div>
+
+              {/* Layer 1.5: 智能体活动标签（思考 / 命令 / 工具 / 文件变更） */}
+              {(m.reasoningContent || (m.activityTags && m.activityTags.length > 0)) && (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {m.reasoningContent && (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#fffbeb] text-[#b45309] border border-[#fde68a]">
+                      <Brain size={10} /> 思考
+                    </span>
+                  )}
+                  {(m.activityTags || []).map((tag, ti) => (
+                    <span
+                      key={ti}
+                      className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#f5f3ff] text-[#6d28d9] border border-[#ddd6fe]"
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              )}
 
               {/* Layer 2: 深度推理思考过程卡片 (Deep Thinking Process) */}
               {m.reasoningContent && (
                 <div className="bg-[#fffbeb] border border-[#fde68a] rounded-lg p-2.5 flex flex-col gap-1.5 text-xs">
                   <div
                     onClick={() =>
-                      setCollapsedThinking((prev) => ({ ...prev, [idx]: !prev[idx] }))
+                      setExpandedThinking((prev) => ({ ...prev, [idx]: !prev[idx] }))
                     }
                     className="flex justify-between items-center cursor-pointer select-none text-[#b45309] font-semibold text-[11px]"
                   >
@@ -1407,13 +1777,33 @@ Instructions:
                       <p className="text-[11px] whitespace-pre-wrap leading-relaxed">{m.errorDetail}</p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 pt-1 border-t border-[#fee2e2]">
-                    <button
-                      onClick={onOpenSettings}
-                      className="px-3 py-1 bg-[#dc2626] hover:bg-[#b91c1c] text-white rounded-md text-[11px] font-semibold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
-                    >
-                      <Settings size={11} /> 前往配置 API Key
-                    </button>
+                  <div className="flex items-center gap-2 pt-1 border-t border-[#fee2e2] flex-wrap">
+                    {(m.errorDetail?.includes("OpenCode") || m.errorDetail?.includes("4096")) ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => setIsOpenCodeInstallModalOpen(true)}
+                          className="px-3 py-1 bg-[#059669] hover:bg-[#047857] text-white rounded-md text-[11px] font-semibold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                        >
+                          <Bot size={11} /> 🚀 安装 / 启动 OpenCode
+                        </button>
+                        <button
+                          type="button"
+                          onClick={onOpenSettings}
+                          className="px-3 py-1 bg-white hover:bg-[#f1f5f9] text-[#1e293b] border border-[#cbd5e1] rounded-md text-[11px] font-semibold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                        >
+                          <Settings size={11} /> 前往网关设置
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={onOpenSettings}
+                        className="px-3 py-1 bg-[#dc2626] hover:bg-[#b91c1c] text-white rounded-md text-[11px] font-semibold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                      >
+                        <Settings size={11} /> 前往配置渠道凭据
+                      </button>
+                    )}
                   </div>
                 </div>
               ) : (
@@ -1751,7 +2141,7 @@ Instructions:
             >
               <div className="px-2 py-1 border-b border-[#f4efea] flex justify-between items-center text-[10px] text-[#78716c] font-bold uppercase tracking-wider">
                 <span className="flex items-center gap-1 text-[#d96b27]">
-                  <Compass size={12} /> 快捷技能 (Skills) & MCP 工具选择
+                  <Compass size={12} /> 快捷技能 (Skills)、MCP & @ 上下文智能引用
                 </span>
                 <span className="font-normal lowercase">
                   ↑↓ 切换 · Enter / Tab 插入 · Esc 关闭
@@ -1760,7 +2150,7 @@ Instructions:
 
               {filteredSlashItems.length === 0 ? (
                 <div className="p-3 text-center text-[#9ca3af] text-xs">
-                  未找到匹配的 Skill 或 MCP 工具
+                  未找到匹配的 Skill、MCP 或 @ 上下文
                 </div>
               ) : (
                 filteredSlashItems.map((item, idx) => {
@@ -1789,6 +2179,8 @@ Instructions:
                                   ? "bg-[#fef3c7] text-[#92400e]"
                                   : item.category === "mcp"
                                   ? "bg-[#e0e7ff] text-[#3730a3]"
+                                  : item.category === "context"
+                                  ? "bg-[#ccfbf1] text-[#0f766e]"
                                   : "bg-[#f3f4f6] text-[#4b5563]"
                               }`}
                             >
@@ -1862,6 +2254,42 @@ Instructions:
                 </span>
               </div>
             </div>
+          )}
+
+          {/* 智能体文件修改工具卡片 (File Modification Tool Protocol)：渲染在输入框上方 */}
+          {fileChanges.length > 0 && (
+            <div className="flex flex-col gap-2">
+              {fileChanges.map((fc) => (
+                <FileChangeCard
+                  key={fc.id}
+                  record={fc}
+                  onApply={handleApplyChange}
+                  onDiscard={handleDiscardChange}
+                  onViewFile={handleViewFile}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* 智能体通用工具调用卡片 (skill/mcp 等)：默认折叠展示 */}
+          {toolInvocations.length > 0 && (
+            <div className="flex flex-col gap-2">
+              {toolInvocations.map((ti) => (
+                <ToolCallCard key={ti.id} invocation={ti} />
+              ))}
+            </div>
+          )}
+
+          {/* 计划任务面板 (Plan Mode)：对话栏内可展开/折叠 */}
+          {taskPlan && <TaskPlanPanel plan={taskPlan} />}
+
+          {/* 智能体提问选项卡片 (Ask Options Protocol)：渲染在输入框上方 */}
+          {pendingAsk && (
+            <OptionsCard
+              payload={pendingAsk}
+              onSubmit={handleAskOptionsSubmit}
+              onSkip={handleAskOptionsSkip}
+            />
           )}
 
           <textarea
@@ -2036,6 +2464,34 @@ Instructions:
                 )}
               </div>
 
+              {/* 2.5 Roo Code 风格：架构模式 (Architect) / 编码模式 (Code) 双模式热切胶囊 */}
+              <div className="flex items-center bg-[#f4efea] p-0.5 rounded-lg border border-[#e5dfd8]">
+                <button
+                  type="button"
+                  onClick={() => setWorkMode("code")}
+                  className={`h-5.5 px-2 rounded-md text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-all ${
+                    workMode === "code"
+                      ? "bg-white text-[#d96b27] shadow-2xs border border-[#fed7aa]"
+                      : "text-[#78716c] hover:text-[#1e1b18]"
+                  }`}
+                  title="编码模式：高保真代码实现，直接输出完整可运行的工程 Diff"
+                >
+                  <span>💻 编码</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setWorkMode("architect")}
+                  className={`h-5.5 px-2 rounded-md text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-all ${
+                    workMode === "architect"
+                      ? "bg-white text-[#0284c7] shadow-2xs border border-[#bae6fd]"
+                      : "text-[#78716c] hover:text-[#1e1b18]"
+                  }`}
+                  title="架构模式：专注系统分析、方案权衡与规范设计，严禁盲目直接输出零碎代码"
+                >
+                  <span>📐 架构</span>
+                </button>
+              </div>
+
               {/* 3. 上下文文件选择器 (点击弹出全功能文件选择模态弹窗) */}
               <button
                 type="button"
@@ -2082,6 +2538,19 @@ Instructions:
                 />
               </div>
 
+              {/* 4.6 OpenCode 引擎与安装快捷按钮 */}
+              {(activeChannel?.id === "chan-opencode" || activeChannel?.type === "opencode" || (activeChannel?.baseUrl && isOpenCodeBaseUrl(activeChannel.baseUrl))) && (
+                <button
+                  type="button"
+                  onClick={() => setIsOpenCodeInstallModalOpen(true)}
+                  className="h-6.5 px-2 bg-[#ecfdf5] hover:bg-[#d1fae5] text-[#059669] rounded-md text-[11px] font-semibold flex items-center gap-1 border border-[#a7f3d0] cursor-pointer transition-colors shadow-2xs"
+                  title="查看 OpenCode 本地 4096 端口状态或打开安装向导"
+                >
+                  <Bot size={11} className="text-[#10b981]" />
+                  <span>OpenCode 引擎</span>
+                </button>
+              )}
+
               {/* 5. 深度思考开关 */}
               <button
                 type="button"
@@ -2097,6 +2566,69 @@ Instructions:
                 <span>思考</span>
               </button>
 
+              {/* Agent 模式切换：审批（默认）/ 自动 */}
+              <button
+                type="button"
+                onClick={() => setAgentMode((prev) => (prev === "approve" ? "auto" : "approve"))}
+                title={
+                  agentMode === "approve"
+                    ? "审批模式：文件修改需人工确认后写入"
+                    : "自动模式：文件修改直接应用（可在右侧撤回）"
+                }
+                className={`h-6.5 px-2 rounded-md text-[11px] font-semibold flex items-center gap-1 cursor-pointer border transition-colors ${
+                  agentMode === "approve"
+                    ? "bg-[#fef3eb] text-[#c2410c] border-[#fed7aa]"
+                    : "bg-[#f0fdf4] text-[#15803d] border-[#bbf7d0]"
+                }`}
+              >
+                {agentMode === "approve" ? (
+                  <ShieldCheck size={11} className="text-[#ea580c]" />
+                ) : (
+                  <Zap size={11} className="text-[#16a34a]" />
+                )}
+                <span>{agentMode === "approve" ? "审批" : "自动"}</span>
+              </button>
+
+              {/* 推理强度切换：低 / 中 / 高 */}
+              <button
+                type="button"
+                onClick={() =>
+                  setReasoningEffort((prev) =>
+                    prev === "low" ? "medium" : prev === "medium" ? "high" : "low"
+                  )
+                }
+                title="推理强度：低/中/高（高会向兼容模型透传 reasoning_effort=high）"
+                className={`h-6.5 px-2 rounded-md text-[11px] font-medium flex items-center gap-1 cursor-pointer border transition-colors ${
+                  reasoningEffort === "high"
+                    ? "bg-[#fdf4ff] text-[#a21caf] border-[#f5d0fe]"
+                    : reasoningEffort === "medium"
+                    ? "bg-[#fffbeb] text-[#b45309] border-[#fde68a]"
+                    : "bg-[#f8fafc] text-[#64748b] border-[#e2e8f0]"
+                }`}
+              >
+                <Gauge size={11} className={reasoningEffort === "high" ? "text-[#c026d3]" : reasoningEffort === "medium" ? "text-[#d97706]" : "text-[#94a3b8]"} />
+                <span>{reasoningEffort === "low" ? "低" : reasoningEffort === "medium" ? "中" : "高"}</span>
+              </button>
+
+              {/* Plan 模式开关：开启后智能体先输出任务计划 */}
+              <button
+                type="button"
+                onClick={() => setPlanMode((prev) => !prev)}
+                title={
+                  planMode
+                    ? "Plan 模式已开启：智能体先输出任务计划再执行"
+                    : "Plan 模式已关闭"
+                }
+                className={`h-6.5 px-2 rounded-md text-[11px] font-semibold flex items-center gap-1 cursor-pointer border transition-colors ${
+                  planMode
+                    ? "bg-[#eff6ff] text-[#1d4ed8] border-[#bfdbfe]"
+                    : "bg-[#f8fafc] text-[#64748b] border-[#e2e8f0]"
+                }`}
+              >
+                <ListChecks size={11} className={planMode ? "text-[#2563eb]" : "text-[#94a3b8]"} />
+                <span>Plan</span>
+              </button>
+
               {/* 6. 联网检索开关 */}
               <button
                 type="button"
@@ -2110,17 +2642,6 @@ Instructions:
               >
                 <Globe size={11} className={isWebSearchEnabled ? "text-[#16a34a]" : "text-[#94a3b8]"} />
                 <span>联网</span>
-              </button>
-
-              {/* 7. 真实工程知识图谱查看器 (Graph-RAG) */}
-              <button
-                type="button"
-                onClick={() => setIsKgModalOpen(true)}
-                title="查看当前项目的真实工程知识图谱 (Graph-RAG)"
-                className="h-6.5 px-2 bg-[#fdf4ff] text-[#a21caf] hover:bg-[#fae8ff] border border-[#f5d0fe] rounded-md text-[11px] font-semibold flex items-center gap-1 cursor-pointer transition-colors"
-              >
-                <Network size={11} className="text-[#c026d3]" />
-                <span>知识图谱</span>
               </button>
             </div>
 
@@ -2169,6 +2690,32 @@ Instructions:
                 </button>
               )}
             </div>
+          </div>
+        </div>
+
+        {/* 输入框下方状态条 (项目 ⌵ | 分支 ⌵ | 压缩保护水位，完全对齐截图) */}
+        <div className="flex justify-between items-center text-[11px] text-[#78716c] px-1 pt-1 font-mono shrink-0">
+          <div className="flex items-center gap-2">
+            <span className="flex items-center gap-1 cursor-pointer hover:text-[#1e1b18]">
+              <Folder size={12} className="text-[#d96b27]" />
+              <span>{currentProjectName}</span>
+              <ChevronDown size={10} />
+            </span>
+            <span className="text-[#cbd5e1]">|</span>
+            <span
+              onClick={() => setIsGitModalOpen(true)}
+              className="flex items-center gap-1 cursor-pointer hover:text-[#1e1b18]"
+            >
+              <GitBranch size={12} className="text-[#0284c7]" />
+              <span>{detectedGitBranch || "main"}</span>
+              <ChevronDown size={10} />
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1 text-[#059669]">
+            <Zap size={11} className="text-[#10b981]" />
+            <span>25.2%</span>
+            <ShieldCheck size={11} className="text-[#10b981]" />
           </div>
         </div>
       </div>
@@ -2306,11 +2853,17 @@ Instructions:
         </div>
       )}
 
-      {/* 🕸️ 真实工程知识图谱可视化模态弹窗 (Project Knowledge Graph Modal) */}
-      <KnowledgeGraphModal
-        isOpen={isKgModalOpen}
-        onClose={() => setIsKgModalOpen(false)}
-        projectName={currentProjectName}
+      {/* 🚀 OpenCode 引擎安装与进度弹窗 */}
+      <OpenCodeInstallModal
+        isOpen={isOpenCodeInstallModalOpen}
+        onClose={() => setIsOpenCodeInstallModalOpen(false)}
+        onInstalledSuccess={() => {
+          const chans = llmConfigService.getChannels();
+          setChannels(chans);
+          const activeChan = chans.find((c) => c.id === "chan-opencode") || chans[0];
+          setActiveChannel(activeChan);
+          if (activeChan?.models?.[0]) setActiveModel(activeChan.models[0]);
+        }}
       />
     </section>
   );

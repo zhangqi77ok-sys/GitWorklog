@@ -4,6 +4,7 @@ import { CockpitGatewayPane } from "./CockpitGatewayPane";
 import { SkillManagerPane } from "./SkillManagerPane";
 import { McpManagerPane } from "./McpManagerPane";
 import { GeneralPreferencesPane } from "./GeneralPreferencesPane";
+import { AuditLogPane } from "./AuditLogPane";
 import { llmConfigService } from "../../services/llmConfigService";
 import {
   Rocket,
@@ -132,6 +133,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
               <span className="text-[10px] bg-[#f1f5f9] text-[#645e57] px-1.5 py-0.5 rounded font-mono">
                 3
+              </span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab("logs")}
+              className={`w-full px-3 py-2 rounded-lg text-xs font-semibold flex items-center justify-between cursor-pointer transition-colors ${
+                activeTab === "logs"
+                  ? "bg-white text-[#d96b27] shadow-sm border border-[#e5dfd8]"
+                  : "text-[#645e57] hover:bg-[#ebe5df] hover:text-[#1e1b18]"
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <FileText size={14} />
+                <span>系统日志与审计</span>
+              </div>
+              <span className="text-[10px] bg-[#f1f5f9] text-[#645e57] px-1.5 py-0.5 rounded font-mono">
+                Log
               </span>
             </button>
 
@@ -306,6 +324,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             )}
             {activeTab === "skills" && <SkillManagerPane />}
             {activeTab === "mcp" && <McpManagerPane />}
+            {activeTab === "logs" && <AuditLogPane />}
             {activeTab === "general" && <GeneralPreferencesPane />}
           </main>
         </div>

@@ -1,12 +1,15 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Terminal, FileCode, Play, Save, Check, X, PanelRightClose } from "lucide-react";
+import { Terminal, FileCode, Play, Save, Check, X, PanelRightClose, RotateCcw } from "lucide-react";
 import { nativeService } from "../../services/nativeService";
+import { FileChangeRecord } from "../../types/contracts";
 
 interface EditorWorkspaceProps {
   terminalHeight: number;
   onTerminalResizeMouseDown: (e: React.MouseEvent) => void;
   isTerminalDragging: boolean;
   onCloseWorkspace?: () => void;
+  fileChanges: FileChangeRecord[];
+  onRevertChange: (id: string) => void;
 }
 
 interface OpenTab {
@@ -22,6 +25,8 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
   onTerminalResizeMouseDown,
   isTerminalDragging,
   onCloseWorkspace,
+  fileChanges,
+  onRevertChange,
 }) => {
   const [tabs, setTabs] = useState<OpenTab[]>([
     {
@@ -80,6 +85,15 @@ export const AccountCard = () => {
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
 
   const activeTab = tabs.find((t) => t.id === activeTabId) || tabs[0];
+
+  // 当前打开文件是否存在已应用未撤回的 AI 修改（用于右侧撤回横幅）
+  const activeFileChange = fileChanges.find(
+    (r) =>
+      r.status === "APPLIED" &&
+      !!activeTab &&
+      r.absolutePath.replace(/\\/g, "/").toLowerCase() ===
+        activeTab.path.replace(/\\/g, "/").toLowerCase()
+  );
   const terminalEndRef = useRef<HTMLDivElement>(null);
 
   // 监听打开文件事件 (来自对话框中代码卡片或文件点击)
@@ -91,6 +105,14 @@ export const AccountCard = () => {
       const targetPath = path || name;
       const existing = tabs.find((t) => t.path === targetPath || t.name === name);
       if (existing) {
+        // 重复打开同一文件时，若携带新内容则刷新（用于展示智能体修改后的文件）
+        if (initialContent !== undefined && existing.content !== initialContent) {
+          setTabs((prev) =>
+            prev.map((t) =>
+              t.id === existing.id ? { ...t, content: initialContent, isDirty: false } : t
+            )
+          );
+        }
         setActiveTabId(existing.id);
         return;
       }
@@ -244,6 +266,29 @@ export const AccountCard = () => {
           )}
         </div>
       </div>
+
+      {/* 当前文件存在已应用未撤回的 AI 修改时显示撤回横幅 */}
+      {activeFileChange && (
+        <div className="px-3 py-2 bg-[#fffbeb] border-b border-[#fde68a] flex items-center justify-between gap-2 text-[11px] shrink-0">
+          <div className="flex items-center gap-1.5 text-[#b45309] font-medium min-w-0">
+            <FileCode size={12} className="shrink-0" />
+            <span className="truncate">
+              此文件有 AI 修改
+              {activeFileChange.toolCall.description
+                ? `：${activeFileChange.toolCall.description}`
+                : ""}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => onRevertChange(activeFileChange.id)}
+            title="恢复修改前内容"
+            className="px-2.5 py-1 rounded-md bg-[#fef2f2] border border-[#fecaca] text-[#b91c1c] hover:bg-[#fee2e2] flex items-center gap-1 cursor-pointer transition-colors shrink-0"
+          >
+            <RotateCcw size={11} /> 撤回修改
+          </button>
+        </div>
+      )}
 
       {/* 真实代码编辑与预览区 */}
       {activeTab ? (

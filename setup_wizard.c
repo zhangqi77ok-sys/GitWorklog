@@ -74,7 +74,7 @@ static void LaunchInstalledApp() {
     }
 
     wchar_t targetExe[MAX_PATH];
-    swprintf(targetExe, MAX_PATH, L"%s\\CodeMind-Studio.exe", cleanDir);
+    swprintf(targetExe, MAX_PATH, L"%ls\\CodeMind-Studio.exe", cleanDir);
     
     // 1. 优先使用 ShellExecuteW 拉起原生应用
     HINSTANCE hInst = ShellExecuteW(NULL, L"open", targetExe, NULL, cleanDir, SW_SHOWNORMAL);
@@ -86,7 +86,7 @@ static void LaunchInstalledApp() {
         si.cb = sizeof(si);
         ZeroMemory(&pi, sizeof(pi));
         wchar_t cmd[MAX_PATH + 8];
-        swprintf(cmd, MAX_PATH + 8, L"\"%s\"", targetExe);
+        swprintf(cmd, MAX_PATH + 8, L"\"%ls\"", targetExe);
         if (CreateProcessW(NULL, cmd, NULL, NULL, FALSE, 0, NULL, cleanDir, &si, &pi)) {
             CloseHandle(pi.hProcess);
             CloseHandle(pi.hThread);
@@ -147,7 +147,7 @@ static DWORD WINAPI InstallThread(LPVOID lpParam) {
     wchar_t tempZip[MAX_PATH];
     wchar_t tempPath[MAX_PATH];
     GetTempPathW(MAX_PATH, tempPath);
-    swprintf(tempZip, MAX_PATH, L"%scodemind_pkg_%lu.zip", tempPath, GetTickCount());
+    swprintf(tempZip, MAX_PATH, L"%lscodemind_pkg_%lu.zip", tempPath, GetTickCount());
 
     FILE* fp = _wfopen(tempZip, L"wb");
     if (fp) {
@@ -166,7 +166,7 @@ static DWORD WINAPI InstallThread(LPVOID lpParam) {
     // 3. 执行 PowerShell 原生解压 (无外部依赖)
     wchar_t psCmd[2048];
     swprintf(psCmd, 2048, 
-        L"powershell.exe -NoProfile -ExecutionPolicy Bypass -Command \"Expand-Archive -Path '%s' -DestinationPath '%s' -Force; Remove-Item -Path '%s' -Force\"",
+        L"powershell.exe -NoProfile -ExecutionPolicy Bypass -Command \"Expand-Archive -Path '%ls' -DestinationPath '%ls' -Force; Remove-Item -Path '%ls' -Force\"",
         tempZip, g_InstallDir, tempZip
     );
 
@@ -186,60 +186,58 @@ static DWORD WINAPI InstallThread(LPVOID lpParam) {
 
     SendMessage(g_hProgress, PBM_SETPOS, 75, 0);
 
-    // 4. 创建快捷方式
-    BOOL bDesktop = (SendMessageW(g_hChkDesktop, BM_GETCHECK, 0, 0) == BST_CHECKED);
-    BOOL bStartMenu = (SendMessageW(g_hChkStartMenu, BM_GETCHECK, 0, 0) == BST_CHECKED);
+    // 4. 创建快捷方式（使用原生 Win32 COM IShellLink 接口，100% 可靠无外部依赖）
+    SetStatusText(L"正在生成桌面快捷方式与系统开始菜单...");
+    CoInitialize(NULL);
 
     wchar_t targetExe[MAX_PATH];
-    swprintf(targetExe, MAX_PATH, L"%s\\CodeMind-Studio.exe", g_InstallDir);
+    swprintf(targetExe, MAX_PATH, L"%ls\\CodeMind-Studio.exe", g_InstallDir);
     wchar_t targetIco[MAX_PATH];
-    swprintf(targetIco, MAX_PATH, L"%s\\app.ico", g_InstallDir);
+    swprintf(targetIco, MAX_PATH, L"%ls\\app.ico", g_InstallDir);
 
-    SetStatusText(L"正在生成桌面快捷方式与系统开始菜单...");
+    #define CREATE_SHORTCUT(targetPath, lnkPath) do { \
+        IShellLinkW* psl = NULL; \
+        if (SUCCEEDED(CoCreateInstance(&CLSID_ShellLink, NULL, CLSCTX_INPROC_SERVER, &IID_IShellLinkW, (void**)&psl))) { \
+            IPersistFile* ppf = NULL; \
+            psl->lpVtbl->SetPath(psl, targetExe); \
+            psl->lpVtbl->SetWorkingDirectory(psl, g_InstallDir); \
+            psl->lpVtbl->SetDescription(psl, L"CodeMind Studio · Cockpit Coding Studio"); \
+            psl->lpVtbl->SetIconLocation(psl, targetIco, 0); \
+            if (SUCCEEDED(psl->lpVtbl->QueryInterface(psl, &IID_IPersistFile, (void**)&ppf))) { \
+                ppf->lpVtbl->Save(ppf, lnkPath, TRUE); \
+                ppf->lpVtbl->Release(ppf); \
+                SHChangeNotify(SHCNE_CREATE, SHCNF_PATHW, lnkPath, NULL); \
+            } \
+            psl->lpVtbl->Release(psl); \
+        } \
+    } while(0)
 
-    wchar_t scCmd[4096];
-    wchar_t desktopSnippet[1024] = L"";
-    wchar_t startMenuSnippet[1024] = L"";
-
-    if (bDesktop) {
-        swprintf(desktopSnippet, 1024,
-            L"$ws = New-Object -ComObject WScript.Shell; "
-            L"$d = [Environment]::GetFolderPath('Desktop'); "
-            L"$s = $ws.CreateShortcut((Join-Path $d 'CodeMind Studio.lnk')); "
-            L"$s.TargetPath = '%s'; $s.WorkingDirectory = '%s'; $s.IconLocation = '%s'; $s.Save(); ",
-            targetExe, g_InstallDir, targetIco
-        );
+    // A. 桌面快捷方式（同时写入当前用户桌面与公共桌面）
+    wchar_t szUserDesktop[MAX_PATH];
+    if (SHGetSpecialFolderPathW(NULL, szUserDesktop, CSIDL_DESKTOPDIRECTORY, TRUE)) {
+        wchar_t szLinkUser[MAX_PATH];
+        swprintf(szLinkUser, MAX_PATH, L"%ls\\CodeMind Studio.lnk", szUserDesktop);
+        CREATE_SHORTCUT(targetExe, szLinkUser);
     }
-    if (bStartMenu) {
-        swprintf(startMenuSnippet, 1024,
-            L"$sm = [Environment]::GetFolderPath('Programs') + '\\CodeMind Studio'; "
-            L"if (-not (Test-Path $sm)) { New-Item -ItemType Directory -Path $sm | Out-Null }; "
-            L"$s2 = $ws.CreateShortcut((Join-Path $sm 'CodeMind Studio.lnk')); "
-            L"$s2.TargetPath = '%s'; $s2.WorkingDirectory = '%s'; $s2.IconLocation = '%s'; $s2.Save(); ",
-            targetExe, g_InstallDir, targetIco
-        );
-    }
-
-    swprintf(scCmd, 4096,
-        L"powershell.exe -NoProfile -ExecutionPolicy Bypass -Command \"%s%s\"",
-        desktopSnippet, startMenuSnippet
-    );
-
-    STARTUPINFOW si2;
-    PROCESS_INFORMATION pi2;
-    ZeroMemory(&si2, sizeof(si2));
-    si2.cb = sizeof(si2);
-    si2.dwFlags |= STARTF_USESHOWWINDOW;
-    si2.wShowWindow = SW_HIDE;
-    ZeroMemory(&pi2, sizeof(pi2));
-
-    if (CreateProcessW(NULL, scCmd, NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, NULL, &si2, &pi2)) {
-        WaitForSingleObject(pi2.hProcess, INFINITE);
-        CloseHandle(pi2.hProcess);
-        CloseHandle(pi2.hThread);
+    wchar_t szCommonDesktop[MAX_PATH];
+    if (SHGetSpecialFolderPathW(NULL, szCommonDesktop, CSIDL_COMMON_DESKTOPDIRECTORY, FALSE)) {
+        wchar_t szLinkCommon[MAX_PATH];
+        swprintf(szLinkCommon, MAX_PATH, L"%ls\\CodeMind Studio.lnk", szCommonDesktop);
+        CREATE_SHORTCUT(targetExe, szLinkCommon);
     }
 
-    // 强制通知 Windows Shell 刷新桌面与任务栏图标
+    // B. 开始菜单程序快捷方式
+    wchar_t szPrograms[MAX_PATH];
+    if (SHGetSpecialFolderPathW(NULL, szPrograms, CSIDL_PROGRAMS, TRUE)) {
+        wchar_t szMenuDir[MAX_PATH];
+        swprintf(szMenuDir, MAX_PATH, L"%ls\\CodeMind Studio", szPrograms);
+        SHCreateDirectoryExW(NULL, szMenuDir, NULL);
+        wchar_t szLinkMenu[MAX_PATH];
+        swprintf(szLinkMenu, MAX_PATH, L"%ls\\CodeMind Studio.lnk", szMenuDir);
+        CREATE_SHORTCUT(targetExe, szLinkMenu);
+    }
+
+    // 强制通知 Windows Explorer Shell 立即刷新桌面
     SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, NULL, NULL);
 
     SendMessage(g_hProgress, PBM_SETPOS, 90, 0);
@@ -304,7 +302,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         } else {
             wchar_t localApp[MAX_PATH];
             GetEnvironmentVariableW(L"LOCALAPPDATA", localApp, MAX_PATH);
-            swprintf(defPath, MAX_PATH, L"%s\\Programs\\CodeMind-Studio", localApp);
+            swprintf(defPath, MAX_PATH, L"%ls\\Programs\\CodeMind-Studio", localApp);
         }
 
         // 控件创建
@@ -401,7 +399,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             if (pidl) {
                 wchar_t szFolder[MAX_PATH];
                 if (SHGetPathFromIDListW(pidl, szFolder)) {
-                    swprintf(g_InstallDir, MAX_PATH, L"%s\\CodeMind-Studio", szFolder);
+                    swprintf(g_InstallDir, MAX_PATH, L"%ls\\CodeMind-Studio", szFolder);
                     SetWindowTextW(g_hPathEdit, g_InstallDir);
                 }
                 CoTaskMemFree(pidl);

@@ -1,8 +1,8 @@
 import { LLMChannel } from "../types";
+import { gatewayBus } from "./bus/GatewayBus";
 import {
   ReActStepNode,
   ReActTraceState,
-  ReActActionPayload,
   ActionRiskLevel,
 } from "../types/contracts";
 
@@ -29,6 +29,7 @@ export interface SendMessageParams {
   temperature?: number;
   maxTokens?: number;
   enableThinking?: boolean;
+  reasoningEffort?: "low" | "medium" | "high";
   abortSignal?: AbortSignal;
   callbacks: StreamEventCallbacks;
 }
@@ -55,7 +56,7 @@ class LLMGatewayEngine {
   }
 
   /**
-   * 统一大模型网关调度分发入口 (带人机协同确认沙箱与流式背压)
+   * 统一大模型网关调度分发入口 (真实流式分发与审计追踪)
    */
   public async dispatchStream(params: SendMessageParams): Promise<void> {
     const {
@@ -65,6 +66,7 @@ class LLMGatewayEngine {
       temperature = 0.7,
       maxTokens = 4096,
       enableThinking = true,
+      reasoningEffort,
       abortSignal,
       callbacks,
     } = params;
@@ -82,72 +84,91 @@ class LLMGatewayEngine {
 
     const hasValidCredentials =
       Boolean(channel.apiKey?.trim()) ||
-      Boolean(channel.geminiAuth?.refreshToken) ||
-      channel.type === "ollama";
+      channel.type === "ollama" ||
+      channel.type === "opencode";
 
-    if (hasValidCredentials) {
-      let attempt = 0;
-      const maxRetries = 2;
-      let lastErr: any = null;
-
-      while (attempt <= maxRetries) {
-        if (abortSignal?.aborted) return;
-        try {
-          await this.executeRealStream({
-            channel,
-            model,
-            messages,
-            temperature,
-            maxTokens,
-            enableThinking,
-            abortSignal,
-            startTime,
-            requestId,
-            traceState,
-            callbacks,
-          });
-          return;
-        } catch (err: any) {
-          lastErr = err;
-          if (err.name === "AbortError" || abortSignal?.aborted) {
-            const durationMs = Math.round(performance.now() - startTime);
-            callbacks.onComplete({
-              durationMs,
-              tokensCount: 50,
-              tokensPerSec: 30,
-              trace: traceState,
-            });
-            return;
-          }
-
-          attempt++;
-          if (attempt <= maxRetries) {
-            const delay = Math.pow(2, attempt) * 300 + Math.random() * 200;
-            console.warn(`[LLMGateway] Transient error, retrying (${attempt}/${maxRetries}) in ${Math.round(delay)}ms:`, err);
-            await new Promise((resolve) => setTimeout(resolve, delay));
-          }
-        }
-      }
-
-      traceState.hasError = true;
-      callbacks.onError(
-        `【${channel.name}】端点连接失败：${lastErr?.message || "网络超时或鉴权失败"}\n\n请求幂等 ID: ${requestId}\n已自动执行 ${maxRetries} 次退避重试。请检查 Base URL (${channel.baseUrl}) 配置。`,
-        500
-      );
+    if (!hasValidCredentials) {
+      const errMsg = `【${channel.name}】未配置 API Key：请在渠道设置中填入有效的密钥或中转站凭据。`;
+      gatewayBus.getAuditSubline().recordLog({
+        engineId: channel.id,
+        relayType: channel.relayMode || "direct",
+        model,
+        durationMs: 0,
+        tokensCount: 0,
+        tokensPerSec: 0,
+        statusCode: 401,
+        status: "error",
+        errorMessage: errMsg,
+        promptSnippet: messages[messages.length - 1]?.content.slice(0, 80),
+      });
+      callbacks.onError(errMsg, 401);
       return;
     }
 
-    // 演练与高保真模拟流式分发
-    await this.executeSimulatedStream({
-      channel,
+    let attempt = 0;
+    const maxRetries = 2;
+    let lastErr: any = null;
+
+    while (attempt <= maxRetries) {
+      if (abortSignal?.aborted) return;
+      try {
+        await this.executeRealStream({
+          channel,
+          model,
+          messages,
+          temperature,
+          maxTokens,
+          enableThinking,
+          reasoningEffort,
+          abortSignal,
+          startTime,
+          requestId,
+          traceState,
+          callbacks,
+        });
+        return;
+      } catch (err: any) {
+        lastErr = err;
+        if (err.name === "AbortError" || abortSignal?.aborted) {
+          const durationMs = Math.round(performance.now() - startTime);
+          callbacks.onComplete({
+            durationMs,
+            tokensCount: 1,
+            tokensPerSec: 1,
+            trace: traceState,
+          });
+          return;
+        }
+
+        attempt++;
+        if (attempt <= maxRetries) {
+          const delay = Math.pow(2, attempt) * 300 + Math.random() * 200;
+          console.warn(`[LLMGateway] Transient error, retrying (${attempt}/${maxRetries}) in ${Math.round(delay)}ms:`, err);
+          await new Promise((resolve) => setTimeout(resolve, delay));
+        }
+      }
+    }
+
+    traceState.hasError = true;
+    gatewayBus.getAuditSubline().recordLog({
+      engineId: channel.id,
+      relayType: channel.relayMode || "direct",
       model,
-      messages,
-      enableThinking,
-      abortSignal,
-      startTime,
-      traceState,
-      callbacks,
+      durationMs: Math.round(performance.now() - startTime),
+      tokensCount: 0,
+      tokensPerSec: 0,
+      statusCode: 500,
+      status: "error",
+      errorMessage: lastErr?.message || "网络超时或鉴权失败",
+      promptSnippet: messages[messages.length - 1]?.content.slice(0, 80),
     });
+    callbacks.onError(
+      `【${channel.name}】端点连接失败：${lastErr?.message || "网络超时或鉴权失败"}
+
+请求幂等 ID: ${requestId}
+已自动执行 ${maxRetries} 次退避重试。请检查 Base URL (${channel.baseUrl}) 配置。`,
+      500
+    );
   }
 
   /**
@@ -160,6 +181,7 @@ class LLMGatewayEngine {
     temperature: number;
     maxTokens: number;
     enableThinking: boolean;
+    reasoningEffort?: "low" | "medium" | "high";
     abortSignal?: AbortSignal;
     startTime: number;
     requestId: string;
@@ -173,6 +195,7 @@ class LLMGatewayEngine {
       temperature,
       maxTokens,
       enableThinking,
+      reasoningEffort,
       abortSignal,
       startTime,
       requestId,
@@ -189,6 +212,15 @@ class LLMGatewayEngine {
       "X-Client-Platform": "CodeMind-Studio-Desktop",
     };
 
+    if (channel.relayMode === "newapi" && channel.newApiChannelId?.trim()) {
+      headers["New-Api-Channel"] = channel.newApiChannelId.trim();
+      headers["X-Channel-Id"] = channel.newApiChannelId.trim();
+    }
+
+    if (channel.apiKey && channel.apiKey !== "opencode-local") {
+      headers["Authorization"] = `Bearer ${channel.apiKey}`;
+    }
+
     let endpoint = targetUrl + "chat/completions";
     let body: any = {
       model,
@@ -198,12 +230,11 @@ class LLMGatewayEngine {
       stream: true,
     };
 
-    if (channel.apiKey) {
-      headers["Authorization"] = `Bearer ${channel.apiKey}`;
-    }
-
     if (enableThinking) {
       body.stream_options = { include_usage: true };
+    }
+    if (reasoningEffort === "high") {
+      body.reasoning_effort = "high";
     }
 
     const response = await fetch(endpoint, {
@@ -219,7 +250,7 @@ class LLMGatewayEngine {
     }
 
     if (!response.body) {
-      throw new Error("Response body is not readable stream");
+      throw new Error("HTTP 响应体为空，无法读取流式事件");
     }
 
     const reader = response.body.getReader();
@@ -300,115 +331,22 @@ class LLMGatewayEngine {
     const tokensPerSec = Math.round((totalTokens / (durationMs / 1000)) * 10) / 10;
 
     traceState.isCompleted = true;
+    gatewayBus.getAuditSubline().recordLog({
+      engineId: channel.id,
+      relayType: channel.relayMode || "direct",
+      model,
+      durationMs,
+      tokensCount: totalTokens,
+      tokensPerSec: tokensPerSec > 0 ? tokensPerSec : 25,
+      statusCode: 200,
+      status: "success",
+      promptSnippet: messages[messages.length - 1]?.content.slice(0, 80),
+    });
+
     callbacks.onComplete({
       durationMs,
       tokensCount: totalTokens,
       tokensPerSec: tokensPerSec > 0 ? tokensPerSec : 25,
-      trace: traceState,
-    });
-  }
-
-  /**
-   * 智能流式演练引擎 (带 ReAct 动作拦截与沙箱协同)
-   */
-  private async executeSimulatedStream(options: {
-    channel: LLMChannel;
-    model: string;
-    messages: { role: string; content: string }[];
-    enableThinking: boolean;
-    abortSignal?: AbortSignal;
-    startTime: number;
-    traceState: ReActTraceState;
-    callbacks: StreamEventCallbacks;
-  }): Promise<void> {
-    const {
-      channel,
-      model,
-      messages,
-      enableThinking,
-      abortSignal,
-      startTime,
-      traceState,
-      callbacks,
-    } = options;
-
-    const userPrompt = messages[messages.length - 1]?.content || "";
-
-    // 1. 显式 ReAct 第一步：THOUGHT 深度意图解析
-    const thoughtStep: ReActStepNode = {
-      id: "step-1",
-      stepIndex: 1,
-      stepType: "THOUGHT",
-      status: "RESOLVED",
-      title: "意图解析与工程拓扑检索",
-      content: `分析指令: "${userPrompt}"。对齐项目知识图谱与长期记忆，规划执行链路。`,
-      timestamp: Date.now(),
-    };
-    traceState.steps.push(thoughtStep);
-    if (callbacks.onReActStep) callbacks.onReActStep(thoughtStep, traceState);
-
-    // 深度推理链
-    const reasoningText =
-      "【ReAct 思考与规划链路】\n" +
-      "1. 接收到用户指令，已对齐当前工程知识图谱与长期情景记忆。\n" +
-      "2. 判定当前执行环境为 Tauri v2 原生桌面端，所有系统命令遵循 CREATE_NO_WINDOW 静默运行。\n" +
-      "3. 对高风险系统动作启用人机协同确认沙箱 (HITL Control)，保障代码与环境安全。\n";
-
-    if (enableThinking) {
-      for (const char of reasoningText) {
-        if (abortSignal?.aborted) return;
-        callbacks.onToken("", char);
-        await new Promise((r) => setTimeout(r, 12));
-      }
-    }
-
-    // 2. 显式 ReAct 第二步：ACTION 工具/逻辑分发
-    const actionPayload: ReActActionPayload = {
-      actionName: "generate_and_review",
-      actionArgs: { prompt: userPrompt, target: "src/" },
-      riskLevel: "LOW",
-      description: "生成经过 AST 结构守卫与阿里规约审查的高性能代码方案",
-    };
-
-    const actionStep: ReActStepNode = {
-      id: "step-2",
-      stepIndex: 2,
-      stepType: "ACTION",
-      status: "RESOLVED",
-      title: "调度统一大模型网关分发",
-      content: `已锁定渠道【${channel.name}】(${model})，执行结构化输出。`,
-      actionPayload,
-      timestamp: Date.now(),
-    };
-    traceState.steps.push(actionStep);
-    if (callbacks.onReActStep) callbacks.onReActStep(actionStep, traceState);
-
-    // 3. 正文输出
-    const fullContent =
-      `已为您就绪 **CodeMind 生产级流式网关与 ReAct 智能体调度中心**。\n\n` +
-      `### 📌 当前环境与工程状态\n` +
-      `- **统一网关通道**：\`${channel.name}\` (${channel.type.toUpperCase()})\n` +
-      `- **生效模型**：\`${model}\`\n` +
-      `- **ReAct 安全沙箱**：已开启高风险动作人机协同拦截 (HITL Approval)\n` +
-      `- **AST 感知压缩**：支持接口骨架提取与代码锚点点击直达\n\n` +
-      `💡 您可以直接输入代码重构、测试编写或系统排查需求，我将实时为您生成高质量方案！`;
-
-    let tokenCount = 0;
-    for (const char of fullContent) {
-      if (abortSignal?.aborted) return;
-      callbacks.onToken(char, "");
-      tokenCount++;
-      await new Promise((r) => setTimeout(r, 10));
-    }
-
-    const durationMs = Math.round(performance.now() - startTime);
-    const tokensPerSec = Math.round((tokenCount / (durationMs / 1000)) * 10) / 10;
-
-    traceState.isCompleted = true;
-    callbacks.onComplete({
-      durationMs,
-      tokensCount: tokenCount + (enableThinking ? 50 : 0),
-      tokensPerSec: tokensPerSec > 0 ? tokensPerSec : 35,
       trace: traceState,
     });
   }

@@ -13,11 +13,13 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { nativeService } from "../../services/nativeService";
+import { formatSessionTime, formatFullDateTime } from "../../utils/timeUtils";
 
 export interface ProjectSession {
   id: string;
   title: string;
   time: string;
+  updatedAt?: number;        // 会话实际最新更改时间戳 (ms)
   projectFolder?: string;
   status?: "running" | "idle" | "error";
 }
@@ -58,7 +60,8 @@ const DEFAULT_REAL_PROJECTS: ProjectFolder[] = [
       {
         id: "sess-1",
         title: "AI 编程协同初始会话",
-        time: "刚刚",
+        time: "",
+        updatedAt: Date.now(),
         projectFolder: "agent-learning",
         status: "idle",
       },
@@ -85,7 +88,23 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
               !p.name.includes("brave-pasteur") &&
               !p.name.includes("F盘 geek-boot-parent")
           );
-          if (filtered.length > 0) return filtered;
+          if (filtered.length > 0) {
+            // 确保所有会话都具备合法 updatedAt 时间戳
+            return (filtered as ProjectFolder[]).map((p: ProjectFolder, pi: number) => ({
+              ...p,
+              sessions: (p.sessions || []).map((s: ProjectSession, si: number) => {
+                let uAt = s.updatedAt;
+                if (!uAt || typeof uAt !== "number") {
+                  const match = s.id?.match(/\d{10,}/);
+                  uAt = match ? Number(match[0]) : Date.now() - (pi * 3600000 + si * 600000);
+                }
+                return {
+                  ...s,
+                  updatedAt: uAt,
+                };
+              }),
+            }));
+          }
         }
       }
     } catch (e) {}
@@ -131,7 +150,8 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
           prev.map((proj) => ({
             ...proj,
             sessions: proj.sessions.map((s) =>
-              s.id === targetId ? { ...s, status } : s
+              // 会话产生活动（发送/完成/失败）时刷新实际最新更改时间
+              s.id === targetId ? { ...s, status, updatedAt: Date.now() } : s
             ),
           }))
         );
@@ -222,7 +242,8 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
     const newSess: ProjectSession = {
       id: `sess-${Date.now()}`,
       title,
-      time: "刚刚",
+      time: "",
+      updatedAt: Date.now(),
       projectFolder: proj.name,
       status: "idle",
     };
@@ -294,7 +315,8 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
             {
               id: `sess-${Date.now()}`,
               title: `Project Initial Session (${folderName})`,
-              time: "刚刚",
+              time: "",
+              updatedAt: Date.now(),
               projectFolder: folderName,
               status: "idle",
             },
@@ -372,7 +394,8 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
           const fallbackSess: ProjectSession = {
             id: `sess-${Date.now()}`,
             title: `AI 初始对话 (${p.name})`,
-            time: "刚刚",
+            time: "",
+            updatedAt: Date.now(),
             projectFolder: p.name,
             status: "idle",
           };
@@ -493,11 +516,12 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
       (s.projectFolder && s.projectFolder.toLowerCase().includes(searchQuery.toLowerCase()));
 
     if (!matchQuery) return false;
+    const uAt = s.updatedAt || Date.now();
     if (filterRange === "today") {
-      return s.time.includes("m") || s.time.includes("刚刚") || s.time.includes("h");
+      return new Date(uAt).toDateString() === new Date().toDateString();
     }
     if (filterRange === "week") {
-      return !s.time.includes("30d");
+      return Date.now() - uAt <= 7 * 24 * 3600 * 1000;
     }
     return true;
   });
@@ -507,11 +531,25 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
       style={{ width: `${width}px` }}
       className="bg-[#faf8f5] border-r border-[#e5dfd8] flex flex-col justify-between shrink-0 select-none text-xs overflow-hidden relative"
     >
-      {/* 顶部标题栏：Projects 与操作按钮 */}
-      <div className="px-3.5 pt-3 pb-2 flex justify-between items-center shrink-0 border-b border-[#f4efea]">
-        <span className="font-semibold text-[#374151] text-[13px] tracking-tight">
-          Projects
-        </span>
+      {/* 顶部标题栏：图标控制与操作 */}
+      <div className="px-3 pt-2.5 pb-2 flex justify-between items-center shrink-0 border-b border-[#f4efea]">
+        <div className="flex items-center gap-1.5 text-[#6b7280]">
+          <button
+            type="button"
+            className="w-6 h-6 rounded flex items-center justify-center text-[#6b7280] hover:bg-[#ebe5df] cursor-pointer"
+            title="侧边栏"
+          >
+            <Folder size={14} />
+          </button>
+          <button
+            type="button"
+            className="w-6 h-6 rounded flex items-center justify-center text-[#6b7280] hover:bg-[#ebe5df] cursor-pointer"
+            title="分栏视图"
+          >
+            <SlidersHorizontal size={13} />
+          </button>
+        </div>
+
         <div className="flex items-center gap-1.5 text-[#6b7280]">
           {/* 筛选会话按钮 */}
           <button
@@ -523,14 +561,14 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
             }`}
             title="筛选与快速搜索会话"
           >
-            <SlidersHorizontal size={13} />
+            <Search size={13} />
           </button>
 
           {/* 打开 Windows 文件夹选择器 */}
           <button
             onClick={handleOpenWindowsFolderDialog}
             className="w-6 h-6 rounded-md hover:bg-[#ebe5df] flex items-center justify-center cursor-pointer transition-colors text-[#374151]"
-            title="从 Windows 系统选择并打开项目文件夹 (支持同名项目重复添加)"
+            title="从 Windows 系统选择并打开项目文件夹"
           >
             <FolderPlus size={14} />
           </button>
@@ -545,6 +583,40 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
             multiple
             className="hidden"
           />
+        </div>
+      </div>
+
+      {/* 顶部 3 个核心快捷按钮：新建会话 / 搜索 / 自动化 */}
+      <div className="px-2.5 pt-2 pb-1 flex flex-col gap-1 shrink-0 border-b border-[#f4efea]">
+        <button
+          type="button"
+          onClick={(e) => {
+            const firstProj = projects[0] || DEFAULT_REAL_PROJECTS[0];
+            handleAddSession(e, firstProj);
+          }}
+          className="w-full py-1.5 px-2.5 bg-white hover:bg-[#f4efea] border border-[#e5dfd8] rounded-lg text-xs font-semibold text-[#1e1b18] flex items-center gap-2 cursor-pointer transition-colors shadow-2xs"
+        >
+          <Plus size={13} className="text-[#d96b27]" />
+          <span>新建会话</span>
+        </button>
+
+        <div className="grid grid-cols-2 gap-1">
+          <button
+            type="button"
+            onClick={() => setIsFilterOpen(true)}
+            className="py-1 px-2 hover:bg-[#ebe5df] rounded-md text-[11px] text-[#4b5563] flex items-center gap-1.5 cursor-pointer transition-colors"
+          >
+            <Search size={11} className="text-[#78716c]" />
+            <span>搜索</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsFilterOpen(true)}
+            className="py-1 px-2 hover:bg-[#ebe5df] rounded-md text-[11px] text-[#4b5563] flex items-center gap-1.5 cursor-pointer transition-colors"
+          >
+            <RefreshCw size={11} className="text-[#78716c]" />
+            <span>自动化</span>
+          </button>
         </div>
       </div>
 
@@ -646,8 +718,11 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
                       </span>
                     </div>
                   </div>
-                  <span className="text-[10px] text-[#9ca3af] shrink-0 font-normal">
-                    {sess.time}
+                  <span
+                    className="text-[10px] text-[#9ca3af] shrink-0 font-mono"
+                    title={formatFullDateTime(sess.updatedAt)}
+                  >
+                    {formatSessionTime(sess.updatedAt, sess.time)}
                   </span>
                 </div>
               ))
@@ -812,8 +887,11 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
                         </div>
 
                         <div className="flex items-center gap-1 shrink-0">
-                          <span className="text-[10px] text-[#9ca3af] font-normal group-hover:hidden">
-                            {sess.time}
+                          <span
+                            className="text-[10px] text-[#9ca3af] font-mono shrink-0 group-hover:hidden"
+                            title={formatFullDateTime(sess.updatedAt)}
+                          >
+                            {formatSessionTime(sess.updatedAt, sess.time)}
                           </span>
 
                           {/* 悬浮操作按钮组 (直接可见 ✏️ 重命名 / 🗑️ 删除 / ⋮ 更多) */}
@@ -906,6 +984,19 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
             </div>
           );
         })}
+      </div>
+
+      {/* 底部：聊天入口与会话统计/Build 状态 (对齐截图) */}
+      <div className="border-t border-[#f4efea] bg-[#faf8f5] px-3 py-2 flex flex-col gap-1 shrink-0 text-xs">
+        <div className="font-semibold text-[#1e1b18] text-[11px] flex items-center justify-between">
+          <span>聊天</span>
+        </div>
+        <div className="flex justify-between items-center text-[10px] text-[#9ca3af] font-mono pt-1 border-t border-[#f4efea]">
+          <span className="flex items-center gap-1">
+            <span className="text-[#6b7280]">山</span> {allSessions.length} 个会话
+          </span>
+          <span className="text-[#9ca3af] hover:text-[#1e1b18] cursor-pointer">&gt;_ build &gt;</span>
+        </div>
       </div>
 
       {/* 统一重命名模态弹窗 */}
