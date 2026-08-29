@@ -64,7 +64,8 @@ import {
   McpServerInfo,
   loadSavedProviders,
   saveProvidersToStorage,
-  ModelItem
+  ModelItem,
+  resolveApiEndpoint
 } from '../types/contracts';
 
 interface SettingsModalProps {
@@ -157,11 +158,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     try {
       let url = draft.baseUrl.trim();
       if (url.endsWith('/')) url = url.slice(0, -1);
-      const testEndpoint = `${url}/models`;
+      const { url: testEndpoint, headers: proxyHeaders } = resolveApiEndpoint(`${url}/models`);
       const res = await fetch(testEndpoint, {
         method: 'GET',
         headers: {
-          'Authorization': `Bearer ${draft.apiKey.trim()}`
+          'Authorization': `Bearer ${draft.apiKey.trim()}`,
+          ...proxyHeaders
         }
       });
       const latency = Date.now() - start;
@@ -194,9 +196,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     try {
       let url = draft.baseUrl.trim();
       if (url.endsWith('/')) url = url.slice(0, -1);
-      const res = await fetch(`${url}/models`, {
+      const { url: modelsEndpoint, headers: proxyHeaders } = resolveApiEndpoint(`${url}/models`);
+      const res = await fetch(modelsEndpoint, {
         headers: {
-          'Authorization': `Bearer ${draft.apiKey.trim()}`
+          'Authorization': `Bearer ${draft.apiKey.trim()}`,
+          ...proxyHeaders
         }
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);

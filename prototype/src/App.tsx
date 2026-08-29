@@ -30,7 +30,8 @@ import {
   DiffNavigationTarget,
   loadSavedProviders,
   loadSavedProjects,
-  saveProjectsToStorage
+  saveProjectsToStorage,
+  resolveApiEndpoint
 } from './types/contracts';
 
 export const App: React.FC = () => {
@@ -334,11 +335,14 @@ export const App: React.FC = () => {
         { role: 'user', content: text }
       ];
 
-      const response = await fetch(`${baseUrl}/chat/completions`, {
+      const { url: requestUrl, headers: proxyHeaders } = resolveApiEndpoint(`${baseUrl}/chat/completions`);
+
+      const response = await fetch(requestUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`
+          'Authorization': `Bearer ${apiKey}`,
+          ...proxyHeaders
         },
         body: JSON.stringify({
           model: targetModel,
