@@ -50,12 +50,50 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
 }) => {
   if (!isOpen) return null;
 
-  const [openedFiles, setOpenedFiles] = useState<OpenedEditorFile[]>(INITIAL_OPENED_FILES);
-  const [activeFileId, setActiveFileId] = useState<string>('file-contracts');
+  const [openedFiles, setOpenedFiles] = useState<OpenedEditorFile[]>([]);
+  const [activeFileId, setActiveFileId] = useState<string>('');
   const [workspaceViewMode, setWorkspaceViewMode] = useState<'code' | 'graph'>('code');
   const [showInlineEdit, setShowInlineEdit] = useState(false);
   const [inlineInput, setInlineInput] = useState('');
   const [inlineToast, setInlineToast] = useState<string | null>(null);
+  const handleExecuteTerminalCommand = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cmd = cmdInput.trim();
+    if (!cmd || isExecutingCmd) return;
+
+    setCmdInput('');
+    setTerminalLogs(prev => [...prev, `PS ${activeProject?.path || 'e:/pro/agent-learning'}> ${cmd}`]);
+    setIsExecutingCmd(true);
+
+    try {
+      const res = await fetch('/api/terminal/exec', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          command: cmd,
+          cwd: activeProject?.path || undefined
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        const outLines = (data.stdout || '').split('\n').filter(Boolean);
+        const errLines = (data.stderr || '').split('\n').filter(Boolean);
+        const combined = [...outLines, ...errLines];
+        if (combined.length === 0) {
+          setTerminalLogs(prev => [...prev, `[命令执行完成，返回值: ${data.exitCode}]`]);
+        } else {
+          setTerminalLogs(prev => [...prev, ...combined]);
+        }
+      } else {
+        setTerminalLogs(prev => [...prev, `✕ 错误: ${data.error || '命令执行失败'}`]);
+      }
+    } catch (err: any) {
+      setTerminalLogs(prev => [...prev, `✕ 终端连接异常: ${err.message}`]);
+    } finally {
+      setIsExecutingCmd(false);
+    }
+  };
+
   const handleSaveCurrentFile = async () => {
     const current = openedFiles.find(f => f.id === activeFileId);
     if (!current) return;
@@ -79,10 +117,11 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
   const [activeTerminalId, setActiveTerminalId] = useState<string>('term-1');
   const [terminals, setTerminals] = useState<TerminalTab[]>(INITIAL_TERMINALS_STATE);
   const [terminalLogs, setTerminalLogs] = useState<string[]>([
-    `[CodeMind Sandbox Terminal] 工作区路径: ${activeProject?.path || 'e:/pro/agent-learning'}`,
-    `[Git Branch]: ${activeProject?.gitBranch || 'main'} · 沙箱保护已就绪`,
-    `$ Ready. 输入命令直接在沙箱执行，高危命令将自动提示 Sudo 放行。`
+    `Windows PowerShell (Desktop Real Engine) [实时本地终端已就绪]`,
+    `工作区目录: ${activeProject?.path || 'e:/pro/agent-learning'} · 分支: ${activeProject?.gitBranch || 'main'}`,
+    `提示: 直接输入系统命令 (例如: dir, git status, npm test, python --version) 即可实时执行。`
   ]);
+  const [isExecutingCmd, setIsExecutingCmd] = useState(false);
   const [cmdInput, setCmdInput] = useState('');
   const [isCiDrawerOpen, setIsCiDrawerOpen] = useState(false);
   const [hoveredAction, setHoveredAction] = useState<string | null>(null);

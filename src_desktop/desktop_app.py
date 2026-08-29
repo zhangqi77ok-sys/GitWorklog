@@ -352,6 +352,65 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
                 self.wfile.write(json.dumps({'error': str(e)}).encode('utf-8'))
             return
 
+        # 4. Real Terminal Command Execution on Desktop
+        if self.path == '/api/terminal/exec':
+            length = int(self.headers.get('Content-Length', 0))
+            body = self.rfile.read(length)
+            try:
+                payload = json.loads(body.decode('utf-8'))
+                cmd = payload.get('command', '').strip()
+                cwd = payload.get('cwd', None) or os.getcwd()
+                if not cmd:
+                    raise Exception('Empty command')
+                
+                # Execute in PowerShell on Windows, bash on Unix
+                if os.name == 'nt':
+                    proc = subprocess.run(
+                        ['powershell.exe', '-NoProfile', '-Command', cmd],
+                        cwd=cwd,
+                        capture_output=True,
+                        text=True,
+                        timeout=30
+                    )
+                else:
+                    proc = subprocess.run(
+                        cmd,
+                        shell=True,
+                        cwd=cwd,
+                        capture_output=True,
+                        text=True,
+                        timeout=30
+                    )
+                
+                self.send_response(200)
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({
+                    'success': True,
+                    'stdout': proc.stdout,
+                    'stderr': proc.stderr,
+                    'exitCode': proc.returncode,
+                    'cmd': cmd
+                }).encode('utf-8'))
+            except subprocess.TimeoutExpired:
+                self.send_response(200)
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({
+                    'success': False,
+                    'error': '命令执行超时 (30s 超时限制)',
+                    'exitCode': 124
+                }).encode('utf-8'))
+            except Exception as e:
+                self.send_response(500)
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'error': str(e)}).encode('utf-8'))
+            return
+
         # 3. Persistent Local Storage Write to Disk (Never lost on upgrade)
         if self.path == '/api/storage':
             length = int(self.headers.get('Content-Length', 0))
