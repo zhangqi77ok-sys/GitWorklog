@@ -22,7 +22,9 @@ import {
   removeProjectFromWorkspace,
   AIModelOption,
   AVAILABLE_MODELS,
-  forkSessionFromMessage
+  forkSessionFromMessage,
+  clampLeftPanelWidth,
+  clampWorkbenchWidth
 } from './types/contracts';
 
 export const App: React.FC = () => {
@@ -42,6 +44,38 @@ export const App: React.FC = () => {
   const [workMode, setWorkMode] = useState<WorkMode>('act');
   const [currentModel, setCurrentModel] = useState<AIModelOption>(AVAILABLE_MODELS[0]);
   const [permissionPolicy, setPermissionPolicy] = useState<PermissionPolicy>('autonomous_agent');
+
+  // Resizable Layout States
+  const [leftPanelWidth, setLeftPanelWidth] = useState<number>(260);
+  const [workbenchWidth, setWorkbenchWidth] = useState<number>(560);
+  const [isDraggingLeft, setIsDraggingLeft] = useState(false);
+  const [isDraggingRight, setIsDraggingRight] = useState(false);
+
+  // Global Drag Listeners
+  React.useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (isDraggingLeft) {
+        setLeftPanelWidth(clampLeftPanelWidth(e.clientX - 44)); // 44px is activity bar
+      } else if (isDraggingRight) {
+        const newWbWidth = window.innerWidth - e.clientX;
+        setWorkbenchWidth(clampWorkbenchWidth(newWbWidth, window.innerWidth));
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsDraggingLeft(false);
+      setIsDraggingRight(false);
+    };
+
+    if (isDraggingLeft || isDraggingRight) {
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+    }
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDraggingLeft, isDraggingRight]);
 
   // Multi-Project Groups
   const [projects, setProjects] = useState<ProjectGroup[]>([
@@ -354,9 +388,9 @@ export const App: React.FC = () => {
           onOpenSettings={() => setIsSettingsOpen(true)}
         />
 
-        {/* LeftPanel: Dynamic Modules (Sessions, Files, Search, Git, Gateway, Settings) */}
+        {/* LeftPanel: Dynamic Modules with Dynamic Resizable Width */}
         <LeftPanel
-          width={260}
+          width={leftPanelWidth}
           activeNav={activeNav}
           onOpenFile={handleOpenFile}
           projects={projects}
@@ -373,9 +407,33 @@ export const App: React.FC = () => {
           onRemoveProject={handleRemoveProject}
         />
 
-        {/* ChatColumn (自适应宽幅: 工作台关闭时填满剩余空间，打开时 45%) */}
+        {/* Left Divider (Draggable) */}
+        <div
+          onMouseDown={() => setIsDraggingLeft(true)}
+          onDoubleClick={() => setLeftPanelWidth(260)}
+          title="双击恢复默认宽度，拖拽调节侧边栏宽度"
+          style={{
+            width: '4px',
+            cursor: 'col-resize',
+            background: isDraggingLeft ? 'var(--accent)' : 'transparent',
+            zIndex: 40,
+            transition: 'background 0.15s ease',
+            position: 'relative'
+          }}
+        >
+          <div style={{
+            position: 'absolute',
+            top: 0,
+            bottom: 0,
+            left: '1px',
+            width: '1px',
+            background: 'var(--border-subtle)'
+          }} />
+        </div>
+
+        {/* ChatColumn (自适应宽幅: 填满剩余空间) */}
         <ChatColumn
-          style={{ flex: rightWorkspaceOpen ? '0 0 45%' : 1 }}
+          style={{ flex: 1, minWidth: '360px' }}
           rightWorkspaceOpen={rightWorkspaceOpen}
           onToggleWorkspace={() => setRightWorkspaceOpen(!rightWorkspaceOpen)}
           session={activeSession}
@@ -391,9 +449,40 @@ export const App: React.FC = () => {
           onForkMessage={handleForkSessionFromMessage}
         />
 
-        {/* EditorWorkspace (默认关闭，打开时占满剩余空间，内部 4:6 终端与文件) */}
+        {/* Right Divider (Draggable, when workbench open) */}
         {rightWorkspaceOpen && (
-          <EditorWorkspace onCloseWorkspace={() => setRightWorkspaceOpen(false)} />
+          <div
+            onMouseDown={() => setIsDraggingRight(true)}
+            onDoubleClick={() => setWorkbenchWidth(560)}
+            title="双击恢复默认宽度，拖拽调节工作台宽度"
+            style={{
+              width: '4px',
+              cursor: 'col-resize',
+              background: isDraggingRight ? 'var(--accent)' : 'transparent',
+              zIndex: 40,
+              transition: 'background 0.15s ease',
+              position: 'relative'
+            }}
+          >
+            <div style={{
+              position: 'absolute',
+              top: 0,
+              bottom: 0,
+              left: '1px',
+              width: '1px',
+              background: 'var(--border-subtle)'
+            }} />
+          </div>
+        )}
+
+        {/* EditorWorkspace (Dynamic Resizable Width) */}
+        {rightWorkspaceOpen && (
+          <div style={{ width: `${workbenchWidth}px`, flexShrink: 0, height: '100%', display: 'flex' }}>
+            <EditorWorkspace
+              isOpen={rightWorkspaceOpen}
+              onClose={() => setRightWorkspaceOpen(false)}
+            />
+          </div>
         )}
       </div>
 

@@ -1569,3 +1569,34 @@ export function unmaskSensitiveText(maskedText: string, mapping: Record<string, 
   }
   return restored;
 }
+
+
+// ============================================================================
+// 13. RESIZABLE LAYOUT CONTRACTS (Split-Pane Widths & Boundaries)
+// ============================================================================
+
+export interface ResizableLayoutState {
+  leftPanelWidth: number;
+  workbenchWidth: number;
+  terminalHeightPercent: number;
+}
+
+export const DEFAULT_LAYOUT_STATE: ResizableLayoutState = {
+  leftPanelWidth: 240,
+  workbenchWidth: 540,
+  terminalHeightPercent: 40
+};
+
+export function clampLeftPanelWidth(width: number): number {
+  return Math.min(Math.max(width, 180), 420);
+}
+
+export function clampWorkbenchWidth(width: number, containerWidth: number = 1440): number {
+  const minWidth = 320;
+  const maxWidth = Math.max(minWidth, containerWidth * 0.65);
+  return Math.min(Math.max(width, minWidth), maxWidth);
+}
+
+export function clampTerminalHeightPercent(percent: number): number {
+  return Math.min(Math.max(percent, 20), 80);
+}

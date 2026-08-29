@@ -149,84 +149,10 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
     setInputText('');
   };
 
-  const renderTier1Badge = () => {
-    if (session.tier1 === 'global') {
-      return (
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '4px 10px',
-          background: 'var(--bg-surface)',
-          borderBottom: '1px solid var(--border-subtle)',
-          fontSize: '11px',
-          color: 'var(--text-secondary)'
-        }}>
-          <span>🌐 <strong>全局自由会话</strong> · 无项目边界约束</span>
-          <span style={{ color: 'var(--accent)', cursor: 'pointer' }}>➕ 关联到工程</span>
-        </div>
-      );
-    }
-    if (session.tier1 === 'project') {
-      return (
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '4px 10px',
-          background: 'rgba(217, 107, 39, 0.08)',
-          borderBottom: '1px solid rgba(217, 107, 39, 0.2)',
-          fontSize: '11px',
-          color: 'var(--accent)'
-        }}>
-          <span>📁 <strong>工程作用域</strong>: {session.projectName || 'agent-learning'} (🌿 {session.gitBranch || 'main'})</span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>AST 骨架已载入</span>
-            <button
-              onClick={onToggleWorkspace}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px',
-                padding: '2px 6px',
-                borderRadius: '4px',
-                background: rightWorkspaceOpen ? 'rgba(217, 107, 39, 0.1)' : 'var(--accent)',
-                color: rightWorkspaceOpen ? 'var(--accent)' : '#FFF',
-                border: 'none',
-                fontSize: '10px',
-                fontWeight: 600,
-                cursor: 'pointer'
-              }}
-            >
-              <FileCode size={11} />
-              <span>{rightWorkspaceOpen ? '收起工作台' : '◫ 打开工作台 (4:6终端)'}</span>
-            </button>
-          </div>
-        </div>
-      );
-    }
-    return (
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '4px 10px',
-        background: 'rgba(37, 99, 235, 0.08)',
-        borderBottom: '1px solid rgba(37, 99, 235, 0.2)',
-        fontSize: '11px',
-        color: '#2563EB'
-      }}>
-        <span>📄 <strong>文件专精</strong>: {session.filePath || 'src/bus/GatewayBus.ts'}</span>
-        <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>单文件重构 (立省80% Token)</span>
-      </div>
-    );
-  };
-
   return (
     <div style={{
-      flex: rightWorkspaceOpen ? '0 0 45%' : 1,
+      flex: 1,
       minWidth: '320px',
-      maxWidth: rightWorkspaceOpen ? '700px' : 'none',
       height: 'calc(100vh - 38px)',
       background: 'var(--bg-surface-elevated)',
       borderRight: rightWorkspaceOpen ? '1px solid var(--border-subtle)' : 'none',
@@ -236,121 +162,129 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
       transition: 'all 0.2s ease',
       ...style
     }}>
-      {/* Pinned Scope Badge */}
-      {renderTier1Badge()}
-
-            {/* FORK SESSION MERGE BANNER */}
-      {isForkedSession && (
-        <div style={{
-          padding: '4px 12px',
-          background: 'rgba(147, 51, 234, 0.08)',
-          borderBottom: '1px solid rgba(147, 51, 234, 0.25)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          fontSize: '10.5px'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#9333EA', fontWeight: 600 }}>
-            <GitBranch size={12} />
-            <span>当前处于分叉分支 <code>#fork-refactor-store</code> (时光机隔离试错)</span>
-          </div>
-          <button
-            onClick={() => {
-              setIsForkedSession(false);
-              setChangesetToast('🔀 已将分叉分支的最佳成果一键合并回主会话！');
-              setTimeout(() => setChangesetToast(null), 3500);
-            }}
-            style={{
-              padding: '2px 8px',
-              borderRadius: '3px',
-              background: '#9333EA',
-              border: 'none',
-              color: '#FFF',
-              fontSize: '10px',
-              fontWeight: 600,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '3px'
-            }}
-          >
-            <CheckCheck size={11} />
-            <span>🔀 一键合并回主线 (Merge to Main)</span>
-          </button>
-        </div>
-      )}
-
-      {/* SWARM SWIMLANE & HARNESS PIPELINE STRIP */}
+      {/* 1. SINGLE-LINE FLUID GLASS RIBBON (Seamless Integration of Breadcrumb, Fork, Swarm & Actions) */}
       <div style={{
-        padding: '4px 12px',
-        background: 'var(--bg-base)',
+        height: '36px',
+        padding: '0 12px',
         borderBottom: '1px solid var(--border-subtle)',
+        background: 'var(--bg-surface)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        fontSize: '10px',
-        color: 'var(--text-muted)'
+        flexShrink: 0,
+        fontSize: '11.5px',
+        gap: '8px'
       }}>
-        {pipelineMode === 'swarm' ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', overflowX: 'auto' }}>
-            <span style={{ fontWeight: 700, color: 'var(--accent)' }}>🐝 Swarm 协同蜂群:</span>
-            {swarmStages.map((stage, idx) => (
-              <React.Fragment key={stage.id}>
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '3px',
-                  padding: '1px 6px',
-                  borderRadius: '3px',
-                  background: stage.status === 'completed'
-                    ? 'rgba(22, 163, 74, 0.1)'
-                    : stage.status === 'running'
-                    ? 'rgba(217, 107, 39, 0.15)'
-                    : 'var(--bg-surface)',
-                  border: stage.status === 'running' ? '1px solid var(--accent)' : '1px solid var(--border-subtle)',
-                  color: stage.status === 'completed' ? '#16A34A' : stage.status === 'running' ? 'var(--accent)' : 'var(--text-muted)',
-                  fontWeight: stage.status === 'running' ? 700 : 500
-                }}>
-                  {stage.role === 'architect' && <Compass size={10} />}
-                  {stage.role === 'coder' && <Zap size={10} />}
-                  {stage.role === 'tester' && <CheckCircle size={10} />}
-                  <span>{stage.name}</span>
-                  <span style={{ fontSize: '8.5px', opacity: 0.8 }}>({stage.model.split(' ')[0]})</span>
-                  {stage.status === 'completed' && <span>✓</span>}
-                  {stage.status === 'running' && <span style={{ width: '4px', height: '4px', borderRadius: '50%', background: 'var(--accent)' }} />}
-                </div>
-                {idx < swarmStages.length - 1 && <span style={{ color: 'var(--text-muted)' }}>➔</span>}
-              </React.Fragment>
-            ))}
-          </div>
-        ) : (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', overflowX: 'auto' }}>
-            <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>Harness 管道:</span>
-            <span style={{ color: 'var(--accent)', fontWeight: 600 }}>📜 规则 ({activeRules.length})</span>
-            <span>➔</span>
-            <span style={{ color: '#10B981', fontWeight: 600 }}>🛡️ AST 审查</span>
-            <span>➔</span>
-            <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>🧠 {currentModel.name}</span>
-            <span>➔</span>
-            <span style={{ color: '#2563EB', fontWeight: 600 }}>🔌 MCP 总线</span>
-            <span>➔</span>
-            <span style={{ color: '#9333EA', fontWeight: 600 }}>💾 影子快照</span>
-          </div>
-        )}
+        {/* Left: Scope Breadcrumb & Fork Pill */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+          <FolderGit2 size={13} color="var(--accent)" />
+          <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
+            agent-learning <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>/ main</span>
+          </span>
 
-        <button
-          onClick={() => setPipelineMode(pipelineMode === 'swarm' ? 'harness' : 'swarm')}
-          style={{
-            background: 'transparent',
-            border: 'none',
-            color: 'var(--text-muted)',
-            fontSize: '9.5px',
-            cursor: 'pointer',
-            textDecoration: 'underline'
-          }}
-        >
-          {pipelineMode === 'swarm' ? '切换为 Harness 管道' : '切换为 Swarm 蜂群'}
-        </button>
+          {isForkedSession && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              padding: '1px 6px',
+              borderRadius: '10px',
+              background: 'rgba(147, 51, 234, 0.1)',
+              border: '1px solid rgba(147, 51, 234, 0.25)',
+              color: '#9333EA',
+              fontSize: '10px',
+              fontWeight: 600
+            }}>
+              <GitBranch size={10} />
+              <span>#fork-refactor-store</span>
+            </div>
+          )}
+        </div>
+
+        {/* Center: Ultra-Sleek Swarm Relay Indicator */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', overflowX: 'auto', padding: '0 4px' }}>
+          {pipelineMode === 'swarm' ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--accent)' }}>🐝 Swarm:</span>
+              <span style={{ padding: '1px 5px', borderRadius: '3px', background: 'rgba(22, 163, 74, 0.1)', color: '#16A34A', fontSize: '9.5px', fontWeight: 600 }}>
+                🧭 R1 ✓
+              </span>
+              <span style={{ color: 'var(--text-muted)', fontSize: '9px' }}>➔</span>
+              <span style={{ padding: '1px 5px', borderRadius: '3px', background: 'rgba(217, 107, 39, 0.15)', border: '1px solid var(--accent)', color: 'var(--accent)', fontSize: '9.5px', fontWeight: 700 }}>
+                ⚡ Sonnet (50%)
+              </span>
+              <span style={{ color: 'var(--text-muted)', fontSize: '9px' }}>➔</span>
+              <span style={{ padding: '1px 5px', borderRadius: '3px', background: 'var(--bg-base)', color: 'var(--text-muted)', fontSize: '9.5px' }}>
+                🧪 GLM
+              </span>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', color: 'var(--text-muted)' }}>
+              <span>📜 规则(3)</span>
+              <span>➔</span>
+              <span style={{ color: '#10B981' }}>🛡️ AST</span>
+              <span>➔</span>
+              <span style={{ color: 'var(--text-primary)' }}>🧠 {currentModel.name.split(' ')[0]}</span>
+              <span>➔</span>
+              <span style={{ color: '#2563EB' }}>🔌 MCP</span>
+            </div>
+          )}
+        </div>
+
+        {/* Right: Merge to Main Pill & Toggle Workbench */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+          {isForkedSession && (
+            <button
+              onClick={() => {
+                setIsForkedSession(false);
+                setChangesetToast('🔀 已将分叉分支成果合并回主会话！');
+                setTimeout(() => setChangesetToast(null), 3000);
+              }}
+              style={{
+                padding: '2px 8px',
+                borderRadius: '4px',
+                background: 'rgba(147, 51, 234, 0.12)',
+                border: '1px solid #9333EA',
+                color: '#9333EA',
+                fontSize: '10.5px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '3px'
+              }}
+              title="将当前分叉的决策与代码合并回主会话"
+            >
+              <CheckCheck size={11} />
+              <span>🔀 一键合并</span>
+            </button>
+          )}
+
+          {workMode === 'minimal' && (
+            <span style={{ padding: '1px 6px', borderRadius: '10px', background: 'rgba(16, 185, 129, 0.12)', color: '#10B981', fontSize: '9.5px', fontWeight: 600 }}>
+              🍃 -82%
+            </span>
+          )}
+
+          <button
+            onClick={onToggleWorkspace}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              padding: '2px 8px',
+              borderRadius: '4px',
+              background: rightWorkspaceOpen ? 'var(--accent)' : 'var(--bg-base)',
+              border: '1px solid var(--border-subtle)',
+              color: rightWorkspaceOpen ? '#FFF' : 'var(--text-secondary)',
+              fontSize: '10.5px',
+              fontWeight: 600,
+              cursor: 'pointer'
+            }}
+          >
+            <span>{rightWorkspaceOpen ? '收起工作台' : '打开工作台'}</span>
+          </button>
+        </div>
       </div>
 
       {/* Task Plan Breathing Capsule */}

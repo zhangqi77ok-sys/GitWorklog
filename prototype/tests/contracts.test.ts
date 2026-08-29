@@ -63,7 +63,10 @@ import {
   INITIAL_SWARM_STAGES,
   queryRepoGraphDependencies,
   maskSensitiveText,
-  unmaskSensitiveText
+  unmaskSensitiveText,
+  clampLeftPanelWidth,
+  clampWorkbenchWidth,
+  clampTerminalHeightPercent
 } from '../src/types/contracts';
 
 describe('SDD Contract - Token Telemetry & Gauge Algorithm', () => {
@@ -535,5 +538,26 @@ describe('SDD Contract - Advanced 5-Killer Features (Fork Merge, Sandbox, Swarm,
 
     const restored = unmaskSensitiveText(maskedText, mapping);
     expect(restored).toBe(raw);
+  });
+});
+
+
+describe('SDD Contract - Fluid Resizable Layout Bounds', () => {
+  it('should clamp left panel width within 180px and 420px', () => {
+    expect(clampLeftPanelWidth(100)).toBe(180);
+    expect(clampLeftPanelWidth(260)).toBe(260);
+    expect(clampLeftPanelWidth(500)).toBe(420);
+  });
+
+  it('should clamp workbench width within 320px and 65% container width', () => {
+    expect(clampWorkbenchWidth(200, 1440)).toBe(320);
+    expect(clampWorkbenchWidth(500, 1440)).toBe(500);
+    expect(clampWorkbenchWidth(1200, 1440)).toBe(1440 * 0.65);
+  });
+
+  it('should clamp terminal height percent within 20% and 80%', () => {
+    expect(clampTerminalHeightPercent(10)).toBe(20);
+    expect(clampTerminalHeightPercent(45)).toBe(45);
+    expect(clampTerminalHeightPercent(95)).toBe(80);
   });
 });
