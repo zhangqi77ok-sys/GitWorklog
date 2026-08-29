@@ -56,6 +56,8 @@ import {
 } from '../types/contracts';
 import { OptionsCard } from './OptionsCard';
 import { SemanticCommitModal } from './SemanticCommitModal';
+import { PullRequestModal } from './PullRequestModal';
+import { GitPullRequest } from 'lucide-react';
 
 interface ChatColumnProps {
   rightWorkspaceOpen: boolean;
@@ -112,6 +114,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
   const [isForkedSession, setIsForkedSession] = useState<boolean>(true);
   const [swarmStages, setSwarmStages] = useState<SwarmPipelineStage[]>(INITIAL_SWARM_STAGES);
   const [isCommitModalOpen, setIsCommitModalOpen] = useState<boolean>(false);
+  const [isPrModalOpen, setIsPrModalOpen] = useState<boolean>(false);
   const [experienceLearned, setExperienceLearned] = useState<boolean>(false);
   const [showLessonConfirm, setShowLessonConfirm] = useState<boolean>(false);
   const [lessonTitle, setLessonTitle] = useState('禁止直接 new Store 实例');
@@ -534,6 +537,29 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                         >
                           <Zap size={11} />
                           <span>📦 意图拆分</span>
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setIsPrModalOpen(true);
+                          }}
+                          style={{
+                            padding: '3px 8px',
+                            borderRadius: '3px',
+                            background: 'rgba(37, 99, 235, 0.1)',
+                            border: '1px solid rgba(37, 99, 235, 0.3)',
+                            color: '#2563EB',
+                            fontSize: '10px',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '3px'
+                          }}
+                          title="生成标准化 PR 简报并 Push"
+                        >
+                          <GitPullRequest size={11} />
+                          <span>🚀 生成 PR 简报</span>
                         </button>
                         <button
                           onClick={(e) => {
@@ -1303,6 +1329,16 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
           <span>💡 提示：按 <strong>Enter</strong> 发送，<strong>Shift+Enter</strong> 换行 · 剪贴板文件或截图支持 <strong>Ctrl+V</strong> 粘贴挂载</span>
           <span>已自动先行注入项目级三大铁律与活跃 Rule 规则</span>
         </div>
+        <PullRequestModal
+          isOpen={isPrModalOpen}
+          onClose={() => setIsPrModalOpen(false)}
+          branchName="fork-refactor-store"
+          sessionTitle="重构三栏自适应流体布局"
+          onSuccess={() => {
+            setChangesetToast('🎉 PR 创建成功并已推送到远端仓库！');
+            setTimeout(() => setChangesetToast(null), 4000);
+          }}
+        />
         <SemanticCommitModal
           isOpen={isCommitModalOpen}
           onClose={() => setIsCommitModalOpen(false)}

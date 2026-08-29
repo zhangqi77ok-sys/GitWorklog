@@ -1856,3 +1856,94 @@ export const WORKBENCH_ICON_ACTIONS: WorkbenchIconAction[] = [
     tooltipDesc: '已自动生成 4 个安全代码还原点'
   }
 ];
+
+
+// ============================================================================
+// 16. PULL REQUEST DRAFT & RULES MEMORY COCKPIT CONTRACTS
+// ============================================================================
+
+export interface PullRequestDraftPayload {
+  branchName: string;
+  targetBranch: string;
+  title: string;
+  motivation: string;
+  decisionLog: string;
+  changedFilesCount: number;
+  ciPassProof: {
+    typescript: string;
+    lint: string;
+    coverage: string;
+  };
+}
+
+export function generatePullRequestDraft(
+  branchName: string,
+  sessionTitle: string,
+  chosenDecision: string
+): PullRequestDraftPayload {
+  return {
+    branchName,
+    targetBranch: 'main',
+    title: `feat(core): ${sessionTitle}`,
+    motivation: '为系统状态管理提供高内聚扩展支持，并补充前置 SDD 契约与单元测试保障。',
+    decisionLog: `根据人机协同决策，采纳架构选型：${chosenDecision}`,
+    changedFilesCount: 3,
+    ciPassProof: {
+      typescript: '0 Errors (tsc --noEmit)',
+      lint: '0 Warnings (ESLint + Prettier)',
+      coverage: '88.4% Line Coverage (Vitest Pass)'
+    }
+  };
+}
+
+export interface RulesMemoryItem {
+  id: string;
+  category: 'iron_law' | 'lesson' | 'team_rule';
+  title: string;
+  description: string;
+  sourceFile: string;
+  enabled: boolean;
+}
+
+export const MOCK_RULES_MEMORY: RulesMemoryItem[] = [
+  {
+    id: 'rule-iron-1',
+    category: 'iron_law',
+    title: '项目三大铁律 #1: 需求与原型强同步',
+    description: '有需求和原型、功能的变更，一定要同步到 PRD 和原型中。',
+    sourceFile: 'AGENTS.md',
+    enabled: true
+  },
+  {
+    id: 'rule-iron-2',
+    category: 'iron_law',
+    title: '项目三大铁律 #2: 需求未澄清严禁开发',
+    description: '没有进行需求澄清和原型设计，不准进行任何代码编写。',
+    sourceFile: 'AGENTS.md',
+    enabled: true
+  },
+  {
+    id: 'rule-iron-3',
+    category: 'iron_law',
+    title: '项目三大铁律 #3: 功能原型必须有交互页面',
+    description: '设计到的功能原型必须具备真实可点击的高保真交互页面。',
+    sourceFile: 'AGENTS.md',
+    enabled: true
+  },
+  {
+    id: 'rule-lesson-1',
+    category: 'lesson',
+    title: '经验沉淀: 禁止直接 new Store 实例',
+    description: '必须通过 StoreFactory 单例方法获取全局 Store，保持单状态源。',
+    sourceFile: '.codemind/lessons.md',
+    enabled: true
+  },
+  {
+    id: 'rule-team-1',
+    category: 'team_rule',
+    title: '团队规范: SDD/TDD 契约前置验证',
+    description: '先定义契约纯函数与测试断言，通过后方可注入 UI 组件。',
+    sourceFile: '.cursorrules',
+    enabled: true
+  }
+];

@@ -75,7 +75,9 @@ import {
   clampLeftPanelWithCollapse,
   createDiffNavigationTarget,
   clampChangesetHeight,
-  WORKBENCH_ICON_ACTIONS
+  WORKBENCH_ICON_ACTIONS,
+  generatePullRequestDraft,
+  MOCK_RULES_MEMORY
 } from '../src/types/contracts';
 
 describe('SDD Contract - Token Telemetry & Gauge Algorithm', () => {
@@ -655,5 +657,22 @@ describe('SDD Contract - Workbench Icon-Only Toolbar', () => {
     const blast = WORKBENCH_ICON_ACTIONS.find(a => a.id === 'blast-radius');
     expect(blast?.tooltipTitle).toContain('波及分析');
     expect(blast?.badgeText).toBe('3');
+  });
+});
+
+
+describe('SDD Contract - Pull Request Draft & Rules Cockpit', () => {
+  it('should generate a comprehensive structured PR draft', () => {
+    const draft = generatePullRequestDraft('fork-refactor-store', '重构三栏自适应流体布局', '扩展现有全局 Store');
+    expect(draft.targetBranch).toBe('main');
+    expect(draft.title).toContain('重构三栏自适应流体布局');
+    expect(draft.decisionLog).toContain('扩展现有全局 Store');
+    expect(draft.ciPassProof.coverage).toBe('88.4% Line Coverage (Vitest Pass)');
+  });
+
+  it('should contain initial rules memory items including iron laws and lessons', () => {
+    expect(MOCK_RULES_MEMORY.length).toBeGreaterThanOrEqual(4);
+    const ironLaw = MOCK_RULES_MEMORY.find(r => r.category === 'iron_law');
+    expect(ironLaw?.title).toContain('三大铁律');
   });
 });

@@ -2,6 +2,7 @@ import { FileExplorerPanel } from './panels/FileExplorerPanel';
 import { GlobalSearchPanel } from './panels/GlobalSearchPanel';
 import { GitSnapshotsPanel } from './panels/GitSnapshotsPanel';
 import { GatewayCockpitPanel } from './panels/GatewayCockpitPanel';
+import { RulesMemoryPanel } from './panels/RulesMemoryPanel';
 import { SettingsPanel } from './panels/SettingsPanel';
 import React, { useState, useRef } from 'react';
 import {
@@ -175,6 +176,14 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
           projects={projects}
           onSelectProject={handleSelectProject}
         />
+      </div>
+    );
+  }
+
+  if (activeNav === 'rules') {
+    return (
+      <div style={{ width: `${width}px`, minWidth: '220px', maxWidth: '380px', height: 'calc(100vh - 38px)', background: 'var(--bg-base)', borderRight: '1px solid var(--border-subtle)' }}>
+        <RulesMemoryPanel />
       </div>
     );
   }

@@ -475,6 +475,51 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
                 <span style={{ color: '#9333EA', fontWeight: 600 }}>export type</span> <span style={{ color: '#0284C7' }}>WorkMode</span> = <span style={{ color: '#16A34A' }}>'act'</span> | <span style={{ color: '#16A34A' }}>'plan'</span> | <span style={{ color: '#16A34A' }}>'minimal'</span> | <span style={{ color: '#16A34A' }}>'creator'</span>;
               </div>
               <div>&nbsp;</div>
+              {/* Floating Selection Quick Bar */}
+              <div style={{
+                margin: '4px 0 6px 0',
+                padding: '2px 8px',
+                borderRadius: '16px',
+                background: '#18181B',
+                border: '1px solid var(--accent)',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                fontSize: '10px',
+                color: '#FFF',
+                zIndex: 10
+              }}>
+                <span style={{ color: 'var(--accent)', fontWeight: 600 }}>Ln 5-11 选中:</span>
+                <button
+                  onClick={() => {
+                    setInlineToast('⚡ 已针对 SessionItem 接口生成 AST 优化重构方案');
+                    setTimeout(() => setInlineToast(null), 3000);
+                  }}
+                  style={{ background: 'transparent', border: 'none', color: '#60A5FA', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '2px', padding: 0 }}
+                >
+                  <Sparkles size={10} /> 智能重构
+                </button>
+                <button
+                  onClick={() => {
+                    setInlineToast('🧪 已生成 SessionItem 契约边界模糊测试用例');
+                    setTimeout(() => setInlineToast(null), 3000);
+                  }}
+                  style={{ background: 'transparent', border: 'none', color: '#4ADE80', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '2px', padding: 0 }}
+                >
+                  <ShieldCheck size={10} /> 补全单测
+                </button>
+                <button
+                  onClick={() => {
+                    setInlineToast('💬 已将 SessionItem 选区注入左侧对话流');
+                    setTimeout(() => setInlineToast(null), 3000);
+                  }}
+                  style={{ background: 'transparent', border: 'none', color: '#FCD34D', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '2px', padding: 0 }}
+                >
+                  💬 追问
+                </button>
+              </div>
+
               <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <span style={{ color: 'var(--text-muted)', fontSize: '9px', userSelect: 'none' }}>⌄</span>
                 <span style={{ color: '#9333EA', fontWeight: 600 }}>export interface</span> <span style={{ color: '#0284C7' }}>SessionItem</span> &#123;
