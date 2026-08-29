@@ -847,3 +847,35 @@ To github.com:zhangqi77ok-sys/agent-learning.git
 ### 4.43.2 交互与切换准则
 - 在 **设置中心 (SettingsModal) ➔ 模型渠道 ➔ OpenAI 配置项** 中，提供双协议即时切换单选组件；
 - 切换后即时持久化到本地 `storageEngine`，并在下一次请求时按选定端点自动组装 Payload。
+
+
+---
+
+## 4.44 多智能体 Swarm 流水线协同规约 (Multi-Agent Swarm Pipeline)
+
+### 4.44.1 角色定义与分工闭环
+生产级复杂任务由 4 个专业 Agent 组成的 Swarm 流水线协同完成：
+1. **Planner (架构推演者 - DeepSeek-R1)**：
+   - 负责长链条任务拆解、AST 依赖扫描与多方案利弊权衡；
+2. **Coder (精准实现者 - Claude 3.5 Sonnet)**：
+   - 负责生成无损的 Unified Chunk Patch 代码补丁；
+3. **Verifier (质量审查者 - Qwen 2.5 Coder)**：
+   - 负责运行 AST 语法检验与 SDD 契约单元测试，实行一票否决权；
+4. **Scribe (经验沉淀者 - Claude 3.5 Haiku)**：
+   - 负责提取本次编码中的 Lessons 并增量固化至 `.codemind/lessons.md`。
+
+### 4.44.2 状态流转与熔断机制
+- 流程：`Planner ➔ Coder ➔ Verifier ➔ Scribe`；
+- **熔断机制**：当 Verifier 驳回超过 2 轮时，自动暂停流水线并切换为人工决策挂起态，防止多 Agent 无休止振荡。
+
+---
+
+## 4.45 AST 接口骨架上下文压缩与离线安全脱敏盾规约 (Context Compressor & Security Shield)
+
+### 4.45.1 AST 接口骨架智能裁剪 (`contextCompressor.ts`)
+- **原理**：对当前非直接编辑的代码文件，自动剥离函数体、循环体等实现细节，仅提取 `export type`, `export interface`, `function signature` 骨架；
+- **收益**：将动辄 50,000+ tokens 的工程上下文压缩至 4,000 tokens 内，节省 85%+ 显存与推理成本。
+
+### 4.45.2 离线敏感凭据与 PII 脱敏盾 (`securityShield.ts`)
+- **脱敏范围**：OpenAI/Anthropic API Keys (`sk-...`)、GitHub Token (`ghp_...`)、数据库密码连接串 (`postgres://user:pass@host`)、手机号与邮箱；
+- **双向透明还原**：发送给大模型时替换为唯一安全锚点 `<REDACTED_SECRET_n>`，大模型输出返回后在本地内存透明替换还原。

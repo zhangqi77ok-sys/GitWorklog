@@ -2265,3 +2265,96 @@ export function buildOpenAiRequestPayload(
     }
   };
 }
+
+
+// ============================================================================
+// 21. STAGE 3: MULTI-AGENT SWARM & CONTEXT COMPRESSOR CONTRACTS
+// ============================================================================
+
+export type SwarmRoleType = 'planner' | 'coder' | 'verifier' | 'scribe';
+
+export interface SwarmAgentState {
+  role: SwarmRoleType;
+  name: string;
+  model: string;
+  status: 'idle' | 'running' | 'completed' | 'blocked';
+  progress: number;
+  outputSummary?: string;
+}
+
+export const INITIAL_SWARM_AGENTS: SwarmAgentState[] = [
+  { role: 'planner', name: '架构推演者', model: 'DeepSeek-R1', status: 'completed', progress: 100, outputSummary: '完成 AST 依赖拓扑扫描与 4 步重构排期' },
+  { role: 'coder', name: '精准实现者', model: 'Claude 3.5 Sonnet', status: 'running', progress: 50, outputSummary: '正在生成 Unified Chunk Patch 补丁' },
+  { role: 'verifier', name: '质量审查者', model: 'Qwen 2.5 Coder', status: 'idle', progress: 0 },
+  { role: 'scribe', name: '经验沉淀者', model: 'Claude 3.5 Haiku', status: 'idle', progress: 0 }
+];
+
+export function extractAstSkeleton(fullCode: string): string {
+  const lines = fullCode.split('\n');
+  const skeletonLines: string[] = [];
+  let insideFunction = false;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith('export interface') || trimmed.startsWith('export type') || trimmed.startsWith('export const') || trimmed.startsWith('//')) {
+      skeletonLines.push(line);
+      continue;
+    }
+    if (trimmed.startsWith('export function') || trimmed.startsWith('function ')) {
+      // Keep signature, truncate body
+      skeletonLines.push(`${line.split('{')[0].trim()} { /* SKELETON_TRUNCATED */ }`);
+      continue;
+    }
+    if (trimmed.startsWith('id:') || trimmed.startsWith('name:') || trimmed.startsWith('title:') || trimmed === '}') {
+      skeletonLines.push(line);
+    }
+  }
+
+  return skeletonLines.join('\n');
+}
+
+export interface RedactionResult {
+  redactedText: string;
+  redactedSecretsCount: number;
+  secretMap: Record<string, string>;
+}
+
+export function redactSensitivePii(rawText: string): RedactionResult {
+  const secretMap: Record<string, string> = {};
+  let count = 0;
+
+  let result = rawText.replace(/(sk-[a-zA-Z0-9_-]{20,})/g, match => {
+    count++;
+    const key = `<REDACTED_APIKEY_${count}>`;
+    secretMap[key] = match;
+    return key;
+  });
+
+  result = result.replace(/(ghp_[a-zA-Z0-9]{30,})/g, match => {
+    count++;
+    const key = `<REDACTED_GHTOKEN_${count}>`;
+    secretMap[key] = match;
+    return key;
+  });
+
+  result = result.replace(/(postgres:\/\/[^:]+:)([^@]+)(@)/g, (_match, prefix, pass, suffix) => {
+    count++;
+    const key = `<REDACTED_DBPASS_${count}>`;
+    secretMap[key] = pass;
+    return `${prefix}${key}${suffix}`;
+  });
+
+  return {
+    redactedText: result,
+    redactedSecretsCount: count,
+    secretMap
+  };
+}
+
+export function unredactSensitivePii(redactedText: string, secretMap: Record<string, string>): string {
+  let restored = redactedText;
+  for (const [placeholder, original] of Object.entries(secretMap)) {
+    restored = restored.split(placeholder).join(original);
+  }
+  return restored;
+}

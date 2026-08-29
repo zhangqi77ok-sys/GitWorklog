@@ -856,3 +856,60 @@ describe('OpenAI Protocol Selection - Responses API vs Chat Completions', () => 
     expect(payload.body.messages).toEqual([{ role: 'user', content: '重构 Store 契约' }]);
   });
 });
+
+
+import { extractAstSkeleton, redactSensitivePii, unredactSensitivePii, INITIAL_SWARM_AGENTS } from '../src/types/contracts';
+import { defaultSwarmManager } from '../src/services/swarmPipeline';
+import { defaultContextCompressor } from '../src/services/contextCompressor';
+
+describe('Stage 3 - Multi-Agent Swarm Pipeline Management', () => {
+  it('should initialize 4 swarm agent roles correctly', () => {
+    expect(INITIAL_SWARM_AGENTS.length).toBe(4);
+    expect(INITIAL_SWARM_AGENTS[0].role).toBe('planner');
+    expect(INITIAL_SWARM_AGENTS[1].role).toBe('coder');
+    expect(INITIAL_SWARM_AGENTS[2].role).toBe('verifier');
+    expect(INITIAL_SWARM_AGENTS[3].role).toBe('scribe');
+  });
+
+  it('should advance swarm stages sequentially', () => {
+    const agents = defaultSwarmManager.advanceStage();
+    expect(agents[1].status).toBe('completed');
+    expect(agents[2].status).toBe('running');
+  });
+});
+
+describe('Stage 3 - AST Context Skeleton Compressor', () => {
+  it('should extract AST interface and types while pruning implementation body', () => {
+    const fullCode = `export interface User {\n  id: string;\n  name: string;\n}\n\nexport function processUserData(u: User) {\n  const x = 100;\n  for(let i=0; i<10; i++) {\n    console.log(i);\n  }\n  return u.name;\n}`;
+    const skeleton = extractAstSkeleton(fullCode);
+    expect(skeleton).toContain('export interface User');
+    expect(skeleton).toContain('id: string;');
+    expect(skeleton).toContain('/* SKELETON_TRUNCATED */');
+    expect(skeleton).not.toContain('console.log(i)');
+  });
+
+  it('should calculate Token saving percentage correctly', () => {
+    const files = [
+      { path: 'test.ts', content: 'export interface Cart { id: string; }\nexport function run() { let a = 1; let b = 2; let c = 3; return a+b+c; }' }
+    ];
+    const res = defaultContextCompressor.compressFiles(files);
+    expect(res.savingPercentage).toBeGreaterThanOrEqual(0);
+    expect(res.compressedPrompt).toContain('SKELETON_TRUNCATED');
+  });
+});
+
+describe('Stage 3 - Offline Security Shield & PII Redactor', () => {
+  it('should mask API Keys and GitHub tokens into secure placeholders', () => {
+    const rawPrompt = '连接数据库使用 postgres://admin:secret12345@db.internal:5432/main，秘钥是 sk-proj-1234567890abcdef1234567890 和 ghp_12345678901234567890123456789012';
+    const result = redactSensitivePii(rawPrompt);
+    expect(result.redactedSecretsCount).toBe(3);
+    expect(result.redactedText).toContain('<REDACTED_DBPASS_');
+    expect(result.redactedText).toContain('<REDACTED_APIKEY_');
+    expect(result.redactedText).toContain('<REDACTED_GHTOKEN_');
+    expect(result.redactedText).not.toContain('secret12345');
+    expect(result.redactedText).not.toContain('sk-proj-');
+
+    const restored = unredactSensitivePii(result.redactedText, result.secretMap);
+    expect(restored).toBe(rawPrompt);
+  });
+});
