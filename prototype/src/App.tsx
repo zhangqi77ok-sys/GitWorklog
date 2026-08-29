@@ -112,8 +112,30 @@ export const App: React.FC = () => {
   });
   const [rightWorkspaceOpen, setRightWorkspaceOpen] = useState<boolean>(false);
   const [workMode, setWorkMode] = useState<WorkMode>('act');
+  const [sessionModelMap, setSessionModelMap] = useState<Record<string, string>>(() => {
+    try {
+      const raw = localStorage.getItem('codemind_session_models_map');
+      return raw ? JSON.parse(raw) : {};
+    } catch (e) {
+      return {};
+    }
+  });
+
   const [currentModel, setCurrentModel] = useState<AIModelOption>(() => {
     const all = getAllAvailableModels();
+    let savedId = '';
+    try {
+      const raw = localStorage.getItem('codemind_session_models_map');
+      const map = raw ? JSON.parse(raw) : {};
+      const initialSessions = loadSavedSessions();
+      const initialSessionId = initialSessions[0]?.id || 'session-1';
+      savedId = map[initialSessionId] || localStorage.getItem('codemind_current_model_id') || '';
+    } catch (e) {}
+
+    if (savedId) {
+      const found = all.find((m: AIModelOption) => m.id === savedId);
+      if (found) return found;
+    }
     return all.find((m: AIModelOption) => m.id === 'mimo-v2.5-free') || all[0] || AVAILABLE_MODELS[0];
   });
   const [permissionPolicy, setPermissionPolicy] = useState<PermissionPolicy>('autonomous_agent');
@@ -127,36 +149,42 @@ export const App: React.FC = () => {
   const [activeDiffTarget, setActiveDiffTarget] = useState<DiffNavigationTarget | null>(null);
   const [activeFile, setActiveFile] = useState<{ path: string; name: string } | null>(null);
 
-  // Global Drag Listeners
+  // Global Drag Listeners for Left & Right Panels
   React.useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (isDraggingLeft) {
-        const snapped = clampLeftPanelWithCollapse(e.clientX - 44);
-        if (snapped === 0) {
+        const rawW = e.clientX - 44;
+        if (rawW < 130) {
           setIsLeftDrawerCollapsed(true);
           setLeftPanelWidth(260);
         } else {
           setIsLeftDrawerCollapsed(false);
-          setLeftPanelWidth(snapped);
+          setLeftPanelWidth(Math.min(520, Math.max(180, rawW)));
         }
       } else if (isDraggingRight) {
         const newWbWidth = window.innerWidth - e.clientX;
-        setWorkbenchWidth(clampWorkbenchWidth(newWbWidth, window.innerWidth));
+        setWorkbenchWidth(Math.min(window.innerWidth - 320, Math.max(300, newWbWidth)));
       }
     };
 
     const handleMouseUp = () => {
       setIsDraggingLeft(false);
       setIsDraggingRight(false);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
     };
 
     if (isDraggingLeft || isDraggingRight) {
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
       window.addEventListener('mousemove', handleMouseMove);
       window.addEventListener('mouseup', handleMouseUp);
     }
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
     };
   }, [isDraggingLeft, isDraggingRight]);
 
@@ -920,28 +948,32 @@ Tcode 已通过宿主磁盘与终端桥接将工程提供给你。` : '当前处
           />
         )}
 
-        {/* Left Divider (Draggable, when not collapsed) */}
+        {/* Left Divider (Draggable Hit-Area, 10px wide) */}
         {!isLeftDrawerCollapsed && (
           <div
-            onMouseDown={() => setIsDraggingLeft(true)}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              setIsDraggingLeft(true);
+            }}
             onDoubleClick={() => setIsLeftDrawerCollapsed(true)}
-            title="拖拽调节宽度，双击一键折叠 (Ctrl+B)"
+            title="拖拽调节侧边栏宽度，双击一键折叠 (Ctrl+B)"
             style={{
-              width: '4px',
+              width: '10px',
+              marginLeft: '-5px',
+              marginRight: '-5px',
               cursor: 'col-resize',
-              background: isDraggingLeft ? 'var(--accent)' : 'transparent',
-              zIndex: 40,
-              transition: 'background 0.15s ease',
-              position: 'relative'
+              zIndex: 90,
+              position: 'relative',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
             }}
           >
             <div style={{
-              position: 'absolute',
-              top: 0,
-              bottom: 0,
-              left: '1px',
-              width: '1px',
-              background: 'var(--border-subtle)'
+              width: '2px',
+              height: '100%',
+              background: isDraggingLeft ? 'var(--accent)' : 'transparent',
+              transition: 'background 0.15s ease'
             }} />
           </div>
         )}
@@ -977,28 +1009,32 @@ Tcode 已通过宿主磁盘与终端桥接将工程提供给你。` : '当前处
           }}
         />
 
-        {/* Right Divider (Draggable, when workbench open) */}
+        {/* Right Divider (Draggable Hit-Area, 10px wide) */}
         {rightWorkspaceOpen && (
           <div
-            onMouseDown={() => setIsDraggingRight(true)}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              setIsDraggingRight(true);
+            }}
             onDoubleClick={() => setWorkbenchWidth(560)}
-            title="双击恢复默认宽度，拖拽调节工作台宽度"
+            title="拖拽调节右侧工作台宽度，双击恢复默认宽度"
             style={{
-              width: '4px',
+              width: '10px',
+              marginLeft: '-5px',
+              marginRight: '-5px',
               cursor: 'col-resize',
-              background: isDraggingRight ? 'var(--accent)' : 'transparent',
-              zIndex: 40,
-              transition: 'background 0.15s ease',
-              position: 'relative'
+              zIndex: 90,
+              position: 'relative',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
             }}
           >
             <div style={{
-              position: 'absolute',
-              top: 0,
-              bottom: 0,
-              left: '1px',
-              width: '1px',
-              background: 'var(--border-subtle)'
+              width: '2px',
+              height: '100%',
+              background: isDraggingRight ? 'var(--accent)' : 'transparent',
+              transition: 'background 0.15s ease'
             }} />
           </div>
         )}
@@ -1014,6 +1050,20 @@ Tcode 已通过宿主磁盘与终端桥接将工程提供给你。` : '当前处
           </div>
         )}
       </div>
+
+      {/* Transparent Global Drag Overlay during layout resizing */}
+      {(isDraggingLeft || isDraggingRight) && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          zIndex: 99999,
+          cursor: 'col-resize',
+          userSelect: 'none'
+        }} />
+      )}
 
       {/* Global Command Hub & Quick File Switcher (Ctrl+P / Ctrl+Shift+P) */}
       <CommandPaletteModal

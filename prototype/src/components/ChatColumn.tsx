@@ -357,20 +357,26 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
         if (container) {
           const rect = container.getBoundingClientRect();
           const newH = e.clientY - rect.top;
-          setChangesetHeight(clampChangesetHeight(newH));
+          setChangesetHeight(Math.min(480, Math.max(80, newH)));
         }
       }
     };
     const handleChangesetUp = () => {
       setIsDraggingChangesetHeight(false);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
     };
     if (isDraggingChangesetHeight) {
+      document.body.style.cursor = 'row-resize';
+      document.body.style.userSelect = 'none';
       window.addEventListener('mousemove', handleChangesetMove);
       window.addEventListener('mouseup', handleChangesetUp);
     }
     return () => {
       window.removeEventListener('mousemove', handleChangesetMove);
       window.removeEventListener('mouseup', handleChangesetUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
     };
   }, [isDraggingChangesetHeight]);
 
