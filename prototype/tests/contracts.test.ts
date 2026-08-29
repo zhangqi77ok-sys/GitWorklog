@@ -7,6 +7,8 @@ import {
   removeTagFromSession,
   renameSession,
   addProjectToWorkspace,
+  AVAILABLE_MODELS,
+  findModelById,
   removeProjectFromWorkspace,
   SessionItem,
   TokenStats
@@ -83,5 +85,25 @@ describe('SDD Contract - System Directory Selection & Workspace', () => {
     const remaining = removeProjectFromWorkspace(initialProjects, 'proj-1');
     expect(remaining.length).toBe(1);
     expect(remaining[0].id).toBe('proj-2');
+  });
+});
+
+
+describe('SDD Contract - AI Model Registry & Dynamic Switching', () => {
+  it('should list multiple providers including Claude, DeepSeek, and Local Ollama', () => {
+    expect(AVAILABLE_MODELS.length).toBeGreaterThanOrEqual(4);
+    const providers = AVAILABLE_MODELS.map(m => m.provider);
+    expect(providers).toContain('Anthropic');
+    expect(providers).toContain('DeepSeek');
+    expect(providers).toContain('Local');
+  });
+
+  it('should find model by ID with fallback default', () => {
+    const deepseek = findModelById('deepseek-v3');
+    expect(deepseek.name).toBe('DeepSeek-V3');
+    expect(deepseek.provider).toBe('DeepSeek');
+
+    const fallback = findModelById('non-existent-id');
+    expect(fallback.id).toBe('claude-3-5-sonnet');
   });
 });

@@ -151,3 +151,83 @@ export function addProjectToWorkspace(
 export function removeProjectFromWorkspace(projects: ProjectGroup[], projectId: string): ProjectGroup[] {
   return projects.filter(p => p.id !== projectId);
 }
+
+
+// AI Models Contract & Registry
+export interface AIModelOption {
+  id: string;
+  name: string;
+  provider: 'Anthropic' | 'DeepSeek' | 'OpenAI' | 'Local';
+  contextLimit: number;
+  inputPricePerM: number;
+  outputPricePerM: number;
+  badge?: string;
+  description?: string;
+}
+
+export const AVAILABLE_MODELS: AIModelOption[] = [
+  {
+    id: 'claude-3-5-sonnet',
+    name: 'Claude 3.5 Sonnet',
+    provider: 'Anthropic',
+    contextLimit: 200000,
+    inputPricePerM: 3.0,
+    outputPricePerM: 15.0,
+    badge: '主力旗舰',
+    description: '综合编码与上下文架构最强'
+  },
+  {
+    id: 'claude-3-7-sonnet',
+    name: 'Claude 3.7 Sonnet',
+    provider: 'Anthropic',
+    contextLimit: 200000,
+    inputPricePerM: 3.0,
+    outputPricePerM: 15.0,
+    badge: 'Thinking',
+    description: '深度推理与混合思考模型'
+  },
+  {
+    id: 'deepseek-v3',
+    name: 'DeepSeek-V3',
+    provider: 'DeepSeek',
+    contextLimit: 128000,
+    inputPricePerM: 0.14,
+    outputPricePerM: 0.28,
+    badge: '极致性价比',
+    description: '超低成本与毫秒级高吞吐'
+  },
+  {
+    id: 'deepseek-r1',
+    name: 'DeepSeek-R1',
+    provider: 'DeepSeek',
+    contextLimit: 128000,
+    inputPricePerM: 0.55,
+    outputPricePerM: 2.19,
+    badge: '深度思考',
+    description: '长链条逻辑推演与算法突破'
+  },
+  {
+    id: 'gpt-4o',
+    name: 'GPT-4o',
+    provider: 'OpenAI',
+    contextLimit: 128000,
+    inputPricePerM: 2.5,
+    outputPricePerM: 10.0,
+    badge: '多模态',
+    description: '综合全能型工程模型'
+  },
+  {
+    id: 'qwen2.5-coder-32b-local',
+    name: 'Qwen 2.5 Coder 32B',
+    provider: 'Local',
+    contextLimit: 32000,
+    inputPricePerM: 0,
+    outputPricePerM: 0,
+    badge: '纯离线私密',
+    description: '本地 Ollama 直连，100% 物理隔离'
+  }
+];
+
+export function findModelById(id: string): AIModelOption {
+  return AVAILABLE_MODELS.find(m => m.id === id) || AVAILABLE_MODELS[0];
+}

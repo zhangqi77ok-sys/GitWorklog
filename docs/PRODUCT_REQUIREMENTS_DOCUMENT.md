@@ -134,6 +134,25 @@
 2. **📁 工程级会话大类**：先选项目，在项目下统领全盘；常驻展示 `[ 📁 工程: agent-learning (🌿 main) ]`，统筹多文件跨模块协同；
 3. **📄 文件专精会话大类**：先选具体文件，针对单个文件开聊；常驻展示 `[ 📄 文件: src/bus/GatewayBus.ts ]`，点击瞬时在编辑器高亮联动，**立省 80% Token**！
 
+
+### 4.4 底栏模式与模型动态调度交互规范 (Mode & Model Selector System)
+1. **Plan / Act 聚合下拉弹窗按钮 (Unified Mode Selector)**：
+   - 将原先并排平铺的 Plan 和 Act 按钮**高度融合为一个单体聚合按钮**，位于输入框底栏；
+   - **默认状态为 `[ ⚡ Act 落地模式 ▾ ]`**，主色为低饱和陶土暖橙 (`#D96B27`)；
+   - 点击弹出轻量选择浮层（Mode Dropdown Popover）：
+     - `⚡ Act 落地模式 (Default)`：AI 执行修改代码、写入补丁并运行治具自纠错；
+     - `📐 Plan 规划模式`：AI 仅深度分析工程 AST、拆解执行计划，严格不修改任何实际代码；
+   - 切换后按钮文本即时更新，输入框提示词与上下文策略自动联动自适应。
+
+2. **模型动态选择与秒级热切按钮 (Model Switcher Cockpit)**：
+   - 输入框底栏常驻模型选择按钮，如 `[ 🧠 Claude 3.5 Sonnet ▾ ]`；
+   - 点击弹出高保真多厂商模型矩阵选择窗，包含：
+     - **Anthropic**: `Claude 3.7 Sonnet (Thinking)`, `Claude 3.5 Sonnet`
+     - **DeepSeek**: `DeepSeek-R1 (Thinking)`, `DeepSeek-V3`
+     - **OpenAI**: `GPT-4o`, `o3-mini`
+     - **Local / Ollama**: `Qwen 2.5 Coder 32B (Local)`, `DeepSeek-Coder 7B`
+   - **秒级热切联动**：用户点击任一模型，无需重启会话，GatewayBus 自动切换对应子线插槽，标题栏 Token 计费单价与上下文最大窗口尺寸（`contextMaxTokens`）即时无感联动更新！
+
 ### 4.3 界面导航与常驻两级面包屑
 - **左侧面板三段式分流器**：`[ 🌐 全局 (3) ] | [ 📁 工程 (12) ] | [ 📄 文件 (5) ]`，按大类清爽过滤；
 - **对话区顶部两级面包屑**：

@@ -1,6 +1,26 @@
 import React, { useState } from 'react';
-import { Send, Shield, Zap, RefreshCw, ChevronDown, ChevronUp, CheckCircle, Clock } from 'lucide-react';
-import { SessionItem, ChatMessage, WorkMode, PermissionPolicy, AskOptionsPayload } from '../types/contracts';
+import {
+  Send,
+  Shield,
+  Zap,
+  ChevronDown,
+  ChevronUp,
+  CheckCircle,
+  Clock,
+  Sparkles,
+  Cpu,
+  Check,
+  Compass,
+  FileCode
+} from 'lucide-react';
+import {
+  SessionItem,
+  ChatMessage,
+  WorkMode,
+  PermissionPolicy,
+  AIModelOption,
+  AVAILABLE_MODELS
+} from '../types/contracts';
 import { OptionsCard } from './OptionsCard';
 
 interface ChatColumnProps {
@@ -8,6 +28,8 @@ interface ChatColumnProps {
   messages: ChatMessage[];
   workMode: WorkMode;
   setWorkMode: (mode: WorkMode) => void;
+  currentModel: AIModelOption;
+  onSelectModel: (model: AIModelOption) => void;
   permissionPolicy: PermissionPolicy;
   setPermissionPolicy: (p: PermissionPolicy) => void;
   onSendMessage: (text: string) => void;
@@ -19,6 +41,8 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
   messages,
   workMode,
   setWorkMode,
+  currentModel,
+  onSelectModel,
   permissionPolicy,
   setPermissionPolicy,
   onSendMessage,
@@ -27,13 +51,16 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
   const [inputText, setInputText] = useState('');
   const [planExpanded, setPlanExpanded] = useState(workMode === 'plan');
 
+  // Popover states for unified mode button and model selector button
+  const [showModeMenu, setShowModeMenu] = useState(false);
+  const [showModelMenu, setShowModelMenu] = useState(false);
+
   const handleSend = () => {
     if (!inputText.trim()) return;
     onSendMessage(inputText);
     setInputText('');
   };
 
-  // Pinned Badge Info based on Tier-1
   const renderTier1Badge = () => {
     if (session.tier1 === 'global') {
       return (
@@ -95,7 +122,8 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
       background: 'var(--bg-surface-elevated)',
       borderRight: '1px solid var(--border-subtle)',
       display: 'flex',
-      flexDirection: 'column'
+      flexDirection: 'column',
+      position: 'relative'
     }}>
       {/* Pinned Scope Badge */}
       {renderTier1Badge()}
@@ -186,7 +214,6 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
               {msg.content}
             </div>
 
-            {/* Interactive OptionsCard if payload exists */}
             {msg.optionsPayload && (
               <OptionsCard
                 payload={msg.optionsPayload}
@@ -197,83 +224,256 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
         ))}
       </div>
 
-      {/* Mode Switch & Bottom Toolbar */}
+      {/* Bottom Controls & Input Area */}
       <div style={{
         padding: '8px 12px',
         borderTop: '1px solid var(--border-subtle)',
-        background: 'var(--bg-surface)'
+        background: 'var(--bg-surface)',
+        position: 'relative'
       }}>
-        {/* Controls capsule row */}
+        {/* ========================================================= */}
+        {/* 1. TOP TOOLBAR: Fused Mode Selector + Model Switcher + Perm */}
+        {/* ========================================================= */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-          {/* Plan vs Act Toggle */}
-          <div style={{
-            display: 'flex',
-            background: 'var(--bg-base)',
-            borderRadius: '6px',
-            border: '1px solid var(--border-subtle)',
-            padding: '2px',
-            fontSize: '11px'
-          }}>
-            <button
-              onClick={() => setWorkMode('plan')}
-              style={{
-                padding: '3px 8px',
-                border: 'none',
-                borderRadius: '4px',
-                background: workMode === 'plan' ? 'var(--accent)' : 'transparent',
-                color: workMode === 'plan' ? '#FFF' : 'var(--text-secondary)',
-                fontWeight: workMode === 'plan' ? 600 : 400,
-                cursor: 'pointer'
-              }}
-            >
-              📐 Plan 规划模式
-            </button>
-            <button
-              onClick={() => setWorkMode('act')}
-              style={{
-                padding: '3px 8px',
-                border: 'none',
-                borderRadius: '4px',
-                background: workMode === 'act' ? 'var(--accent)' : 'transparent',
-                color: workMode === 'act' ? '#FFF' : 'var(--text-secondary)',
-                fontWeight: workMode === 'act' ? 600 : 400,
-                cursor: 'pointer'
-              }}
-            >
-              ⚡ Act 落地模式
-            </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', position: 'relative' }}>
+
+            {/* 1.1 Fused Mode Button (Default Act, Popover on click) */}
+            <div style={{ position: 'relative' }}>
+              <button
+                onClick={() => {
+                  setShowModeMenu(!showModeMenu);
+                  setShowModelMenu(false);
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  padding: '3px 8px',
+                  borderRadius: '4px',
+                  background: workMode === 'act' ? 'var(--accent)' : '#6366F1',
+                  color: '#FFF',
+                  border: 'none',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                }}
+              >
+                {workMode === 'act' ? <Zap size={12} /> : <Compass size={12} />}
+                <span>{workMode === 'act' ? '⚡ Act 落地模式' : '📐 Plan 规划模式'}</span>
+                <ChevronDown size={12} />
+              </button>
+
+              {/* Mode Selection Popover Dropdown */}
+              {showModeMenu && (
+                <div style={{
+                  position: 'absolute',
+                  bottom: '30px',
+                  left: '0',
+                  width: '240px',
+                  background: 'var(--bg-surface-elevated)',
+                  border: '1px solid var(--border-strong)',
+                  borderRadius: '6px',
+                  boxShadow: '0 8px 24px rgba(0,0,0,0.14)',
+                  padding: '6px',
+                  zIndex: 100
+                }}>
+                  <div style={{ fontSize: '10px', color: 'var(--text-muted)', padding: '2px 6px', fontWeight: 600 }}>
+                    选择智能体执行策略
+                  </div>
+                  {/* Act Option (Default) */}
+                  <div
+                    onClick={() => {
+                      setWorkMode('act');
+                      setShowModeMenu(false);
+                    }}
+                    style={{
+                      padding: '6px 8px',
+                      borderRadius: '4px',
+                      background: workMode === 'act' ? 'var(--accent-subtle)' : 'transparent',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: '6px',
+                      marginBottom: '2px'
+                    }}
+                  >
+                    <Zap size={14} color="var(--accent)" style={{ marginTop: '2px' }} />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontWeight: 600, fontSize: '11px', color: 'var(--accent)' }}>⚡ Act 落地模式</span>
+                        <span style={{ fontSize: '9px', background: 'rgba(217, 107, 39, 0.15)', color: 'var(--accent)', padding: '0 4px', borderRadius: '3px' }}>默认</span>
+                      </div>
+                      <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>直接修改代码、落盘补丁并执行自动化测试治具验证</div>
+                    </div>
+                    {workMode === 'act' && <Check size={12} color="var(--accent)" style={{ marginTop: '2px' }} />}
+                  </div>
+
+                  {/* Plan Option */}
+                  <div
+                    onClick={() => {
+                      setWorkMode('plan');
+                      setShowModeMenu(false);
+                    }}
+                    style={{
+                      padding: '6px 8px',
+                      borderRadius: '4px',
+                      background: workMode === 'plan' ? 'rgba(99, 102, 241, 0.1)' : 'transparent',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: '6px'
+                    }}
+                  >
+                    <Compass size={14} color="#6366F1" style={{ marginTop: '2px' }} />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 600, fontSize: '11px', color: '#6366F1' }}>📐 Plan 规划模式</div>
+                      <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>深度解析工程架构并制定计划，严禁修改任何代码</div>
+                    </div>
+                    {workMode === 'plan' && <Check size={12} color="#6366F1" style={{ marginTop: '2px' }} />}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* 1.2 Model Switcher Button (Click to popover, Auto switch) */}
+            <div style={{ position: 'relative' }}>
+              <button
+                onClick={() => {
+                  setShowModelMenu(!showModelMenu);
+                  setShowModeMenu(false);
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  padding: '3px 8px',
+                  borderRadius: '4px',
+                  background: 'var(--bg-base)',
+                  color: 'var(--text-primary)',
+                  border: '1px solid var(--border-subtle)',
+                  fontSize: '11px',
+                  fontWeight: 500,
+                  cursor: 'pointer'
+                }}
+              >
+                <Cpu size={12} color="var(--accent)" />
+                <span>{currentModel.name}</span>
+                <span style={{ fontSize: '9px', color: 'var(--accent)', background: 'var(--accent-subtle)', padding: '0 3px', borderRadius: '2px' }}>
+                  {currentModel.badge || currentModel.provider}
+                </span>
+                <ChevronDown size={11} color="var(--text-muted)" />
+              </button>
+
+              {/* Model Switcher Popover Dropdown */}
+              {showModelMenu && (
+                <div style={{
+                  position: 'absolute',
+                  bottom: '30px',
+                  left: '0',
+                  width: '280px',
+                  background: 'var(--bg-surface-elevated)',
+                  border: '1px solid var(--border-strong)',
+                  borderRadius: '6px',
+                  boxShadow: '0 8px 24px rgba(0,0,0,0.14)',
+                  padding: '6px',
+                  zIndex: 100,
+                  maxHeight: '320px',
+                  overflowY: 'auto'
+                }}>
+                  <div style={{ fontSize: '10px', color: 'var(--text-muted)', padding: '2px 6px', fontWeight: 600 }}>
+                    选择底层推理大模型 (点击自动热切)
+                  </div>
+
+                  {AVAILABLE_MODELS.map(model => {
+                    const isSelected = model.id === currentModel.id;
+                    return (
+                      <div
+                        key={model.id}
+                        onClick={() => {
+                          onSelectModel(model);
+                          setShowModelMenu(false);
+                        }}
+                        style={{
+                          padding: '6px 8px',
+                          borderRadius: '4px',
+                          background: isSelected ? 'var(--accent-subtle)' : 'transparent',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          marginBottom: '2px'
+                        }}
+                      >
+                        <div style={{ flex: 1 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ fontWeight: isSelected ? 600 : 500, fontSize: '11px', color: isSelected ? 'var(--accent)' : 'var(--text-primary)' }}>
+                              {model.name}
+                            </span>
+                            {model.badge && (
+                              <span style={{
+                                fontSize: '9px',
+                                padding: '1px 4px',
+                                borderRadius: '2px',
+                                background: isSelected ? 'var(--accent)' : 'rgba(0,0,0,0.06)',
+                                color: isSelected ? '#FFF' : 'var(--text-muted)'
+                              }}>
+                                {model.badge}
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                            {model.description} · 上限 {Math.round(model.contextLimit / 1000)}k tokens
+                          </div>
+                        </div>
+                        {isSelected && <Check size={14} color="var(--accent)" />}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
           </div>
 
-          {/* Dual-Track Permission Selector */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '4px',
-            padding: '2px 8px',
-            borderRadius: '12px',
-            background: 'var(--bg-base)',
-            border: '1px solid var(--border-subtle)',
-            fontSize: '11px',
-            cursor: 'pointer'
-          }}
-          onClick={() => {
-            if (permissionPolicy === 'strict_approval') setPermissionPolicy('autonomous_agent');
-            else if (permissionPolicy === 'autonomous_agent') setPermissionPolicy('risk_adaptive');
-            else setPermissionPolicy('strict_approval');
-          }}>
+          {/* 1.3 Dual-Track Permission Pill */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              padding: '2px 8px',
+              borderRadius: '12px',
+              background: 'var(--bg-base)',
+              border: '1px solid var(--border-subtle)',
+              fontSize: '11px',
+              cursor: 'pointer'
+            }}
+            onClick={() => {
+              if (permissionPolicy === 'strict_approval') setPermissionPolicy('autonomous_agent');
+              else if (permissionPolicy === 'autonomous_agent') setPermissionPolicy('risk_adaptive');
+              else setPermissionPolicy('strict_approval');
+            }}
+          >
             <Shield size={12} color="var(--accent)" />
             <span>
-              {permissionPolicy === 'strict_approval' && '🛡️ 逐次人工审核'}
-              {permissionPolicy === 'autonomous_agent' && '🤖 智能自主决策'}
-              {permissionPolicy === 'risk_adaptive' && '⚡ 风险自适应熔断'}
+              {permissionPolicy === 'strict_approval' && '🛡️ 逐次审核'}
+              {permissionPolicy === 'autonomous_agent' && '🤖 智能自决'}
+              {permissionPolicy === 'risk_adaptive' && '⚡ 风险熔断'}
             </span>
           </div>
         </div>
 
-        {/* Input box */}
+        {/* ========================================================= */}
+        {/* 2. INPUT BOX                                              */}
+        {/* ========================================================= */}
         <div style={{ display: 'flex', gap: '8px' }}>
           <textarea
-            placeholder={workMode === 'plan' ? '输入指令，AI 将进行纯分析与架构规划（不写盘）...' : '输入需求，AI 将落地修改代码并执行测试自纠...'}
+            placeholder={
+              workMode === 'plan'
+                ? `[${currentModel.name} · Plan模式] 请输入指令，AI 将进行纯分析与架构规划（不写盘）...`
+                : `[${currentModel.name} · Act模式] 请输入需求，AI 将落地修改代码并执行测试自纠...`
+            }
             value={inputText}
             onChange={e => setInputText(e.target.value)}
             onKeyDown={e => {

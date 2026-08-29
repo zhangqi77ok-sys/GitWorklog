@@ -17,13 +17,16 @@ import {
   removeTagFromSession,
   renameSession,
   addProjectToWorkspace,
-  removeProjectFromWorkspace
+  removeProjectFromWorkspace,
+  AIModelOption,
+  AVAILABLE_MODELS
 } from './types/contracts';
 
 export const App: React.FC = () => {
   const [activeNav, setActiveNav] = useState('sessions');
   const [currentSessionId, setCurrentSessionId] = useState('session-2');
   const [workMode, setWorkMode] = useState<WorkMode>('act');
+  const [currentModel, setCurrentModel] = useState<AIModelOption>(AVAILABLE_MODELS[0]);
   const [permissionPolicy, setPermissionPolicy] = useState<PermissionPolicy>('autonomous_agent');
 
   // Multi-Project Groups
@@ -248,6 +251,24 @@ export const App: React.FC = () => {
     setProjects(prev => removeProjectFromWorkspace(prev, projectId));
   };
 
+  const handleSelectModel = (model: AIModelOption) => {
+    setCurrentModel(model);
+    // Update Token stats context window max
+    setTokenStats(prev => ({
+      ...prev,
+      contextMaxTokens: model.contextLimit
+    }));
+    // Insert system notification message in chat
+    const switchMsg: ChatMessage = {
+      id: `sys-${Date.now()}`,
+      role: 'assistant',
+      content: `✨ 模型已无缝切换至: **${model.name}** (${model.badge || model.provider}) · 上下文上限自动调整为 ${Math.round(model.contextLimit / 1000)}k tokens · 网关子线已激活`,
+      timestamp: Date.now(),
+      auditTag: '⚡ 模型热切完成'
+    };
+    setMessages(prev => [...prev, switchMsg]);
+  };
+
   const handleSendMessage = (text: string) => {
     const newMsg: ChatMessage = {
       id: `msg-${Date.now()}`,
@@ -327,6 +348,8 @@ export const App: React.FC = () => {
           messages={messages}
           workMode={workMode}
           setWorkMode={setWorkMode}
+          currentModel={currentModel}
+          onSelectModel={handleSelectModel}
           permissionPolicy={permissionPolicy}
           setPermissionPolicy={setPermissionPolicy}
           onSendMessage={handleSendMessage}
