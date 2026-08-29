@@ -188,13 +188,13 @@ export const Titlebar: React.FC<TitlebarProps> = ({
                   <span style={{ color: 'var(--status-safe)', fontWeight: 600 }}>{tokenStats.cacheHitTokens.toLocaleString()} tokens (省90%)</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--border-subtle)', paddingTop: '6px' }}>
-                  <span style={{ color: 'var(--text-secondary)' }}>当前上下文水位:</span>
+                  <span style={{ color: 'var(--text-secondary)' }}>本轮有效输入水位:</span>
                   <span>{Math.round((tokenStats.contextCurrentTokens / tokenStats.contextMaxTokens) * 100)}% ({Math.round(tokenStats.contextCurrentTokens / 1000)}k / {Math.round(tokenStats.contextMaxTokens / 1000)}k)</span>
                 </div>
                 {/* Water Level Bar */}
                 <div style={{ height: '4px', background: 'var(--border-subtle)', borderRadius: '2px', overflow: 'hidden' }}>
                   <div style={{
-                    width: `${(tokenStats.contextCurrentTokens / tokenStats.contextMaxTokens) * 100}%`,
+                    width: `${Math.min(100, (tokenStats.contextCurrentTokens / tokenStats.contextMaxTokens) * 100)}%`,
                     height: '100%',
                     background: gaugeColors[gaugeLevel]
                   }} />

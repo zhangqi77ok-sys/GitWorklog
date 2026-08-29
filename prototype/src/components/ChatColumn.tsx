@@ -98,7 +98,7 @@ import { ThinkingBlock } from './ThinkingBlock';
 import { extractThinkingFromText, SLASH_COMMANDS, SlashCommandItem, loadSavedProfile, DeveloperProfile } from '../types/contracts';
 import { GitPullRequest, RotateCcw } from 'lucide-react';
 import type { AgentAction } from '../services/agentLoop';
-import { getContextTelemetry, compressModelContext } from '../services/contextTelemetry';
+import { getContextBudget, ContextBudget, compressModelContext } from '../services/contextTelemetry';
 
 interface ChatColumnProps {
   rightWorkspaceOpen: boolean;
@@ -829,28 +829,35 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
             </button>
           )}
 
-          {/* Context Telemetry HUD Capsule (Dynamic Real LLM Feed Telemetry) */}
+          {/* Context Telemetry HUD Capsule (Industry Standard Context Budget Model) */}
           {(() => {
             const limit = currentModel?.contextLimit || 131072;
-            const telemetry = getContextTelemetry(messages, limit);
+            const budget = getContextBudget(messages, limit);
             
-            // Calculate real breakdown percentages
-            const totalPercent = telemetry.usagePercent;
-            const convTokens = telemetry.conversationTokens;
-            const toolTokens = telemetry.toolsTokens;
-            const sysTokens = telemetry.systemTokens;
-            const usedTokens = Math.max(1, telemetry.usedTokens);
+            const totalPercent = budget.usagePercent;
+            const convRatio = budget.breakdown.convRatio;
+            const toolRatio = budget.breakdown.toolRatio;
+            const sysRatio = budget.breakdown.sysRatio;
 
-            const convRatio = Math.round((convTokens / usedTokens) * 100);
-            const toolRatio = Math.round((toolTokens / usedTokens) * 100);
-            const sysRatio = Math.max(1, 100 - convRatio - toolRatio);
+            const statusColor = totalPercent >= 100 ? '#DC2626' : totalPercent >= 95 ? '#EA580C' : totalPercent >= 85 ? '#D97706' : '#16A34A';
+            const statusLabel = totalPercent >= 100 ? '已达上限 (已暂停)' : totalPercent >= 95 ? '强制压缩' : totalPercent >= 85 ? '自动压缩' : totalPercent >= 70 ? '接近上限' : '容量充裕';
 
-            const statusColor = totalPercent >= 95 ? '#DC2626' : totalPercent >= 85 ? '#EA580C' : totalPercent >= 75 ? '#D97706' : '#16A34A';
-            const statusLabel = totalPercent >= 95 ? '已强制压缩' : totalPercent >= 85 ? '自动压缩' : totalPercent >= 75 ? '建议压缩' : '容量充裕';
+            const rawK = (budget.rawHistoryTokens / 1000).toFixed(1);
+            const effK = (budget.effectiveInputTokens / 1000).toFixed(1);
+            const availK = (budget.availableInputTokens / 1000).toFixed(1);
+            const limitK = (budget.modelContextLimit / 1000).toFixed(0);
+
+            const detailedTooltip = `模型上下文预算看板：${totalPercent}% (${statusLabel})
+• 当前模型：${currentModel?.name || '默认模型'} (总窗口 ${limitK}k)
+• 本轮输入预算：${availK}k (已预留 16k 输出 + 4k 安全余量)
+• 有效请求负载：${effK}k / ${availK}k
+• 原始会话历史：${rawK}k ${budget.isCompressed ? `→ 压缩后 ${effK}k (节约 ${(budget.savedTokens / 1000).toFixed(1)}k)` : ''}
+• 负载构成：对话 ${convRatio}% · 工具/代码 ${toolRatio}% · 规则 ${sysRatio}%
+• 状态：${budget.isCompressed ? '🍃 已启用非破坏性智能压缩' : '完整原始上下文'}`;
 
             return (
               <div
-                title={`模型上下文容量：${totalPercent}% (${statusLabel})\n• 实际占用: ${Math.round(telemetry.usedTokens / 1000)}k / ${Math.round(limit / 1000)}k tokens\n• 对话历史: ${convRatio}% (${Math.round(convTokens / 1000)}k)\n• 工具/代码: ${toolRatio}% (${Math.round(toolTokens / 1000)}k)\n• 系统规则: ${sysRatio}% (${Math.round(sysTokens / 1000)}k)`}
+                title={detailedTooltip}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -867,6 +874,9 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
               >
                 <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: statusColor }} />
                 <span style={{ fontWeight: 700 }}>上下文 {totalPercent}%</span>
+                {budget.isCompressed && (
+                  <span style={{ fontSize: '9px', color: '#16A34A', fontWeight: 600 }}>🍃已压缩</span>
+                )}
                 <span style={{ fontSize: '9px', color: 'var(--text-muted)' }}>({convRatio}% / {toolRatio}% / {sysRatio}%)</span>
               </div>
             );

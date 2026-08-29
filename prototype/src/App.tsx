@@ -1,5 +1,5 @@
 import { hostGateway } from './services/hostGateway';
-import { getContextTelemetry, compressModelContext } from './services/contextTelemetry';
+import { getContextBudget, getContextTelemetry, compressModelContext } from './services/contextTelemetry';
 // ────────────────────────────────────────────────────────────
 // 🧠 CONTEXT TELEMETRY & SMART AUTO-COMPRESSION ENGINE
 // ────────────────────────────────────────────────────────────
@@ -375,15 +375,15 @@ export const App: React.FC = () => {
   // 🧠 Single Source of Truth: Synchronize real Token telemetry and context percentage dynamically
   React.useEffect(() => {
     const curMsgs = sessionMessages[currentSessionId] || [];
-    const limit = currentModel?.contextLimit || 128000;
-    const telemetry = getContextTelemetry(curMsgs, limit);
+    const limit = currentModel?.contextLimit || 131072;
+    const budget = getContextBudget(curMsgs, limit);
 
     setTokenStats(prev => ({
       ...prev,
-      contextCurrentTokens: telemetry.usedTokens,
-      contextMaxTokens: limit,
-      promptTokens: Math.max(prev.promptTokens, telemetry.conversationTokens),
-      completionTokens: Math.max(prev.completionTokens, telemetry.toolsTokens)
+      contextCurrentTokens: budget.effectiveInputTokens,
+      contextMaxTokens: budget.availableInputTokens,
+      promptTokens: Math.max(prev.promptTokens, budget.breakdown.conversationTokens),
+      completionTokens: Math.max(prev.completionTokens, budget.breakdown.toolsTokens)
     }));
   }, [sessionMessages, currentSessionId, currentModel]);
   const [isStreaming, setIsStreaming] = useState<boolean>(false);
@@ -439,7 +439,8 @@ export const App: React.FC = () => {
       cacheHitTokens: kv.totalCacheHitTokens,
       cacheWriteTokens: kv.prefixTokens,
       estimatedCostUsd: Math.max(0.001, costUsd),
-      contextCurrentTokens: Math.min(currentModel.contextLimit || 128000, totalTokens),
+      // Keep overflow visible in the titlebar analytics; do not flatten it to the model limit.
+      contextCurrentTokens: totalTokens,
       contextMaxTokens: currentModel.contextLimit || 128000
     });
   }, [messages, currentModel]);
@@ -994,22 +995,26 @@ Tcode 已通过宿主磁盘与终端桥接将工程提供给你。` : '当前处
         loopCount++;
         const assistantId = singleRunCardId;
 
-        // 🧠 Unified Context Telemetry Check (Using actual currentModel.contextLimit)
-        const limit = streamingModel.contextLimit || 128000;
-        let telemetry = getContextTelemetry(conversationSnapshot, limit);
+        // 🧠 Unified Context Budget Check (Using actual currentModel.contextLimit)
+        const limit = streamingModel.contextLimit || 131072;
+        const budgetBefore = getContextBudget(conversationSnapshot, limit);
         let modelFeedMessages = conversationSnapshot;
 
-        if (telemetry.status === 'auto_compress' || telemetry.status === 'force_compress' || telemetry.usagePercent >= 85) {
+        if (budgetBefore.isCompressed || budgetBefore.usagePercent >= 85) {
           const compressRes = compressModelContext(conversationSnapshot, limit);
           modelFeedMessages = compressRes.compressed;
-          telemetry = getContextTelemetry(modelFeedMessages, limit);
+          const budgetAfter = getContextBudget(modelFeedMessages, limit);
+
+          const rawK = (compressRes.rawTokens / 1000).toFixed(1);
+          const effK = (compressRes.effectiveTokens / 1000).toFixed(1);
+          const savedK = (compressRes.savedTokens / 1000).toFixed(1);
 
           setActiveAutoExecutedToast({
             count: 1,
-            glob: `⚡ 模型上下文已就地智能压缩 · ${compressRes.beforePercent}% → ${compressRes.afterPercent}% (节约 ${compressRes.savedTokens} tokens)`
+            glob: `⚡ 模型有效上下文已就地智能压缩 · ${rawK}k → ${effK}k (节约 ${savedK}k tokens)`
           });
           setTimeout(() => setActiveAutoExecutedToast(null), 3500);
-          addLog('INFO', 'ContextEngine', `[智能压缩] 上下文使用率 ${compressRes.beforePercent}% → ${compressRes.afterPercent}%，UI 聊天历史永久完整保留。`);
+          addLog('INFO', 'ContextEngine', `[智能压缩] 原始历史 ${rawK}k ➔ 实际发送 ${effK}k (节约 ${savedK}k tokens)，UI 完整历史永久保留。`);
         }
 
         const cleanHistory = modelFeedMessages

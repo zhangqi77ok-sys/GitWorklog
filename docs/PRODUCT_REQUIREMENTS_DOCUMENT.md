@@ -1348,3 +1348,10 @@ Agent 执行请求 ➔ SecurityShield (脱敏) ➔ SandboxGuard (分类) ➔ Hos
 
 ### 3. Git 影子快照与真实物理回滚
 快照回滚直通 `revertCheckpoint`，执行底层 `git checkout <ref> -- .` 与 `git clean -fd`，真实恢复磁盘物理文件并同步刷新工作台。
+
+
+## 上下文 HUD 修复记录（2026-08）
+
+- 上下文百分比严格以当前模型 `contextLimit` 为分母并封顶为 100%；接近上限时按非破坏性的压缩请求副本计算有效占用。累计 Token 仅用于会话账单，不等于当前上下文窗口水位。
+- HUD 必须通过 tooltip 说明实际估算 Token、模型窗口上限、对话/工具/系统规则分项占比，避免把“原始历史水位”和“压缩后请求水位”混为一谈。
+- 详细契约见 `docs/technical_reviews/CONTEXT_TELEMETRY_SPEC.md`。

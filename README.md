@@ -31,3 +31,8 @@ python build_installer.py
 ```
 
 产物将输出至 `release/Tcode-Setup-v1.5.0.exe` 与 `release/Tcode-Setup-v1.5.0-windows-x64.zip`。
+
+
+## 上下文容量提示
+
+右侧上下文 HUD 使用当前模型的上下文窗口作为分母。100% 表示当前原始历史已达到或超过模型窗口；接近上限时，HUD 会按非破坏性的压缩请求副本计算有效占用。顶部显示的累计 Token 是会话消耗统计，不是上下文窗口水位。
