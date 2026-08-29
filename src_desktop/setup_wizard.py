@@ -106,7 +106,7 @@ class SetupWizard(tk.Tk):
             "建议在安装前关闭正在运行的旧版本程序。\n\n"
             "点击“下一步”继续安装。"
         )
-        body = tk.Label(self.content_frame, text=desc, font=("Segoe UI", 9.5), justify="left", bg="#F8FAFC", fg="#334155")
+        body = tk.Label(self.content_frame, text=desc, font=("Segoe UI", 10), justify="left", bg="#F8FAFC", fg="#334155")
         body.pack(anchor="w", pady=6)
 
     def step_choose_dir(self):
@@ -122,13 +122,13 @@ class SetupWizard(tk.Tk):
         frame_input = tk.Frame(self.content_frame, bg="#F8FAFC")
         frame_input.pack(fill="x", pady=6)
         
-        entry = tk.Entry(frame_input, textvariable=self.install_dir, font=("Segoe UI", 9.5), relief="solid", bd=1)
+        entry = tk.Entry(frame_input, textvariable=self.install_dir, font=("Segoe UI", 10), relief="solid", bd=1)
         entry.pack(side="left", fill="x", expand=True, ipady=4, padx=(0, 8))
         
         browse_btn = tk.Button(frame_input, text="浏览...", font=("Segoe UI", 9), command=self.browse_dir)
         browse_btn.pack(side="right", padx=2)
         
-        space_label = tk.Label(self.content_frame, text="所需磁盘空间: 约 46 MB\n可用磁盘空间: 充足", font=("Segoe UI", 8.5), justify="left", bg="#F8FAFC", fg="#64748B")
+        space_label = tk.Label(self.content_frame, text="所需磁盘空间: 约 46 MB\n可用磁盘空间: 充足", font=("Segoe UI", 9), justify="left", bg="#F8FAFC", fg="#64748B")
         space_label.pack(anchor="w", pady=12)
 
     def browse_dir(self):
@@ -146,10 +146,10 @@ class SetupWizard(tk.Tk):
         desc = tk.Label(self.content_frame, text="选择您希望安装程序在安装 CodeMind-Hub 时执行的附加任务：", font=("Segoe UI", 9), justify="left", bg="#F8FAFC", fg="#475569")
         desc.pack(anchor="w", pady=(0, 16))
         
-        chk1 = tk.Checkbutton(self.content_frame, text="创建桌面快捷方式 (Desktop Shortcut)", variable=self.create_desktop_shortcut, font=("Segoe UI", 9.5), bg="#F8FAFC", activebackground="#F8FAFC")
+        chk1 = tk.Checkbutton(self.content_frame, text="创建桌面快捷方式 (Desktop Shortcut)", variable=self.create_desktop_shortcut, font=("Segoe UI", 10), bg="#F8FAFC", activebackground="#F8FAFC")
         chk1.pack(anchor="w", pady=4)
         
-        chk2 = tk.Checkbutton(self.content_frame, text="创建开始菜单快捷方式 (Start Menu Shortcut)", variable=self.create_start_menu_shortcut, font=("Segoe UI", 9.5), bg="#F8FAFC", activebackground="#F8FAFC")
+        chk2 = tk.Checkbutton(self.content_frame, text="创建开始菜单快捷方式 (Start Menu Shortcut)", variable=self.create_start_menu_shortcut, font=("Segoe UI", 10), bg="#F8FAFC", activebackground="#F8FAFC")
         chk2.pack(anchor="w", pady=4)
 
     def start_install(self):
@@ -230,10 +230,10 @@ class SetupWizard(tk.Tk):
             "快捷方式已根据您的设置创建在系统桌面与开始菜单中。\n\n"
             "点击“完成”以退出安装向导。"
         )
-        body = tk.Label(self.content_frame, text=desc, font=("Segoe UI", 9.5), justify="left", bg="#F8FAFC", fg="#334155")
+        body = tk.Label(self.content_frame, text=desc, font=("Segoe UI", 10), justify="left", bg="#F8FAFC", fg="#334155")
         body.pack(anchor="w", pady=6)
         
-        chk = tk.Checkbutton(self.content_frame, text="立即启动 CodeMind-Hub", variable=self.launch_after_install, font=("Segoe UI", 9.5, "bold"), bg="#F8FAFC", activebackground="#F8FAFC")
+        chk = tk.Checkbutton(self.content_frame, text="立即启动 CodeMind-Hub", variable=self.launch_after_install, font=("Segoe UI", 10, "bold"), bg="#F8FAFC", activebackground="#F8FAFC")
         chk.pack(anchor="w", pady=16)
 
     def finish_all(self):
