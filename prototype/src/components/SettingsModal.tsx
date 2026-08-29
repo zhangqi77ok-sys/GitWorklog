@@ -103,7 +103,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
 
 
-  // GitHub Benchmark Model Providers Master-Detail State (Cherry Studio / LobeChat style)
+  // GitHub Benchmark Model Providers Master-Detail State with Draft Buffer (Cherry Studio / LobeChat style)
   const [providers, setProviders] = useState<ModelProviderItem[]>(loadSavedProviders());
   const [selectedProviderId, setSelectedProviderId] = useState<string>('provider-deepseek');
   const [providerSearch, setProviderSearch] = useState<string>('');
@@ -114,27 +114,63 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [providerToast, setProviderToast] = useState<string | null>(null);
   const [showProviderKeyMap, setShowProviderKeyMap] = useState<Record<string, boolean>>({});
 
+  // Form Draft Buffer Map: keeps user inputs locally until explicit save / commit
+  const [draftConfigMap, setDraftConfigMap] = useState<Record<string, { baseUrl: string; apiKey: string }>>(() => {
+    const initialDrafts: Record<string, { baseUrl: string; apiKey: string }> = {};
+    const loaded = loadSavedProviders();
+    for (const p of loaded) {
+      initialDrafts[p.id] = { baseUrl: p.baseUrl, apiKey: p.apiKey };
+    }
+    return initialDrafts;
+  });
+
   const selectedProvider = providers.find(p => p.id === selectedProviderId) || providers[0];
+  const currentDraft = draftConfigMap[selectedProvider.id] || { baseUrl: selectedProvider.baseUrl, apiKey: selectedProvider.apiKey };
+  const isCurrentDraftDirty = currentDraft.baseUrl !== selectedProvider.baseUrl || currentDraft.apiKey !== selectedProvider.apiKey;
+
+  const handleUpdateDraft = (providerId: string, updates: Partial<{ baseUrl: string; apiKey: string }>) => {
+    setDraftConfigMap(prev => ({
+      ...prev,
+      [providerId]: {
+        ...(prev[providerId] || { baseUrl: selectedProvider.baseUrl, apiKey: selectedProvider.apiKey }),
+        ...updates
+      }
+    }));
+  };
+
+  const handleSaveProviderConfig = (p: ModelProviderItem) => {
+    const draft = draftConfigMap[p.id] || { baseUrl: p.baseUrl, apiKey: p.apiKey };
+    const updated = providers.map(item =>
+      item.id === p.id ? { ...item, baseUrl: draft.baseUrl.trim(), apiKey: draft.apiKey.trim() } : item
+    );
+    setProviders(updated);
+    saveProvidersToStorage(updated);
+    setProviderToast(`💾 已成功保存 [${p.name}] 配置并同步刷新网关！`);
+    setTimeout(() => setProviderToast(null), 3000);
+  };
 
   const handleTestProvider = async (p: ModelProviderItem) => {
+    const draft = draftConfigMap[p.id] || { baseUrl: p.baseUrl, apiKey: p.apiKey };
     setTestingProviderId(p.id);
-    setProviderToast(`🔄 正在向 ${p.baseUrl} 发起真实连通性探测...`);
+    setProviderToast(`🔄 正在向 ${draft.baseUrl} 发起真实连通性探测...`);
     const start = Date.now();
     try {
-      let url = p.baseUrl.trim();
+      let url = draft.baseUrl.trim();
       if (url.endsWith('/')) url = url.slice(0, -1);
       const testEndpoint = `${url}/models`;
       const res = await fetch(testEndpoint, {
         method: 'GET',
         headers: {
-          'Authorization': `Bearer ${p.apiKey.trim()}`
+          'Authorization': `Bearer ${draft.apiKey.trim()}`
         }
       });
       const latency = Date.now() - start;
       if (res.ok) {
         const data = await res.json();
         const modelCount = data?.data?.length || p.models.length;
-        const updated = providers.map(item => item.id === p.id ? { ...item, status: 'healthy' as const, latencyMs: latency } : item);
+        const updated = providers.map(item =>
+          item.id === p.id ? { ...item, baseUrl: draft.baseUrl.trim(), apiKey: draft.apiKey.trim(), status: 'healthy' as const, latencyMs: latency } : item
+        );
         setProviders(updated);
         saveProvidersToStorage(updated);
         setProviderToast(`✓ [${p.name}] 真实连通性测试成功！HTTP ${res.status} OK · 延迟 ${latency}ms · 探测到 ${modelCount} 个可用模型`);
@@ -153,13 +189,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   };
 
   const handleFetchProviderModels = async (p: ModelProviderItem) => {
-    setProviderToast(`🔄 正在从 ${p.baseUrl}/models 真实拉取最新模型列表...`);
+    const draft = draftConfigMap[p.id] || { baseUrl: p.baseUrl, apiKey: p.apiKey };
+    setProviderToast(`🔄 正在从 ${draft.baseUrl}/models 真实拉取最新模型列表...`);
     try {
-      let url = p.baseUrl.trim();
+      let url = draft.baseUrl.trim();
       if (url.endsWith('/')) url = url.slice(0, -1);
       const res = await fetch(`${url}/models`, {
         headers: {
-          'Authorization': `Bearer ${p.apiKey.trim()}`
+          'Authorization': `Bearer ${draft.apiKey.trim()}`
         }
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
@@ -173,7 +210,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           contextLimit: 128000,
           capabilities: ['code', 'fast']
         }));
-        const updated = providers.map(item => item.id === p.id ? { ...item, models: fetchedModels } : item);
+        const updated = providers.map(item => item.id === p.id ? { ...item, baseUrl: draft.baseUrl.trim(), apiKey: draft.apiKey.trim(), models: fetchedModels } : item);
         setProviders(updated);
         saveProvidersToStorage(updated);
         setProviderToast(`✓ 成功从 ${p.name} 真实拉取并同步 ${fetchedModels.length} 个最新模型！`);
@@ -185,12 +222,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     } finally {
       setTimeout(() => setProviderToast(null), 4000);
     }
-  };
-
-  const handleSaveProviderConfig = (p: ModelProviderItem) => {
-    saveProvidersToStorage(providers);
-    setProviderToast(`💾 已成功保存 [${p.name}] 服务商配置至本地存储！`);
-    setTimeout(() => setProviderToast(null), 3000);
   };
 
   const handleAddCustomModelSubmit = () => {
@@ -896,6 +927,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
                     {/* Master Actions: Save Config + Enable Switch */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+                      {isCurrentDraftDirty && (
+                        <span style={{
+                          fontSize: '10px',
+                          padding: '2px 6px',
+                          borderRadius: '4px',
+                          background: 'rgba(217, 107, 39, 0.15)',
+                          color: 'var(--accent)',
+                          fontWeight: 700
+                        }}>
+                          ● 有未保存修改
+                        </span>
+                      )}
                       <button
                         onClick={() => handleSaveProviderConfig(selectedProvider)}
                         style={{
@@ -904,18 +947,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           gap: '4px',
                           padding: '4px 12px',
                           borderRadius: '4px',
-                          background: 'var(--accent)',
-                          border: 'none',
-                          color: '#FFF',
+                          background: isCurrentDraftDirty ? 'var(--accent)' : 'var(--bg-base)',
+                          border: isCurrentDraftDirty ? 'none' : '1px solid var(--border-subtle)',
+                          color: isCurrentDraftDirty ? '#FFF' : 'var(--text-secondary)',
                           fontSize: '11px',
                           fontWeight: 600,
                           cursor: 'pointer',
-                          boxShadow: '0 2px 6px rgba(217, 107, 39, 0.2)'
+                          boxShadow: isCurrentDraftDirty ? '0 2px 8px rgba(217, 107, 39, 0.25)' : 'none',
+                          transition: 'all 0.15s ease'
                         }}
-                        title="立即将当前 Base URL 与 API Key 写入持久化存储"
+                        title="立即将草稿修改持久化至本地存储并刷新网关"
                       >
                         <Save size={12} />
-                        <span>保存配置</span>
+                        <span>{isCurrentDraftDirty ? '保存并刷新网关' : '已保存'}</span>
                       </button>
 
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -973,17 +1017,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       </div>
                       <input
                         type="text"
-                        value={selectedProvider.baseUrl}
-                        onChange={e => {
-                          const val = e.target.value;
-                          setProviders(prev => prev.map(item => item.id === selectedProvider.id ? { ...item, baseUrl: val } : item));
-                        }}
+                        value={currentDraft.baseUrl}
+                        onChange={e => handleUpdateDraft(selectedProvider.id, { baseUrl: e.target.value })}
                         style={{
                           width: '100%',
                           padding: '5px 8px',
                           fontSize: '11px',
                           borderRadius: '4px',
-                          border: '1px solid var(--border-strong)',
+                          border: isCurrentDraftDirty ? '1px solid var(--accent)' : '1px solid var(--border-strong)',
                           background: 'var(--bg-base)',
                           color: 'var(--text-primary)',
                           fontFamily: 'var(--font-mono)',
@@ -1044,12 +1085,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'var(--bg-base)', borderRadius: '4px', border: '1px solid var(--border-strong)', padding: '0 6px' }}>
                         <input
                           type={showProviderKeyMap[selectedProvider.id] ? 'text' : 'password'}
-                          value={selectedProvider.apiKey}
+                          value={currentDraft.apiKey}
                           placeholder={selectedProvider.id === 'provider-ollama' ? '本地 Ollama 免密钥' : 'sk-...'}
-                          onChange={e => {
-                            const val = e.target.value;
-                            setProviders(prev => prev.map(item => item.id === selectedProvider.id ? { ...item, apiKey: val } : item));
-                          }}
+                          onChange={e => handleUpdateDraft(selectedProvider.id, { apiKey: e.target.value })}
                           style={{
                             flex: 1,
                             padding: '5px 0',
