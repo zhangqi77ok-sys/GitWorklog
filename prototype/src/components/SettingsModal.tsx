@@ -27,7 +27,8 @@ import {
   Trash2,
   Code,
   ChevronDown,
-  Sparkles
+  Sparkles,
+  Save
 } from 'lucide-react';
 import {
   SkillItem,
@@ -60,7 +61,10 @@ import {
   INITIAL_MCP_SERVERS,
   McpServerItem,
   ProviderHealth,
-  McpServerInfo
+  McpServerInfo,
+  loadSavedProviders,
+  saveProvidersToStorage,
+  ModelItem
 } from '../types/contracts';
 
 interface SettingsModalProps {
@@ -100,7 +104,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
 
   // GitHub Benchmark Model Providers Master-Detail State (Cherry Studio / LobeChat style)
-  const [providers, setProviders] = useState<ModelProviderItem[]>(INITIAL_PROVIDERS);
+  const [providers, setProviders] = useState<ModelProviderItem[]>(loadSavedProviders());
   const [selectedProviderId, setSelectedProviderId] = useState<string>('provider-deepseek');
   const [providerSearch, setProviderSearch] = useState<string>('');
   const [categoryFilter, setCategoryFilter] = useState<ProviderCategory>('all');
@@ -112,22 +116,81 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const selectedProvider = providers.find(p => p.id === selectedProviderId) || providers[0];
 
-  const handleTestProvider = (p: ModelProviderItem) => {
+  const handleTestProvider = async (p: ModelProviderItem) => {
     setTestingProviderId(p.id);
-    setTimeout(() => {
-      setProviders(prev => prev.map(item => item.id === p.id ? { ...item, status: 'healthy', latencyMs: item.id === 'provider-ollama' ? 0 : Math.floor(Math.random() * 50) + 65 } : item));
+    setProviderToast(`🔄 正在向 ${p.baseUrl} 发起真实连通性探测...`);
+    const start = Date.now();
+    try {
+      let url = p.baseUrl.trim();
+      if (url.endsWith('/')) url = url.slice(0, -1);
+      const testEndpoint = `${url}/models`;
+      const res = await fetch(testEndpoint, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${p.apiKey.trim()}`
+        }
+      });
+      const latency = Date.now() - start;
+      if (res.ok) {
+        const data = await res.json();
+        const modelCount = data?.data?.length || p.models.length;
+        const updated = providers.map(item => item.id === p.id ? { ...item, status: 'healthy' as const, latencyMs: latency } : item);
+        setProviders(updated);
+        saveProvidersToStorage(updated);
+        setProviderToast(`✓ [${p.name}] 真实连通性测试成功！HTTP ${res.status} OK · 延迟 ${latency}ms · 探测到 ${modelCount} 个可用模型`);
+      } else {
+        const updated = providers.map(item => item.id === p.id ? { ...item, status: 'untested' as const, latencyMs: 0 } : item);
+        setProviders(updated);
+        saveProvidersToStorage(updated);
+        setProviderToast(`✕ [${p.name}] 探测返回异常: HTTP ${res.status} (${res.statusText})`);
+      }
+    } catch (err: any) {
+      setProviderToast(`✕ [${p.name}] 网络连接失败: ${err.message}`);
+    } finally {
       setTestingProviderId(null);
-      setProviderToast(`✓ [${p.name}] 连通性测试成功！HTTP 200 OK · ${p.id === 'provider-ollama' ? '0ms 本地直连' : '78ms'}`);
-      setTimeout(() => setProviderToast(null), 3000);
-    }, 500);
+      setTimeout(() => setProviderToast(null), 4000);
+    }
   };
 
-  const handleFetchProviderModels = (p: ModelProviderItem) => {
-    setProviderToast(`🔄 正在向 ${p.baseUrl}/models 发起请求拉取最新模型...`);
-    setTimeout(() => {
-      setProviderToast(`✓ 成功从 ${p.name} 动态拉取并同步 ${p.models.length} 个最新可用模型！`);
-      setTimeout(() => setProviderToast(null), 3000);
-    }, 600);
+  const handleFetchProviderModels = async (p: ModelProviderItem) => {
+    setProviderToast(`🔄 正在从 ${p.baseUrl}/models 真实拉取最新模型列表...`);
+    try {
+      let url = p.baseUrl.trim();
+      if (url.endsWith('/')) url = url.slice(0, -1);
+      const res = await fetch(`${url}/models`, {
+        headers: {
+          'Authorization': `Bearer ${p.apiKey.trim()}`
+        }
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      const json = await res.json();
+      const rawModels: any[] = json.data || [];
+      if (rawModels.length > 0) {
+        const fetchedModels: ModelItem[] = rawModels.map((m: any) => ({
+          id: m.id,
+          name: m.id,
+          enabled: true,
+          contextLimit: 128000,
+          capabilities: ['code', 'fast']
+        }));
+        const updated = providers.map(item => item.id === p.id ? { ...item, models: fetchedModels } : item);
+        setProviders(updated);
+        saveProvidersToStorage(updated);
+        setProviderToast(`✓ 成功从 ${p.name} 真实拉取并同步 ${fetchedModels.length} 个最新模型！`);
+      } else {
+        setProviderToast(`✓ 接口返回成功，当前暂无额外可用模型`);
+      }
+    } catch (err: any) {
+      setProviderToast(`✕ 拉取模型列表失败: ${err.message}`);
+    } finally {
+      setTimeout(() => setProviderToast(null), 4000);
+    }
+  };
+
+  const handleSaveProviderConfig = (p: ModelProviderItem) => {
+    saveProvidersToStorage(providers);
+    setProviderToast(`💾 已成功保存 [${p.name}] 服务商配置至本地存储！`);
+    setTimeout(() => setProviderToast(null), 3000);
   };
 
   const handleAddCustomModelSubmit = () => {
@@ -831,27 +894,55 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       </div>
                     </div>
 
-                    {/* Master Enable Switch (Clean & Roomy) */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
-                      <span style={{ fontSize: '11px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
-                        服务商总开关:
-                      </span>
+                    {/* Master Actions: Save Config + Enable Switch */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
                       <button
-                        onClick={() => setProviders(toggleProviderSwitch(providers, selectedProvider.id))}
+                        onClick={() => handleSaveProviderConfig(selectedProvider)}
                         style={{
-                          padding: '3px 12px',
-                          borderRadius: '12px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          padding: '4px 12px',
+                          borderRadius: '4px',
+                          background: 'var(--accent)',
                           border: 'none',
-                          background: selectedProvider.enabled ? 'var(--accent)' : 'var(--border-strong)',
                           color: '#FFF',
-                          fontSize: '10px',
-                          fontWeight: 700,
+                          fontSize: '11px',
+                          fontWeight: 600,
                           cursor: 'pointer',
-                          whiteSpace: 'nowrap'
+                          boxShadow: '0 2px 6px rgba(217, 107, 39, 0.2)'
                         }}
+                        title="立即将当前 Base URL 与 API Key 写入持久化存储"
                       >
-                        {selectedProvider.enabled ? '已启用 (ON)' : '已禁用 (OFF)'}
+                        <Save size={12} />
+                        <span>保存配置</span>
                       </button>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ fontSize: '11px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                          开关:
+                        </span>
+                        <button
+                          onClick={() => {
+                            const updated = toggleProviderSwitch(providers, selectedProvider.id);
+                            setProviders(updated);
+                            saveProvidersToStorage(updated);
+                          }}
+                          style={{
+                            padding: '3px 10px',
+                            borderRadius: '12px',
+                            border: 'none',
+                            background: selectedProvider.enabled ? '#10B981' : 'var(--border-strong)',
+                            color: '#FFF',
+                            fontSize: '10px',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            whiteSpace: 'nowrap'
+                          }}
+                        >
+                          {selectedProvider.enabled ? '已启用 (ON)' : '已禁用 (OFF)'}
+                        </button>
+                      </div>
                     </div>
                   </div>
 

@@ -27,7 +27,8 @@ import {
   clampLeftPanelWidth,
   clampWorkbenchWidth,
   clampLeftPanelWithCollapse,
-  DiffNavigationTarget
+  DiffNavigationTarget,
+  loadSavedProviders
 } from './types/contracts';
 
 export const App: React.FC = () => {

@@ -762,18 +762,19 @@ export const INITIAL_PROVIDERS: ModelProviderItem[] = [
   // 1. Domestic Chinese Models (国内顶流)
   {
     id: 'provider-deepseek',
-    name: 'DeepSeek (深度求索)',
+    name: 'DeepSeek (深度求索 / 星海平台)',
     icon: '🔵',
     category: 'domestic',
     enabled: true,
     protocol: 'openai',
-    baseUrl: 'https://api.deepseek.com/v1',
-    defaultBaseUrl: 'https://api.deepseek.com/v1',
-    apiKey: 'sk-dsk984729104810284729103847',
+    baseUrl: 'https://platform.ai.hixinghai.com/api/v1',
+    defaultBaseUrl: 'https://platform.ai.hixinghai.com/api/v1',
+    apiKey: 'sk-xh-ZVKvOZcvzLKxUSWECPQ3mUKfP9q9sxrz14NQmtoQ000',
     status: 'healthy',
-    latencyMs: 85,
-    docUrl: 'https://platform.deepseek.com',
+    latencyMs: 78,
+    docUrl: 'https://platform.ai.hixinghai.com',
     models: [
+      { id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash (极速闪电)', enabled: true, contextLimit: 128000, capabilities: ['fast', 'code'] },
       { id: 'deepseek-reasoner', name: 'DeepSeek-R1 (深度推理)', enabled: true, contextLimit: 64000, capabilities: ['reasoning', 'code'] },
       { id: 'deepseek-chat', name: 'DeepSeek-V3 (主力代码)', enabled: true, contextLimit: 64000, capabilities: ['fast', 'code'] }
     ]
@@ -2536,3 +2537,30 @@ export function createEmptySession(title: string = '新的自由会话', project
 export function isFirstLaunchState(sessions: SessionItem[]): boolean {
   return sessions.length === 0 || (sessions.length === 1 && sessions[0].messagesCount === 0);
 }
+
+export const STORAGE_KEYS = {
+  PROVIDERS: 'codemind_providers',
+  CURRENT_MODEL: 'codemind_current_model',
+  OPENAI_PROTOCOL: 'codemind_openai_protocol',
+  SESSIONS: 'codemind_sessions',
+  ACTIVE_SESSION_ID: 'codemind_active_session_id',
+  PROJECTS: 'codemind_projects'
+};
+
+export function loadSavedProviders(): ModelProviderItem[] {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEYS.PROVIDERS);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch (e) {}
+  return INITIAL_PROVIDERS;
+}
+
+export function saveProvidersToStorage(providers: ModelProviderItem[]): void {
+  try {
+    localStorage.setItem(STORAGE_KEYS.PROVIDERS, JSON.stringify(providers));
+  } catch (e) {}
+}
+
