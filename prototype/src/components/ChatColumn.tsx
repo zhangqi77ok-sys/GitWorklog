@@ -71,6 +71,7 @@ interface ChatColumnProps {
   onSendMessage: (text: string) => void;
   onResolveOptions: (messageId: string, selectedIds: string[], customInput?: string) => void;
   onForkMessage?: (fromMessageId: string) => void;
+  onNavigateDiff?: (target: { fileId: string; filePath: string; targetLine: number }) => void;
 }
 
 export const ChatColumn: React.FC<ChatColumnProps> = ({
@@ -87,7 +88,8 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
   setPermissionPolicy,
   onSendMessage,
   onResolveOptions,
-  onForkMessage
+  onForkMessage,
+  onNavigateDiff
 }) => {
   const [inputText, setInputText] = useState('');
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
@@ -110,6 +112,9 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
   const [swarmStages, setSwarmStages] = useState<SwarmPipelineStage[]>(INITIAL_SWARM_STAGES);
   const [isCommitModalOpen, setIsCommitModalOpen] = useState<boolean>(false);
   const [experienceLearned, setExperienceLearned] = useState<boolean>(false);
+  const [showLessonConfirm, setShowLessonConfirm] = useState<boolean>(false);
+  const [lessonTitle, setLessonTitle] = useState('禁止直接 new Store 实例');
+  const [lessonPrompt, setLessonPrompt] = useState('必须通过 StoreFactory 单例方法获取全局 Store，保持单状态源');
   const [activeRuleCount, setActiveRuleCount] = useState<number>(3);
 
 
@@ -586,8 +591,8 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
           overflow: 'visible',
           position: 'relative'
         }}>
-          {/* Self-Learning Lessons Pill (Floating Suggestion) */}
-          {!experienceLearned && (
+          {/* Self-Learning Lessons Pill & Confirmation Card */}
+          {!experienceLearned && !showLessonConfirm && (
             <div style={{
               position: 'absolute',
               top: '-28px',
@@ -606,16 +611,75 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
               zIndex: 25,
               boxShadow: '0 2px 8px rgba(217, 107, 39, 0.1)'
             }}
-            onClick={() => {
-              setExperienceLearned(true);
-              setActiveRuleCount(prev => prev + 1);
-              setChangesetToast('💡 已将经验沉淀至 .codemind/lessons.md (全局永久生效)');
-              setTimeout(() => setChangesetToast(null), 3500);
-            }}
-            title="点击将当前纠错自动固化为项目规则"
+            onClick={() => setShowLessonConfirm(true)}
+            title="点击展开确认/微调规约 Prompt 并固化至项目记忆库"
             >
               <span>💡 检测到架构纠正: 点击一键沉淀为工程经验 (.codemind/lessons.md)</span>
-              <span style={{ textDecoration: 'underline' }}>沉淀</span>
+              <span style={{ textDecoration: 'underline' }}>确认沉淀</span>
+            </div>
+          )}
+
+          {/* Inline Transparent Lesson Confirmation Card */}
+          {showLessonConfirm && !experienceLearned && (
+            <div style={{
+              position: 'absolute',
+              top: '-92px',
+              left: '4px',
+              right: '4px',
+              padding: '8px 12px',
+              borderRadius: '6px',
+              background: 'var(--bg-surface)',
+              border: '1px solid var(--accent)',
+              boxShadow: '0 4px 16px rgba(0,0,0,0.18)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '4px',
+              zIndex: 35
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontWeight: 700, fontSize: '11px', color: 'var(--accent)' }}>
+                  💡 沉淀工程经验确认 (.codemind/lessons.md)
+                </span>
+                <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>同工程未来所有会话永久遵守</span>
+              </div>
+              <input
+                type="text"
+                value={lessonTitle}
+                onChange={e => setLessonTitle(e.target.value)}
+                style={{
+                  background: 'var(--bg-base)',
+                  border: '1px solid var(--border-subtle)',
+                  borderRadius: '3px',
+                  padding: '2px 6px',
+                  fontSize: '10.5px',
+                  color: 'var(--text-primary)'
+                }}
+              />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '6px' }}>
+                <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                  约束: {lessonPrompt}
+                </span>
+                <div style={{ display: 'flex', gap: '4px' }}>
+                  <button
+                    onClick={() => setShowLessonConfirm(false)}
+                    style={{ padding: '1px 6px', borderRadius: '3px', background: 'transparent', border: '1px solid var(--border-subtle)', fontSize: '10px', color: 'var(--text-muted)', cursor: 'pointer' }}
+                  >
+                    取消
+                  </button>
+                  <button
+                    onClick={() => {
+                      setExperienceLearned(true);
+                      setShowLessonConfirm(false);
+                      setActiveRuleCount(prev => prev + 1);
+                      setChangesetToast('✓ 已将规则固化至 .codemind/lessons.md！');
+                      setTimeout(() => setChangesetToast(null), 3000);
+                    }}
+                    style={{ padding: '1px 8px', borderRadius: '3px', background: 'var(--accent)', border: 'none', color: '#FFF', fontSize: '10px', fontWeight: 600, cursor: 'pointer' }}
+                  >
+                    确认固化
+                  </button>
+                </div>
+              </div>
             </div>
           )}
 

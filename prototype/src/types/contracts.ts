@@ -1779,3 +1779,33 @@ export function calculateBlastRadius(sourceFile: string): BlastRadiusReport {
     totalAffectedCallsites: 0
   };
 }
+
+
+// ============================================================================
+// 15. UX & LOGIC CLOSURE CONTRACTS (Collapse Snap, Diff Navigation, Sudo Bypass)
+// ============================================================================
+
+export function clampLeftPanelWithCollapse(width: number): number {
+  if (width < 80) return 0;
+  return clampLeftPanelWidth(width);
+}
+
+export interface DiffNavigationTarget {
+  fileId: string;
+  filePath: string;
+  targetLine: number;
+  highlightToken: string;
+}
+
+export function createDiffNavigationTarget(
+  fileId: string,
+  filePath: string,
+  targetLine: number = 14
+): DiffNavigationTarget {
+  return {
+    fileId,
+    filePath,
+    targetLine,
+    highlightToken: `diff-target-${fileId}-${targetLine}`
+  };
+}

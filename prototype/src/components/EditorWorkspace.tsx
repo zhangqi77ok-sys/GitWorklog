@@ -26,6 +26,7 @@ import {
 interface EditorWorkspaceProps {
   isOpen: boolean;
   onClose: () => void;
+  activeDiffTarget?: { fileId: string; filePath: string; targetLine: number } | null;
 }
 
 const INITIAL_TERMINALS_STATE: TerminalTab[] = [
@@ -35,7 +36,8 @@ const INITIAL_TERMINALS_STATE: TerminalTab[] = [
 
 export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
   isOpen,
-  onClose
+  onClose,
+  activeDiffTarget
 }) => {
   if (!isOpen) return null;
 
@@ -54,7 +56,17 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
   ]);
   const [cmdInput, setCmdInput] = useState('');
   const [isCiDrawerOpen, setIsCiDrawerOpen] = useState(false);
-  const [debugProbes, setDebugProbes] = useState<DebugProbeItem[]>([
+  // Listen for Diff Navigation Targets from ChatColumn
+  React.useEffect(() => {
+    if (activeDiffTarget) {
+      setActiveFileId(activeDiffTarget.fileId);
+      setInlineToast(`🎯 已自动定位至 ${activeDiffTarget.filePath} 行内 Diff 区域`);
+      setTimeout(() => setInlineToast(null), 3000);
+    }
+  }, [activeDiffTarget]);
+
+  const [sudoBypassed, setSudoBypassed] = useState(false);
+  const [debugProbes, setDebugProbes] = useState<DebugProbeItem[]>([ 
     { id: 'probe-contracts-13', fileId: 'file-contracts', line: 13, variableName: 'solveGeneric', capturedValue: '{ input: "test", resolved: true }', status: 'active' }
   ]);
 
@@ -94,7 +106,7 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
     const newLogs = [...terminalLogs, `$ ${cmdInput}`];
 
     if (cmdInput.toLowerCase().includes('rm -rf') || cmdInput.toLowerCase().includes('drop table')) {
-      newLogs.push('🛡️ [终端安全沙箱拦截]: 监测到高危破坏性写盘指令，已自动阻断并保护工作区！');
+      newLogs.push('🛡️ [终端安全沙箱拦截]: 监测到高危写盘指令 rm -rf dist (本地构建产物)');
     } else {
       newLogs.push(`[${terminals.find(t => t.id === activeTerminalId)?.title || 'term'}]: 执行成功 (AST 状态健康)`);
     }
@@ -394,7 +406,7 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
               <div>14</div>
             </div>
 
-            {/* Code Content Area */}
+            {/* Code Content Area with Indentation Guides & Folding */}
             <div style={{ flex: 1, padding: '0 12px', lineHeight: '20px' }}>
               <div><span style={{ color: '#6B7280' }}>// CodeMind-Hub 核心数据契约 (SDD Contract)</span></div>
               <div>&nbsp;</div>
@@ -402,22 +414,23 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
                 <span style={{ color: '#9333EA', fontWeight: 600 }}>export type</span> <span style={{ color: '#0284C7' }}>WorkMode</span> = <span style={{ color: '#16A34A' }}>'act'</span> | <span style={{ color: '#16A34A' }}>'plan'</span> | <span style={{ color: '#16A34A' }}>'minimal'</span> | <span style={{ color: '#16A34A' }}>'creator'</span>;
               </div>
               <div>&nbsp;</div>
-              <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <span style={{ color: 'var(--text-muted)', fontSize: '9px', userSelect: 'none' }}>⌄</span>
                 <span style={{ color: '#9333EA', fontWeight: 600 }}>export interface</span> <span style={{ color: '#0284C7' }}>SessionItem</span> &#123;
               </div>
-              <div style={{ paddingLeft: '16px' }}>
+              <div style={{ paddingLeft: '16px', borderLeft: '1px solid rgba(0,0,0,0.06)', marginLeft: '4px' }}>
                 <span style={{ color: 'var(--text-primary)' }}>id:</span> <span style={{ color: '#D97706' }}>string</span>;
               </div>
-              <div style={{ paddingLeft: '16px' }}>
+              <div style={{ paddingLeft: '16px', borderLeft: '1px solid rgba(0,0,0,0.06)', marginLeft: '4px' }}>
                 <span style={{ color: 'var(--text-primary)' }}>tier1:</span> <span style={{ color: '#16A34A' }}>'global'</span> | <span style={{ color: '#16A34A' }}>'project'</span>;
               </div>
-              <div style={{ paddingLeft: '16px' }}>
+              <div style={{ paddingLeft: '16px', borderLeft: '1px solid rgba(0,0,0,0.06)', marginLeft: '4px' }}>
                 <span style={{ color: 'var(--text-primary)' }}>title:</span> <span style={{ color: '#D97706' }}>string</span>;
               </div>
-              <div style={{ paddingLeft: '16px' }}>
+              <div style={{ paddingLeft: '16px', borderLeft: '1px solid rgba(0,0,0,0.06)', marginLeft: '4px' }}>
                 <span style={{ color: 'var(--text-primary)' }}>totalTokens:</span> <span style={{ color: '#D97706' }}>number</span>;
               </div>
-              <div style={{ paddingLeft: '16px' }}>
+              <div style={{ paddingLeft: '16px', borderLeft: '1px solid rgba(0,0,0,0.06)', marginLeft: '4px' }}>
                 <span style={{ color: 'var(--text-primary)' }}>forkedFromId?:</span> <span style={{ color: '#D97706' }}>string</span>;
               </div>
               <div>&#125;</div>
@@ -603,7 +616,7 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
             </div>
           </div>
 
-          {/* Terminal Console Logs */}
+          {/* Terminal Console Logs & Interactive Sudo Override Card */}
           <div style={{ flex: 1, padding: '8px 10px', overflowY: 'auto', lineHeight: '18px' }}>
             {terminalLogs.map((log, idx) => (
               <div key={idx} style={{
@@ -620,6 +633,45 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
                 {log}
               </div>
             ))}
+
+            {/* Interactive Sudo Bypass Resolution Card */}
+            {!sudoBypassed && (
+              <div style={{
+                marginTop: '6px',
+                padding: '6px 10px',
+                borderRadius: '4px',
+                background: 'rgba(239, 68, 68, 0.1)',
+                border: '1px solid #EF4444',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                fontSize: '10.5px'
+              }}>
+                <span style={{ color: '#FCA5A5' }}>
+                  ⚠️ 检测到构建清理命令，是否确认为合法操作并放行？
+                </span>
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <button
+                    onClick={() => {
+                      setSudoBypassed(true);
+                      setTerminalLogs(prev => [...prev, '🔓 [开发者提权放行]: sudo rm -rf dist 执行成功 (已清理 42MB 缓存)']);
+                    }}
+                    style={{
+                      padding: '2px 8px',
+                      borderRadius: '3px',
+                      background: '#16A34A',
+                      border: 'none',
+                      color: '#FFF',
+                      fontSize: '10px',
+                      fontWeight: 600,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    🔓 临时放行 (Sudo)
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Terminal Command Input Form */}

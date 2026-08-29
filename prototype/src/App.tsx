@@ -25,7 +25,9 @@ import {
   AVAILABLE_MODELS,
   forkSessionFromMessage,
   clampLeftPanelWidth,
-  clampWorkbenchWidth
+  clampWorkbenchWidth,
+  clampLeftPanelWithCollapse,
+  DiffNavigationTarget
 } from './types/contracts';
 
 export const App: React.FC = () => {
@@ -37,7 +39,10 @@ export const App: React.FC = () => {
   // Global Keyboard Navigation (Ctrl+P, Ctrl+Shift+P, Alt+1/2/3)
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'p' && !e.shiftKey) {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'b' || e.key === 'B')) {
+        e.preventDefault();
+        setIsLeftDrawerCollapsed(prev => !prev);
+      } else if ((e.ctrlKey || e.metaKey) && e.key === 'p' && !e.shiftKey) {
         e.preventDefault();
         setPaletteMode('files');
         setIsPaletteOpen(true);
@@ -71,17 +76,26 @@ export const App: React.FC = () => {
   const [currentModel, setCurrentModel] = useState<AIModelOption>(AVAILABLE_MODELS[0]);
   const [permissionPolicy, setPermissionPolicy] = useState<PermissionPolicy>('autonomous_agent');
 
-  // Resizable Layout States
+  // Resizable Layout & Collapse States
   const [leftPanelWidth, setLeftPanelWidth] = useState<number>(260);
+  const [isLeftDrawerCollapsed, setIsLeftDrawerCollapsed] = useState<boolean>(false);
   const [workbenchWidth, setWorkbenchWidth] = useState<number>(560);
   const [isDraggingLeft, setIsDraggingLeft] = useState(false);
   const [isDraggingRight, setIsDraggingRight] = useState(false);
+  const [activeDiffTarget, setActiveDiffTarget] = useState<DiffNavigationTarget | null>(null);
 
   // Global Drag Listeners
   React.useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (isDraggingLeft) {
-        setLeftPanelWidth(clampLeftPanelWidth(e.clientX - 44)); // 44px is activity bar
+        const snapped = clampLeftPanelWithCollapse(e.clientX - 44);
+        if (snapped === 0) {
+          setIsLeftDrawerCollapsed(true);
+          setLeftPanelWidth(260);
+        } else {
+          setIsLeftDrawerCollapsed(false);
+          setLeftPanelWidth(snapped);
+        }
       } else if (isDraggingRight) {
         const newWbWidth = window.innerWidth - e.clientX;
         setWorkbenchWidth(clampWorkbenchWidth(newWbWidth, window.innerWidth));
@@ -414,48 +428,52 @@ export const App: React.FC = () => {
           onOpenSettings={() => setIsSettingsOpen(true)}
         />
 
-        {/* LeftPanel: Dynamic Modules with Dynamic Resizable Width */}
-        <LeftPanel
-          width={leftPanelWidth}
-          activeNav={activeNav}
-          onOpenFile={handleOpenFile}
-          projects={projects}
-          sessions={sessions}
-          currentSessionId={currentSessionId}
-          onSelectSession={setCurrentSessionId}
-          onNewGlobalSession={handleNewGlobalSession}
-          onNewProjectSession={handleNewProjectSession}
-          onDeleteSession={handleDeleteSession}
-          onRenameSession={handleRenameSession}
-          onAddTag={handleAddTag}
-          onRemoveTag={handleRemoveTag}
-          onOpenDirectory={handleOpenDirectory}
-          onRemoveProject={handleRemoveProject}
-        />
+        {/* LeftPanel: Dynamic Modules with Dynamic Resizable Width & Ctrl+B Collapse */}
+        {!isLeftDrawerCollapsed && (
+          <LeftPanel
+            width={leftPanelWidth}
+            activeNav={activeNav}
+            onOpenFile={handleOpenFile}
+            projects={projects}
+            sessions={sessions}
+            currentSessionId={currentSessionId}
+            onSelectSession={setCurrentSessionId}
+            onNewGlobalSession={handleNewGlobalSession}
+            onNewProjectSession={handleNewProjectSession}
+            onDeleteSession={handleDeleteSession}
+            onRenameSession={handleRenameSession}
+            onAddTag={handleAddTag}
+            onRemoveTag={handleRemoveTag}
+            onOpenDirectory={handleOpenDirectory}
+            onRemoveProject={handleRemoveProject}
+          />
+        )}
 
-        {/* Left Divider (Draggable) */}
-        <div
-          onMouseDown={() => setIsDraggingLeft(true)}
-          onDoubleClick={() => setLeftPanelWidth(260)}
-          title="双击恢复默认宽度，拖拽调节侧边栏宽度"
-          style={{
-            width: '4px',
-            cursor: 'col-resize',
-            background: isDraggingLeft ? 'var(--accent)' : 'transparent',
-            zIndex: 40,
-            transition: 'background 0.15s ease',
-            position: 'relative'
-          }}
-        >
-          <div style={{
-            position: 'absolute',
-            top: 0,
-            bottom: 0,
-            left: '1px',
-            width: '1px',
-            background: 'var(--border-subtle)'
-          }} />
-        </div>
+        {/* Left Divider (Draggable, when not collapsed) */}
+        {!isLeftDrawerCollapsed && (
+          <div
+            onMouseDown={() => setIsDraggingLeft(true)}
+            onDoubleClick={() => setIsLeftDrawerCollapsed(true)}
+            title="拖拽调节宽度，双击一键折叠 (Ctrl+B)"
+            style={{
+              width: '4px',
+              cursor: 'col-resize',
+              background: isDraggingLeft ? 'var(--accent)' : 'transparent',
+              zIndex: 40,
+              transition: 'background 0.15s ease',
+              position: 'relative'
+            }}
+          >
+            <div style={{
+              position: 'absolute',
+              top: 0,
+              bottom: 0,
+              left: '1px',
+              width: '1px',
+              background: 'var(--border-subtle)'
+            }} />
+          </div>
+        )}
 
         {/* ChatColumn (自适应宽幅: 填满剩余空间) */}
         <ChatColumn
@@ -473,6 +491,10 @@ export const App: React.FC = () => {
           onSendMessage={handleSendMessage}
           onResolveOptions={handleResolveOptions}
           onForkMessage={handleForkSessionFromMessage}
+          onNavigateDiff={(target) => {
+            setRightWorkspaceOpen(true);
+            setActiveDiffTarget({ ...target, highlightToken: `diff-${target.fileId}` });
+          }}
         />
 
         {/* Right Divider (Draggable, when workbench open) */}
@@ -501,12 +523,13 @@ export const App: React.FC = () => {
           </div>
         )}
 
-        {/* EditorWorkspace (Dynamic Resizable Width) */}
+        {/* EditorWorkspace (Dynamic Resizable Width & Diff Navigation) */}
         {rightWorkspaceOpen && (
           <div style={{ width: `${workbenchWidth}px`, flexShrink: 0, height: '100%', display: 'flex' }}>
             <EditorWorkspace
               isOpen={rightWorkspaceOpen}
               onClose={() => setRightWorkspaceOpen(false)}
+              activeDiffTarget={activeDiffTarget}
             />
           </div>
         )}

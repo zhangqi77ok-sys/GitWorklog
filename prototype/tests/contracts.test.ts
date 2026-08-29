@@ -71,7 +71,9 @@ import {
   generatePreFlightCiReport,
   splitChangesetIntoSemanticCommits,
   toggleDebugProbe,
-  calculateBlastRadius
+  calculateBlastRadius,
+  clampLeftPanelWithCollapse,
+  createDiffNavigationTarget
 } from '../src/types/contracts';
 
 describe('SDD Contract - Token Telemetry & Gauge Algorithm', () => {
@@ -614,5 +616,23 @@ describe('SDD Contract - Senior Dev Production Features', () => {
     const blast = calculateBlastRadius('src/types/contracts.ts');
     expect(blast.sourcePackage).toContain('packages/core');
     expect(blast.totalAffectedCallsites).toBe(7);
+  });
+});
+
+
+describe('SDD Contract - UX & Logic Polish', () => {
+  it('should snap left panel to 0 if width < 80px, otherwise clamp between 180px and 420px', () => {
+    expect(clampLeftPanelWithCollapse(50)).toBe(0);
+    expect(clampLeftPanelWithCollapse(0)).toBe(0);
+    expect(clampLeftPanelWithCollapse(120)).toBe(180);
+    expect(clampLeftPanelWithCollapse(300)).toBe(300);
+    expect(clampLeftPanelWithCollapse(500)).toBe(420);
+  });
+
+  it('should generate valid Diff navigation target payload', () => {
+    const target = createDiffNavigationTarget('file-options', 'src/components/OptionsCard.tsx', 12);
+    expect(target.fileId).toBe('file-options');
+    expect(target.filePath).toBe('src/components/OptionsCard.tsx');
+    expect(target.targetLine).toBe(12);
   });
 });
