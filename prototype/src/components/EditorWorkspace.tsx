@@ -121,13 +121,15 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
   const [isExecutingCmd, setIsExecutingCmd] = useState<boolean>(false);
   const [commandHistory, setCommandHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState<number>(-1);
-  // Vertical Ratio State: Editor 62% / Terminal 38% (Persistent per project)
-  const [terminalRatio, setTerminalRatio] = useState<number>(() => {
+  // 📐 Stable Pixel Height: Default 260px (Bounds: 160px ~ 520px) with Self-Healing
+  const [terminalHeight, setTerminalHeight] = useState<number>(() => {
     try {
-      const saved = localStorage.getItem(`codemind_terminal_ratio_${activeProject?.path || 'default'}`);
-      return saved ? parseFloat(saved) : 0.38;
+      const saved = localStorage.getItem('codemind_terminal_height_px');
+      const val = saved ? parseInt(saved, 10) : 260;
+      if (isNaN(val) || val < 160 || val > 520) return 260;
+      return val;
     } catch (e) {
-      return 0.38;
+      return 260;
     }
   });
   const [isDraggingSplit, setIsDraggingSplit] = useState<boolean>(false);
@@ -150,11 +152,11 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
     const container = document.getElementById('workbench-split-container');
     if (container) {
       const rect = container.getBoundingClientRect();
-      const rawRatio = (rect.bottom - e.clientY) / rect.height;
-      const clampedRatio = Math.max(0.15, Math.min(0.80, rawRatio));
-      setTerminalRatio(clampedRatio);
+      const rawHeight = rect.bottom - e.clientY;
+      const clampedHeight = Math.max(160, Math.min(520, Math.round(rawHeight)));
+      setTerminalHeight(clampedHeight);
       try {
-        localStorage.setItem(`codemind_terminal_ratio_${activeProject?.path || 'default'}`, clampedRatio.toString());
+        localStorage.setItem('codemind_terminal_height_px', clampedHeight.toString());
       } catch (err) {}
     }
   };
@@ -166,10 +168,10 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
     setIsDraggingSplit(false);
   };
 
-  const handleResetSplitRatio = () => {
-    setTerminalRatio(0.38);
+  const handleResetSplitHeight = () => {
+    setTerminalHeight(260);
     try {
-      localStorage.setItem(`codemind_terminal_ratio_${activeProject?.path || 'default'}`, '0.38');
+      localStorage.setItem('codemind_terminal_height_px', '260');
     } catch (err) {}
   };
 
@@ -323,18 +325,18 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
         </button>
       </div>
 
-      {/* 2. MAIN SPLIT BODY */}
+      {/* 2. MAIN SPLIT BODY (Flex column with 1fr Top Editor and fixed px Bottom Terminal) */}
       <div id="workbench-split-container" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
-        {/* TOP: CODE EDITOR AREA */}
+        {/* TOP: CODE EDITOR AREA (Flex 1 takes all remaining vertical space) */}
         <div style={{
           flex: 1,
-          height: `${(1 - terminalRatio) * 100}%`,
           display: 'flex',
           flexDirection: 'column',
           background: 'var(--bg-base)',
           overflow: 'hidden',
           fontFamily: 'var(--font-mono)',
-          fontSize: '12px'
+          fontSize: '12px',
+          minHeight: '120px'
         }}>
           {/* File Tabs Strip */}
           {openedFiles.length > 0 && (
@@ -453,13 +455,13 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
           )}
         </div>
 
-        {/* DRAGGABLE RESIZE DIVIDER (Pointer Events + Double Click Reset + Real-time Ratio) */}
+        {/* DRAGGABLE RESIZE DIVIDER (Pointer Events + Double Click Reset) */}
         <div
           onPointerDown={handleSplitPointerDown}
           onPointerMove={handleSplitPointerMove}
           onPointerUp={handleSplitPointerUp}
-          onDoubleClick={handleResetSplitRatio}
-          title="上下拖拽调节比例 (双击恢复默认 Editor 62% / Terminal 38%)"
+          onDoubleClick={handleResetSplitHeight}
+          title="上下拖拽调节高度 (双击恢复默认 260px)"
           style={{
             height: '6px',
             background: isDraggingSplit ? 'var(--accent)' : 'var(--border-subtle)',
@@ -487,14 +489,16 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
               pointerEvents: 'none',
               zIndex: 40
             }}>
-              {Math.round((1 - terminalRatio) * 100)}% / {Math.round(terminalRatio * 100)}%
+              终端 {terminalHeight}px
             </div>
           )}
         </div>
 
-        {/* BOTTOM: INDEPENDENT TERMINAL AREA */}
+        {/* BOTTOM: INDEPENDENT TERMINAL AREA (Stable Pixel Height) */}
         <div style={{
-          height: `${terminalRatio * 100}%`,
+          height: `${terminalHeight}px`,
+          minHeight: '160px',
+          maxHeight: '520px',
           display: 'flex',
           flexDirection: 'column',
           background: '#0D1117',
