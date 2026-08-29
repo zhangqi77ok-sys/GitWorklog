@@ -217,16 +217,6 @@ export const AVAILABLE_MODELS: AIModelOption[] = [
     description: '深度推理与混合思考模型'
   },
   {
-    id: 'deepseek-r1',
-    name: 'DeepSeek-R1',
-    provider: 'DeepSeek',
-    contextLimit: 128000,
-    inputPricePerM: 0.55,
-    outputPricePerM: 2.19,
-    badge: '深度思考',
-    description: '长链条逻辑推演与算法突破'
-  },
-  {
     id: 'gpt-4o',
     name: 'GPT-4o',
     provider: 'OpenAI',
@@ -247,6 +237,58 @@ export const AVAILABLE_MODELS: AIModelOption[] = [
     description: '本地 Ollama 直连，100% 物理隔离'
   }
 ];
+
+export function getAllAvailableModels(): AIModelOption[] {
+  try {
+    const providers = loadSavedProviders();
+    const result: AIModelOption[] = [];
+    
+    for (const p of providers) {
+      if (p.enabled && Array.isArray(p.models) && p.models.length > 0) {
+        for (const m of p.models) {
+          if (m.enabled) {
+            result.push({
+              id: m.id,
+              name: m.name || m.id,
+              provider: (p.name.includes('Anthropic') ? 'Anthropic' : p.name.includes('OpenAI') ? 'OpenAI' : 'DeepSeek') as any,
+              contextLimit: m.contextLimit || 128000,
+              inputPricePerM: 0.1,
+              outputPricePerM: 0.2,
+              badge: p.name.includes('星海') ? '星海直通' : p.name.split(' ')[0],
+              description: `${p.name} 真实网关大模型 (${m.id})`
+            });
+          }
+        }
+      }
+    }
+    if (result.length > 0) {
+      return result;
+    }
+  } catch (e) {}
+  return AVAILABLE_MODELS;
+}
+
+export function flattenFileTreeToMentions(nodes: FileNode[]): MentionContextItem[] {
+  const items: MentionContextItem[] = [];
+  function traverse(list: FileNode[]) {
+    for (const node of list) {
+      if (node.type === 'file') {
+        items.push({
+          id: `mention-file-${node.path}`,
+          type: 'file',
+          name: node.name,
+          path: node.path,
+          detail: `本地文件 · ${node.path}`
+        });
+      }
+      if (node.children && node.children.length > 0) {
+        traverse(node.children);
+      }
+    }
+  }
+  traverse(nodes);
+  return items;
+}
 
 export function findModelById(id: string): AIModelOption {
   return AVAILABLE_MODELS.find(m => m.id === id) || AVAILABLE_MODELS[0];

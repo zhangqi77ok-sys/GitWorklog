@@ -35,7 +35,8 @@ import {
   loadSavedSessions,
   saveSessionsToStorage,
   loadSavedSessionMessages,
-  saveSessionMessagesToStorage
+  saveSessionMessagesToStorage,
+  MentionContextItem
 } from './types/contracts';
 
 export const App: React.FC = () => {
@@ -351,7 +352,7 @@ export const App: React.FC = () => {
     }
   };
 
-  const handleSendMessage = async (text: string) => {
+  const handleSendMessage = async (text: string, mentions?: MentionContextItem[]) => {
     if (!text.trim() || isStreaming) return;
 
     const userMsg: ChatMessage = {
@@ -384,13 +385,60 @@ export const App: React.FC = () => {
       let baseUrl = provider?.baseUrl?.trim() || 'https://platform.ai.hixinghai.com/api/v1';
       if (baseUrl.endsWith('/')) baseUrl = baseUrl.slice(0, -1);
       const apiKey = provider?.apiKey?.trim() || 'sk-xh-ZVKvOZcvzLKxUSWECPQ3mUKfP9q9sxrz14NQmtoQ000';
-      const targetModel = currentModel.id.includes('deepseek') ? 'deepseek-v4-flash' : currentModel.id;
+      // Use the exact model ID selected by user without hardcoding
+      const targetModel = currentModel.id;
+
+      // Pack Agent Workspace & Mentioned Files Context
+      let contextualizedUserContent = text;
+      if (mentions && mentions.length > 0) {
+        let mentionContextStr = '';
+        for (const item of mentions) {
+          if (item.type === 'file' && item.path) {
+            try {
+              const res = await fetch(`/api/fs/read?path=${encodeURIComponent(item.path)}`);
+              const data = await res.json();
+              if (data.success && typeof data.content === 'string') {
+                mentionContextStr += `\n\n[引用的文件 @${item.name} (${item.path})]:\n\`\`\`\n${data.content.slice(0, 12000)}\n\`\`\``;
+              }
+            } catch (e) {}
+          } else if (item.name === '@工程目录全貌' && activeSession.projectPath) {
+            try {
+              const res = await fetch(`/api/fs/tree?path=${encodeURIComponent(activeSession.projectPath)}`);
+              const data = await res.json();
+              if (data.success && data.tree) {
+                mentionContextStr += `\n\n[工作区工程完整目录拓扑]:\n\`\`\`json\n${JSON.stringify(data.tree, null, 2).slice(0, 5000)}\n\`\`\``;
+              }
+            } catch (e) {}
+          }
+        }
+        if (mentionContextStr) {
+          contextualizedUserContent = `${text}\n\n--- 上下文工程数据 ---${mentionContextStr}`;
+        }
+      }
+
+      // If user asks about project architecture and we have projectPath, automatically attach workspace tree outline
+      const isAskingAboutProject = /项目|工程|架构|代码|优化|审查|文件/i.test(text);
+      let workspaceTreeOutline = '';
+      if (isAskingAboutProject && activeSession.projectPath) {
+        try {
+          const res = await fetch(`/api/fs/tree?path=${encodeURIComponent(activeSession.projectPath)}`);
+          const data = await res.json();
+          if (data.success && data.tree) {
+            workspaceTreeOutline = `\n[当前工程实时目录文件拓扑]:\n${JSON.stringify(data.tree.map((n: any) => ({ name: n.name, type: n.type, path: n.path })), null, 2)}`;
+          }
+        } catch (e) {}
+      }
+
+      const systemPrompt = `你是 CodeMind-Hub 接入的真实生产级大模型助手。
+${activeSession.projectPath ? `【工作区环境】当前正在处理本地物理工程: ${activeSession.projectName}，路径: ${activeSession.projectPath}，Git分支: ${activeSession.gitBranch || 'main'}。你已通过 CodeMind-Hub 本地系统桥接，可以直接访问工作区。` : '当前处于全局自由会话模式。'}
+${workspaceTreeOutline}
+请针对用户的需求给出专业、精炼、准确且可落地的解答与代码。`;
 
       const currentList = sessionMessages[currentSessionId] || [];
       const apiMessages = [
-        { role: 'system', content: '你是 CodeMind-Hub 接入的真实生产级大模型助手。请针对用户的需求给出专业、精炼且正确的回答与代码。' },
+        { role: 'system', content: systemPrompt },
         ...currentList.slice(-6).map(m => ({ role: m.role, content: m.content })),
-        { role: 'user', content: text }
+        { role: 'user', content: contextualizedUserContent }
       ];
 
       const { url: requestUrl, headers: proxyHeaders } = resolveApiEndpoint(`${baseUrl}/chat/completions`);

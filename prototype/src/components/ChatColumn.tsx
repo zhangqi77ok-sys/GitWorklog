@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import {
   Send,
+  X,
   Shield,
   Paperclip,
   ScrollText,
@@ -46,6 +47,10 @@ import {
   PermissionPolicy,
   AIModelOption,
   AVAILABLE_MODELS,
+  getAllAvailableModels,
+  flattenFileTreeToMentions,
+  loadSavedProviders,
+  resolveApiEndpoint,
   MentionContextItem,
   DEFAULT_MENTION_ITEMS,
   searchMentionItems,
@@ -82,7 +87,7 @@ interface ChatColumnProps {
   permissionPolicy: PermissionPolicy;
   setPermissionPolicy: (p: PermissionPolicy) => void;
   isStreaming?: boolean;
-  onSendMessage: (text: string) => void;
+  onSendMessage: (text: string, mentions?: MentionContextItem[]) => void;
   onResolveOptions: (messageId: string, selectedIds: string[], customInput?: string) => void;
   onForkMessage?: (fromMessageId: string) => void;
   onNavigateDiff?: (target: { fileId: string; filePath: string; targetLine: number }) => void;
@@ -117,6 +122,73 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
   const [showMentionMenu, setShowMentionMenu] = useState(false);
   const [mentionQuery, setMentionQuery] = useState('');
   const [selectedMentions, setSelectedMentions] = useState<MentionContextItem[]>([]);
+  // Real Workspace Mentions State
+  const [workspaceMentionItems, setWorkspaceMentionItems] = useState<MentionContextItem[]>([]);
+  const [availableModelList, setAvailableModelList] = useState<AIModelOption[]>(getAllAvailableModels());
+  const [modelSearchQuery, setModelSearchQuery] = useState('');
+  const [isSyncingModels, setIsSyncingModels] = useState(false);
+
+  React.useEffect(() => {
+    let isMounted = true;
+    const loadMentions = async () => {
+      const projPath = session?.projectPath;
+      if (!projPath) return;
+      try {
+        const res = await fetch(`/api/fs/tree?path=${encodeURIComponent(projPath)}`);
+        const data = await res.json();
+        if (isMounted && data.success && Array.isArray(data.tree)) {
+          const files = flattenFileTreeToMentions(data.tree);
+          const specials: MentionContextItem[] = [
+            { id: 'm-workspace-tree', type: 'file', name: '@工程目录全貌', path: projPath, detail: '扫描并向 Agent 注入完整工程目录结构与依赖拓扑' },
+            { id: 'm-git-diff', type: 'git-diff', name: '@git-diff', detail: '注入当前 Git 未暂存代码变更' }
+          ];
+          setWorkspaceMentionItems([...specials, ...files]);
+        }
+      } catch (e) {}
+    };
+    loadMentions();
+    return () => { isMounted = false; };
+  }, [session?.projectPath]);
+
+  const handleSyncOnlineModels = async () => {
+    setIsSyncingModels(true);
+    try {
+      const savedProviders = loadSavedProviders();
+      const p = savedProviders.find((item: any) => item.enabled && item.apiKey && item.baseUrl) || savedProviders[0];
+      if (!p) throw new Error('未配置服务商');
+      let base = p.baseUrl.trim();
+      if (base.endsWith('/')) base = base.slice(0, -1);
+      const { url: requestUrl, headers: proxyHeaders } = resolveApiEndpoint(`${base}/models`);
+      const res = await fetch(requestUrl, {
+        headers: {
+          'Authorization': `Bearer ${p.apiKey.trim()}`,
+          ...proxyHeaders
+        }
+      });
+      const data = await res.json();
+      const list = data.data || [];
+      if (Array.isArray(list) && list.length > 0) {
+        const synched: AIModelOption[] = list.map((m: any) => ({
+          id: m.id,
+          name: m.id,
+          provider: (p.name.includes('Anthropic') ? 'Anthropic' : p.name.includes('OpenAI') ? 'OpenAI' : 'DeepSeek') as any,
+          contextLimit: 128000,
+          inputPricePerM: 0.1,
+          outputPricePerM: 0.2,
+          badge: '已同步',
+          description: `在线网关可用模型 (${m.id})`
+        }));
+        setAvailableModelList(synched);
+        setChangesetToast(`✓ 成功同步 ${synched.length} 个真实大模型！`);
+        setTimeout(() => setChangesetToast(null), 3000);
+      }
+    } catch (e: any) {
+      setChangesetToast(`✕ 同步失败: ${e.message}`);
+      setTimeout(() => setChangesetToast(null), 3000);
+    } finally {
+      setIsSyncingModels(false);
+    }
+  };
   const [pinnedFiles, setPinnedFiles] = useState<PinnedFileItem[]>([
     { id: 'pin-1', path: 'src/types/contracts.ts', name: 'contracts.ts', size: 38400 }
   ]);
@@ -202,8 +274,9 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
 
   const handleSend = () => {
     if (!inputText.trim()) return;
-    onSendMessage(inputText);
+    onSendMessage(inputText, selectedMentions);
     setInputText('');
+    setSelectedMentions([]);
   };
 
   return (
@@ -986,6 +1059,44 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
             </div>
           )}
 
+          {/* Active @ Mention Context Badges */}
+          {selectedMentions.length > 0 && (
+            <div style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: '6px',
+              padding: '6px 12px 2px 12px',
+              background: 'rgba(37, 99, 235, 0.04)',
+              borderBottom: '1px solid var(--border-subtle)'
+            }}>
+              {selectedMentions.map(m => (
+                <div
+                  key={m.id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '2px 8px',
+                    borderRadius: '12px',
+                    background: 'var(--bg-surface-elevated)',
+                    border: '1px solid #2563EB',
+                    color: '#2563EB',
+                    fontSize: '10.5px',
+                    fontWeight: 600
+                  }}
+                >
+                  <AtSign size={11} />
+                  <span>{m.name}</span>
+                  <X
+                    size={11}
+                    style={{ cursor: 'pointer', marginLeft: '2px' }}
+                    onClick={() => setSelectedMentions(prev => prev.filter(item => item.id !== m.id))}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+
           {/* 2. BORDERLESS AUTO-EXPANDING TEXTAREA */}
           <textarea
             placeholder={
@@ -1200,13 +1311,49 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                     overflowY: 'auto'
                   }}>
                     {/* Section 1: Direct Model Selection */}
-                    <div style={{ fontSize: '10px', color: 'var(--text-muted)', padding: '2px 6px', fontWeight: 700, borderBottom: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between' }}>
-                      <span>🌟 选择指定大模型</span>
-                      <span>{AVAILABLE_MODELS.length} 个可用</span>
+                    <div style={{ fontSize: '10px', color: 'var(--text-muted)', padding: '2px 6px', fontWeight: 700, borderBottom: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span>🌟 选择指定大模型 ({availableModelList.length} 个可用)</span>
+                      <button
+                        onClick={e => { e.stopPropagation(); handleSyncOnlineModels(); }}
+                        style={{
+                          padding: '1px 6px',
+                          borderRadius: '3px',
+                          background: 'var(--accent)',
+                          color: '#FFF',
+                          border: 'none',
+                          fontSize: '9.5px',
+                          fontWeight: 600,
+                          cursor: 'pointer'
+                        }}
+                        title="立即从网关实时拉取所有 47+ 个在线模型"
+                      >
+                        {isSyncingModels ? '同步中...' : '🔄 同步网关模型'}
+                      </button>
                     </div>
 
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                      {AVAILABLE_MODELS.map(m => {
+                    <div style={{ padding: '2px 4px 4px' }}>
+                      <input
+                        type="text"
+                        placeholder="过滤模型名称或 ID..."
+                        value={modelSearchQuery}
+                        onChange={e => setModelSearchQuery(e.target.value)}
+                        style={{
+                          width: '100%',
+                          padding: '3px 6px',
+                          fontSize: '10.5px',
+                          borderRadius: '3px',
+                          border: '1px solid var(--border-subtle)',
+                          background: 'var(--bg-base)',
+                          color: 'var(--text-primary)',
+                          outline: 'none'
+                        }}
+                      />
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', maxHeight: '220px', overflowY: 'auto' }}>
+                      {availableModelList
+                        .filter(m => !modelSearchQuery || m.name.toLowerCase().includes(modelSearchQuery.toLowerCase()) || m.id.toLowerCase().includes(modelSearchQuery.toLowerCase()))
+                        .map(m => {
                         const isSelected = !isAutoRouting && currentModel.id === m.id;
                         return (
                           <div
@@ -1330,11 +1477,31 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                     padding: '6px',
                     zIndex: 100
                   }}>
-                    <div style={{ fontSize: '10px', color: 'var(--text-muted)', padding: '2px 8px 6px', fontWeight: 600, borderBottom: '1px solid var(--border-subtle)' }}>
-                      @ 即时上下文引用 (文件 / AST 符号 / Git Diff / 终端)
+                    <div style={{ fontSize: '10px', color: 'var(--text-muted)', padding: '2px 8px 6px', fontWeight: 600, borderBottom: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span>@ 即时上下文引用 (工程文件/目录/Git)</span>
+                      <span style={{ color: 'var(--accent)' }}>{workspaceMentionItems.length > 0 ? `${workspaceMentionItems.length} 个文件` : '默认预置'}</span>
+                    </div>
+                    <div style={{ padding: '4px 6px' }}>
+                      <input
+                        type="text"
+                        placeholder="搜索文件或符号 (例如 package.json, contracts...)"
+                        value={mentionQuery}
+                        onChange={e => setMentionQuery(e.target.value)}
+                        autoFocus
+                        style={{
+                          width: '100%',
+                          padding: '4px 8px',
+                          fontSize: '11px',
+                          borderRadius: '4px',
+                          border: '1px solid var(--border-strong)',
+                          background: 'var(--bg-base)',
+                          color: 'var(--text-primary)',
+                          outline: 'none'
+                        }}
+                      />
                     </div>
                     <div style={{ maxHeight: '200px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '2px', marginTop: '4px' }}>
-                      {searchMentionItems(mentionQuery).map(item => (
+                      {(workspaceMentionItems.length > 0 ? workspaceMentionItems.filter(i => !mentionQuery || i.name.toLowerCase().includes(mentionQuery.toLowerCase()) || (i.path && i.path.toLowerCase().includes(mentionQuery.toLowerCase()))) : searchMentionItems(mentionQuery)).slice(0, 15).map(item => (
                         <div
                           key={item.id}
                           onClick={() => {
