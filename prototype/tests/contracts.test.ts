@@ -15,6 +15,13 @@ import {
   getProjectWorkspaceData,
   toggleSkillItem,
   updateKeybinding,
+  addAttachedFile,
+  removeAttachedFile,
+  getActiveRules,
+  toggleRuleItem,
+  INITIAL_RULES,
+  AttachedFile,
+  RuleItem,
   SkillItem,
   KeybindingItem,
   removeProjectFromWorkspace,
@@ -199,5 +206,28 @@ describe('SDD Contract - Settings Modal (Skills & Keybindings)', () => {
     ];
     const updated = updateKeybinding(mockKeymaps, 'act-run', 'Ctrl+Shift+Enter');
     expect(updated[0].currentKey).toBe('Ctrl+Shift+Enter');
+  });
+});
+
+
+describe('SDD Contract - Attached Files & Rules Preloading', () => {
+  it('should add and remove attached file seamlessly', () => {
+    const initial: AttachedFile[] = [];
+    const added = addAttachedFile(initial, { name: 'schema.sql', size: 2048, type: 'application/sql' });
+    expect(added.length).toBe(1);
+    expect(added[0].name).toBe('schema.sql');
+    expect(added[0].size).toBe(2048);
+
+    const removed = removeAttachedFile(added, added[0].id);
+    expect(removed.length).toBe(0);
+  });
+
+  it('should filter active rules and toggle rule status', () => {
+    const rules = [...INITIAL_RULES];
+    expect(getActiveRules(rules).length).toBe(3);
+
+    const toggled = toggleRuleItem(rules, 'rule-iron-triple');
+    expect(getActiveRules(toggled).length).toBe(2);
+    expect(toggled.find(r => r.id === 'rule-iron-triple')?.enabled).toBe(false);
   });
 });

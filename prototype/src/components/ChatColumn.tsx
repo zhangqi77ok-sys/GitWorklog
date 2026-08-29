@@ -2,6 +2,10 @@ import React, { useState } from 'react';
 import {
   Send,
   Shield,
+  Paperclip,
+  ScrollText,
+  X as XIcon,
+
   Zap,
   ChevronDown,
   ChevronUp,
@@ -16,6 +20,11 @@ import {
 import {
   SessionItem,
   ChatMessage,
+  AttachedFile,
+  RuleItem,
+  INITIAL_RULES,
+  getActiveRules,
+
   WorkMode,
   PermissionPolicy,
   AIModelOption,
@@ -55,6 +64,38 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
   onResolveOptions
 }) => {
   const [inputText, setInputText] = useState('');
+  const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
+  const [showRulesPopover, setShowRulesPopover] = useState(false);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const activeRules = getActiveRules(INITIAL_RULES);
+
+  const handlePaste = (e: React.ClipboardEvent) => {
+    if (e.clipboardData.files && e.clipboardData.files.length > 0) {
+      e.preventDefault();
+      const files = Array.from(e.clipboardData.files);
+      const newItems: AttachedFile[] = files.map(f => ({
+        id: `att-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
+        name: f.name || 'clipboard-file',
+        size: f.size,
+        type: f.type
+      }));
+      setAttachedFiles(prev => [...prev, ...newItems]);
+    }
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const files = Array.from(e.target.files);
+      const newItems: AttachedFile[] = files.map(f => ({
+        id: `att-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
+        name: f.name,
+        size: f.size,
+        type: f.type
+      }));
+      setAttachedFiles(prev => [...prev, ...newItems]);
+    }
+  };
+
   const [planExpanded, setPlanExpanded] = useState(workMode === 'plan');
 
   // Popover states for unified mode button and model selector button
@@ -465,6 +506,92 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
 
           </div>
 
+            {/* 1.2.2 File Upload & Attach Button */}
+            <input
+              type="file"
+              ref={fileInputRef}
+              multiple
+              onChange={handleFileSelect}
+              style={{ display: 'none' }}
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              title="上传文件或从剪贴板粘贴 (支持代码、图片、文档)"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                padding: '3px 8px',
+                borderRadius: '4px',
+                background: 'var(--bg-base)',
+                border: '1px solid var(--border-subtle)',
+                color: 'var(--text-secondary)',
+                fontSize: '11px',
+                cursor: 'pointer'
+              }}
+            >
+              <Paperclip size={12} color="var(--accent)" />
+              <span>上传文件/粘贴</span>
+            </button>
+
+            {/* 1.2.3 Rule Rules Preload Indicator Pill */}
+            <div style={{ position: 'relative' }}>
+              <button
+                onClick={() => setShowRulesPopover(!showRulesPopover)}
+                title="查看当前问答前置加载的顶层规则"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  padding: '3px 8px',
+                  borderRadius: '4px',
+                  background: 'rgba(217, 107, 39, 0.08)',
+                  border: '1px solid rgba(217, 107, 39, 0.25)',
+                  color: 'var(--accent)',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                <ScrollText size={12} />
+                <span>📜 {activeRules.length}条规则前置加载 ▾</span>
+              </button>
+
+              {/* Rules Popover */}
+              {showRulesPopover && (
+                <div style={{
+                  position: 'absolute',
+                  bottom: '30px',
+                  left: 0,
+                  width: '320px',
+                  background: 'var(--bg-surface-elevated)',
+                  border: '1px solid var(--border-strong)',
+                  borderRadius: '6px',
+                  boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
+                  padding: '10px',
+                  zIndex: 80,
+                  fontSize: '11px'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '4px' }}>
+                    <span style={{ fontWeight: 700, color: 'var(--accent)' }}>已生效的顶层 System Rules</span>
+                    <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>先行注入 Prompt</span>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    {activeRules.map(r => (
+                      <div key={r.id} style={{ padding: '4px 6px', background: 'var(--bg-surface)', borderRadius: '4px', border: '1px solid var(--border-subtle)' }}>
+                        <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '2px' }}>
+                          ● {r.title}
+                        </div>
+                        <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                          {r.content}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
           {/* 1.3 Dual-Track Permission Pill */}
           <div
             style={{
@@ -496,6 +623,36 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
         {/* ========================================================= */}
         {/* 2. INPUT BOX                                              */}
         {/* ========================================================= */}
+        {/* Attached Files Chips Bar */}
+        {attachedFiles.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '6px' }}>
+            {attachedFiles.map(f => (
+              <div
+                key={f.id}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  padding: '2px 8px',
+                  borderRadius: '4px',
+                  background: 'var(--accent-subtle)',
+                  border: '1px solid rgba(217, 107, 39, 0.3)',
+                  color: 'var(--accent)',
+                  fontSize: '11px',
+                  fontWeight: 500
+                }}
+              >
+                <Paperclip size={11} />
+                <span>{f.name} ({(f.size / 1024).toFixed(1)}KB)</span>
+                <XIcon
+                  size={12}
+                  style={{ cursor: 'pointer', marginLeft: '2px' }}
+                  onClick={() => setAttachedFiles(prev => prev.filter(item => item.id !== f.id))}
+                />
+              </div>
+            ))}
+          </div>
+        )}
         <div style={{ display: 'flex', gap: '8px' }}>
           <textarea
             placeholder={
@@ -505,6 +662,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
             }
             value={inputText}
             onChange={e => setInputText(e.target.value)}
+            onPaste={handlePaste}
             onKeyDown={e => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();

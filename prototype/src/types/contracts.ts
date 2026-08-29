@@ -522,3 +522,71 @@ export function toggleSkillItem(skills: SkillItem[], skillId: string): SkillItem
 export function updateKeybinding(bindings: KeybindingItem[], id: string, newKey: string): KeybindingItem[] {
   return bindings.map(b => b.id === id ? { ...b, currentKey: newKey } : b);
 }
+
+
+// Attachment & Rules Contracts
+export interface AttachedFile {
+  id: string;
+  name: string;
+  size: number;
+  type: string;
+  dataPreview?: string;
+}
+
+export function addAttachedFile(existing: AttachedFile[], file: { name: string; size?: number; type?: string }): AttachedFile[] {
+  const newFile: AttachedFile = {
+    id: `att-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
+    name: file.name,
+    size: file.size || 1024,
+    type: file.type || 'text/plain'
+  };
+  return [...existing, newFile];
+}
+
+export function removeAttachedFile(existing: AttachedFile[], id: string): AttachedFile[] {
+  return existing.filter(f => f.id !== id);
+}
+
+export interface RuleItem {
+  id: string;
+  title: string;
+  scope: 'global' | 'project';
+  content: string;
+  enabled: boolean;
+  priority: number;
+}
+
+export const INITIAL_RULES: RuleItem[] = [
+  {
+    id: 'rule-iron-triple',
+    title: '项目级三大铁律 (AGENTS.md)',
+    scope: 'project',
+    content: '1. 双向强同步原则: 需求变动必须同步PRD与原型; 2. 严禁越界开发禁令; 3. 真实交互原型验证。',
+    enabled: true,
+    priority: 1
+  },
+  {
+    id: 'rule-ts-strict',
+    title: 'TypeScript 严格类型检查与无 any',
+    scope: 'global',
+    content: '永远保持严格类型标注，严禁使用 any，类型定义统一集中在 src/types/contracts.ts。',
+    enabled: true,
+    priority: 2
+  },
+  {
+    id: 'rule-sdd-tdd',
+    title: 'SDD-TDD 契约与单测先行原则',
+    scope: 'global',
+    content: '每次代码变更前必须先定义契约并补充 Vitest 自动化测试，确保 100% 测试通过。',
+    enabled: true,
+    priority: 3
+  }
+];
+
+export function getActiveRules(rules: RuleItem[]): RuleItem[] {
+  return rules.filter(r => r.enabled);
+}
+
+export function toggleRuleItem(rules: RuleItem[], ruleId: string): RuleItem[] {
+  return rules.map(r => r.id === ruleId ? { ...r, enabled: !r.enabled } : r);
+}

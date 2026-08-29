@@ -8,6 +8,7 @@ import {
   Palette,
   Keyboard,
   Shield,
+  ScrollText,
   Check,
   Zap,
   Plus,
@@ -25,6 +26,9 @@ import {
   ACCENT_COLOR_PRESETS,
   toggleSkillItem,
   updateKeybinding,
+  RuleItem,
+  INITIAL_RULES,
+  toggleRuleItem,
   ProviderHealth,
   McpServerInfo
 } from '../types/contracts';
@@ -42,8 +46,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   currentAccentHex,
   onSelectAccentHex
 }) => {
-  const [activeTab, setActiveTab] = useState<'gateway' | 'skills' | 'mcp' | 'appearance' | 'keybindings' | 'system'>('gateway');
+  const [activeTab, setActiveTab] = useState<'gateway' | 'rules' | 'skills' | 'mcp' | 'appearance' | 'keybindings' | 'system'>('rules');
   const [searchFilter, setSearchFilter] = useState('');
+  const [rules, setRules] = useState<RuleItem[]>(INITIAL_RULES);
+
 
   // 1. Gateway State
   const [providers, setProviders] = useState<ProviderHealth[]>([
@@ -120,6 +126,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const navTabs = [
     { id: 'gateway', label: '模型网关', icon: Cpu },
+    { id: 'rules', label: 'Rule 规则管理', icon: ScrollText },
     { id: 'skills', label: 'Skill 技能库', icon: Boxes },
     { id: 'mcp', label: 'MCP 工具管理', icon: Server },
     { id: 'appearance', label: '自定义外观颜色', icon: Palette },
@@ -261,6 +268,87 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
           {/* Right Scrollable Content View */}
           <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px', background: 'var(--bg-surface-elevated)' }}>
+
+            {/* TAB: RULE 规则管理 (Rules for AI) */}
+            {activeTab === 'rules' && (
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                  <h3 style={{ fontSize: '13px', fontWeight: 700 }}>Rule 规则管理 (Rules for AI)</h3>
+                  <button style={{
+                    padding: '3px 8px',
+                    borderRadius: '4px',
+                    background: 'var(--accent)',
+                    color: '#FFF',
+                    border: 'none',
+                    fontSize: '10px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '3px'
+                  }}>
+                    <Plus size={11} />
+                    <span>添加自定义规则</span>
+                  </button>
+                </div>
+                <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '14px' }}>
+                  参考 Cursor <code>.cursorrules</code> 与 Antigravity 架构，问答发起与 Act 任务启动前会自动前置注入处于生效状态的 Rule 规则。
+                </p>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {rules.map(r => (
+                    <div
+                      key={r.id}
+                      style={{
+                        padding: '10px 12px',
+                        borderRadius: '6px',
+                        border: r.enabled ? '1px solid var(--accent)' : '1px solid var(--border-subtle)',
+                        background: 'var(--bg-surface)',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'flex-start'
+                      }}
+                    >
+                      <div style={{ flex: 1, paddingRight: '12px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                          <span style={{ fontWeight: 600, fontSize: '12px' }}>{r.title}</span>
+                          <span style={{
+                            fontSize: '9px',
+                            padding: '1px 5px',
+                            borderRadius: '3px',
+                            background: r.scope === 'project' ? 'rgba(217, 107, 39, 0.15)' : 'rgba(37, 99, 235, 0.1)',
+                            color: r.scope === 'project' ? 'var(--accent)' : '#2563EB',
+                            fontWeight: 600
+                          }}>
+                            {r.scope === 'project' ? '📁 工程级规则' : '🌐 全局通用规则'}
+                          </span>
+                        </div>
+                        <p style={{ fontSize: '11px', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+                          {r.content}
+                        </p>
+                      </div>
+
+                      <button
+                        onClick={() => setRules(toggleRuleItem(rules, r.id))}
+                        style={{
+                          padding: '3px 10px',
+                          borderRadius: '12px',
+                          border: 'none',
+                          background: r.enabled ? 'var(--accent)' : 'var(--border-strong)',
+                          color: '#FFF',
+                          fontSize: '10px',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          minWidth: '55px'
+                        }}
+                      >
+                        {r.enabled ? '已生效' : '已禁用'}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* TAB 1: MODEL GATEWAY */}
             {activeTab === 'gateway' && (
