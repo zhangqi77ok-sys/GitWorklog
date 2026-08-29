@@ -6,6 +6,8 @@ import {
   addTagToSession,
   removeTagFromSession,
   renameSession,
+  addProjectToWorkspace,
+  removeProjectFromWorkspace,
   SessionItem,
   TokenStats
 } from '../src/types/contracts';
@@ -58,5 +60,28 @@ describe('SDD Contract - Session Operations (Tags, Rename, Hierarchy)', () => {
   it('should rename session cleanly', () => {
     const renamed = renameSession(sampleSession, '全新架构重构');
     expect(renamed.title).toBe('全新架构重构');
+  });
+});
+
+describe('SDD Contract - System Directory Selection & Workspace', () => {
+  it('should add a new system directory path as a project group', () => {
+    const initialProjects = [
+      { id: 'proj-1', name: 'agent-learning', path: 'e:/pro/agent-learning', gitBranch: 'main', isExpanded: true }
+    ];
+    const { projects, newProject } = addProjectToWorkspace(initialProjects, 'D:\\dev\\my-awesome-app', 'feature/auth');
+    expect(projects.length).toBe(2);
+    expect(newProject.name).toBe('my-awesome-app');
+    expect(newProject.path).toBe('D:/dev/my-awesome-app');
+    expect(newProject.gitBranch).toBe('feature/auth');
+  });
+
+  it('should remove a project group cleanly', () => {
+    const initialProjects = [
+      { id: 'proj-1', name: 'agent-learning', path: 'e:/pro/agent-learning', gitBranch: 'main', isExpanded: true },
+      { id: 'proj-2', name: 'my-app', path: 'd:/dev/my-app', gitBranch: 'main', isExpanded: true }
+    ];
+    const remaining = removeProjectFromWorkspace(initialProjects, 'proj-1');
+    expect(remaining.length).toBe(1);
+    expect(remaining[0].id).toBe('proj-2');
   });
 });

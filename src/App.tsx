@@ -15,7 +15,9 @@ import {
   ProjectGroup,
   addTagToSession,
   removeTagFromSession,
-  renameSession
+  renameSession,
+  addProjectToWorkspace,
+  removeProjectFromWorkspace
 } from './types/contracts';
 
 export const App: React.FC = () => {
@@ -219,6 +221,33 @@ export const App: React.FC = () => {
     );
   };
 
+
+  const handleOpenDirectory = (folderPath: string) => {
+    const { projects: updatedProjects, newProject } = addProjectToWorkspace(projects, folderPath, 'main');
+    setProjects(updatedProjects);
+    // Create an initial session under this new project
+    const newSession: SessionItem = {
+      id: `session-${Date.now()}`,
+      tier1: 'project',
+      projectId: newProject.id,
+      projectName: newProject.name,
+      projectPath: newProject.path,
+      gitBranch: newProject.gitBranch,
+      title: `项目初始化对话 (${newProject.name})`,
+      tags: ['init'],
+      messagesCount: 1,
+      totalTokens: 1200,
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    };
+    setSessions(prev => [newSession, ...prev]);
+    setCurrentSessionId(newSession.id);
+  };
+
+  const handleRemoveProject = (projectId: string) => {
+    setProjects(prev => removeProjectFromWorkspace(prev, projectId));
+  };
+
   const handleSendMessage = (text: string) => {
     const newMsg: ChatMessage = {
       id: `msg-${Date.now()}`,
@@ -288,6 +317,8 @@ export const App: React.FC = () => {
           onRenameSession={handleRenameSession}
           onAddTag={handleAddTag}
           onRemoveTag={handleRemoveTag}
+          onOpenDirectory={handleOpenDirectory}
+          onRemoveProject={handleRemoveProject}
         />
 
         {/* ChatColumn (弹性 45%) */}

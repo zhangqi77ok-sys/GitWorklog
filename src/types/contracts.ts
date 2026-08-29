@@ -125,3 +125,29 @@ export function renameSession(session: SessionItem, newTitle: string): SessionIt
   if (!cleanTitle) return session;
   return { ...session, title: cleanTitle, updatedAt: Date.now() };
 }
+
+// Project Directory Operations
+export function addProjectToWorkspace(
+  projects: ProjectGroup[],
+  folderPath: string,
+  gitBranch: string = 'main'
+): { projects: ProjectGroup[]; newProject: ProjectGroup } {
+  const cleanPath = folderPath.trim().replace(/\\/g, '/');
+  const folderName = cleanPath.split('/').filter(Boolean).pop() || 'new-project';
+  const existing = projects.find(p => p.path === cleanPath);
+  if (existing) {
+    return { projects, newProject: existing };
+  }
+  const newProject: ProjectGroup = {
+    id: `proj-${Date.now()}`,
+    name: folderName,
+    path: cleanPath,
+    gitBranch,
+    isExpanded: true
+  };
+  return { projects: [...projects, newProject], newProject };
+}
+
+export function removeProjectFromWorkspace(projects: ProjectGroup[], projectId: string): ProjectGroup[] {
+  return projects.filter(p => p.id !== projectId);
+}

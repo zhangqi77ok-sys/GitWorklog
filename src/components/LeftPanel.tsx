@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   ChevronDown,
   ChevronRight,
@@ -6,13 +6,14 @@ import {
   Globe,
   Folder,
   FolderOpen,
+  FolderPlus,
   FileText,
   Trash2,
   Edit2,
   Tag,
   Check,
   X,
-  Sparkles
+  HardDrive
 } from 'lucide-react';
 import { SessionItem, ProjectGroup } from '../types/contracts';
 
@@ -29,6 +30,8 @@ interface LeftPanelProps {
   onRenameSession: (id: string, newTitle: string) => void;
   onAddTag: (sessionId: string, tag: string) => void;
   onRemoveTag: (sessionId: string, tag: string) => void;
+  onOpenDirectory: (folderPath: string) => void;
+  onRemoveProject: (projectId: string) => void;
 }
 
 export const LeftPanel: React.FC<LeftPanelProps> = ({
@@ -43,7 +46,9 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
   onDeleteSession,
   onRenameSession,
   onAddTag,
-  onRemoveTag
+  onRemoveTag,
+  onOpenDirectory,
+  onRemoveProject
 }) => {
   // Tree collapse state
   const [globalExpanded, setGlobalExpanded] = useState(true);
@@ -55,6 +60,11 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
   const [expandedFiles, setExpandedFiles] = useState<Record<string, boolean>>({
     'src/bus/GatewayBus.ts': true
   });
+
+  // Directory picker modal state
+  const [showDirPickerModal, setShowDirPickerModal] = useState(false);
+  const [customPathInput, setCustomPathInput] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Editing state
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
@@ -105,7 +115,27 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
     setExpandedFiles(prev => ({ ...prev, [filePath]: !prev[filePath] }));
   };
 
-  // Group sessions by category
+  // Directory picker handlers
+  const handleNativeFolderSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      // Extract root directory name from webkitRelativePath
+      const firstFile = files[0];
+      const relPath = firstFile.webkitRelativePath;
+      const rootName = relPath.split('/')[0];
+      onOpenDirectory(`d:/workspace/${rootName}`);
+      setShowDirPickerModal(false);
+    }
+  };
+
+  const handleConfirmCustomPath = () => {
+    if (customPathInput.trim()) {
+      onOpenDirectory(customPathInput.trim());
+      setCustomPathInput('');
+      setShowDirPickerModal(false);
+    }
+  };
+
   const globalSessions = sessions.filter(s => s.tier1 === 'global');
 
   return (
@@ -119,8 +149,18 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
       display: 'flex',
       flexDirection: 'column',
       userSelect: 'none',
-      fontSize: '12px'
+      fontSize: '12px',
+      position: 'relative'
     }}>
+      {/* Hidden file input for webkitdirectory */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        style={{ display: 'none' }}
+        onChange={handleNativeFolderSelect}
+        {...({ webkitdirectory: '', directory: '' } as any)}
+      />
+
       {/* Panel Header */}
       <div style={{
         padding: '10px 12px 8px',
@@ -132,17 +172,32 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
         <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
           项目与会话架构树
         </span>
-        <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-          {sessions.length} 个会话
-        </span>
+        <button
+          onClick={() => setShowDirPickerModal(true)}
+          title="选择并打开系统目录"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px',
+            padding: '2px 7px',
+            borderRadius: '4px',
+            background: 'var(--accent-subtle)',
+            color: 'var(--accent)',
+            border: '1px solid rgba(217, 107, 39, 0.3)',
+            fontSize: '11px',
+            fontWeight: 600,
+            cursor: 'pointer'
+          }}
+        >
+          <FolderPlus size={12} />
+          <span>打开目录</span>
+        </button>
       </div>
 
       {/* Tree Content Area */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '8px 4px' }}>
 
-        {/* ========================================================= */}
-        {/* 1. TOP-LEVEL GROUP: 🌐 全局自由会话 (Global Free Sessions) */}
-        {/* ========================================================= */}
+        {/* 1. TOP-LEVEL GROUP: 🌐 全局自由会话 */}
         <div style={{ marginBottom: '8px' }}>
           <div
             onClick={() => setGlobalExpanded(!globalExpanded)}
@@ -186,7 +241,6 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
             </button>
           </div>
 
-          {/* Global Session Items */}
           {globalExpanded && (
             <div style={{ paddingLeft: '14px', marginTop: '2px' }}>
               {globalSessions.map(session => renderSessionItem(session))}
@@ -194,9 +248,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
           )}
         </div>
 
-        {/* ========================================================= */}
-        {/* 2. TOP-LEVEL GROUP: 📁 项目管理与会话 (Projects Group)    */}
-        {/* ========================================================= */}
+        {/* 2. TOP-LEVEL GROUP: 📁 项目管理与会话 */}
         <div>
           <div
             onClick={() => setProjectsExpanded(!projectsExpanded)}
@@ -217,6 +269,27 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
               <Folder size={13} color="var(--accent)" />
               <span>📁 工作区项目 ({projects.length})</span>
             </div>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowDirPickerModal(true);
+              }}
+              title="添加/打开新系统项目目录"
+              style={{
+                width: '18px',
+                height: '18px',
+                borderRadius: '3px',
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--accent)',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+            >
+              <FolderPlus size={13} />
+            </button>
           </div>
 
           {/* Project List */}
@@ -232,6 +305,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
                     {/* Project Folder Header */}
                     <div
                       onClick={() => toggleProject(proj.id)}
+                      title={`系统绝对路径: ${proj.path}`}
                       style={{
                         display: 'flex',
                         alignItems: 'center',
@@ -244,45 +318,61 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
                         fontWeight: 600
                       }}
                     >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', overflow: 'hidden' }}>
                         {isProjOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
                         {isProjOpen ? <FolderOpen size={13} color="var(--accent)" /> : <Folder size={13} color="var(--accent)" />}
-                        <span style={{ color: 'var(--text-primary)' }}>{proj.name}</span>
+                        <span style={{ color: 'var(--text-primary)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                          {proj.name}
+                        </span>
                         <span style={{ fontSize: '10px', color: 'var(--accent)', fontWeight: 400 }}>({proj.gitBranch})</span>
                       </div>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onNewProjectSession(proj.id);
-                        }}
-                        title="在此工程下新建会话"
-                        style={{
-                          width: '18px',
-                          height: '18px',
-                          borderRadius: '3px',
-                          background: 'transparent',
-                          border: 'none',
-                          color: 'var(--accent)',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center'
-                        }}
-                      >
-                        <Plus size={12} />
-                      </button>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }} onClick={e => e.stopPropagation()}>
+                        <button
+                          onClick={() => onNewProjectSession(proj.id)}
+                          title="在此工程下新建会话"
+                          style={{
+                            width: '18px',
+                            height: '18px',
+                            borderRadius: '3px',
+                            background: 'transparent',
+                            border: 'none',
+                            color: 'var(--accent)',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}
+                        >
+                          <Plus size={12} />
+                        </button>
+                        <button
+                          onClick={() => onRemoveProject(proj.id)}
+                          title="从工作区移除此工程目录"
+                          style={{
+                            width: '18px',
+                            height: '18px',
+                            borderRadius: '3px',
+                            background: 'transparent',
+                            border: 'none',
+                            color: 'var(--text-muted)',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}
+                        >
+                          <X size={11} />
+                        </button>
+                      </div>
                     </div>
 
-                    {/* Project Children: Project-level sessions & File-level sessions */}
+                    {/* Project Children */}
                     {isProjOpen && (
                       <div style={{ paddingLeft: '14px', marginTop: '2px' }}>
-                        {/* 2.1 Project-scope Sessions */}
                         {projSessions.map(session => renderSessionItem(session))}
 
-                        {/* 2.2 File-scope Sub-nodes */}
                         {fileSessions.length > 0 && (
                           <div style={{ marginTop: '4px' }}>
-                            {/* File Parent Node */}
                             <div
                               onClick={() => toggleFile('src/bus/GatewayBus.ts')}
                               style={{
@@ -307,18 +397,12 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
                                   onNewFileSession(proj.id, 'src/bus/GatewayBus.ts');
                                 }}
                                 title="针对此文件开新会话"
-                                style={{
-                                  background: 'transparent',
-                                  border: 'none',
-                                  color: '#2563EB',
-                                  cursor: 'pointer'
-                                }}
+                                style={{ background: 'transparent', border: 'none', color: '#2563EB', cursor: 'pointer' }}
                               >
                                 <Plus size={11} />
                               </button>
                             </div>
 
-                            {/* File's sessions */}
                             {expandedFiles['src/bus/GatewayBus.ts'] && (
                               <div style={{ paddingLeft: '12px' }}>
                                 {fileSessions.map(session => renderSessionItem(session))}
@@ -337,7 +421,165 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
       </div>
 
       {/* ========================================================= */}
-      {/* 3. Tag Adding Popover Modal (When 🏷️ is clicked)           */}
+      {/* 3. Open System Directory Modal Dialog                     */}
+      {/* ========================================================= */}
+      {showDirPickerModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.45)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 999
+        }}>
+          <div style={{
+            width: '420px',
+            background: 'var(--bg-surface-elevated)',
+            borderRadius: '8px',
+            border: '1px solid var(--border-strong)',
+            boxShadow: '0 12px 32px rgba(0, 0, 0, 0.18)',
+            padding: '16px'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600, fontSize: '13px' }}>
+                <FolderPlus size={16} color="var(--accent)" />
+                <span>选择或打开系统项目目录</span>
+              </div>
+              <button
+                onClick={() => setShowDirPickerModal(false)}
+                style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}
+              >
+                <X size={14} />
+              </button>
+            </div>
+
+            {/* Option 1: Native System File Dialog */}
+            <div style={{ marginBottom: '14px' }}>
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  borderRadius: '6px',
+                  background: 'var(--accent-subtle)',
+                  color: 'var(--accent)',
+                  border: '1px solid var(--accent)',
+                  fontWeight: 600,
+                  fontSize: '12px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px'
+                }}
+              >
+                <HardDrive size={14} />
+                <span>调用系统文件选择器 (浏览本机文件夹)...</span>
+              </button>
+            </div>
+
+            {/* Divider */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: '12px 0', color: 'var(--text-muted)', fontSize: '11px' }}>
+              <div style={{ flex: 1, height: '1px', background: 'var(--border-subtle)' }} />
+              <span>或者手动输入系统绝对路径</span>
+              <div style={{ flex: 1, height: '1px', background: 'var(--border-subtle)' }} />
+            </div>
+
+            {/* Option 2: Path Input */}
+            <div style={{ marginBottom: '12px' }}>
+              <input
+                type="text"
+                placeholder="例如: D:\workspace\my-project 或 e:/pro/agent-learning"
+                value={customPathInput}
+                onChange={e => setCustomPathInput(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') handleConfirmCustomPath();
+                }}
+                style={{
+                  width: '100%',
+                  padding: '7px 10px',
+                  fontSize: '12px',
+                  borderRadius: '4px',
+                  border: '1px solid var(--border-strong)',
+                  background: 'var(--bg-base)',
+                  color: 'var(--text-primary)',
+                  outline: 'none'
+                }}
+              />
+            </div>
+
+            {/* Option 3: Recent Folders */}
+            <div style={{ marginBottom: '16px' }}>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '6px' }}>最近使用的工程目录：</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                {['e:/pro/agent-learning', 'e:/pro/codemind-sdk', 'd:/workspace/react-web-app'].map(p => (
+                  <div
+                    key={p}
+                    onClick={() => {
+                      onOpenDirectory(p);
+                      setShowDirPickerModal(false);
+                    }}
+                    style={{
+                      padding: '4px 8px',
+                      borderRadius: '4px',
+                      background: 'var(--bg-surface)',
+                      cursor: 'pointer',
+                      fontSize: '11px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <Folder size={12} color="var(--accent)" />
+                    <span>{p}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+              <button
+                onClick={() => setShowDirPickerModal(false)}
+                style={{
+                  padding: '5px 12px',
+                  borderRadius: '4px',
+                  border: '1px solid var(--border-subtle)',
+                  background: 'transparent',
+                  color: 'var(--text-secondary)',
+                  fontSize: '11px',
+                  cursor: 'pointer'
+                }}
+              >
+                取消
+              </button>
+              <button
+                onClick={handleConfirmCustomPath}
+                disabled={!customPathInput.trim()}
+                style={{
+                  padding: '5px 14px',
+                  borderRadius: '4px',
+                  border: 'none',
+                  background: 'var(--accent)',
+                  color: '#FFF',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                打开此工程
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* 4. Tag Adding Popover Modal                               */}
       {/* ========================================================= */}
       {taggingSessionId && (
         <div style={{
@@ -355,7 +597,6 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
               <X size={12} />
             </button>
           </div>
-          {/* Quick preset tags */}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '8px' }}>
             {popularTags.map(t => (
               <span
@@ -378,7 +619,6 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
               </span>
             ))}
           </div>
-          {/* Custom tag input */}
           <div style={{ display: 'flex', gap: '4px' }}>
             <input
               type="text"
@@ -409,7 +649,6 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
     </div>
   );
 
-  // Helper renderer for a single session item
   function renderSessionItem(session: SessionItem) {
     const isSelected = session.id === currentSessionId;
     const isEditing = editingSessionId === session.id;
@@ -430,7 +669,6 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
           transition: 'all 0.15s ease'
         }}
       >
-        {/* Title or In-place edit input */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           {isEditing ? (
             <div
@@ -488,7 +726,6 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
                 {session.title}
               </div>
 
-              {/* Action Buttons (Visible on hover or when selected) */}
               <div
                 style={{
                   display: 'flex',
@@ -498,7 +735,6 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
                 }}
                 onClick={e => e.stopPropagation()}
               >
-                {/* Add Tag */}
                 <button
                   title="为会话打标签"
                   onClick={() => setTaggingSessionId(session.id)}
@@ -506,8 +742,6 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
                 >
                   <Tag size={11} />
                 </button>
-
-                {/* Rename */}
                 <button
                   title="重命名会话"
                   onClick={(e) => startRename(session, e)}
@@ -515,8 +749,6 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
                 >
                   <Edit2 size={11} />
                 </button>
-
-                {/* Delete */}
                 <button
                   title="删除此会话"
                   onClick={() => onDeleteSession(session.id)}
@@ -529,7 +761,6 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
           )}
         </div>
 
-        {/* Tags row */}
         {session.tags && session.tags.length > 0 && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px', marginTop: '4px' }}>
             {session.tags.map(t => {
@@ -564,7 +795,6 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
           </div>
         )}
 
-        {/* Subtitle with message count & token usage */}
         <div style={{
           display: 'flex',
           justifyContent: 'space-between',
