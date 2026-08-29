@@ -197,6 +197,16 @@ export const AVAILABLE_MODELS: AIModelOption[] = [
     description: '超低成本与毫秒级高吞吐'
   },
   {
+    id: 'deepseek-v4-flash',
+    name: 'DeepSeek V4 Flash',
+    provider: 'DeepSeek',
+    contextLimit: 128000,
+    inputPricePerM: 0.10,
+    outputPricePerM: 0.20,
+    badge: '极速闪电',
+    description: '极速响应与超低延迟高吞吐，适配星海大模型平台'
+  },
+  {
     id: 'deepseek-r1',
     name: 'DeepSeek-R1',
     provider: 'DeepSeek',
