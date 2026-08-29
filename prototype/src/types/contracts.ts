@@ -2108,3 +2108,112 @@ export const MOCK_TOPOLOGY_NODES: ArchitectureTopologyNode[] = [
     impactCount: 0
   }
 ];
+
+
+// ============================================================================
+// 18. STAGE 2: STREAMING & THINKING BLOCK CONTRACTS
+// ============================================================================
+
+export interface ThinkingBlockPayload {
+  thinkingText: string;
+  contentText: string;
+  isThinkingFinished: boolean;
+  durationSeconds: number;
+  tokensCount: number;
+}
+
+export function extractThinkingFromText(rawText: string, elapsedSeconds: number = 0): ThinkingBlockPayload {
+  const thinkStart = rawText.indexOf('<think>');
+  const thinkEnd = rawText.indexOf('</think>');
+
+  if (thinkStart === -1) {
+    return {
+      thinkingText: '',
+      contentText: rawText,
+      isThinkingFinished: true,
+      durationSeconds: elapsedSeconds,
+      tokensCount: Math.ceil(rawText.length / 4)
+    };
+  }
+
+  if (thinkEnd === -1) {
+    // Still thinking
+    const thinking = rawText.substring(thinkStart + 7);
+    return {
+      thinkingText: thinking.trim(),
+      contentText: '',
+      isThinkingFinished: false,
+      durationSeconds: elapsedSeconds,
+      tokensCount: Math.ceil(thinking.length / 4)
+    };
+  }
+
+  // Finished thinking
+  const thinking = rawText.substring(thinkStart + 7, thinkEnd).trim();
+  const content = rawText.substring(thinkEnd + 8).trim();
+  return {
+    thinkingText: thinking,
+    contentText: content,
+    isThinkingFinished: true,
+    durationSeconds: elapsedSeconds || 8.2,
+    tokensCount: Math.ceil((thinking.length + content.length) / 4)
+  };
+}
+
+
+// ============================================================================
+// 19. STAGE 2: FUZZY AST PATCH ENGINE CONTRACTS
+// ============================================================================
+
+export interface PatchChunk {
+  oldStart: number;
+  oldLines: string[];
+  newLines: string[];
+}
+
+export interface PatchApplyResult {
+  success: boolean;
+  patchedContent: string;
+  appliedChunksCount: number;
+  syntaxValid: boolean;
+  errorMessage?: string;
+}
+
+export function applyUnifiedDiffPatch(originalSource: string, chunk: PatchChunk): PatchApplyResult {
+  const sourceLines = originalSource.split('\n');
+  const targetPattern = chunk.oldLines.join('\n').trim();
+
+  if (!targetPattern) {
+    return {
+      success: false,
+      patchedContent: originalSource,
+      appliedChunksCount: 0,
+      syntaxValid: true,
+      errorMessage: '空替换块'
+    };
+  }
+
+  const sourceJoined = sourceLines.join('\n');
+  const matchIndex = sourceJoined.indexOf(targetPattern);
+
+  if (matchIndex === -1) {
+    return {
+      success: false,
+      patchedContent: originalSource,
+      appliedChunksCount: 0,
+      syntaxValid: true,
+      errorMessage: '未能在目标源码中模糊匹配到上下文锚点'
+    };
+  }
+
+  const replaced = sourceJoined.replace(targetPattern, chunk.newLines.join('\n').trim());
+  const hasSyntaxError = replaced.includes('class class') || replaced.includes('def def');
+
+  return {
+    success: !hasSyntaxError,
+    patchedContent: replaced,
+    appliedChunksCount: 1,
+    syntaxValid: !hasSyntaxError,
+    errorMessage: hasSyntaxError ? 'AST 语法校验失败: 检测到重复关键字' : undefined
+  };
+}

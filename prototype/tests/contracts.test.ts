@@ -743,3 +743,92 @@ describe('Production Bridge - Tauri & Web Dual-Mode IPC Gateways', () => {
     expect(report.tsErrorsCount).toBe(0);
   });
 });
+
+
+import { extractThinkingFromText, applyUnifiedDiffPatch } from '../src/types/contracts';
+import { storageEngine } from '../src/services/storageEngine';
+import { defaultPatchEngine } from '../src/services/astPatchEngine';
+
+describe('Stage 2 Engine - SSE Streaming & Thinking Block Extraction', () => {
+  it('should parse completed thinking stream cleanly', () => {
+    const raw = '<think>\n分析依赖关系并规划 AST 补丁\n</think>\n已完成重构。';
+    const payload = extractThinkingFromText(raw, 5.4);
+    expect(payload.isThinkingFinished).toBe(true);
+    expect(payload.thinkingText).toBe('分析依赖关系并规划 AST 补丁');
+    expect(payload.contentText).toBe('已完成重构。');
+    expect(payload.durationSeconds).toBe(5.4);
+  });
+
+  it('should handle ongoing thinking state', () => {
+    const raw = '<think>\n正在推演第 3 个边缘情况...';
+    const payload = extractThinkingFromText(raw, 2.1);
+    expect(payload.isThinkingFinished).toBe(false);
+    expect(payload.thinkingText).toBe('正在推演第 3 个边缘情况...');
+    expect(payload.contentText).toBe('');
+  });
+
+  it('should return pure content if no think tags present', () => {
+    const raw = '直接返回代码实现结果。';
+    const payload = extractThinkingFromText(raw, 0.5);
+    expect(payload.isThinkingFinished).toBe(true);
+    expect(payload.thinkingText).toBe('');
+    expect(payload.contentText).toBe(raw);
+  });
+});
+
+describe('Stage 2 Engine - Fuzzy AST Unified Chunk Patching', () => {
+  it('should apply patch chunk with exact context matching', () => {
+    const source = `function calculateTotal(items) {\n  return items.reduce((acc, x) => acc + x.price, 0);\n}`;
+    const chunk = {
+      oldStart: 1,
+      oldLines: ['function calculateTotal(items) {', '  return items.reduce((acc, x) => acc + x.price, 0);', '}'],
+      newLines: ['function calculateTotal(items: CartItem[]): number {', '  return items.reduce((acc, x) => acc + x.price, 0);', '}']
+    };
+
+    const res = applyUnifiedDiffPatch(source, chunk);
+    expect(res.success).toBe(true);
+    expect(res.syntaxValid).toBe(true);
+    expect(res.patchedContent).toContain('CartItem[]');
+  });
+
+  it('should reject patch if target chunk pattern does not match', () => {
+    const source = `const x = 10;`;
+    const chunk = {
+      oldStart: 1,
+      oldLines: ['non_existent_function()'],
+      newLines: ['new_code()']
+    };
+
+    const res = applyUnifiedDiffPatch(source, chunk);
+    expect(res.success).toBe(false);
+    expect(res.appliedChunksCount).toBe(0);
+    expect(res.errorMessage).toBe('未能在目标源码中模糊匹配到上下文锚点');
+  });
+
+  it('should validate AST syntax and detect duplicate keywords', () => {
+    const validRes = defaultPatchEngine.validateAstSyntax('export function test() { return 1; }');
+    expect(validRes.valid).toBe(true);
+    expect(validRes.errors.length).toBe(0);
+
+    const invalidRes = defaultPatchEngine.validateAstSyntax('export class class MyClass {}');
+    expect(invalidRes.valid).toBe(false);
+    expect(invalidRes.errors).toContain('检测到重复关键字声明 (Duplicate Keyword)');
+  });
+});
+
+describe('Stage 2 Engine - Local Atomic Storage Persistence', () => {
+  it('should save and load typed data reliably', () => {
+    const dummyKey = 'test_session_backup';
+    const testData = { id: 'sess-999', title: 'Backup Test' };
+
+    const saveOk = storageEngine.save(dummyKey, testData);
+    expect(saveOk).toBe(true);
+
+    const loaded = storageEngine.load(dummyKey, null);
+    expect(loaded).toEqual(testData);
+
+    storageEngine.remove(dummyKey);
+    const loadedAfterRemove = storageEngine.load(dummyKey, { fallback: true });
+    expect(loadedAfterRemove).toEqual({ fallback: true });
+  });
+});

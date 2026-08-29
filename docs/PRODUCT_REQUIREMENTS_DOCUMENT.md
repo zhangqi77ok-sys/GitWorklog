@@ -796,3 +796,35 @@ To github.com:zhangqi77ok-sys/agent-learning.git
 ```
 - **代码库纯净态**：所有历史代码已彻底清空归档至保护分支，当前处于 0 行代码纯需求设计态；
 - **全景规约完备**：[PRODUCT_REQUIREMENTS_DOCUMENT.md](file:///e:/pro/agent-learning/PRODUCT_REQUIREMENTS_DOCUMENT.md) 与 [ARCHITECTURE.md](file:///e:/pro/agent-learning/ARCHITECTURE.md) 已同步就绪！
+
+
+---
+
+## 4.41 真实 SSE 流式网关与 Thinking 深度思维链实时折叠规约 (SSE & Thinking Stream)
+
+### 4.41.1 功能背景与痛点
+1. **真实大模型网络连接**：生产环境下需与 DeepSeek、OpenAI、Anthropic 以及本地私有化 Ollama (`http://localhost:11434`) 进行低延迟打字机流式传输；
+2. **推理模型思维链分离**：DeepSeek-R1 等模型会在输出前吐出长达几千字的 `<think>...</think>` 思维链，若直接平铺会严重遮挡真实代码输出，破坏阅读节奏。
+
+### 4.41.2 架构规约与交互准则
+1. **SSE 统一流式解析器 (`llmStreamingClient.ts`)**：
+   - 自动抹平各模型厂商返回格式差异（`choices[0].delta.content` vs `delta.text` vs `message.content`）；
+   - 支持流式打字机逐字刷新，并自动累加 Token 消耗与计算耗时；
+2. **Thinking 思考流折叠卡片 (`ThinkingBlock.tsx`)**：
+   - **流式中**：卡片呈现动态呼吸发光（`🧠 深度思考中 (耗时 3.4s)... ⌄`），实时显示推演文字；
+   - **生成完毕**：自动折叠为紧凑单行（`🧠 深度思考过程 (耗时 8.2s / 消耗 1,420 tokens) ⌄`），点击可展开或收起。
+
+---
+
+## 4.42 本地原子化持久化与 AST 模糊打补丁内核规约 (Storage & Fuzzy Patch Engine)
+
+### 4.42.1 本地原子持久化规约
+1. **多级持久化存储 (`storageEngine.ts`)**：
+   - **L1 LocalStorage**：轻量配置、当前活跃会话 ID、布局宽度；
+   - **L2 IndexedDB**：多会话全量消息记录、时空轨迹快照树、AST 语法树缓存；
+2. **故障自愈与断电恢复**：用户刷新页面或客户端意外关闭后，再次打开时 100% 毫秒级恢复上一次的输入草稿、打开的文件 Tab 与思维树状态。
+
+### 4.42.2 AST 模糊打补丁内核规约 (`astPatchEngine.ts`)
+1. **Unified Chunk Patch 算法**：
+   - 支持基于上下文（Context Lines）的模糊对齐搜索，即使代码行号发生轻微漂移（±10 行内），仍能精准命中目标函数体进行局部替换；
+   - 打补丁完成后自动触发 Tree-sitter 增量语法校验，若发现语法错误自动回滚至影子快照并发出警告。

@@ -64,6 +64,8 @@ import { OptionsCard } from './OptionsCard';
 import { SemanticCommitModal } from './SemanticCommitModal';
 import { PullRequestModal } from './PullRequestModal';
 import { TrajectorySnapshotModal } from './TrajectorySnapshotModal';
+import { ThinkingBlock } from './ThinkingBlock';
+import { extractThinkingFromText } from '../types/contracts';
 import { GitPullRequest } from 'lucide-react';
 
 interface ChatColumnProps {
@@ -465,16 +467,32 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
               )}
             </div>
 
-            <div style={{
-              padding: '10px 12px',
-              borderRadius: '6px',
-              background: msg.role === 'user' ? 'var(--bg-surface)' : 'var(--bg-base)',
-              border: '1px solid var(--border-subtle)',
-              fontSize: '12px',
-              lineHeight: 1.6
-            }}>
-              {msg.content}
-            </div>
+            {msg.role === 'assistant' && msg.content.includes('<think>') ? (
+              <>
+                <ThinkingBlock payload={extractThinkingFromText(msg.content, 8.2)} />
+                <div style={{
+                  padding: '10px 12px',
+                  borderRadius: '6px',
+                  background: 'var(--bg-base)',
+                  border: '1px solid var(--border-subtle)',
+                  fontSize: '12px',
+                  lineHeight: 1.6
+                }}>
+                  {extractThinkingFromText(msg.content).contentText || msg.content}
+                </div>
+              </>
+            ) : (
+              <div style={{
+                padding: '10px 12px',
+                borderRadius: '6px',
+                background: msg.role === 'user' ? 'var(--bg-surface)' : 'var(--bg-base)',
+                border: '1px solid var(--border-subtle)',
+                fontSize: '12px',
+                lineHeight: 1.6
+              }}>
+                {msg.content}
+              </div>
+            )}
 
             {msg.optionsPayload && (
               <OptionsCard

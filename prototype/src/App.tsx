@@ -210,7 +210,12 @@ export const App: React.FC = () => {
     {
       id: 'msg-2',
       role: 'assistant',
-      content: '已针对项目 AST 完成扫描。检测到组件状态扩展需求，有多种架构路径可供选择：',
+      content: `<think>
+1. 扫描工作区项目 AST 符号依赖关系，确定涉及 SessionItem 与 OptionsCard 数据流。
+2. 评估两种扩展路径：A 方案为纯契约解耦，B 方案为集中式 Store 状态总线。
+3. 推荐 B 方案以获得全局一致性并兼容未来多 Agent 协同。
+</think>
+已针对项目 AST 完成扫描。检测到组件状态扩展需求，有多种架构路径可供选择：`,
       timestamp: Date.now() - 240000,
       auditTag: '🤖 自动决策通过 · 已存快照',
       optionsPayload: {
