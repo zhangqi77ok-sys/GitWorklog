@@ -828,3 +828,22 @@ To github.com:zhangqi77ok-sys/agent-learning.git
 1. **Unified Chunk Patch 算法**：
    - 支持基于上下文（Context Lines）的模糊对齐搜索，即使代码行号发生轻微漂移（±10 行内），仍能精准命中目标函数体进行局部替换；
    - 打补丁完成后自动触发 Tree-sitter 增量语法校验，若发现语法错误自动回滚至影子快照并发出警告。
+
+
+---
+
+## 4.43 OpenAI 上游双协议支持规约 (Responses API vs Chat Completions)
+
+### 4.43.1 协议背景与架构分流
+针对 OpenAI 系列大模型（GPT-4o、o1、o3 等），提供双协议上游分流支持：
+1. **Responses API (`/v1/responses`) —— 默认协议**：
+   - **定位**：OpenAI 官方主推的下一代面向 Agent 与状态化交互的统一协议；
+   - **特点**：原生支持 `input` 结构、状态延续、模态合并以及高级 Agent Tools 调用；
+   - **默认行为**：系统初始化或新增 OpenAI 渠道时，**默认锁定为 Responses API**。
+2. **Chat Completions (`/v1/chat/completions`) —— 传统兼容协议**：
+   - **定位**：兼容各大第三方中转网关、OneAPI / NewAPI 等聚合转发服务；
+   - **特点**：标准 `messages: [{ role, content }]` 数组传输。
+
+### 4.43.2 交互与切换准则
+- 在 **设置中心 (SettingsModal) ➔ 模型渠道 ➔ OpenAI 配置项** 中，提供双协议即时切换单选组件；
+- 切换后即时持久化到本地 `storageEngine`，并在下一次请求时按选定端点自动组装 Payload。

@@ -26,7 +26,8 @@ import {
   Clipboard,
   Trash2,
   Code,
-  ChevronDown
+  ChevronDown,
+  Sparkles
 } from 'lucide-react';
 import {
   SkillItem,
@@ -75,6 +76,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   currentAccentHex,
   onSelectAccentHex
 }) => {
+  const [openaiProtocol, setOpenaiProtocol] = useState<'responses' | 'chat_completions'>('responses');
   const [activeTab, setActiveTab] = useState<'gateway' | 'rules' | 'skills' | 'mcp' | 'appearance' | 'keybindings' | 'system'>('rules');
   const [searchFilter, setSearchFilter] = useState('');
   const [rules, setRules] = useState<RuleItem[]>(INITIAL_RULES);
@@ -979,6 +981,89 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       </div>
                     </div>
                   </div>
+
+                  {/* OpenAI Upstream Protocol Selection Card (Responses API vs Chat Completions) */}
+                  {(selectedProvider.protocol === 'openai' || selectedProvider.id.includes('openai')) && (
+                    <div style={{
+                      padding: '10px 14px',
+                      borderRadius: '6px',
+                      background: 'rgba(217, 107, 39, 0.05)',
+                      border: '1px solid rgba(217, 107, 39, 0.25)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '8px'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <Sparkles size={13} color="var(--accent)" />
+                          <span style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                            OpenAI 上游协议选择 (Upstream Protocol)
+                          </span>
+                        </div>
+                        <span style={{ fontSize: '9.5px', padding: '1px 6px', borderRadius: '3px', background: 'var(--accent)', color: '#FFF', fontWeight: 600 }}>
+                          默认: Responses API
+                        </span>
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                        <div
+                          onClick={() => {
+                            setOpenaiProtocol('responses');
+                            setProviderToast('✓ OpenAI 上游协议已切换为 Responses API (/v1/responses)');
+                            setTimeout(() => setProviderToast(null), 3000);
+                          }}
+                          style={{
+                            padding: '8px 10px',
+                            borderRadius: '5px',
+                            border: openaiProtocol === 'responses' ? '1px solid var(--accent)' : '1px solid var(--border-subtle)',
+                            background: openaiProtocol === 'responses' ? 'var(--accent-subtle)' : 'var(--bg-surface)',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '2px'
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <span style={{ fontSize: '11px', fontWeight: 600, color: openaiProtocol === 'responses' ? 'var(--accent)' : 'var(--text-primary)' }}>
+                              ⚡ Responses API (默认推荐)
+                            </span>
+                            <span style={{ fontSize: '9px', color: 'var(--text-muted)' }}>/v1/responses</span>
+                          </div>
+                          <span style={{ fontSize: '9.5px', color: 'var(--text-muted)' }}>
+                            面向 Agent 的状态化统一协议，支持原生多模态与实时工具调用
+                          </span>
+                        </div>
+
+                        <div
+                          onClick={() => {
+                            setOpenaiProtocol('chat_completions');
+                            setProviderToast('✓ OpenAI 上游协议已切换为 Chat Completions (/v1/chat/completions)');
+                            setTimeout(() => setProviderToast(null), 3000);
+                          }}
+                          style={{
+                            padding: '8px 10px',
+                            borderRadius: '5px',
+                            border: openaiProtocol === 'chat_completions' ? '1px solid var(--accent)' : '1px solid var(--border-subtle)',
+                            background: openaiProtocol === 'chat_completions' ? 'var(--accent-subtle)' : 'var(--bg-surface)',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '2px'
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <span style={{ fontSize: '11px', fontWeight: 600, color: openaiProtocol === 'chat_completions' ? 'var(--accent)' : 'var(--text-primary)' }}>
+                              💬 Chat Completions (传统兼容)
+                            </span>
+                            <span style={{ fontSize: '9px', color: 'var(--text-muted)' }}>/v1/chat/completions</span>
+                          </div>
+                          <span style={{ fontSize: '9.5px', color: 'var(--text-muted)' }}>
+                            标准 messages 数组流式协议，兼容各大聚合中转网关与 OneAPI
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Full-Width Models Management Card (Symmetrical & Spacious) */}
                   <div style={{

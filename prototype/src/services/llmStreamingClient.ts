@@ -1,4 +1,4 @@
-import { extractThinkingFromText, ThinkingBlockPayload } from '../types/contracts';
+import { extractThinkingFromText, ThinkingBlockPayload, OpenAiProtocolType, DEFAULT_OPENAI_PROTOCOL, buildOpenAiRequestPayload } from '../types/contracts';
 
 export interface StreamEventCallbacks {
   onChunk: (chunkText: string, fullText: string, thinkingPayload: ThinkingBlockPayload) => void;
@@ -12,6 +12,7 @@ export interface StreamRequestConfig {
   model: string;
   prompt: string;
   temperature?: number;
+  openaiProtocol?: OpenAiProtocolType;
 }
 
 export class LlmStreamingClient {

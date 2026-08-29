@@ -2217,3 +2217,51 @@ export function applyUnifiedDiffPatch(originalSource: string, chunk: PatchChunk)
     errorMessage: hasSyntaxError ? 'AST 语法校验失败: 检测到重复关键字' : undefined
   };
 }
+
+
+// ============================================================================
+// 20. OPENAI UPSTREAM PROTOCOL SELECTION CONTRACTS
+// ============================================================================
+
+export type OpenAiProtocolType = 'responses' | 'chat_completions';
+
+export interface OpenAiProtocolConfig {
+  protocol: OpenAiProtocolType;
+  customBaseUrl?: string;
+}
+
+export const DEFAULT_OPENAI_PROTOCOL: OpenAiProtocolType = 'responses';
+
+export interface OpenAiPayloadResult {
+  endpointPath: string;
+  body: Record<string, unknown>;
+}
+
+export function buildOpenAiRequestPayload(
+  model: string,
+  prompt: string,
+  protocol: OpenAiProtocolType = DEFAULT_OPENAI_PROTOCOL,
+  temperature: number = 0.3
+): OpenAiPayloadResult {
+  if (protocol === 'responses') {
+    return {
+      endpointPath: '/v1/responses',
+      body: {
+        model,
+        input: prompt,
+        temperature
+      }
+    };
+  }
+
+  // Fallback / legacy Chat Completions
+  return {
+    endpointPath: '/v1/chat/completions',
+    body: {
+      model,
+      messages: [{ role: 'user', content: prompt }],
+      stream: true,
+      temperature
+    }
+  };
+}
