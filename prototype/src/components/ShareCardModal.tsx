@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { X, Check, Copy, Download, Share2, Sparkles, ShieldCheck, Terminal, Cpu } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { X, Check, Copy, Download, Share2, Sparkles, Image as ImageIcon, ShieldCheck } from 'lucide-react';
 import { ChatMessage, SessionItem } from '../types/contracts';
 import { MarkdownCard } from './MarkdownCard';
 
@@ -16,7 +16,21 @@ export const ShareCardModal: React.FC<ShareCardModalProps> = ({
   message,
   session
 }) => {
-  const [copied, setCopied] = useState(false);
+  const [copiedText, setCopiedText] = useState(false);
+  const [isGeneratingImage, setIsGeneratingImage] = useState(false);
+  const [imageGeneratedToast, setImageGeneratedToast] = useState<string | null>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  // Universal ESC key support
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isOpen) {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
 
   if (!isOpen || !message) return null;
 
@@ -29,21 +43,170 @@ export const ShareCardModal: React.FC<ShareCardModalProps> = ({
   });
 
   const handleCopyCardText = async () => {
-    const text = `【Tcode AI 协作卡片】\n会话: ${session.title}\n工程: ${session.projectName || '主工程'}\n时间: ${cardDate}\n\n--- 问答内容 ---\n${message.content}\n\n— 来自 Tcode 金融级 AI 桌面 IDE`;
+    const text = `【Tcode AI 协作记录卡片】\n会话: ${session.title}\n工程: ${session.projectName || '主工程'}\n时间: ${cardDate}\n\n--- 问答内容 ---\n${message.content}\n\n— 来自 Tcode 企业级 AI 桌面 IDE`;
     await navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2500);
+    setCopiedText(true);
+    setTimeout(() => setCopiedText(false), 2500);
   };
 
-  const handleExportMarkdown = () => {
-    const mdContent = `# Tcode 对话记录\n\n**工程**: ${session.projectName || '主工程'} (${session.gitBranch || 'main'})  \n**会话**: ${session.title}  \n**时间**: ${cardDate}  \n**模型审计**: ${message.auditTag || 'Tcode AI Engine'}  \n\n---\n\n${message.content}\n`;
-    const blob = new Blob([mdContent], { type: 'text/markdown;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `CodeMind-Share-${session.title.slice(0, 16)}-${Date.now()}.md`;
-    a.click();
-    URL.revokeObjectURL(url);
+  // High-DPI Canvas PNG Card Generator
+  const handleSaveAsImage = () => {
+    setIsGeneratingImage(true);
+    try {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      const width = 800;
+      const padding = 32;
+      const contentWidth = width - padding * 2;
+      
+      // Calculate wrapped lines
+      ctx.font = '14px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+      const rawLines = message.content.split('\n');
+      const lines: string[] = [];
+
+      for (const rLine of rawLines) {
+        if (!rLine) {
+          lines.push('');
+          continue;
+        }
+        let current = '';
+        for (const char of rLine) {
+          const testLine = current + char;
+          const metrics = ctx.measureText(testLine);
+          if (metrics.width > contentWidth && current !== '') {
+            lines.push(current);
+            current = char;
+          } else {
+            current = testLine;
+          }
+        }
+        if (current) lines.push(current);
+      }
+
+      const lineHeight = 22;
+      const maxLinesToRender = Math.min(lines.length, 60);
+      const contentHeight = maxLinesToRender * lineHeight + 40;
+      const headerHeight = 110;
+      const footerHeight = 60;
+      const height = headerHeight + contentHeight + footerHeight;
+
+      // Scale for Retina / High-DPI
+      const scale = 2;
+      canvas.width = width * scale;
+      canvas.height = height * scale;
+      ctx.scale(scale, scale);
+
+      // 1. Draw Card Background
+      ctx.fillStyle = '#1A1816';
+      ctx.fillRect(0, 0, width, height);
+
+      // Card border
+      ctx.strokeStyle = '#38332E';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(0, 0, width, height);
+
+      // 2. Draw Header Banner
+      const grad = ctx.createLinearGradient(0, 0, width, 0);
+      grad.addColorStop(0, '#D96B27');
+      grad.addColorStop(1, '#9333EA');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, width, 5);
+
+      // Logo Icon Box
+      ctx.fillStyle = '#D96B27';
+      ctx.beginPath();
+      ctx.roundRect(padding, 24, 28, 28, 6);
+      ctx.fill();
+
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = 'bold 16px sans-serif';
+      ctx.fillText('T', padding + 8, 44);
+
+      // Brand Title
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = 'bold 16px sans-serif';
+      ctx.fillText('Tcode', padding + 38, 38);
+
+      ctx.fillStyle = '#A8A29E';
+      ctx.font = '11px sans-serif';
+      ctx.fillText('AI Agentic Desktop IDE', padding + 38, 52);
+
+      // Project & Time (Right-aligned)
+      ctx.fillStyle = '#E7E5E4';
+      ctx.font = 'bold 12px sans-serif';
+      ctx.textAlign = 'right';
+      ctx.fillText(`📁 ${session.projectName || '主工程'} (${session.gitBranch || 'main'})`, width - padding, 38);
+
+      ctx.fillStyle = '#78716C';
+      ctx.font = '11px sans-serif';
+      ctx.fillText(cardDate, width - padding, 52);
+      ctx.textAlign = 'left';
+
+      // Divider
+      ctx.strokeStyle = '#292524';
+      ctx.beginPath();
+      ctx.moveTo(padding, headerHeight - 15);
+      ctx.lineTo(width - padding, headerHeight - 15);
+      ctx.stroke();
+
+      // 3. Draw Message Content
+      ctx.fillStyle = '#F5F5F4';
+      ctx.font = '14px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+      
+      let y = headerHeight + 10;
+      for (let i = 0; i < maxLinesToRender; i++) {
+        const line = lines[i];
+        if (line.startsWith('```') || line.startsWith('#')) {
+          ctx.fillStyle = '#D96B27';
+          ctx.font = 'bold 14px Consolas, monospace';
+        } else if (line.startsWith('- ') || line.startsWith('● ')) {
+          ctx.fillStyle = '#E7E5E4';
+          ctx.font = '14px sans-serif';
+        } else {
+          ctx.fillStyle = '#D6D3D1';
+          ctx.font = '14px sans-serif';
+        }
+        ctx.fillText(line, padding, y);
+        y += lineHeight;
+      }
+
+      if (lines.length > maxLinesToRender) {
+        ctx.fillStyle = '#78716C';
+        ctx.font = 'italic 12px sans-serif';
+        ctx.fillText(`... (已截取前 ${maxLinesToRender} 行，完整内容请在 IDE 中查看)`, padding, y + 10);
+      }
+
+      // 4. Draw Footer
+      const footerY = height - footerHeight + 15;
+      ctx.strokeStyle = '#292524';
+      ctx.beginPath();
+      ctx.moveTo(padding, footerY - 10);
+      ctx.lineTo(width - padding, footerY - 10);
+      ctx.stroke();
+
+      ctx.fillStyle = '#78716C';
+      ctx.font = '11px sans-serif';
+      ctx.fillText('✨ 由 Tcode 智能体生成 · 经 AST 语法校验与离线脱敏认证', padding, footerY + 15);
+
+      ctx.textAlign = 'right';
+      ctx.fillText('https://github.com/zhangqi77ok-sys/agent-learning', width - padding, footerY + 15);
+
+      // 5. Download as PNG
+      const link = document.createElement('a');
+      link.download = `Tcode-Share-Card-${Date.now()}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+
+      setImageGeneratedToast('✨ 已成功生成并下载精美图片卡片 (PNG)！');
+      setTimeout(() => setImageGeneratedToast(null), 3500);
+    } catch (e) {
+      setImageGeneratedToast('❌ 生成图片失败，请重试');
+      setTimeout(() => setImageGeneratedToast(null), 3000);
+    } finally {
+      setIsGeneratingImage(false);
+    }
   };
 
   return (
@@ -53,7 +216,7 @@ export const ShareCardModal: React.FC<ShareCardModalProps> = ({
       left: 0,
       right: 0,
       bottom: 0,
-      background: 'rgba(0, 0, 0, 0.52)',
+      background: 'rgba(0, 0, 0, 0.55)',
       backdropFilter: 'blur(6px)',
       display: 'flex',
       alignItems: 'center',
@@ -86,11 +249,12 @@ export const ShareCardModal: React.FC<ShareCardModalProps> = ({
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Share2 size={16} color="var(--accent)" />
             <span style={{ fontWeight: 700, fontSize: '13px', color: 'var(--text-primary)' }}>
-              分享对话卡片 (Share Insight Card)
+              分享对话卡片 (Share Image Card)
             </span>
           </div>
           <button
             onClick={onClose}
+            title="关闭 (ESC)"
             style={{
               background: 'transparent',
               border: 'none',
@@ -108,17 +272,36 @@ export const ShareCardModal: React.FC<ShareCardModalProps> = ({
 
         {/* Card Body Viewport */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '20px', background: 'var(--bg-base)' }}>
-          {/* THE SOCIAL SHARE CARD */}
-          <div style={{
-            background: 'var(--bg-surface)',
-            borderRadius: '10px',
-            border: '1px solid var(--border-strong)',
-            boxShadow: '0 8px 24px rgba(0, 0, 0, 0.1)',
-            overflow: 'hidden'
-          }}>
+          {imageGeneratedToast && (
+            <div style={{
+              padding: '8px 12px',
+              borderRadius: '6px',
+              background: 'var(--accent)',
+              color: '#FFF',
+              fontSize: '11.5px',
+              fontWeight: 600,
+              marginBottom: '12px',
+              textAlign: 'center',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+            }}>
+              {imageGeneratedToast}
+            </div>
+          )}
+
+          {/* THE SOCIAL SHARE CARD PREVIEW */}
+          <div
+            ref={cardRef}
+            style={{
+              background: 'var(--bg-surface)',
+              borderRadius: '10px',
+              border: '1px solid var(--border-strong)',
+              boxShadow: '0 8px 24px rgba(0, 0, 0, 0.1)',
+              overflow: 'hidden'
+            }}
+          >
             {/* Card Top Brand Banner */}
             <div style={{
-              background: 'linear-gradient(135deg, rgba(217, 107, 39, 0.12) 0%, rgba(147, 51, 234, 0.08) 100%)',
+              background: 'linear-gradient(135deg, rgba(217, 107, 39, 0.14) 0%, rgba(147, 51, 234, 0.08) 100%)',
               borderBottom: '1px solid var(--border-subtle)',
               padding: '14px 18px',
               display: 'flex',
@@ -127,8 +310,8 @@ export const ShareCardModal: React.FC<ShareCardModalProps> = ({
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <div style={{
-                  width: '24px',
-                  height: '24px',
+                  width: '26px',
+                  height: '26px',
                   borderRadius: '6px',
                   background: 'var(--accent)',
                   color: '#FFF',
@@ -136,16 +319,16 @@ export const ShareCardModal: React.FC<ShareCardModalProps> = ({
                   alignItems: 'center',
                   justifyContent: 'center',
                   fontWeight: 800,
-                  fontSize: '13px'
+                  fontSize: '14px'
                 }}>
-                  C
+                  T
                 </div>
                 <div>
-                  <div style={{ fontWeight: 700, fontSize: '13px', color: 'var(--text-strong)' }}>
+                  <div style={{ fontWeight: 700, fontSize: '13.5px', color: 'var(--text-strong)' }}>
                     Tcode
                   </div>
                   <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
-                    Enterprise AI Agentic IDE
+                    AI Agentic Desktop IDE
                   </div>
                 </div>
               </div>
@@ -186,18 +369,6 @@ export const ShareCardModal: React.FC<ShareCardModalProps> = ({
                 }}>
                   🛡️ 离线脱敏认证
                 </span>
-                {message.auditTag && (
-                  <span style={{
-                    padding: '1px 6px',
-                    borderRadius: '3px',
-                    background: 'var(--accent-subtle)',
-                    color: 'var(--accent)',
-                    fontWeight: 600,
-                    fontSize: '10px'
-                  }}>
-                    {message.auditTag}
-                  </span>
-                )}
               </div>
             </div>
 
@@ -217,7 +388,7 @@ export const ShareCardModal: React.FC<ShareCardModalProps> = ({
               fontSize: '10.5px',
               color: 'var(--text-muted)'
             }}>
-              <span>Tcode Agent 架构协同生成 · 真实本地代码校验</span>
+              <span>✨ 由 Tcode 智能体协同生成 · 本地代码严谨校验</span>
               <span>SHA-256: {Math.random().toString(36).substring(2, 10).toUpperCase()}</span>
             </div>
           </div>
@@ -230,50 +401,68 @@ export const ShareCardModal: React.FC<ShareCardModalProps> = ({
           padding: '0 16px',
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'flex-end',
-          gap: '10px',
+          justifyContent: 'space-between',
           background: 'var(--bg-surface)'
         }}>
           <button
-            onClick={handleCopyCardText}
+            onClick={onClose}
             style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '6px 14px',
+              padding: '6px 12px',
               borderRadius: '6px',
-              background: copied ? '#16A34A' : 'var(--bg-base)',
-              border: `1px solid ${copied ? '#16A34A' : 'var(--border-subtle)'}`,
-              color: copied ? '#FFF' : 'var(--text-primary)',
-              fontSize: '12px',
-              fontWeight: 600,
-              cursor: 'pointer',
-              transition: 'all 0.15s ease'
-            }}
-          >
-            {copied ? <Check size={14} /> : <Copy size={14} />}
-            <span>{copied ? '✓ 已复制卡片文本' : '📋 复制卡片文本'}</span>
-          </button>
-
-          <button
-            onClick={handleExportMarkdown}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '6px 14px',
-              borderRadius: '6px',
-              background: 'var(--accent)',
-              border: 'none',
-              color: '#FFF',
-              fontSize: '12px',
-              fontWeight: 600,
+              border: '1px solid var(--border-subtle)',
+              background: 'transparent',
+              color: 'var(--text-secondary)',
+              fontSize: '11.5px',
               cursor: 'pointer'
             }}
           >
-            <Download size={14} />
-            <span>💾 导出为 Markdown 文件</span>
+            ✕ 取消 (ESC)
           </button>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <button
+              onClick={handleCopyCardText}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 12px',
+                borderRadius: '6px',
+                background: copiedText ? '#16A34A' : 'var(--bg-base)',
+                border: `1px solid ${copiedText ? '#16A34A' : 'var(--border-subtle)'}`,
+                color: copiedText ? '#FFF' : 'var(--text-primary)',
+                fontSize: '12px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              {copiedText ? <Check size={14} /> : <Copy size={14} />}
+              <span>{copiedText ? '✓ 已复制文本' : '📋 复制文本'}</span>
+            </button>
+
+            <button
+              onClick={handleSaveAsImage}
+              disabled={isGeneratingImage}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 16px',
+                borderRadius: '6px',
+                background: 'var(--accent)',
+                border: 'none',
+                color: '#FFF',
+                fontSize: '12px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                boxShadow: '0 2px 8px rgba(217, 107, 39, 0.25)'
+              }}
+            >
+              <ImageIcon size={14} />
+              <span>{isGeneratingImage ? '正在生成卡片...' : '🖼️ 保存为卡片图片 (PNG)'}</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>

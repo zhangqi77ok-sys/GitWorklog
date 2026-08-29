@@ -908,13 +908,8 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
 
                     <button
                       onClick={() => {
-                        const blob = new Blob([msg.content], { type: 'text/markdown;charset=utf-8;' });
-                        const url = URL.createObjectURL(blob);
-                        const a = document.createElement('a');
-                        a.href = url;
-                        a.download = `codemind-${msg.id}.md`;
-                        a.click();
-                        URL.revokeObjectURL(url);
+                        setShareTargetMessage(msg);
+                        setIsShareModalOpen(true);
                       }}
                       style={{
                         display: 'flex',
@@ -924,15 +919,16 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                         borderRadius: '4px',
                         background: 'var(--bg-surface)',
                         border: '1px solid var(--border-subtle)',
-                        color: 'var(--text-muted)',
+                        color: 'var(--accent)',
                         fontSize: '10.5px',
+                        fontWeight: 600,
                         cursor: 'pointer',
                         transition: 'all 0.15s ease'
                       }}
-                      title="导出为 Markdown 文件"
+                      title="生成精美图片卡片并分享"
                     >
-                      <Share2 size={11} />
-                      <span>导出</span>
+                      <Share2 size={11} color="var(--accent)" />
+                      <span>分享</span>
                     </button>
 
                     {msg.role === 'assistant' && onForkMessage && (
