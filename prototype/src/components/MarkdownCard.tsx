@@ -4,14 +4,18 @@ import { Copy, Check, Terminal, Code2, FileCode, Play, Save, CheckCircle2, Alert
 interface MarkdownCardProps {
   content: string;
   isStreaming?: boolean;
+  autoExecute?: boolean;
 }
 
 interface CodeBlockCardProps {
   language: string;
   code: string;
+  autoExecute?: boolean;
+  isStreaming?: boolean;
 }
 
-const CodeBlockCard: React.FC<CodeBlockCardProps> = ({ language, code }) => {
+const CodeBlockCard: React.FC<CodeBlockCardProps> = ({ language, code, autoExecute, isStreaming }) => {
+  const [hasAutoExecuted, setHasAutoExecuted] = useState(false);
   const [copied, setCopied] = useState(false);
   const [isExecuting, setIsExecuting] = useState(false);
   const [execResult, setExecResult] = useState<{ success: boolean; stdout?: string; stderr?: string; exitCode?: number; error?: string } | null>(null);
@@ -22,7 +26,19 @@ const CodeBlockCard: React.FC<CodeBlockCardProps> = ({ language, code }) => {
   const isWriteFile = cleanLang.startsWith('write_file:') || cleanLang.startsWith('file:') || cleanLang.startsWith('create_file:');
   const targetFilePath = isWriteFile ? cleanLang.replace(/^(write_file:|file:|create_file:)/, '').trim() : '';
 
-  const isCommandLang = ['run_command', 'bash', 'sh', 'powershell', 'pwsh', 'cmd', 'shell', 'zsh', 'terminal'].includes(cleanLang.toLowerCase()) || code.startsWith('git ') || code.startsWith('npm ') || code.startsWith('python ') || code.startsWith('cargo ') || code.startsWith('New-Item') || code.startsWith('Set-Content');
+  const isCommandLang = ['run_command', 'bash', 'sh', 'powershell', 'pwsh', 'cmd', 'shell', 'zsh', 'terminal'].includes(cleanLang.toLowerCase()) || code.startsWith('git ') || code.startsWith('npm ') || code.startsWith('python ') || code.startsWith('cargo ') || code.startsWith('New-Item') || code.startsWith('Set-Content') || code.includes('Test-Path');
+  // Autonomous Act Mode: Automatically execute file writing and terminal commands when generation completes
+  React.useEffect(() => {
+    if (autoExecute && !isStreaming && !hasAutoExecuted && code && code.trim()) {
+      setHasAutoExecuted(true);
+      if (isWriteFile && targetFilePath) {
+        handleWriteFileToDisk();
+      } else if (isCommandLang) {
+        handleRunCommand();
+      }
+    }
+  }, [autoExecute, isStreaming, hasAutoExecuted, isWriteFile, isCommandLang, targetFilePath, code]);
+
 
   const handleCopy = () => {
     navigator.clipboard.writeText(code);
@@ -333,7 +349,7 @@ const CodeBlockCard: React.FC<CodeBlockCardProps> = ({ language, code }) => {
   );
 };
 
-export const MarkdownCard: React.FC<MarkdownCardProps> = ({ content, isStreaming }) => {
+export const MarkdownCard: React.FC<MarkdownCardProps> = ({ content, isStreaming, autoExecute }) => {
   if (!content) return null;
 
   // Split content into blocks: Code blocks vs Text/Markdown blocks
@@ -544,7 +560,7 @@ export const MarkdownCard: React.FC<MarkdownCardProps> = ({ content, isStreaming
     <div style={{ fontSize: '12px', lineHeight: 1.6, color: 'var(--text-primary)' }}>
       {blocks.map((b, idx) => {
         if (b.type === 'code') {
-          return <CodeBlockCard key={idx} language={b.language || ''} code={b.content} />;
+          return <CodeBlockCard key={idx} language={b.language || ''} code={b.content} autoExecute={autoExecute} isStreaming={isStreaming} />;
         }
         return renderTextParagraphs(b.content, idx);
       })}

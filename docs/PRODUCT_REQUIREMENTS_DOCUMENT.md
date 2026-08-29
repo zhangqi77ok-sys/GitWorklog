@@ -1123,3 +1123,11 @@ To github.com:zhangqi77ok-sys/agent-learning.git
 2. **消息流动作执行器与一键写盘/执行工作台 (Action Execution Card)**：
    - **`write_file:path` 专用文件写入卡片**：直接展示目标文件路径与代码，提供 **`[ 💾 立即写盘应用此文件 ]`** 按钮，点击直接调用 `/api/fs/write` 持久化至本地磁盘；
    - **`run_command` 终端命令执行卡片**：提供 **`[ ▶️ 立即在宿主终端执行 ]`** 按钮，点击直接调用 `/api/terminal/exec` 在本地 PowerShell 执行并实时内嵌回显 stdout/stderr。
+
+### 12.18 Act 落地模式全自主自动执行机制 (Fully Autonomous Act Mode Auto-Execution)
+1. **零人工干预自主落地 (Zero-Manual-Intervention Auto Execution)**：
+   - 在 **Act 落地模式 (自主执行模式)** 下，当大模型生成 `write_file:path` 写盘代码块或 `run_command` 终端指令时，系统在响应完成后**自动触发写盘与终端执行**；
+   - 彻底无需用户手动点击按钮或手动复制，自动调用宿主网关 `/api/fs/write` 与 `/api/terminal/exec`，实现类似 Cursor Composer / Claude Code 的真正自主 Agent 落地。
+2. **实时执行状态内嵌回显**：
+   - 自动写盘成功后实时在卡片顶部呈现 `✨ 成功将代码落地写入至: xxx (xxx 字节)`；
+   - 终端命令自动执行完成后实时展开 `stdout / stderr / Exit Code` 回显。

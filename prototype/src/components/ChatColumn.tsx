@@ -869,6 +869,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                       <MarkdownCard
                         content={parsed.cleanContent || (isLastAssistant ? '正在推演并分析工程结构...' : msg.content)}
                         isStreaming={isLastAssistant && isStreaming}
+                        autoExecute={workMode === 'act'}
                       />
                     </div>
                   )}
