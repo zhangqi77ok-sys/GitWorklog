@@ -9,7 +9,7 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from pathlib import Path
 
-VERSION = "1.1.8"
+VERSION = "1.1.9"
 APP_NAME = "CodeMind-Hub"
 
 def get_detected_installed_dir():

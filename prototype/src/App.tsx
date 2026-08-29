@@ -13,6 +13,7 @@ import {
   SessionTier1Type,
   SessionItem,
   ChatMessage,
+  QueuedPromptItem,
   TokenStats,
   WorkMode,
   PermissionPolicy,
@@ -168,6 +169,10 @@ export const App: React.FC = () => {
   // Per-Session Message Map (100% Isolated: each session has its own message stream)
   const [sessionMessages, setSessionMessages] = useState<Record<string, ChatMessage[]>>(loadSavedSessionMessages());
   const [isStreaming, setIsStreaming] = useState<boolean>(false);
+  const [promptQueue, setPromptQueue] = useState<QueuedPromptItem[]>([]);
+  const promptQueueRef = React.useRef<QueuedPromptItem[]>([]);
+  promptQueueRef.current = promptQueue;
+
   const abortControllerRef = React.useRef<AbortController | null>(null);
 
   const handleStopGeneration = () => {
@@ -379,8 +384,56 @@ export const App: React.FC = () => {
     }
   };
 
+    const handleEnqueuePrompt = (text: string, mentions?: MentionContextItem[]) => {
+    const newItem: QueuedPromptItem = {
+      id: `queue-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      text,
+      createdAt: Date.now(),
+      selectedMentions: mentions
+    };
+    setPromptQueue(prev => [...prev, newItem]);
+    addLog('INFO', 'QueueBus', `[队列注入] 新增等待问答任务 #${promptQueue.length + 1}: ${text.slice(0, 30)}...`);
+  };
+
+  const handleWithdrawQueuedPrompt = (id: string) => {
+    setPromptQueue(prev => prev.filter(q => q.id !== id));
+    addLog('INFO', 'QueueBus', `[队列撤回] 成功撤回任务 [${id}]`);
+  };
+
+  const handleEditQueuedPrompt = (id: string, newText: string) => {
+    setPromptQueue(prev => prev.map(q => q.id === id ? { ...q, text: newText } : q));
+    addLog('INFO', 'QueueBus', `[队列更新] 任务 [${id}] 内容已更新`);
+  };
+
+  const handleMoveQueuedPrompt = (index: number, direction: -1 | 1) => {
+    setPromptQueue(prev => {
+      const nextIdx = index + direction;
+      if (nextIdx < 0 || nextIdx >= prev.length) return prev;
+      const copy = [...prev];
+      const temp = copy[index];
+      copy[index] = copy[nextIdx];
+      copy[nextIdx] = temp;
+      return copy;
+    });
+  };
+
+  const handlePreemptQueuedPrompt = (id: string) => {
+    const item = promptQueue.find(q => q.id === id);
+    if (!item) return;
+    addLog('WARN', 'QueueBus', `[队列顶替] 立即打断当前问答，强行置顶执行任务: ${item.text.slice(0, 30)}...`);
+    handleStopGeneration();
+    setPromptQueue(prev => prev.filter(q => q.id !== id));
+    setTimeout(() => {
+      handleSendMessage(item.text, item.selectedMentions);
+    }, 150);
+  };
+
   const handleSendMessage = async (text: string, mentions?: MentionContextItem[]) => {
-    if (!text.trim() || isStreaming) return;
+    if (!text.trim()) return;
+    if (isStreaming) {
+      handleEnqueuePrompt(text, mentions);
+      return;
+    }
 
     const userMsg: ChatMessage = {
       id: `msg-${Date.now()}`,
@@ -770,6 +823,13 @@ CodeMind 已通过本地磁盘桥接将工程目录结构与核心配置自动�
           onSelectModel={handleSelectModel}
           permissionPolicy={permissionPolicy}
           setPermissionPolicy={setPermissionPolicy}
+          isStreaming={isStreaming}
+          onStopGeneration={handleStopGeneration}
+          promptQueue={promptQueue}
+          onWithdrawQueuedPrompt={handleWithdrawQueuedPrompt}
+          onEditQueuedPrompt={handleEditQueuedPrompt}
+          onMoveQueuedPrompt={handleMoveQueuedPrompt}
+          onPreemptQueuedPrompt={handlePreemptQueuedPrompt}
           onSendMessage={handleSendMessage}
           onResolveOptions={handleResolveOptions}
           onForkMessage={handleForkSessionFromMessage}

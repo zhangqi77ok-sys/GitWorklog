@@ -2,6 +2,11 @@ import React, { useState } from 'react';
 import { MarkdownCard } from './MarkdownCard';
 import {
   Send,
+  ArrowUp,
+  ArrowDown,
+  Edit3,
+  Trash2,
+  ListOrdered,
   Loader2,
   Search,
   RefreshCw,
@@ -45,6 +50,7 @@ import {
   MOCK_TRAJECTORY_STEPS,
   TrajectoryStepSnapshot,
   ChatMessage,
+  QueuedPromptItem,
   parseAgentMessage,
   ParsedToolCall,
   AttachedFile,
@@ -98,6 +104,11 @@ interface ChatColumnProps {
   setPermissionPolicy: (p: PermissionPolicy) => void;
   isStreaming?: boolean;
   onStopGeneration?: () => void;
+  promptQueue?: QueuedPromptItem[];
+  onWithdrawQueuedPrompt?: (id: string) => void;
+  onEditQueuedPrompt?: (id: string, newText: string) => void;
+  onMoveQueuedPrompt?: (index: number, direction: -1 | 1) => void;
+  onPreemptQueuedPrompt?: (id: string) => void;
   onSendMessage: (text: string, mentions?: MentionContextItem[]) => void;
   onResolveOptions: (messageId: string, selectedIds: string[], customInput?: string) => void;
   onForkMessage?: (fromMessageId: string) => void;
@@ -118,12 +129,20 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
   setPermissionPolicy,
   isStreaming = false,
   onStopGeneration,
+  promptQueue = [],
+  onWithdrawQueuedPrompt,
+  onEditQueuedPrompt,
+  onMoveQueuedPrompt,
+  onPreemptQueuedPrompt,
   onSendMessage,
   onResolveOptions,
   onForkMessage,
   onNavigateDiff
 }) => {
   const [inputText, setInputText] = useState('');
+  const [editingQueueId, setEditingQueueId] = useState<string | null>(null);
+  const [editingQueueText, setEditingQueueText] = useState<string>('');
+  const [isQueueCollapsed, setIsQueueCollapsed] = useState<boolean>(false);
   const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null);
   const [collapsedTools, setCollapsedTools] = useState<Record<string, boolean>>({});
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);

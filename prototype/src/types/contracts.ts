@@ -95,6 +95,13 @@ export interface ChatMessageTokens {
   totalTokens: number;
 }
 
+export interface QueuedPromptItem {
+  id: string;
+  text: string;
+  createdAt: number;
+  selectedMentions?: MentionContextItem[];
+}
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant' | 'system';
