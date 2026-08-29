@@ -15,7 +15,10 @@ import {
   Cpu,
   Check,
   Compass,
-  FileCode
+  FileCode,
+  GitBranch,
+  Leaf,
+  Wrench
 } from 'lucide-react';
 import {
   SessionItem,
@@ -26,6 +29,7 @@ import {
   getActiveRules,
 
   WorkMode,
+  WORK_MODE_CONFIGS,
   PermissionPolicy,
   AIModelOption,
   AVAILABLE_MODELS
@@ -46,6 +50,7 @@ interface ChatColumnProps {
   setPermissionPolicy: (p: PermissionPolicy) => void;
   onSendMessage: (text: string) => void;
   onResolveOptions: (messageId: string, selectedIds: string[], customInput?: string) => void;
+  onForkMessage?: (fromMessageId: string) => void;
 }
 
 export const ChatColumn: React.FC<ChatColumnProps> = ({
@@ -61,7 +66,8 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
   permissionPolicy,
   setPermissionPolicy,
   onSendMessage,
-  onResolveOptions
+  onResolveOptions,
+  onForkMessage
 }) => {
   const [inputText, setInputText] = useState('');
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
@@ -199,6 +205,37 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
       {/* Pinned Scope Badge */}
       {renderTier1Badge()}
 
+            {/* DeepSeek Harness Plugin Execution Pipeline Banner */}
+      <div style={{
+        padding: '4px 12px',
+        background: 'var(--bg-base)',
+        borderBottom: '1px solid var(--border-subtle)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        fontSize: '10px',
+        color: 'var(--text-muted)'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', overflowX: 'auto' }}>
+          <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>Harness 管道:</span>
+          <span style={{ color: 'var(--accent)', fontWeight: 600 }}>📜 规则 ({activeRules.length})</span>
+          <span>➔</span>
+          <span style={{ color: '#10B981', fontWeight: 600 }}>🛡️ AST 审查</span>
+          <span>➔</span>
+          <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>🧠 {currentModel.name}</span>
+          <span>➔</span>
+          <span style={{ color: '#2563EB', fontWeight: 600 }}>🔌 MCP 总线</span>
+          <span>➔</span>
+          <span style={{ color: '#9333EA', fontWeight: 600 }}>💾 影子快照</span>
+        </div>
+
+        {workMode === 'minimal' && (
+          <span style={{ padding: '1px 6px', borderRadius: '10px', background: 'rgba(16, 185, 129, 0.12)', color: '#10B981', fontWeight: 600 }}>
+            🍃 降噪净化中 (-82% Token)
+          </span>
+        )}
+      </div>
+
       {/* Task Plan Breathing Capsule */}
       <div style={{
         borderBottom: '1px solid var(--border-subtle)',
@@ -271,6 +308,29 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                 <span style={{ padding: '1px 5px', borderRadius: '3px', background: 'var(--accent-subtle)', color: 'var(--accent)', fontSize: '10px' }}>
                   {msg.auditTag}
                 </span>
+              )}
+              {msg.role === 'assistant' && onForkMessage && (
+                <button
+                  onClick={() => onForkMessage(msg.id)}
+                  title="Harness 事件溯源: 从该思考节点分叉出独立会话分支"
+                  style={{
+                    marginLeft: 'auto',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '3px',
+                    padding: '2px 7px',
+                    borderRadius: '3px',
+                    background: 'var(--bg-base)',
+                    border: '1px solid var(--border-subtle)',
+                    color: 'var(--text-secondary)',
+                    fontSize: '10px',
+                    fontWeight: 600,
+                    cursor: 'pointer'
+                  }}
+                >
+                  <GitBranch size={10} color="var(--accent)" />
+                  <span>分叉分支 (Fork)</span>
+                </button>
               )}
             </div>
 
@@ -398,7 +458,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
           }}>
             {/* Left Tools Group: Mode, Model, Attachments, Rules */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-              {/* Mode Switcher Pill */}
+              {/* Mode Switcher Pill (DeepSeek Harness 4 Modes) */}
               <div style={{ position: 'relative' }}>
                 <button
                   onClick={() => {
@@ -412,26 +472,47 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                     gap: '4px',
                     padding: '2px 8px',
                     borderRadius: '4px',
-                    background: workMode === 'act' ? 'rgba(217, 107, 39, 0.12)' : 'rgba(147, 51, 234, 0.12)',
-                    color: workMode === 'act' ? 'var(--accent)' : '#9333EA',
-                    border: workMode === 'act' ? '1px solid rgba(217, 107, 39, 0.3)' : '1px solid rgba(147, 51, 234, 0.3)',
+                    background: workMode === 'act'
+                      ? 'rgba(217, 107, 39, 0.12)'
+                      : workMode === 'plan'
+                      ? 'rgba(147, 51, 234, 0.12)'
+                      : workMode === 'minimal'
+                      ? 'rgba(16, 185, 129, 0.12)'
+                      : 'rgba(37, 99, 235, 0.12)',
+                    color: workMode === 'act'
+                      ? 'var(--accent)'
+                      : workMode === 'plan'
+                      ? '#9333EA'
+                      : workMode === 'minimal'
+                      ? '#10B981'
+                      : '#2563EB',
+                    border: workMode === 'act'
+                      ? '1px solid rgba(217, 107, 39, 0.3)'
+                      : workMode === 'plan'
+                      ? '1px solid rgba(147, 51, 234, 0.3)'
+                      : workMode === 'minimal'
+                      ? '1px solid rgba(16, 185, 129, 0.3)'
+                      : '1px solid rgba(37, 99, 235, 0.3)',
                     fontSize: '11px',
                     fontWeight: 700,
                     cursor: 'pointer'
                   }}
                 >
-                  {workMode === 'act' ? <Zap size={11} /> : <Compass size={11} />}
-                  <span>{workMode === 'act' ? 'Act 落地模式' : 'Plan 规划模式'}</span>
+                  {workMode === 'act' && <Zap size={11} />}
+                  {workMode === 'plan' && <Compass size={11} />}
+                  {workMode === 'minimal' && <Leaf size={11} />}
+                  {workMode === 'creator' && <Wrench size={11} />}
+                  <span>{WORK_MODE_CONFIGS[workMode].label}</span>
                   <ChevronDown size={10} />
                 </button>
 
-                {/* Mode Dropdown Popover */}
+                {/* Mode Dropdown Popover (DeepSeek Harness 4 Modes Matrix) */}
                 {showModeMenu && (
                   <div style={{
                     position: 'absolute',
                     bottom: '30px',
                     left: '0',
-                    width: '240px',
+                    width: '280px',
                     background: 'var(--bg-surface-elevated)',
                     border: '1px solid var(--border-strong)',
                     borderRadius: '6px',
@@ -439,46 +520,40 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                     padding: '6px',
                     zIndex: 100
                   }}>
-                    <div
-                      onClick={() => { setWorkMode('act'); setShowModeMenu(false); }}
-                      style={{
-                        padding: '6px 8px',
-                        borderRadius: '4px',
-                        background: workMode === 'act' ? 'var(--accent-subtle)' : 'transparent',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'flex-start',
-                        gap: '6px',
-                        marginBottom: '4px'
-                      }}
-                    >
-                      <Zap size={13} color="var(--accent)" style={{ marginTop: '2px' }} />
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: 600, fontSize: '11px', color: 'var(--accent)' }}>⚡ Act 落地模式 (默认)</div>
-                        <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>直接修改代码、调用终端执行测试并自动纠错</div>
-                      </div>
-                      {workMode === 'act' && <Check size={12} color="var(--accent)" />}
+                    <div style={{ fontSize: '10px', color: 'var(--text-muted)', padding: '2px 8px 6px', fontWeight: 600, borderBottom: '1px solid var(--border-subtle)', marginBottom: '4px' }}>
+                      DeepSeek Harness 运行时模态矩阵 (Runtime Modes)
                     </div>
 
-                    <div
-                      onClick={() => { setWorkMode('plan'); setShowModeMenu(false); }}
-                      style={{
-                        padding: '6px 8px',
-                        borderRadius: '4px',
-                        background: workMode === 'plan' ? 'rgba(147, 51, 234, 0.1)' : 'transparent',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'flex-start',
-                        gap: '6px'
-                      }}
-                    >
-                      <Compass size={13} color="#9333EA" style={{ marginTop: '2px' }} />
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: 600, fontSize: '11px', color: '#9333EA' }}>📐 Plan 规划模式</div>
-                        <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>深度解析架构与推演步骤，严禁修改任何代码</div>
+                    {[
+                      { id: 'act', name: '⚡ Act 落地执行', color: 'var(--accent)', desc: '全功能工具链 + AST 校验 + 代码落盘与测试自纠', tag: '生产落地' },
+                      { id: 'plan', name: '📐 Plan 架构推演', color: '#9333EA', desc: '只读探索 + 任务依赖拓扑生成，严禁越权写盘', tag: '只读设计' },
+                      { id: 'minimal', name: '🍃 Minimal 极简低噪', color: '#10B981', desc: '过滤 80% 冗余转轮与废话，立省 75% Token 成本', tag: '极限低噪' },
+                      { id: 'creator', name: '🛠️ Creator 技能造物', color: '#2563EB', desc: '用于现场调试 Prompt、编写 Rule 与测试 MCP 插件', tag: '生态开发' }
+                    ].map(modeItem => (
+                      <div
+                        key={modeItem.id}
+                        onClick={() => { setWorkMode(modeItem.id as WorkMode); setShowModeMenu(false); }}
+                        style={{
+                          padding: '6px 8px',
+                          borderRadius: '4px',
+                          background: workMode === modeItem.id ? 'var(--accent-subtle)' : 'transparent',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'flex-start',
+                          gap: '6px',
+                          marginBottom: '2px'
+                        }}
+                      >
+                        <div style={{ flex: 1 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <span style={{ fontWeight: 600, fontSize: '11px', color: modeItem.color }}>{modeItem.name}</span>
+                            <span style={{ fontSize: '9px', padding: '1px 4px', borderRadius: '3px', background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', color: 'var(--text-muted)' }}>{modeItem.tag}</span>
+                          </div>
+                          <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '2px' }}>{modeItem.desc}</div>
+                        </div>
+                        {workMode === modeItem.id && <Check size={12} color="var(--accent)" style={{ marginTop: '2px' }} />}
                       </div>
-                      {workMode === 'plan' && <Check size={12} color="#9333EA" />}
-                    </div>
+                    ))}
                   </div>
                 )}
               </div>

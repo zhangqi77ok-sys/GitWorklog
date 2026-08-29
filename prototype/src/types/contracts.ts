@@ -73,7 +73,7 @@ export interface AskOptionsPayload {
 
 export type PermissionPolicy = 'strict_approval' | 'autonomous_agent' | 'risk_adaptive';
 
-export type WorkMode = 'plan' | 'act';
+export type WorkMode = 'act' | 'plan' | 'minimal' | 'creator';
 
 export interface TaskPlanStep {
   id: number;
@@ -1186,3 +1186,120 @@ export const INITIAL_KEYBINDINGS: KeybindingItem[] = [
   { id: 'kb-search', actionName: '全局符号与文本检索', category: 'navigation', currentKey: 'Ctrl + Shift + F', defaultKey: 'Ctrl + Shift + F' },
   { id: 'kb-settings', actionName: '打开全局首选项与设置弹窗', category: 'navigation', currentKey: 'Ctrl + ,', defaultKey: 'Ctrl + ,' }
 ];
+
+
+// ============================================================================
+// 10. DeepSeek Harness Architecture Integration Contracts
+// ============================================================================
+
+export interface WorkModeMetadata {
+  id: WorkMode;
+  name: string;
+  label: string;
+  icon: string;
+  description: string;
+  badge: string;
+  tokenSavingRate: string;
+}
+
+export const WORK_MODE_CONFIGS: Record<WorkMode, WorkModeMetadata> = {
+  act: {
+    id: 'act',
+    name: 'Act 落地执行',
+    label: 'Act 落地模式',
+    icon: '⚡',
+    description: '全功能工具链 + AST 校验 + 代码落地与测试自纠',
+    badge: '生产落地',
+    tokenSavingRate: '标准消耗'
+  },
+  plan: {
+    id: 'plan',
+    name: 'Plan 架构推演',
+    label: 'Plan 推演模式',
+    icon: '📐',
+    description: '只读探索 + 任务依赖拓扑生成，严禁越权写盘',
+    badge: '只读推演',
+    tokenSavingRate: '节省 40% Token'
+  },
+  minimal: {
+    id: 'minimal',
+    name: 'Minimal 极简低噪',
+    label: 'Minimal 极简模式',
+    icon: '🪶',
+    description: 'Harness 极简沙箱：过滤 80% 冗余转轮与废话，专注极速直出',
+    badge: '极简低噪',
+    tokenSavingRate: '立省 75% Token'
+  },
+  creator: {
+    id: 'creator',
+    name: 'Creator 技能造物',
+    label: 'Creator 造物模式',
+    icon: '🛠️',
+    description: '用于现场调试 Prompt、生成自定义 Rule 与测试新 MCP 插件',
+    badge: '生态调试',
+    tokenSavingRate: '调试开发'
+  }
+};
+
+export function forkSessionFromMessage(
+  sessions: SessionItem[],
+  messages: ChatMessage[],
+  sourceSessionId: string,
+  fromMessageId: string,
+  branchSuffix?: string
+): {
+  updatedSessions: SessionItem[];
+  newSession: SessionItem;
+  forkedMessages: ChatMessage[];
+} {
+  const sourceSession = sessions.find(s => s.id === sourceSessionId) || sessions[0];
+  const targetIndex = messages.findIndex(m => m.id === fromMessageId);
+  const cutMessages = targetIndex !== -1 ? messages.slice(0, targetIndex + 1) : messages;
+
+  const suffix = branchSuffix || `fork-${Math.random().toString(36).substring(2, 6)}`;
+  const newId = `session-${Date.now()}`;
+  const newSession: SessionItem = {
+    ...sourceSession,
+    id: newId,
+    title: `${sourceSession.title} (${suffix})`,
+    tags: [...(sourceSession.tags || []), 'fork'],
+    messagesCount: cutMessages.length,
+    totalTokens: Math.round(sourceSession.totalTokens * 0.8),
+    createdAt: Date.now(),
+    updatedAt: Date.now()
+  };
+
+  const forkedMessages: ChatMessage[] = cutMessages.map(m => ({
+    ...m,
+    id: `fork-${m.id}`
+  }));
+
+  return {
+    updatedSessions: [newSession, ...sessions],
+    newSession,
+    forkedMessages
+  };
+}
+
+export function filterCompilerNoise(rawLogs: string[]): {
+  cleanedLogs: string[];
+  suppressedLinesCount: number;
+} {
+  const wheelNoiseRegex = /^(⠋|⠙|⠹|⠸|⠼|⠴|⠦|⠧|⠇|⠏|\[\d+\/\d+\]|transforming \(\d+\)|rendering chunks\.\.\.|computing gzip size\.\.\.).*$/;
+  let suppressed = 0;
+  const cleaned: string[] = [];
+
+  for (const line of rawLogs) {
+    const trimmed = line.trim();
+    if (wheelNoiseRegex.test(trimmed) || (trimmed.startsWith('> vite') && trimmed.includes('building'))) {
+      suppressed++;
+    } else {
+      cleaned.push(line);
+    }
+  }
+
+  return {
+    cleanedLogs: cleaned,
+    suppressedLinesCount: suppressed
+  };
+}

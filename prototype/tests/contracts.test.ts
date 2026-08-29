@@ -46,7 +46,11 @@ import {
   KeybindingItem,
   removeProjectFromWorkspace,
   SessionItem,
-  TokenStats
+  TokenStats,
+  WORK_MODE_CONFIGS,
+  forkSessionFromMessage,
+  filterCompilerNoise,
+  ChatMessage
 } from '../src/types/contracts';
 
 describe('SDD Contract - Token Telemetry & Gauge Algorithm', () => {
@@ -354,5 +358,61 @@ describe('SDD Contract - All Tabs Enhanced Operations', () => {
     const result = closeEditorFile(files, 'file-contracts');
     expect(result.remainingFiles.length).toBe(1);
     expect(result.activeFileId).toBe('file-options');
+  });
+});
+
+
+describe('SDD Contract - DeepSeek Harness Architecture Integration', () => {
+  it('should provide four complete runtime mode profiles with metadata', () => {
+    expect(WORK_MODE_CONFIGS.act.name).toBe('Act 落地执行');
+    expect(WORK_MODE_CONFIGS.plan.name).toBe('Plan 架构推演');
+    expect(WORK_MODE_CONFIGS.minimal.name).toBe('Minimal 极简低噪');
+    expect(WORK_MODE_CONFIGS.creator.name).toBe('Creator 技能造物');
+
+    expect(WORK_MODE_CONFIGS.minimal.tokenSavingRate).toContain('立省');
+  });
+
+  it('should fork session cleanly from any historical message node', () => {
+    const mockSessions: any[] = [
+      { id: 'sess-1', title: '架构重构会话', totalTokens: 10000, tags: ['feat'] }
+    ];
+    const mockMessages: ChatMessage[] = [
+      { id: 'm-1', role: 'user', content: '如何设计状态总线？', timestamp: 100 },
+      { id: 'm-2', role: 'assistant', content: '推荐使用微内核插件总线。', timestamp: 200 },
+      { id: 'm-3', role: 'user', content: '请帮我落地。', timestamp: 300 }
+    ];
+
+    const { updatedSessions, newSession, forkedMessages } = forkSessionFromMessage(
+      mockSessions,
+      mockMessages,
+      'sess-1',
+      'm-2',
+      'fork-v1'
+    );
+
+    expect(updatedSessions.length).toBe(2);
+    expect(newSession.title).toContain('(fork-v1)');
+    expect(newSession.tags).toContain('fork');
+    expect(forkedMessages.length).toBe(2);
+    expect(forkedMessages[0].content).toBe('如何设计状态总线？');
+    expect(forkedMessages[1].content).toBe('推荐使用微内核插件总线。');
+  });
+
+  it('should filter out compiler noise and wheel spinners, saving token overhead', () => {
+    const rawLogs = [
+      '⠋ building for production...',
+      '⠙ transforming (42)...',
+      '> vite build',
+      'rendering chunks...',
+      'computing gzip size...',
+      '✓ built in 1.2s',
+      'dist/index.html 0.45 kB',
+      'ERROR: Type error in contracts.ts:42'
+    ];
+
+    const { cleanedLogs, suppressedLinesCount } = filterCompilerNoise(rawLogs);
+    expect(suppressedLinesCount).toBe(4);
+    expect(cleanedLogs).toContain('✓ built in 1.2s');
+    expect(cleanedLogs).toContain('ERROR: Type error in contracts.ts:42');
   });
 });

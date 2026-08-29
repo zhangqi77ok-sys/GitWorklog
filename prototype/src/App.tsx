@@ -20,7 +20,8 @@ import {
   addProjectToWorkspace,
   removeProjectFromWorkspace,
   AIModelOption,
-  AVAILABLE_MODELS
+  AVAILABLE_MODELS,
+  forkSessionFromMessage
 } from './types/contracts';
 
 export const App: React.FC = () => {
@@ -262,6 +263,28 @@ export const App: React.FC = () => {
   };
 
 
+  const handleForkSessionFromMessage = (fromMessageId: string) => {
+    const { updatedSessions, newSession, forkedMessages } = forkSessionFromMessage(
+      sessions,
+      messages,
+      currentSessionId,
+      fromMessageId
+    );
+    setSessions(updatedSessions);
+    setCurrentSessionId(newSession.id);
+    setMessages(forkedMessages);
+
+    // Toast notification
+    const toastMsg: ChatMessage = {
+      id: `toast-${Date.now()}`,
+      role: 'assistant',
+      content: `✨ **已成功从该历史事件节点分叉出会话分支**: [${newSession.title}]。旧分支会话已完整归档保护，您可在此分支独立开展试错与重构。`,
+      timestamp: Date.now(),
+      auditTag: '⑂ Harness 会话时光机分叉'
+    };
+    setMessages(prev => [...prev, toastMsg]);
+  };
+
   const handleOpenFile = (filePath: string, fileName: string, line?: number) => {
     // Open right workspace if closed
     if (!rightWorkspaceOpen) {
@@ -362,6 +385,7 @@ export const App: React.FC = () => {
           setPermissionPolicy={setPermissionPolicy}
           onSendMessage={handleSendMessage}
           onResolveOptions={handleResolveOptions}
+          onForkMessage={handleForkSessionFromMessage}
         />
 
         {/* EditorWorkspace (默认关闭，打开时占满剩余空间，内部 4:6 终端与文件) */}

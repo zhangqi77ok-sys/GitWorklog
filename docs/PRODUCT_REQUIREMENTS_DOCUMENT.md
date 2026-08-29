@@ -384,6 +384,31 @@
 5. **自定义快捷键 (Keybindings)**：支持常用操作快捷键检索与自定义录制，配备冲突预警提示。
 6. **系统与安全设置 (System & Safety)**：提供数据脱敏（PII / API Key 自动掩码）、影子快照频率配置与本地缓存持久化管理。
 
+### 4.14 DeepSeek Harness 架构思想深度融入规约 (DeepSeek Harness Architecture Integration)
+借鉴 2026 年开源的智能体运行时框架 **DeepSeek Harness (`dsh`)**，在保持 CodeMind-Hub 既有“总线-子线架构（Bus-Subline Architecture）”与“纸质暖橙美学”底座的基础上，全面融入其核心设计思想：
+
+#### 1. 核心架构哲学：Agent = Model + Harness (模型即灵魂，驾驭中枢即身躯)
+- 模型（LLM）负责推理与意图理解，而任务分发、上下文装配、沙箱隔离、工具路由与状态回溯均由 **Harness 驾驭系统** 强力承载；
+- 杜绝让模型裸奔接触系统命令，所有执行流必须通过 Harness 的前置防护、AST 语义审查与影子快照保护。
+
+#### 2. 四大运行时模态矩阵 (Runtime Modes Matrix)
+底部一体化悬浮命令台升级为四象限模态切换：
+1. **Act (落地执行模式)**：全功能工具链 + AST 语法校验 + 代码落盘与自动化测试自纠；
+2. **Plan (架构推演模式)**：只读探测 + 架构拓扑生成 + 杜绝任何写盘越权；
+3. **Minimal (极简低噪模式)**：继承 Harness Minimal 特性，硬核抑制 80% 冗余中间过程与编译器转轮，专注代码快速生效与极限压榨 Token；
+4. **Creator (技能造物主模式)**：为开发者提供现场调试 Prompt、生成自定义 Rule、编写新 Skill 与挂载 MCP 服务的沉浸式环境。
+
+#### 3. 追加式事件溯源与会话分叉时光机 (Event-Sourced Session Forking)
+- 会话内的每次用户提问、AI 思考、OptionsCard 决策、Tool 调用均作为不可篡改的事件节点持久化；
+- 在对话流的每个 Assistant 消息卡片与决策卡片右上角，配备 **`[ ⑂ 分叉分支 (Fork) ]`** 按钮；
+- 用户可从任意历史思考或出错节点直接分叉出一条新的子会话分支（如 `feature-refactor (fork-1)`），旧分支完整保留，实现非破坏性多路径对比验证。
+
+#### 4. 终端与日志极限噪声压榨过滤器 (Compiler Noise Filter)
+- 集成 Harness 标志性的 Noise Filter 算法，实时从控制台日志中剥离编译器转轮进度条（如 vite/cargo 滚动轮）与重复调试信息；
+- 终端界面顶部常驻显示 `[ ⚡ Harness 噪声净化 (已压制 N 行编译器转轮) ]`，并支持一键展开/折叠被过滤细节。
+
+---
+
 ## 五、人机协同动态交互选择体系 (Dynamic Human-in-the-Loop)
 
 当 Agent 在推理过程中遇到技术分叉或歧义时，**严禁盲猜代劳**，主动触发结构化微型卡片挂起：
