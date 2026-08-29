@@ -73,7 +73,8 @@ import {
   toggleDebugProbe,
   calculateBlastRadius,
   clampLeftPanelWithCollapse,
-  createDiffNavigationTarget
+  createDiffNavigationTarget,
+  clampChangesetHeight
 } from '../src/types/contracts';
 
 describe('SDD Contract - Token Telemetry & Gauge Algorithm', () => {
@@ -634,5 +635,14 @@ describe('SDD Contract - UX & Logic Polish', () => {
     expect(target.fileId).toBe('file-options');
     expect(target.filePath).toBe('src/components/OptionsCard.tsx');
     expect(target.targetLine).toBe(12);
+  });
+});
+
+
+describe('SDD Contract - Changeset Resizable & Collapsible Card', () => {
+  it('should clamp changeset height within 80px and 450px', () => {
+    expect(clampChangesetHeight(40)).toBe(80);
+    expect(clampChangesetHeight(150)).toBe(150);
+    expect(clampChangesetHeight(600)).toBe(450);
   });
 });

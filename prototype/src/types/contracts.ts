@@ -1809,3 +1809,8 @@ export function createDiffNavigationTarget(
     highlightToken: `diff-target-${fileId}-${targetLine}`
   };
 }
+
+
+export function clampChangesetHeight(height: number): number {
+  return Math.min(Math.max(height, 80), 450);
+}

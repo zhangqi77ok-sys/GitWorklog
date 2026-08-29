@@ -51,7 +51,8 @@ import {
   SwarmPipelineStage,
   INITIAL_SWARM_STAGES,
   mergeForkSessionToMain,
-  MOCK_REPO_GRAPH
+  MOCK_REPO_GRAPH,
+  clampChangesetHeight
 } from '../types/contracts';
 import { OptionsCard } from './OptionsCard';
 import { SemanticCommitModal } from './SemanticCommitModal';
@@ -116,6 +117,34 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
   const [lessonTitle, setLessonTitle] = useState('禁止直接 new Store 实例');
   const [lessonPrompt, setLessonPrompt] = useState('必须通过 StoreFactory 单例方法获取全局 Store，保持单状态源');
   const [activeRuleCount, setActiveRuleCount] = useState<number>(3);
+  const [isChangesetCollapsed, setIsChangesetCollapsed] = useState<boolean>(false);
+  const [changesetHeight, setChangesetHeight] = useState<number>(135);
+  const [isDraggingChangesetHeight, setIsDraggingChangesetHeight] = useState<boolean>(false);
+
+  // Global mouse drag listener for Changeset Card height
+  React.useEffect(() => {
+    const handleChangesetMove = (e: MouseEvent) => {
+      if (isDraggingChangesetHeight) {
+        const container = document.getElementById('changeset-review-card');
+        if (container) {
+          const rect = container.getBoundingClientRect();
+          const newH = e.clientY - rect.top;
+          setChangesetHeight(clampChangesetHeight(newH));
+        }
+      }
+    };
+    const handleChangesetUp = () => {
+      setIsDraggingChangesetHeight(false);
+    };
+    if (isDraggingChangesetHeight) {
+      window.addEventListener('mousemove', handleChangesetMove);
+      window.addEventListener('mouseup', handleChangesetUp);
+    }
+    return () => {
+      window.removeEventListener('mousemove', handleChangesetMove);
+      window.removeEventListener('mouseup', handleChangesetUp);
+    };
+  }, [isDraggingChangesetHeight]);
 
 
 
@@ -443,21 +472,31 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
 
             {/* Changeset Review Card (for latest assistant response) */}
             {msg.role === 'assistant' && changeset && (
-              <div style={{
-                marginTop: '10px',
-                borderRadius: '6px',
-                border: changeset.status === 'accepted' ? '1px solid #16A34A' : changeset.status === 'rejected' ? '1px solid #DC2626' : '1px solid var(--accent)',
-                background: 'var(--bg-surface)',
-                overflow: 'hidden'
-              }}>
-                {/* Changeset Header */}
-                <div style={{
-                  padding: '8px 12px',
-                  background: changeset.status === 'accepted' ? 'rgba(22, 163, 74, 0.08)' : changeset.status === 'rejected' ? 'rgba(220, 38, 38, 0.08)' : 'var(--accent-subtle)',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center'
-                }}>
+              <div
+                id="changeset-review-card"
+                style={{
+                  marginTop: '10px',
+                  borderRadius: '6px',
+                  border: changeset.status === 'accepted' ? '1px solid #16A34A' : changeset.status === 'rejected' ? '1px solid #DC2626' : '1px solid var(--accent)',
+                  background: 'var(--bg-surface)',
+                  overflow: 'hidden',
+                  userSelect: isDraggingChangesetHeight ? 'none' : 'auto'
+                }}
+              >
+                {/* Changeset Header (Clickable to Collapse / Expand) */}
+                <div
+                  onClick={() => setIsChangesetCollapsed(!isChangesetCollapsed)}
+                  style={{
+                    padding: '8px 12px',
+                    background: changeset.status === 'accepted' ? 'rgba(22, 163, 74, 0.08)' : changeset.status === 'rejected' ? 'rgba(220, 38, 38, 0.08)' : 'var(--accent-subtle)',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    cursor: 'pointer',
+                    userSelect: 'none'
+                  }}
+                  title="点击折叠/展开变更集列表"
+                >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <FolderGit2 size={13} color="var(--accent)" />
                     <span style={{ fontSize: '11px', fontWeight: 700 }}>
@@ -474,7 +513,31 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                     {changeset.status === 'pending' ? (
                       <>
                         <button
-                          onClick={() => {
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setIsCommitModalOpen(true);
+                          }}
+                          style={{
+                            padding: '3px 8px',
+                            borderRadius: '3px',
+                            background: 'var(--bg-base)',
+                            border: '1px solid var(--border-subtle)',
+                            color: 'var(--accent)',
+                            fontSize: '10px',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '3px'
+                          }}
+                          title="按意图拆分为多个原子提交"
+                        >
+                          <Zap size={11} />
+                          <span>📦 意图拆分</span>
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
                             setChangeset(acceptChangeset(changeset));
                             setChangesetToast('✓ 已成功接受并合并全部变更');
                             setTimeout(() => setChangesetToast(null), 3000);
@@ -497,7 +560,8 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                           <span>全部接受</span>
                         </button>
                         <button
-                          onClick={() => {
+                          onClick={(e) => {
+                            e.stopPropagation();
                             setChangeset(rejectChangeset(changeset));
                             setChangesetToast('↩️ 已通过 Git 影子快照回滚全部变更');
                             setTimeout(() => setChangesetToast(null), 3000);
@@ -529,39 +593,77 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                         {changeset.status === 'accepted' ? '● 已全量接受' : '○ 已全量回滚'}
                       </span>
                     )}
+
+                    {/* Collapse / Expand Toggle Icon */}
+                    <div style={{ color: 'var(--text-muted)', display: 'flex', alignItems: 'center', marginLeft: '4px' }}>
+                      {isChangesetCollapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+                    </div>
                   </div>
                 </div>
 
-                {/* Changed Files List */}
-                <div style={{ padding: '6px 12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  {changeset.files.map(f => (
-                    <div
-                      key={f.path}
-                      onClick={() => onToggleWorkspace()}
-                      style={{
-                        padding: '4px 8px',
-                        borderRadius: '4px',
-                        background: 'var(--bg-base)',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        fontSize: '10.5px',
-                        cursor: 'pointer'
-                      }}
-                      title="点击在右侧工作台开启对比"
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <FileCode size={11} color="var(--accent)" />
-                        <span style={{ fontWeight: 600, fontFamily: 'var(--font-mono)' }}>{f.path}</span>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ color: '#16A34A', fontWeight: 600 }}>+{f.additions}</span>
-                        <span style={{ color: '#DC2626', fontWeight: 600 }}>-{f.deletions}</span>
-                        <span style={{ color: 'var(--text-muted)', fontSize: '9px' }}>查看 Diff ➔</span>
-                      </div>
+                {/* Changed Files List (Scrollable within Constrained Height) */}
+                {!isChangesetCollapsed && (
+                  <>
+                    <div style={{
+                      height: `${changesetHeight}px`,
+                      overflowY: 'auto',
+                      padding: '6px 12px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '4px'
+                    }}>
+                      {changeset.files.map(f => (
+                        <div
+                          key={f.path}
+                          onClick={() => onNavigateDiff && onNavigateDiff({ fileId: f.path.includes('contracts') ? 'file-contracts' : 'file-options', filePath: f.path, targetLine: 13 })}
+                          style={{
+                            padding: '4px 8px',
+                            borderRadius: '4px',
+                            background: 'var(--bg-base)',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            fontSize: '10.5px',
+                            cursor: 'pointer'
+                          }}
+                          title="点击在右侧工作台平滑定位 Diff"
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <FileCode size={11} color="var(--accent)" />
+                            <span style={{ fontWeight: 600, fontFamily: 'var(--font-mono)' }}>{f.path}</span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ color: '#16A34A', fontWeight: 600 }}>+{f.additions}</span>
+                            <span style={{ color: '#DC2626', fontWeight: 600 }}>-{f.deletions}</span>
+                            <span style={{ color: 'var(--accent)', fontWeight: 600, textDecoration: 'underline' }}>查看 Diff →</span>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
+
+                    {/* Draggable Height Resizer Bar */}
+                    <div
+                      onMouseDown={(e) => {
+                        e.stopPropagation();
+                        setIsDraggingChangesetHeight(true);
+                      }}
+                      onDoubleClick={() => setChangesetHeight(135)}
+                      title="按住上下拖拽调节卡片高度，双击重置默认高度"
+                      style={{
+                        height: '6px',
+                        background: isDraggingChangesetHeight ? 'var(--accent)' : 'var(--bg-surface)',
+                        borderTop: '1px solid var(--border-subtle)',
+                        cursor: 'row-resize',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        transition: 'background 0.15s ease'
+                      }}
+                    >
+                      <div style={{ width: '28px', height: '2px', borderRadius: '1px', background: 'var(--text-muted)', opacity: 0.4 }} />
+                    </div>
+                  </>
+                )}
               </div>
             )}
           </div>
