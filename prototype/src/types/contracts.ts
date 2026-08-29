@@ -1567,7 +1567,7 @@ export function maskSensitiveText(text: string): { maskedText: string; mapping: 
   let counter = 1;
 
   // Mask API Keys (e.g. sk-xxxx, gsk_xxxx)
-  let masked = text.replace(/(sk-[a-zA-Z0-9]{16,}|gsk_[a-zA-Z0-9]{16,})/g, (match) => {
+  let masked = text.replace(/(sk-[a-zA-Z0-9_-]{16,}|gsk_[a-zA-Z0-9_-]{16,})/g, (match) => {
     const placeholder = `[SEC_API_KEY_${counter++}]`;
     mapping[placeholder] = match;
     return placeholder;
