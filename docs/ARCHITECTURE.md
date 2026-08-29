@@ -122,3 +122,43 @@ sequenceDiagram
 1. **零循环依赖**：`services/bus/` 绝不反向依赖 UI 组件，仅通过纯接口（`IProviderSubline`, `BusStreamRequest`, `BusStreamCallbacks`）通信；
 2. **单一职责 (SRP)**：每个厂商子线独立文件（`ClaudeSubline.ts`, `OpenCodeSubline.ts` 等），新增厂商只需实现标准子线接口注册至 `GatewayBus`，无需修改任何 UI 代码；
 3. **安全第一 (Safety First)**：所有系统命令与文件写操作均通过 Tauri IPC 约束并在执行前自动触发 Git 影子快照，确保随时可秒级还原。
+
+---
+
+## 8. v1.1.9 架构演进与容灾持久化子系统
+
+### 8.1 Dual-Layer Fail-Safe Storage Architecture (双层容灾存储架构)
+
+```
+┌────────────────────────────────────────────────────────┐
+│               前端 React 状态层 (State Layer)           │
+└───────────────┬────────────────────────┬───────────────┘
+                │                        │
+                ▼                        ▼
+     ┌──────────────────────┐ ┌──────────────────────────────────────┐
+     │ Layer 1: WebView2    │ │ Layer 2: 物理磁盘 JSON 引擎           │
+     │ Persistent Profile   │ │ (POST /api/storage)                  │
+     │ (%LOCALAPPDATA%/...) │ │ (%LOCALAPPDATA%/CodeMind-Hub/storage)│
+     └──────────────────────┘ └──────────────────┬───────────────────┘
+                                                 │
+                                                 ▼
+                                     ┌───────────────────────┐
+                                     │ codemind_sessions.json│
+                                     │ session_messages.json │
+                                     │ codemind_projects.json│
+                                     └───────────────────────┘
+```
+
+### 8.2 Prompt Execution Queue Pipeline (问答调度队列流水线)
+
+```
+[用户 Prompt 提交] ──▶ 是否正在流式生成?
+                             ├── 否 ──▶ 立即启动 SSE 真流式传输 ──▶ 右下角切换为转动红圆圈 (支持随时打断)
+                             └── 是 ──▶ 压入 PromptQueue 调度队列
+                                             │
+                                             ├── 支持 [⚡ 顶替当前] (打断当前 + 抢占执行)
+                                             ├── 支持 [✏️ 编辑] (就地行内修改)
+                                             ├── 支持 [🔼 / 🔽] (调整排队优先级)
+                                             ├── 支持 [🗑️ 撤回] (注销移出队列)
+                                             └── 当前回答完成后自动 FIFO 顺延调用
+```
