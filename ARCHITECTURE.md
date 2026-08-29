@@ -60,6 +60,12 @@ graph TB
         DualIronMan["DualIronMan (Builder 蓝军建设者 vs Critic 红军质询者)"]
     end
 
+    subgraph SecuritySubstrate ["6. 权限治理与安全底座 (Permission & Security Substrate)"]
+        PermissionGateway["PermissionPolicy (逐次审核 vs 智能自主决策)"]
+        GitShadow["Git 影子快照引擎 (写前自动快照 · 一键秒级回退)"]
+        OptionsCard["OptionsCard (动态交互选择卡片 · 单选/多选/补充输入)"]
+    end
+
     UI <--> NativeBridge
     NativeBridge <--> RustCore
     RustCore --> DiskIO & SysCmd & GitCheckpoint & WebSearchEngine
@@ -68,6 +74,7 @@ graph TB
     Sublines <--> Extensions
     UI <--> DomainBrain
     DomainBrain <--> HarnessSuite
+    UI <--> SecuritySubstrate <--> GatewayBus
 ```
 
 ---
