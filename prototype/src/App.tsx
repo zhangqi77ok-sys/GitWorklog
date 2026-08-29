@@ -1,4 +1,5 @@
 import { SettingsModal } from './components/SettingsModal';
+import { LiveLogsModal } from './components/LiveLogsModal';
 import { CommandPaletteModal } from './components/CommandPaletteModal';
 import { TokenAnalyticsModal } from './components/TokenAnalyticsModal';
 import React, { useState } from 'react';
@@ -36,11 +37,22 @@ import {
   saveSessionsToStorage,
   loadSavedSessionMessages,
   saveSessionMessagesToStorage,
-  MentionContextItem
+  MentionContextItem,
+  LiveLogItem,
+  appendLiveLog
 } from './types/contracts';
 
 export const App: React.FC = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isLiveLogsOpen, setIsLiveLogsOpen] = useState(false);
+  const [liveLogs, setLiveLogs] = useState<LiveLogItem[]>([
+    { id: 'log-init', timestamp: Date.now(), level: 'INFO', module: 'GatewayBus', message: '网关总线核心已启动，正在监听本地与远程大模型通信' }
+  ]);
+
+  const addLog = (level: 'INFO' | 'WARN' | 'ERROR' | 'NET', module: string, message: string) => {
+    const item = appendLiveLog(level, module, message);
+    setLiveLogs(prev => [item, ...prev.slice(0, 199)]);
+  };
   const [isTokenAnalyticsOpen, setIsTokenAnalyticsOpen] = useState(false);
   const [isPaletteOpen, setIsPaletteOpen] = useState(false);
   const [paletteMode, setPaletteMode] = useState<'files' | 'commands'>('files');
@@ -387,7 +399,9 @@ export const App: React.FC = () => {
     }));
     setIsStreaming(true);
 
+    const callStartTime = performance.now();
     try {
+      addLog('INFO', 'GatewayBus', `[发送指令] 正在调度模型 [${currentModel.name}] (${currentModel.id})`);
       const savedProviders = loadSavedProviders();
       const provider = savedProviders.find(p => p.enabled && p.apiKey && p.baseUrl) || savedProviders[0];
 
@@ -507,10 +521,22 @@ CodeMind 已通过本地磁盘桥接将工程目录结构与核心配置自动�
       let buffer = '';
 
       if (reader) {
+        let isFirstChunk = true;
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
           buffer += decoder.decode(value, { stream: true });
+
+          // GatewayBus: Inspect first chunk for upstream plain-text errors (e.g. 'no channel is currently available')
+          if (isFirstChunk && buffer.trim()) {
+            isFirstChunk = false;
+            if (!buffer.includes('data: ') && !buffer.includes('{')) {
+              const upstreamError = buffer.trim();
+              addLog('ERROR', 'GatewayBus', `上游模型网关错误: "${upstreamError}"`);
+              throw new Error(`上游大模型服务商提示: "${upstreamError}"。当前模型通道不可用，请切换至 DeepSeek V4 Flash 等可用模型。`);
+            }
+          }
+
           const lines = buffer.split('\n');
           buffer = lines.pop() || '';
 
@@ -567,15 +593,29 @@ CodeMind 已通过本地磁盘桥接将工程目录结构与核心配置自动�
         finalAccumulated = '已完成对当前工程上下文的推演与分析。请继续提出具体修改或重构指令。';
       }
 
+      const durationSec = parseFloat(((performance.now() - callStartTime) / 1000).toFixed(1));
+      const addedPrompt = Math.round(text.length * 0.75);
+      const addedComp = Math.round(finalAccumulated.length * 0.75);
+      const tokenDetail = {
+        promptTokens: addedPrompt,
+        completionTokens: addedComp,
+        totalTokens: addedPrompt + addedComp
+      };
+
+      addLog('NET', 'GatewayBus', `[调用完成] 模型: ${currentModel.name} · 耗时: ${durationSec}s · Token消耗: ${tokenDetail.totalTokens}`);
+
       setSessionMessages(prev => {
         const list = prev[currentSessionId] || [];
-        const updated = list.map(m => m.id === assistantId ? { ...m, content: finalAccumulated } : m);
+        const updated = list.map(m => m.id === assistantId ? {
+          ...m,
+          content: finalAccumulated,
+          tokensDetail: tokenDetail,
+          durationSeconds: durationSec
+        } : m);
         return { ...prev, [currentSessionId]: updated };
       });
 
       // Realistic Token increment
-      const addedPrompt = Math.round(text.length * 0.75);
-      const addedComp = Math.round(finalAccumulated.length * 0.75);
       setTokenStats(prev => ({
         ...prev,
         promptTokens: prev.promptTokens + addedPrompt,
@@ -654,6 +694,7 @@ CodeMind 已通过本地磁盘桥接将工程目录结构与核心配置自动�
           activeNav={activeNav}
           setActiveNav={setActiveNav}
           onOpenSettings={() => setIsSettingsOpen(true)}
+          onOpenLiveLogs={() => setIsLiveLogsOpen(true)}
         />
 
         {/* LeftPanel: Dynamic Modules with Dynamic Resizable Width & Ctrl+B Collapse */}

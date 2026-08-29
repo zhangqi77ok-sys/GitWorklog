@@ -1,13 +1,14 @@
 import React from 'react';
-import { MessageSquare, FolderTree, Search, GitBranch, Cpu, Settings, BookOpen } from 'lucide-react';
+import { MessageSquare, FolderTree, Search, GitBranch, Cpu, Settings, BookOpen, ScrollText } from 'lucide-react';
 
 interface ActivityBarProps {
   activeNav: string;
   setActiveNav: (nav: string) => void;
   onOpenSettings: () => void;
+  onOpenLiveLogs: () => void;
 }
 
-export const ActivityBar: React.FC<ActivityBarProps> = ({ activeNav, setActiveNav, onOpenSettings }) => {
+export const ActivityBar: React.FC<ActivityBarProps> = ({ activeNav, setActiveNav, onOpenSettings, onOpenLiveLogs }) => {
   const navItems = [
     { id: 'sessions', icon: MessageSquare, label: '会话管理' },
     { id: 'files', icon: FolderTree, label: '项目代码' },
@@ -59,24 +60,48 @@ export const ActivityBar: React.FC<ActivityBarProps> = ({ activeNav, setActiveNa
         })}
       </div>
 
-      <button
-        onClick={onOpenSettings}
-        title="设置与首选项"
-        style={{
-          width: '32px',
-          height: '32px',
-          borderRadius: '6px',
-          border: 'none',
-          background: activeNav === 'settings' ? 'var(--accent-subtle)' : 'transparent',
-          color: activeNav === 'settings' ? 'var(--accent)' : 'var(--text-muted)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          cursor: 'pointer'
-        }}
-      >
-        <Settings size={18} />
-      </button>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        {/* Live Logs Trigger Button (Above Settings) */}
+        <button
+          onClick={onOpenLiveLogs}
+          title="实时运行与网关日志 (Live Logs)"
+          style={{
+            width: '32px',
+            height: '32px',
+            borderRadius: '6px',
+            border: 'none',
+            background: 'transparent',
+            color: 'var(--text-muted)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease'
+          }}
+          className="hover:text-orange-500"
+        >
+          <ScrollText size={18} />
+        </button>
+
+        <button
+          onClick={onOpenSettings}
+          title="设置与首选项"
+          style={{
+            width: '32px',
+            height: '32px',
+            borderRadius: '6px',
+            border: 'none',
+            background: activeNav === 'settings' ? 'var(--accent-subtle)' : 'transparent',
+            color: activeNav === 'settings' ? 'var(--accent)' : 'var(--text-muted)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer'
+          }}
+        >
+          <Settings size={18} />
+        </button>
+      </div>
     </aside>
   );
 };

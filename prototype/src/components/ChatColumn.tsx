@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import {
   Send,
+  Coins,
   Copy,
   Share2,
   Square,
@@ -621,6 +622,26 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
               {msg.auditTag && (
                 <span style={{ padding: '1px 5px', borderRadius: '3px', background: 'var(--accent-subtle)', color: 'var(--accent)', fontSize: '10px' }}>
                   {msg.auditTag}
+                </span>
+              )}
+
+              {/* Per-Turn Token & Duration Gauge */}
+              {msg.role === 'assistant' && msg.tokensDetail && (
+                <span style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '3px',
+                  padding: '1px 6px',
+                  borderRadius: '3px',
+                  background: 'rgba(217, 107, 39, 0.08)',
+                  border: '1px solid rgba(217, 107, 39, 0.2)',
+                  color: 'var(--accent)',
+                  fontSize: '9.5px',
+                  fontWeight: 600
+                }}>
+                  <Coins size={10} />
+                  <span>{msg.tokensDetail.totalTokens} tokens (输入 {msg.tokensDetail.promptTokens} · 输出 {msg.tokensDetail.completionTokens})</span>
+                  {msg.durationSeconds && <span style={{ color: 'var(--text-muted)' }}>· {msg.durationSeconds}s</span>}
                 </span>
               )}
 

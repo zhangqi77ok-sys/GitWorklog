@@ -89,6 +89,12 @@ export interface TaskPlan {
   activeStepIndex: number;
 }
 
+export interface ChatMessageTokens {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+}
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant' | 'system';
@@ -98,6 +104,33 @@ export interface ChatMessage {
   taskPlan?: TaskPlan;
   auditTag?: string;
   tokensUsed?: number;
+  tokensDetail?: ChatMessageTokens;
+  durationSeconds?: number;
+}
+
+export interface LiveLogItem {
+  id: string;
+  timestamp: number;
+  level: 'INFO' | 'WARN' | 'ERROR' | 'NET';
+  module: string;
+  message: string;
+}
+
+export const liveLogStore: LiveLogItem[] = [
+  { id: 'log-1', timestamp: Date.now(), level: 'INFO', module: 'System', message: 'CodeMind-Hub 内核启动完成，本地同源网关已就绪' }
+];
+
+export function appendLiveLog(level: 'INFO' | 'WARN' | 'ERROR' | 'NET', module: string, message: string): LiveLogItem {
+  const item: LiveLogItem = {
+    id: `log-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    timestamp: Date.now(),
+    level,
+    module,
+    message
+  };
+  liveLogStore.unshift(item);
+  if (liveLogStore.length > 200) liveLogStore.pop();
+  return item;
 }
 
 export type WindowBreakpoint = 'ultrawide' | 'standard' | 'laptop' | 'split_half';
