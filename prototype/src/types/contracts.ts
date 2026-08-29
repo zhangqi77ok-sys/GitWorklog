@@ -261,7 +261,7 @@ export function closeTerminalTab(existing: TerminalTab[], tabId: string): Termin
 export interface FileNode {
   id: string;
   name: string;
-  path: string;
+  path?: string;
   type: 'file' | 'directory';
   children?: FileNode[];
   extension?: string;
@@ -351,4 +351,133 @@ export interface SystemSettings {
   contextWarnRatio: number;
   defaultPermission: PermissionPolicy;
   theme: 'cream' | 'dark_charcoal' | 'system';
+}
+
+
+// Contextual Scoping Data & Helpers
+export interface ProjectWorkspaceData {
+  projectId: string;
+  projectName: string;
+  gitBranch: string;
+  fileTree: FileNode;
+  searchableFiles: Array<{ path: string; content: string }>;
+  gitChanges: GitFileChange[];
+  snapshots: ShadowSnapshotItem[];
+}
+
+export const WORKSPACE_MOCK_DATA: Record<string, ProjectWorkspaceData> = {
+  'proj-1': {
+    projectId: 'proj-1',
+    projectName: 'agent-learning',
+    gitBranch: 'main',
+    fileTree: {
+      id: 'proj-1-root',
+      name: 'agent-learning',
+      type: 'directory',
+      children: [
+        {
+          id: 'p1-docs',
+          name: 'docs',
+          type: 'directory',
+          path: 'docs',
+          children: [
+            { id: 'p1-prd', name: 'PRODUCT_REQUIREMENTS_DOCUMENT.md', type: 'file', path: 'docs/PRODUCT_REQUIREMENTS_DOCUMENT.md' },
+            { id: 'p1-arch', name: 'ARCHITECTURE.md', type: 'file', path: 'docs/ARCHITECTURE.md' }
+          ]
+        },
+        {
+          id: 'p1-src',
+          name: 'src',
+          type: 'directory',
+          path: 'src',
+          children: [
+            {
+              id: 'p1-components',
+              name: 'components',
+              type: 'directory',
+              path: 'src/components',
+              children: [
+                { id: 'p1-titlebar', name: 'Titlebar.tsx', type: 'file', path: 'src/components/Titlebar.tsx' },
+                { id: 'p1-leftpanel', name: 'LeftPanel.tsx', type: 'file', path: 'src/components/LeftPanel.tsx' },
+                { id: 'p1-chat', name: 'ChatColumn.tsx', type: 'file', path: 'src/components/ChatColumn.tsx' },
+                { id: 'p1-editor', name: 'EditorWorkspace.tsx', type: 'file', path: 'src/components/EditorWorkspace.tsx' }
+              ]
+            },
+            {
+              id: 'p1-types',
+              name: 'types',
+              type: 'directory',
+              path: 'src/types',
+              children: [
+                { id: 'p1-contracts', name: 'contracts.ts', type: 'file', path: 'src/types/contracts.ts' }
+              ]
+            },
+            { id: 'p1-app', name: 'App.tsx', type: 'file', path: 'src/App.tsx' }
+          ]
+        },
+        { id: 'p1-pkg', name: 'package.json', type: 'file', path: 'package.json' }
+      ]
+    },
+    searchableFiles: [
+      { path: 'src/types/contracts.ts', content: 'export class GatewayBus {\n  dispatch() {}\n}' },
+      { path: 'src/components/LeftPanel.tsx', content: '// GatewayBus event listener\nexport const LeftPanel = () => {};' },
+      { path: 'docs/PRODUCT_REQUIREMENTS_DOCUMENT.md', content: '单例调度总线 GatewayBus' }
+    ],
+    gitChanges: [
+      { path: 'src/components/LeftPanel.tsx', status: 'modified', additions: 42, deletions: 18 },
+      { path: 'docs/PRODUCT_REQUIREMENTS_DOCUMENT.md', status: 'modified', additions: 80, deletions: 12 }
+    ],
+    snapshots: [
+      { id: 'snap-1', timestamp: Date.now() - 300000, label: '落地 4:6 终端与工作台收起', gitCommitHash: 'a8523ff', changedFilesCount: 7, isAiGenerated: true },
+      { id: 'snap-2', timestamp: Date.now() - 1200000, label: '实现聚合模式下拉与多模型热切', gitCommitHash: 'a00ee38', changedFilesCount: 5, isAiGenerated: true }
+    ]
+  },
+  'proj-2': {
+    projectId: 'proj-2',
+    projectName: 'codemind-sdk',
+    gitBranch: 'dev',
+    fileTree: {
+      id: 'proj-2-root',
+      name: 'codemind-sdk',
+      type: 'directory',
+      children: [
+        {
+          id: 'p2-codemind',
+          name: 'codemind',
+          type: 'directory',
+          path: 'codemind',
+          children: [
+            { id: 'p2-harness', name: 'harness.py', type: 'file', path: 'codemind/harness.py' },
+            { id: 'p2-ast', name: 'ast_parser.py', type: 'file', path: 'codemind/ast_parser.py' },
+            { id: 'p2-bus', name: 'event_bus.py', type: 'file', path: 'codemind/event_bus.py' }
+          ]
+        },
+        {
+          id: 'p2-tests',
+          name: 'tests',
+          type: 'directory',
+          path: 'tests',
+          children: [
+            { id: 'p2-test-harness', name: 'test_harness.py', type: 'file', path: 'tests/test_harness.py' }
+          ]
+        },
+        { id: 'p2-setup', name: 'pyproject.toml', type: 'file', path: 'pyproject.toml' },
+        { id: 'p2-readme', name: 'README.md', type: 'file', path: 'README.md' }
+      ]
+    },
+    searchableFiles: [
+      { path: 'codemind/harness.py', content: 'class CodeMindHarness:\n    def run_tests(self): pass' },
+      { path: 'codemind/ast_parser.py', content: 'import tree_sitter\ndef parse_ast(): pass' }
+    ],
+    gitChanges: [
+      { path: 'codemind/harness.py', status: 'modified', additions: 15, deletions: 3 }
+    ],
+    snapshots: [
+      { id: 'snap-sdk-1', timestamp: Date.now() - 7200000, label: '初始化 Python AST 语法治具', gitCommitHash: 'd3e8fa1', changedFilesCount: 2, isAiGenerated: false }
+    ]
+  }
+};
+
+export function getProjectWorkspaceData(projectId: string): ProjectWorkspaceData {
+  return WORKSPACE_MOCK_DATA[projectId] || WORKSPACE_MOCK_DATA['proj-1'];
 }

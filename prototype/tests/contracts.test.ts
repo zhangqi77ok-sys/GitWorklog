@@ -12,6 +12,7 @@ import {
   createTerminalTab,
   closeTerminalTab,
   filterFilesByQuery,
+  getProjectWorkspaceData,
   removeProjectFromWorkspace,
   SessionItem,
   TokenStats
@@ -155,5 +156,21 @@ describe('SDD Contract - All Core Workspace Modules Logic', () => {
   it('should return empty array for empty search query', () => {
     const results = filterFilesByQuery('', [{ path: 'a.ts', content: 'hello' }]);
     expect(results).toEqual([]);
+  });
+});
+
+
+describe('SDD Contract - Context-Scoped Project Linking', () => {
+  it('should switch file tree and searchable files when switching active project', () => {
+    const dataProj1 = getProjectWorkspaceData('proj-1');
+    expect(dataProj1.projectName).toBe('agent-learning');
+    expect(dataProj1.fileTree.name).toBe('agent-learning');
+    expect(dataProj1.gitBranch).toBe('main');
+
+    const dataProj2 = getProjectWorkspaceData('proj-2');
+    expect(dataProj2.projectName).toBe('codemind-sdk');
+    expect(dataProj2.fileTree.name).toBe('codemind-sdk');
+    expect(dataProj2.gitBranch).toBe('dev');
+    expect(dataProj2.searchableFiles[0].path).toBe('codemind/harness.py');
   });
 });

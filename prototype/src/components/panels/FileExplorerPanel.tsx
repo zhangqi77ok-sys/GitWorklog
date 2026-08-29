@@ -11,112 +11,43 @@ import {
   FolderPlus,
   FilePlus
 } from 'lucide-react';
+import { ProjectGroup, FileNode, getProjectWorkspaceData } from '../../types/contracts';
 
 interface FileExplorerPanelProps {
-  currentProject: string;
+  activeProject: ProjectGroup;
+  projects: ProjectGroup[];
+  onSelectProject: (projectId: string) => void;
   onOpenFile: (filePath: string, fileName: string) => void;
 }
 
-interface TreeItem {
-  id: string;
-  name: string;
-  type: 'file' | 'dir';
-  path: string;
-  children?: TreeItem[];
-}
-
 export const FileExplorerPanel: React.FC<FileExplorerPanelProps> = ({
-  currentProject,
+  activeProject,
+  projects,
+  onSelectProject,
   onOpenFile
 }) => {
   const [expandedDirs, setExpandedDirs] = useState<Record<string, boolean>>({
-    'root': true,
-    'src': true,
-    'src/components': true,
-    'src/types': true,
-    'docs': true
+    'proj-1-root': true,
+    'proj-2-root': true,
+    'p1-src': true,
+    'p1-components': true,
+    'p1-types': true,
+    'p1-docs': true,
+    'p2-codemind': true
   });
 
   const [selectedFile, setSelectedFile] = useState<string>('src/types/contracts.ts');
+  const [showProjDropdown, setShowProjDropdown] = useState(false);
 
-  const fileTree: TreeItem = {
-    id: 'root',
-    name: currentProject,
-    type: 'dir',
-    path: '',
-    children: [
-      {
-        id: 'docs',
-        name: 'docs',
-        type: 'dir',
-        path: 'docs',
-        children: [
-          { id: 'prd', name: 'PRODUCT_REQUIREMENTS_DOCUMENT.md', type: 'file', path: 'docs/PRODUCT_REQUIREMENTS_DOCUMENT.md' },
-          { id: 'arch', name: 'ARCHITECTURE.md', type: 'file', path: 'docs/ARCHITECTURE.md' }
-        ]
-      },
-      {
-        id: 'src',
-        name: 'src',
-        type: 'dir',
-        path: 'src',
-        children: [
-          {
-            id: 'src-components',
-            name: 'components',
-            type: 'dir',
-            path: 'src/components',
-            children: [
-              { id: 'c-titlebar', name: 'Titlebar.tsx', type: 'file', path: 'src/components/Titlebar.tsx' },
-              { id: 'c-leftpanel', name: 'LeftPanel.tsx', type: 'file', path: 'src/components/LeftPanel.tsx' },
-              { id: 'c-chat', name: 'ChatColumn.tsx', type: 'file', path: 'src/components/ChatColumn.tsx' },
-              { id: 'c-editor', name: 'EditorWorkspace.tsx', type: 'file', path: 'src/components/EditorWorkspace.tsx' },
-              { id: 'c-options', name: 'OptionsCard.tsx', type: 'file', path: 'src/components/OptionsCard.tsx' }
-            ]
-          },
-          {
-            id: 'src-types',
-            name: 'types',
-            type: 'dir',
-            path: 'src/types',
-            children: [
-              { id: 't-contracts', name: 'contracts.ts', type: 'file', path: 'src/types/contracts.ts' }
-            ]
-          },
-          {
-            id: 'src-styles',
-            name: 'styles',
-            type: 'dir',
-            path: 'src/styles',
-            children: [
-              { id: 's-theme', name: 'theme.css', type: 'file', path: 'src/styles/theme.css' }
-            ]
-          },
-          { id: 'app', name: 'App.tsx', type: 'file', path: 'src/App.tsx' },
-          { id: 'main', name: 'main.tsx', type: 'file', path: 'src/main.tsx' }
-        ]
-      },
-      {
-        id: 'tests',
-        name: 'tests',
-        type: 'dir',
-        path: 'tests',
-        children: [
-          { id: 't-test', name: 'contracts.test.ts', type: 'file', path: 'tests/contracts.test.ts' }
-        ]
-      },
-      { id: 'pkg', name: 'package.json', type: 'file', path: 'package.json' },
-      { id: 'tsconf', name: 'tsconfig.json', type: 'file', path: 'tsconfig.json' },
-      { id: 'viteconf', name: 'vite.config.ts', type: 'file', path: 'vite.config.ts' }
-    ]
+  const workspaceData = getProjectWorkspaceData(activeProject.id);
+  const fileTree = workspaceData.fileTree;
+
+  const toggleDir = (dirId: string) => {
+    setExpandedDirs(prev => ({ ...prev, [dirId]: !prev[dirId] }));
   };
 
-  const toggleDir = (dirPath: string) => {
-    setExpandedDirs(prev => ({ ...prev, [dirPath]: !prev[dirPath] }));
-  };
-
-  const renderTree = (item: TreeItem, level: number = 0) => {
-    const isDir = item.type === 'dir';
+  const renderTree = (item: FileNode, level: number = 0) => {
+    const isDir = item.type === 'directory';
     const isExpanded = expandedDirs[item.id] ?? false;
     const isSelected = selectedFile === item.path;
 
@@ -127,8 +58,9 @@ export const FileExplorerPanel: React.FC<FileExplorerPanelProps> = ({
             if (isDir) {
               toggleDir(item.id);
             } else {
-              setSelectedFile(item.path);
-              onOpenFile(item.path, item.name);
+              const targetPath = item.path || item.name;
+              setSelectedFile(targetPath);
+              onOpenFile(targetPath, item.name);
             }
           }}
           style={{
@@ -157,6 +89,8 @@ export const FileExplorerPanel: React.FC<FileExplorerPanelProps> = ({
               <span style={{ width: '11px' }} />
               {item.name.endsWith('.md') ? (
                 <FileText size={12} color="#10B981" />
+              ) : item.name.endsWith('.py') ? (
+                <FileCode size={12} color="#F59E0B" />
               ) : (
                 <FileCode size={12} color={item.name.endsWith('.tsx') ? '#60A5FA' : 'var(--accent)'} />
               )}
@@ -178,27 +112,94 @@ export const FileExplorerPanel: React.FC<FileExplorerPanelProps> = ({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      {/* Explorer Header Actions */}
+      {/* Explorer Header with Project Selector */}
       <div style={{
         padding: '8px 10px',
         borderBottom: '1px solid var(--border-subtle)',
         display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center'
+        flexDirection: 'column',
+        gap: '6px'
       }}>
-        <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-          项目代码文件树
-        </span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-          <button title="新建文件" style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '2px' }}>
-            <FilePlus size={13} />
-          </button>
-          <button title="新建文件夹" style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '2px' }}>
-            <FolderPlus size={13} />
-          </button>
-          <button title="刷新树" style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '2px' }}>
-            <RefreshCw size={12} />
-          </button>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+            工程代码文件树
+          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <button title="新建文件" style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '2px' }}>
+              <FilePlus size={13} />
+            </button>
+            <button title="新建文件夹" style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '2px' }}>
+              <FolderPlus size={13} />
+            </button>
+            <button title="刷新树" style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '2px' }}>
+              <RefreshCw size={12} />
+            </button>
+          </div>
+        </div>
+
+        {/* Active Project Switcher Capsule */}
+        <div style={{ position: 'relative' }}>
+          <div
+            onClick={() => setShowProjDropdown(!showProjDropdown)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '4px 8px',
+              borderRadius: '4px',
+              background: 'var(--bg-surface)',
+              border: '1px solid var(--border-strong)',
+              fontSize: '11px',
+              cursor: 'pointer'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', overflow: 'hidden' }}>
+              <Folder size={13} color="var(--accent)" />
+              <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{activeProject.name}</span>
+              <span style={{ fontSize: '10px', color: 'var(--accent)' }}>({activeProject.gitBranch})</span>
+            </div>
+            <ChevronDown size={12} color="var(--text-muted)" />
+          </div>
+
+          {/* Project Dropdown */}
+          {showProjDropdown && (
+            <div style={{
+              position: 'absolute',
+              top: '28px',
+              left: 0,
+              right: 0,
+              background: 'var(--bg-surface-elevated)',
+              border: '1px solid var(--border-strong)',
+              borderRadius: '4px',
+              boxShadow: '0 6px 16px rgba(0,0,0,0.12)',
+              zIndex: 50,
+              padding: '4px'
+            }}>
+              {projects.map(p => (
+                <div
+                  key={p.id}
+                  onClick={() => {
+                    onSelectProject(p.id);
+                    setShowProjDropdown(false);
+                  }}
+                  style={{
+                    padding: '4px 8px',
+                    borderRadius: '3px',
+                    background: p.id === activeProject.id ? 'var(--accent-subtle)' : 'transparent',
+                    color: p.id === activeProject.id ? 'var(--accent)' : 'var(--text-primary)',
+                    fontWeight: p.id === activeProject.id ? 600 : 400,
+                    cursor: 'pointer',
+                    fontSize: '11px',
+                    display: 'flex',
+                    justifyContent: 'space-between'
+                  }}
+                >
+                  <span>📁 {p.name}</span>
+                  <span style={{ color: 'var(--text-muted)', fontSize: '10px' }}>({p.gitBranch})</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 

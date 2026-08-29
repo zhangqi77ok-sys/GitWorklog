@@ -1,69 +1,33 @@
 import React, { useState } from 'react';
-import { GitBranch, RotateCcw, Check, Clock, Plus, ShieldCheck } from 'lucide-react';
-import { ShadowSnapshotItem, GitFileChange } from '../../types/contracts';
+import { GitBranch, RotateCcw, ShieldCheck, ChevronDown } from 'lucide-react';
+import { ProjectGroup, getProjectWorkspaceData, ShadowSnapshotItem } from '../../types/contracts';
 
-export const GitSnapshotsPanel: React.FC = () => {
-  const [currentBranch, setCurrentBranch] = useState('main');
+interface GitSnapshotsPanelProps {
+  activeProject: ProjectGroup;
+  projects: ProjectGroup[];
+  onSelectProject: (projectId: string) => void;
+}
+
+export const GitSnapshotsPanel: React.FC<GitSnapshotsPanelProps> = ({
+  activeProject,
+  projects,
+  onSelectProject
+}) => {
   const [commitMessage, setCommitMessage] = useState('');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [showProjDropdown, setShowProjDropdown] = useState(false);
 
-  const modifiedFiles: GitFileChange[] = [
-    { path: 'src/components/LeftPanel.tsx', status: 'modified', additions: 42, deletions: 18 },
-    { path: 'docs/PRODUCT_REQUIREMENTS_DOCUMENT.md', status: 'modified', additions: 80, deletions: 12 },
-    { path: 'src/components/EditorWorkspace.tsx', status: 'modified', additions: 55, deletions: 20 }
-  ];
-
-  const [snapshots, setSnapshots] = useState<ShadowSnapshotItem[]>([
-    {
-      id: 'snap-3',
-      timestamp: Date.now() - 300000,
-      label: '编写 Store 契约与前置测试 (落盘前自动快照)',
-      gitCommitHash: 'a8523ff',
-      changedFilesCount: 3,
-      isAiGenerated: true
-    },
-    {
-      id: 'snap-2',
-      timestamp: Date.now() - 1200000,
-      label: '重构 LeftPanel 树形结构与标签管理',
-      gitCommitHash: 'b9fa36d',
-      changedFilesCount: 4,
-      isAiGenerated: true
-    },
-    {
-      id: 'snap-1',
-      timestamp: Date.now() - 3600000,
-      label: '项目三大铁律永久入库',
-      gitCommitHash: 'ec0b17d',
-      changedFilesCount: 3,
-      isAiGenerated: false
-    }
-  ]);
+  const workspaceData = getProjectWorkspaceData(activeProject.id);
+  const modifiedFiles = workspaceData.gitChanges;
+  const snapshots = workspaceData.snapshots;
 
   const handleRollback = (snap: ShadowSnapshotItem) => {
-    setToastMessage(`✨ 成功还原至影子快照 [${snap.gitCommitHash}]: ${snap.label}`);
-    setTimeout(() => setToastMessage(null), 3000);
-  };
-
-  const handleCommit = () => {
-    if (!commitMessage.trim()) return;
-    const newSnap: ShadowSnapshotItem = {
-      id: `snap-${Date.now()}`,
-      timestamp: Date.now(),
-      label: commitMessage.trim(),
-      gitCommitHash: Math.random().toString(16).substring(2, 9),
-      changedFilesCount: modifiedFiles.length,
-      isAiGenerated: false
-    };
-    setSnapshots(prev => [newSnap, ...prev]);
-    setCommitMessage('');
-    setToastMessage(`✓ 已创建提交并沉淀新检查点: ${newSnap.gitCommitHash}`);
+    setToastMessage(`✨ 成功还原 [${activeProject.name}] 至影子快照 [${snap.gitCommitHash}]: ${snap.label}`);
     setTimeout(() => setToastMessage(null), 3000);
   };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}>
-      {/* Toast Notification */}
       {toastMessage && (
         <div style={{
           position: 'absolute',
@@ -87,7 +51,7 @@ export const GitSnapshotsPanel: React.FC = () => {
       <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--border-subtle)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
           <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-            Git 影子快照与版本感知
+            Git 影子快照中心
           </span>
           <div style={{
             display: 'flex',
@@ -101,15 +65,73 @@ export const GitSnapshotsPanel: React.FC = () => {
             fontWeight: 600
           }}>
             <GitBranch size={11} />
-            <span>{currentBranch}</span>
+            <span>{activeProject.gitBranch}</span>
           </div>
         </div>
 
+        {/* Project Switcher */}
+        <div style={{ position: 'relative', marginBottom: '6px' }}>
+          <div
+            onClick={() => setShowProjDropdown(!showProjDropdown)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '3px 6px',
+              borderRadius: '4px',
+              background: 'var(--bg-surface)',
+              border: '1px solid var(--border-subtle)',
+              fontSize: '11px',
+              cursor: 'pointer'
+            }}
+          >
+            <span style={{ color: 'var(--text-secondary)' }}>
+              工程仓库: 📁 <strong>{activeProject.name}</strong>
+            </span>
+            <ChevronDown size={11} color="var(--text-muted)" />
+          </div>
+
+          {showProjDropdown && (
+            <div style={{
+              position: 'absolute',
+              top: '26px',
+              left: 0,
+              right: 0,
+              background: 'var(--bg-surface-elevated)',
+              border: '1px solid var(--border-strong)',
+              borderRadius: '4px',
+              boxShadow: '0 6px 16px rgba(0,0,0,0.12)',
+              zIndex: 50,
+              padding: '4px'
+            }}>
+              {projects.map(p => (
+                <div
+                  key={p.id}
+                  onClick={() => {
+                    onSelectProject(p.id);
+                    setShowProjDropdown(false);
+                  }}
+                  style={{
+                    padding: '4px 8px',
+                    borderRadius: '3px',
+                    background: p.id === activeProject.id ? 'var(--accent-subtle)' : 'transparent',
+                    color: p.id === activeProject.id ? 'var(--accent)' : 'var(--text-primary)',
+                    cursor: 'pointer',
+                    fontSize: '11px'
+                  }}
+                >
+                  📁 {p.name} ({p.gitBranch})
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         {/* Commit Input Box */}
-        <div style={{ display: 'flex', gap: '4px', marginTop: '6px' }}>
+        <div style={{ display: 'flex', gap: '4px' }}>
           <input
             type="text"
-            placeholder="输入提交信息并打快照..."
+            placeholder={`提交 ${activeProject.name} 变更并打快照...`}
             value={commitMessage}
             onChange={e => setCommitMessage(e.target.value)}
             style={{
@@ -124,7 +146,13 @@ export const GitSnapshotsPanel: React.FC = () => {
             }}
           />
           <button
-            onClick={handleCommit}
+            onClick={() => {
+              if (commitMessage.trim()) {
+                setToastMessage(`✓ 已为 ${activeProject.name} 提交变更并固化检查点`);
+                setCommitMessage('');
+                setTimeout(() => setToastMessage(null), 3000);
+              }
+            }}
             disabled={!commitMessage.trim()}
             style={{
               padding: '4px 8px',
@@ -142,9 +170,9 @@ export const GitSnapshotsPanel: React.FC = () => {
         </div>
       </div>
 
-      {/* Content Area: Modified Files + Timeline */}
+      {/* Content */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '8px' }}>
-        {/* 1. Working Changes */}
+        {/* Working Changes */}
         <div style={{ marginBottom: '14px' }}>
           <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>
             未提交变更 ({modifiedFiles.length})
@@ -178,11 +206,11 @@ export const GitSnapshotsPanel: React.FC = () => {
           ))}
         </div>
 
-        {/* 2. Shadow Snapshot Timeline */}
+        {/* Shadow Timeline */}
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>
             <ShieldCheck size={13} color="var(--accent)" />
-            <span>AI 自动影子检查点时间线</span>
+            <span>{activeProject.name} 影子快照时间线</span>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>

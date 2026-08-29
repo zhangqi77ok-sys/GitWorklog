@@ -131,12 +131,23 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
 
   const globalSessions = sessions.filter(s => s.tier1 === 'global');
 
+  const currentSession = sessions.find(s => s.id === currentSessionId);
+  const activeProject = projects.find(p => p.id === currentSession?.projectId) || projects[0];
+  const handleSelectProject = (projId: string) => {
+    const projSession = sessions.find(s => s.projectId === projId);
+    if (projSession) {
+      onSelectSession(projSession.id);
+    }
+  };
+
   // Render based on active navigation tab
   if (activeNav === 'files') {
     return (
       <div style={{ width: `${width}px`, minWidth: '220px', maxWidth: '380px', height: 'calc(100vh - 38px)', background: 'var(--bg-base)', borderRight: '1px solid var(--border-subtle)' }}>
         <FileExplorerPanel
-          currentProject={projects[0]?.name || 'agent-learning'}
+          activeProject={activeProject}
+          projects={projects}
+          onSelectProject={handleSelectProject}
           onOpenFile={(path, name) => onOpenFile(path, name)}
         />
       </div>
@@ -147,6 +158,9 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
     return (
       <div style={{ width: `${width}px`, minWidth: '220px', maxWidth: '380px', height: 'calc(100vh - 38px)', background: 'var(--bg-base)', borderRight: '1px solid var(--border-subtle)' }}>
         <GlobalSearchPanel
+          activeProject={activeProject}
+          projects={projects}
+          onSelectProject={handleSelectProject}
           onOpenFileAndLine={(path, name, line) => onOpenFile(path, name, line)}
         />
       </div>
@@ -156,7 +170,11 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
   if (activeNav === 'git') {
     return (
       <div style={{ width: `${width}px`, minWidth: '220px', maxWidth: '380px', height: 'calc(100vh - 38px)', background: 'var(--bg-base)', borderRight: '1px solid var(--border-subtle)' }}>
-        <GitSnapshotsPanel />
+        <GitSnapshotsPanel
+          activeProject={activeProject}
+          projects={projects}
+          onSelectProject={handleSelectProject}
+        />
       </div>
     );
   }

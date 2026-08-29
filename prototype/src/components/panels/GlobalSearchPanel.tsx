@@ -1,43 +1,99 @@
 import React, { useState } from 'react';
-import { Search, ChevronDown, ChevronRight, FileCode, ArrowRight } from 'lucide-react';
-import { filterFilesByQuery, SearchResultFile } from '../../types/contracts';
+import { Search, FileCode, ArrowRight, ChevronDown } from 'lucide-react';
+import { ProjectGroup, getProjectWorkspaceData, filterFilesByQuery, SearchResultFile } from '../../types/contracts';
 
 interface GlobalSearchPanelProps {
+  activeProject: ProjectGroup;
+  projects: ProjectGroup[];
+  onSelectProject: (projectId: string) => void;
   onOpenFileAndLine: (filePath: string, fileName: string, line: number) => void;
 }
 
-export const GlobalSearchPanel: React.FC<GlobalSearchPanelProps> = ({ onOpenFileAndLine }) => {
-  const [query, setQuery] = useState('GatewayBus');
+export const GlobalSearchPanel: React.FC<GlobalSearchPanelProps> = ({
+  activeProject,
+  projects,
+  onSelectProject,
+  onOpenFileAndLine
+}) => {
+  const [query, setQuery] = useState(activeProject.id === 'proj-2' ? 'CodeMindHarness' : 'GatewayBus');
   const [caseSensitive, setCaseSensitive] = useState(false);
   const [useRegex, setUseRegex] = useState(false);
+  const [showProjDropdown, setShowProjDropdown] = useState(false);
 
-  // Mock workspace file contents
-  const mockFiles = [
-    {
-      path: 'src/types/contracts.ts',
-      content: `export type SessionTier1Type = 'global' | 'project';\nexport interface SessionItem {\nid: string;\ntitle: string;\n}\nexport class GatewayBus {\n  dispatch() {}\n}`
-    },
-    {
-      path: 'src/components/LeftPanel.tsx',
-      content: `import { SessionItem } from '../types/contracts';\n// GatewayBus listener attached for real-time events\nexport const LeftPanel = () => {};`
-    },
-    {
-      path: 'docs/PRODUCT_REQUIREMENTS_DOCUMENT.md',
-      content: `GatewayBus 核心总线调度中枢\n单例调度总线 GatewayBus`
-    }
-  ];
-
-  const results: SearchResultFile[] = filterFilesByQuery(query, mockFiles);
+  const workspaceData = getProjectWorkspaceData(activeProject.id);
+  const results: SearchResultFile[] = filterFilesByQuery(query, workspaceData.searchableFiles);
   const totalMatches = results.reduce((acc, r) => acc + r.matches.length, 0);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* Header */}
       <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--border-subtle)' }}>
-        <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-          全局跨文件检索
-        </span>
-        {/* Search Input with options */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+          <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+            全局跨文件检索
+          </span>
+        </div>
+
+        {/* Scope Dropdown */}
+        <div style={{ position: 'relative', marginBottom: '6px' }}>
+          <div
+            onClick={() => setShowProjDropdown(!showProjDropdown)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '3px 6px',
+              borderRadius: '4px',
+              background: 'var(--bg-surface)',
+              border: '1px solid var(--border-subtle)',
+              fontSize: '11px',
+              cursor: 'pointer'
+            }}
+          >
+            <span style={{ color: 'var(--text-secondary)' }}>
+              范围: 📁 <strong>{activeProject.name}</strong>
+            </span>
+            <ChevronDown size={11} color="var(--text-muted)" />
+          </div>
+
+          {showProjDropdown && (
+            <div style={{
+              position: 'absolute',
+              top: '26px',
+              left: 0,
+              right: 0,
+              background: 'var(--bg-surface-elevated)',
+              border: '1px solid var(--border-strong)',
+              borderRadius: '4px',
+              boxShadow: '0 6px 16px rgba(0,0,0,0.12)',
+              zIndex: 50,
+              padding: '4px'
+            }}>
+              {projects.map(p => (
+                <div
+                  key={p.id}
+                  onClick={() => {
+                    onSelectProject(p.id);
+                    setQuery(p.id === 'proj-2' ? 'CodeMindHarness' : 'GatewayBus');
+                    setShowProjDropdown(false);
+                  }}
+                  style={{
+                    padding: '4px 8px',
+                    borderRadius: '3px',
+                    background: p.id === activeProject.id ? 'var(--accent-subtle)' : 'transparent',
+                    color: p.id === activeProject.id ? 'var(--accent)' : 'var(--text-primary)',
+                    cursor: 'pointer',
+                    fontSize: '11px'
+                  }}
+                >
+                  📁 {p.name}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Search Input */}
         <div style={{
           display: 'flex',
           alignItems: 'center',
@@ -45,15 +101,14 @@ export const GlobalSearchPanel: React.FC<GlobalSearchPanelProps> = ({ onOpenFile
           background: 'var(--bg-surface)',
           borderRadius: '4px',
           border: '1px solid var(--border-strong)',
-          padding: '2px 6px',
-          marginTop: '6px'
+          padding: '2px 6px'
         }}>
           <Search size={13} color="var(--text-muted)" />
           <input
             type="text"
             value={query}
             onChange={e => setQuery(e.target.value)}
-            placeholder="搜索符号、文本或类名..."
+            placeholder="搜索符号、文本或函数..."
             style={{
               flex: 1,
               background: 'transparent',
@@ -63,7 +118,6 @@ export const GlobalSearchPanel: React.FC<GlobalSearchPanelProps> = ({ onOpenFile
               outline: 'none'
             }}
           />
-          {/* Toggles */}
           <button
             onClick={() => setCaseSensitive(!caseSensitive)}
             style={{
@@ -96,16 +150,16 @@ export const GlobalSearchPanel: React.FC<GlobalSearchPanelProps> = ({ onOpenFile
           </button>
         </div>
 
-        <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '6px', display: 'flex', justifyContent: 'space-between' }}>
-          <span>{totalMatches} 个匹配结果 ({results.length} 个文件)</span>
+        <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '4px' }}>
+          <span>{totalMatches} 个匹配结果 (在 {activeProject.name} 中)</span>
         </div>
       </div>
 
-      {/* Search Results List */}
+      {/* Results */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '6px' }}>
         {results.length === 0 ? (
           <div style={{ padding: '24px 12px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '11px' }}>
-            未找到包含 "{query}" 的匹配项
+            在 {activeProject.name} 中未找到 "{query}" 的匹配项
           </div>
         ) : (
           results.map(fileRes => (
