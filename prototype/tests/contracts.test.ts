@@ -707,3 +707,39 @@ describe('SDD Contract - 3 Production Pillars (Router, Trajectory, Graph)', () =
     expect(webNode?.impactCount).toBe(3);
   });
 });
+
+
+import { desktopBridge } from '../src/services/desktopBridge';
+
+describe('Production Bridge - Tauri & Web Dual-Mode IPC Gateways', () => {
+  it('should get AST tree nodes deterministically', async () => {
+    const nodes = await desktopBridge.getAstTree('contracts.ts');
+    expect(nodes.length).toBeGreaterThan(0);
+    expect(nodes[0].name).toBe('SessionItem');
+    expect(nodes[0].kind).toBe('interface');
+  });
+
+  it('should intercept dangerous shell commands without sudo', async () => {
+    const resForbidden = await desktopBridge.executeSandboxCommand('rm -rf /', false);
+    expect(resForbidden.isSandboxIntercepted).toBe(true);
+    expect(resForbidden.exitCode).toBe(1);
+
+    const resAllowed = await desktopBridge.executeSandboxCommand('npm test', false);
+    expect(resAllowed.isSandboxIntercepted).toBe(false);
+    expect(resAllowed.exitCode).toBe(0);
+  });
+
+  it('should allow dangerous command when sudo is explicitly granted', async () => {
+    const resSudo = await desktopBridge.executeSandboxCommand('rm -rf /', true);
+    expect(resSudo.isSandboxIntercepted).toBe(false);
+    expect(resSudo.exitCode).toBe(0);
+  });
+
+  it('should generate preflight CI report with 88.4% coverage pass', async () => {
+    const report = await desktopBridge.checkPreflightCi();
+    expect(report.status).toBe('passed');
+    expect(report.allowPush).toBe(true);
+    expect(report.lineCoverage).toBe(88.4);
+    expect(report.tsErrorsCount).toBe(0);
+  });
+});

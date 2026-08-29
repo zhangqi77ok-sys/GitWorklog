@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { PreFlightCiDrawer } from './PreFlightCiDrawer';
 import { ArchitectureGraphView } from './ArchitectureGraphView';
+import { MonacoCodeEditor } from './MonacoCodeEditor';
 import { Network } from 'lucide-react';
 import {
   X,
