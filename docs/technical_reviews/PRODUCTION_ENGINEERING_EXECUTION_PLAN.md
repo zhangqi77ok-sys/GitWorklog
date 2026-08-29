@@ -1,4 +1,4 @@
-# CodeMind-Hub 生产级工程研发、测试与缺陷自愈实施蓝图
+# Tcode 生产级工程研发、测试与缺陷自愈实施蓝图
 > **工程级别**：商业级生产发布标准 (Enterprise Production-Ready Standard / GA)  
 > **核心宗旨**：**“拒绝 Demo 玩具心态，全链路严谨闭环，每个功能点必经可量化验证”**  
 > **归档路径**：`docs/technical_reviews/PRODUCTION_ENGINEERING_EXECUTION_PLAN.md`
@@ -137,7 +137,7 @@ graph LR
 
 ```mermaid
 gantt
-    title CodeMind-Hub 生产级开发、测试与发布全景排期
+    title Tcode 生产级开发、测试与发布全景排期
     dateFormat  YYYY-MM-DD
     section M1: 核心契约与测试收敛 (已完成)
     PRD 规约制定与 54 项 SDD 契约单测编写 :done, m1_1, 2026-08-15, 2026-08-25

@@ -1,4 +1,4 @@
-# CodeMind-Hub 商业级生产发布与运维全景指南
+# Tcode 商业级生产发布与运维全景指南
 > **版本**：v1.0.0 Commercial Release (GA)  
 > **适用平台**：Windows 10/11 (x86_64) · macOS (Apple Silicon ARM64 & Intel) · Linux  
 > **归档路径**：`docs/technical_reviews/ENTERPRISE_RELEASE_GUIDE.md`
@@ -22,8 +22,8 @@
 powershell -ExecutionPolicy Bypass -File ./scripts/build-desktop.ps1 -Target windows -Release
 ```
 - **构建输出产物**：
-  - `src-tauri/target/release/bundle/nsis/CodeMind-Hub_1.0.0_x64-setup.exe` (NSIS 安装程序)
-  - `src-tauri/target/release/bundle/msi/CodeMind-Hub_1.0.0_x64_en-US.msi` (企业部署 MSI)
+  - `src-tauri/target/release/bundle/nsis/Tcode_1.0.0_x64-setup.exe` (NSIS 安装程序)
+  - `src-tauri/target/release/bundle/msi/Tcode_1.0.0_x64_en-US.msi` (企业部署 MSI)
 
 ### 2. macOS 跨平台打包 (Apple Silicon & Universal)
 在 macOS CI 机器上运行：
@@ -31,7 +31,7 @@ powershell -ExecutionPolicy Bypass -File ./scripts/build-desktop.ps1 -Target win
 bash ./scripts/build-desktop.sh --target macos --universal
 ```
 - **构建输出产物**：
-  - `src-tauri/target/release/bundle/dmg/CodeMind-Hub_1.0.0_universal.dmg` (双架构 DMG)
+  - `src-tauri/target/release/bundle/dmg/Tcode_1.0.0_universal.dmg` (双架构 DMG)
 
 ---
 
@@ -40,20 +40,20 @@ bash ./scripts/build-desktop.sh --target macos --universal
 ### 1. Windows 签名 (Authenticode)
 使用 `signtool.exe` 对 `.exe` 和 `.msi` 签名：
 ```powershell
-signtool sign /f "path/to/enterprise.pfx" /p "CertPassword" /tr http://timestamp.digicert.com /td sha256 /fd sha256 "src-tauri/target/release/bundle/nsis/CodeMind-Hub_1.0.0_x64-setup.exe"
+signtool sign /f "path/to/enterprise.pfx" /p "CertPassword" /tr http://timestamp.digicert.com /td sha256 /fd sha256 "src-tauri/target/release/bundle/nsis/Tcode_1.0.0_x64-setup.exe"
 ```
 
 ### 2. macOS 公证 (Apple Notarization)
 ```bash
-xcrun notarytool submit "src-tauri/target/release/bundle/dmg/CodeMind-Hub_1.0.0_universal.dmg" --keychain-profile "AC_PASSWORD" --wait
-xcrun stapler staple "src-tauri/target/release/bundle/dmg/CodeMind-Hub_1.0.0_universal.dmg"
+xcrun notarytool submit "src-tauri/target/release/bundle/dmg/Tcode_1.0.0_universal.dmg" --keychain-profile "AC_PASSWORD" --wait
+xcrun stapler staple "src-tauri/target/release/bundle/dmg/Tcode_1.0.0_universal.dmg"
 ```
 
 ---
 
 ## 三、增量热更新机制 (Tauri Auto-Updater)
 
-CodeMind-Hub 集成基于 **Ed25519 签名算法** 的安全静默热更新：
+Tcode 集成基于 **Ed25519 签名算法** 的安全静默热更新：
 1. **生成签名公私钥**：
    ```bash
    npx @tauri-apps/cli signer generate -w ~/.tauri/codemind.key
@@ -67,7 +67,7 @@ CodeMind-Hub 集成基于 **Ed25519 签名算法** 的安全静默热更新：
      "platforms": {
        "windows-x86_64": {
          "signature": "dW50cnVzdGVkIGNvbW1lbnQ6...",
-         "url": "https://releases.codemind.hub/v1.0.1/CodeMind-Hub_x64.nsis.zip"
+         "url": "https://releases.codemind.hub/v1.0.1/Tcode_x64.nsis.zip"
        }
      }
    }

@@ -4,8 +4,8 @@ import sys
 import json
 import subprocess
 CREATE_NO_WINDOW = 0x08000000
-APP_NAME = 'CodeMind Studio'
-APP_STORAGE_KEY = 'CodeMind-Studio'
+APP_NAME = 'Tcode Studio'
+APP_STORAGE_KEY = 'Tcode'
 HOST = '127.0.0.1'
 PORT = 8010
 
@@ -158,7 +158,7 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
             self.send_header('Access-Control-Allow-Origin', '*')
             self.send_header('Content-Type', 'application/json')
             self.end_headers()
-            self.wfile.write(json.dumps({'status': 'ok', 'service': 'codemind-studio'}).encode('utf-8'))
+            self.wfile.write(json.dumps({'status': 'ok', 'service': 'tcode'}).encode('utf-8'))
             return
 
         # 1. Native Folder Picker

@@ -1,5 +1,5 @@
-# CodeMind-Hub 桌面端技术选型决策与全景架构白皮书 (ADR)
-> **决策主题**：CodeMind-Hub 桌面客户端与跨平台架构技术选型 (Windows 优先，无缝兼容 macOS)  
+# Tcode 桌面端技术选型决策与全景架构白皮书 (ADR)
+> **决策主题**：Tcode 桌面客户端与跨平台架构技术选型 (Windows 优先，无缝兼容 macOS)  
 > **制定角色**：Principal Desktop & AI Systems Architect (桌面与系统级首席架构师) & Lead Agent Engineer  
 > **文档版本**：v1.0 (Architecture Decision Record)  
 > **归档路径**：`docs/technical_reviews/TECH_STACK_SELECTION_ADR.md`
@@ -16,7 +16,7 @@
 
 ```mermaid
 graph TD
-    subgraph "CodeMind-Hub 桌面端三层架构拓扑"
+    subgraph "Tcode 桌面端三层架构拓扑"
         UI["🖥️ 展现层: React 19 + TypeScript + Monaco Editor<br/>(WebKit / WebView2 极速渲染)"]
         IPC["⚡ 高速跨进程 IPC (Rust-IPC / JSON-RPC / Shared Memory)"]
         CORE["🦀 本地系统内核: Rust Native Sidecar Core<br/>(Tree-sitter AST + git2 + LSP Manager + SQLite/LanceDB)"]
@@ -42,7 +42,7 @@ graph TD
 
 ## 三、最终拍板定调技术栈 (The Recommended Tech Stack)
 
-经过架构委员会严谨评审，**CodeMind-Hub 采用 “Tauri 2.0 (Rust) + React 19 / Monaco + 本地轻量化 Daemon” 混合分层架构**：
+经过架构委员会严谨评审，**Tcode 采用 “Tauri 2.0 (Rust) + React 19 / Monaco + 本地轻量化 Daemon” 混合分层架构**：
 
 ```mermaid
 graph LR

@@ -49,7 +49,7 @@
 
 ## 📦 五、架构与发布交付规范
 
-- **产品正式品牌**：`Tcode`（内核代号 `CodeMind-Hub`，Agent 统一为 `Tcode Agent`）；
+- **产品正式品牌**：`Tcode`（内核代号 `Tcode`，Agent 统一为 `Tcode Agent`）；
 - **当前生产架构**：`React 18 + Python 3.12 桌面宿主网关 (PyInstaller 极速打包) + PyWebView`；
 - **未来演进路线**：`Tauri v2 + Rust Core 原生轻量化`；
 - **Windows 生产安装包**：`release/Tcode-Setup-v1.5.0.exe`。

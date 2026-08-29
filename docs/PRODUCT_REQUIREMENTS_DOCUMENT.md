@@ -1,6 +1,6 @@
-# CodeMind-Hub 全景产品需求与架构设计规范 (PRD 终极精粹整合版)
+# Tcode 全景产品需求与架构设计规范 (PRD 终极精粹整合版)
 
-> **产品代号**：CodeMind-Hub  
+> **产品代号**：Tcode  
 > **产品定位**：新一代企业级开源极简 AI 编程桌面工作台 (Cursor-Alternative Native Desktop IDE)  
 > **核心设计哲学**：基于**“总线-子线”**与**“搭积木”**解耦架构，打造**安全可控、极致省 Token、高度人机协同、全场景流体自适应**的自主智能体开发底座。  
 > **联合设计团队**：Agent 产品经理、UI/UX 体验设计师、前端架构师、Rust 原生核心工程师、Python 治具工程师
@@ -34,14 +34,14 @@
 - 一端是商业闭源软件（如 Cursor），强制将代码上传云端索引，收取高昂订阅费且无法连接企业自建大模型；
 - 另一端是开源方案，要么直接 Fork 臃肿的 VS Code（如 Void、PearAI，安装包 350MB+，启动吃力），要么是纯黑框 CLI 终端（如 Aider，缺乏直观的可视化协同），要么是纯对话框套壳（如 Cherry Studio，无法落地编辑真实工程）。
 
-**CodeMind-Hub 的破局之道**：
+**Tcode 的破局之道**：
 采用 **Tauri v2 + Rust 微内核 + React 19 原子积木**，打造包体积 `< 50MB`、内存占用 `< 150MB`、冷启动 `< 1s` 的原生桌面 IDE。在底层融合 Aider 的精炼哲学与大模型 Transformer 运行机制，建立全链路 **80%~95% 极致省 Token 引擎**，并通过 **Git 影子快照与双轨权限** 赋予开发者最高掌控感。
 
 ---
 
 ## 二、GitHub TOP 20 开源客户端精华提炼与融合矩阵
 
-从全球最具代表性的 20 款开源桌面客户端中，我们深度甄选出经过社区实战验证的优秀基因，剔除其历史缺陷，转化为 CodeMind-Hub 的原生模块：
+从全球最具代表性的 20 款开源桌面客户端中，我们深度甄选出经过社区实战验证的优秀基因，剔除其历史缺陷，转化为 Tcode 的原生模块：
 
 ```
                 ┌─────────────────────────────────────────────────────────────┐
@@ -71,7 +71,7 @@
 
 ```
                               ┌─────────────────────────────────────────────────────────┐
-                              │            CodeMind-Hub 四大核心系统底座                 │
+                              │            Tcode 四大核心系统底座                 │
                               └────────────────────────────┬────────────────────────────┘
                                                            │
         ┌──────────────────────────┬───────────────────────┴──────────────────┬──────────────────────────┐
@@ -101,7 +101,7 @@
 5. **分级滑动记忆网格 (L0/L1/L2)**：L0 恒定核心规则 + L1 自动浓缩决策事实 + L2 滚动明细，杜绝长会话 Token 爆炸与失忆。
 
 ### 3.4 安全系统底座 (Security & Reversible Substrate)
-- **Git 影子快照与秒级回退**：写入操作前自动建立快照（`[CodeMind Checkpoint]`），界面提供常驻 **`↩️ 影子回退`** 按钮，一键秒级 `git reset --hard`；
+- **Git 影子快照与秒级回退**：写入操作前自动建立快照（`[Tcode Checkpoint]`），界面提供常驻 **`↩️ 影子回退`** 按钮，一键秒级 `git reset --hard`；
 - **双轨权限治理**：一键切换 `[ 🛡️ 逐次审核 ]` 与 `[ 🤖 智能决策 ]`；
 - **AST 语法防腐门禁**：落盘前在内存中校验语法，严防半截残缺代码；
 - **无窗口静默进程隔离**：Tauri Rust 原生通道调用，消除 Windows 弹窗黑框干扰。
@@ -183,7 +183,7 @@
 
 
 ### 4.6 工作台全功能模块交互规范 (All Core Workspace Modules)
-为了杜绝“纯聊天框套壳”，CodeMind-Hub 必须具备完整的工业级桌面 IDE 全套核心模块体系：
+为了杜绝“纯聊天框套壳”，Tcode 必须具备完整的工业级桌面 IDE 全套核心模块体系：
 
 1. **项目代码资源管理器 (File Explorer Panel)**：
    - 真实呈现当前工作区工程的文件树目录（支持文件夹递归折叠与展开）；
@@ -200,7 +200,7 @@
    - **分支管理**：常驻显示当前 Git 分支，支持秒级切换分支；
    - **未暂存/已修改文件清单**：清晰列出 `M (Modified)`、`A (Added)`、`D (Deleted)` 变更；
    - **自动化影子检查点时间线 (Shadow Checkpoints Timeline)**：
-     - 显式列出 AI 在每次写盘前自动创建的 `[CodeMind Checkpoint]` 快照；
+     - 显式列出 AI 在每次写盘前自动创建的 `[Tcode Checkpoint]` 快照；
      - 每个快照条目右侧配备 **`[ ↩️ 一键还原至此快照 ]`** 动作按钮，秒级回滚。
 
 4. **模型网关驾驶舱与 MCP 工具生态 (Gateway & MCP Cockpit Panel)**：
@@ -228,7 +228,7 @@
 
 
 ### 4.8 全局首选项与系统设置弹窗体系 (Settings & Preferences Modal System)
-借鉴 Cursor、Continue.dev、Roo Code / Cline 与 Zed 的先进工业级设计，CodeMind-Hub 的设置入口统合为全局弹窗（浮层 Modal 模态框，支持 `Esc` 退出、快捷键 `Ctrl+,` 呼出）：
+借鉴 Cursor、Continue.dev、Roo Code / Cline 与 Zed 的先进工业级设计，Tcode 的设置入口统合为全局弹窗（浮层 Modal 模态框，支持 `Esc` 退出、快捷键 `Ctrl+,` 呼出）：
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────────┐
@@ -276,7 +276,7 @@
 
 
 ### 4.11 GitHub 标杆级多渠道模型生态与中转站矩阵规约 (Comprehensive Model Providers & Aggregators)
-深入复盘 GitHub 顶级开源 AI 客户端（**Cherry Studio**、**LobeChat**、**OneAPI**、**NextChat**）支持的模型服务商体系，CodeMind-Hub 必须原生建立面向**“国内自研生态”**、**“中转分发网络”**与**“本地私有引擎”**的全矩阵支持体系：
+深入复盘 GitHub 顶级开源 AI 客户端（**Cherry Studio**、**LobeChat**、**OneAPI**、**NextChat**）支持的模型服务商体系，Tcode 必须原生建立面向**“国内自研生态”**、**“中转分发网络”**与**“本地私有引擎”**的全矩阵支持体系：
 
 #### 1. 全矩阵服务商生态谱系 (Provider Categories)
 系统按开发者实际用云场景划分为五大维度，并在左侧导航提供分类快速筛选胶囊（`全部`、`🇨🇳 国内精选`、`🌐 国际主流`、`🔀 聚合中转`、`💻 本地私有`）：
@@ -385,7 +385,7 @@
 6. **系统与安全设置 (System & Safety)**：提供数据脱敏（PII / API Key 自动掩码）、影子快照频率配置与本地缓存持久化管理。
 
 ### 4.14 DeepSeek Harness 架构思想深度融入规约 (DeepSeek Harness Architecture Integration)
-借鉴 2026 年开源的智能体运行时框架 **DeepSeek Harness (`dsh`)**，在保持 CodeMind-Hub 既有“总线-子线架构（Bus-Subline Architecture）”与“纸质暖橙美学”底座的基础上，全面融入其核心设计思想：
+借鉴 2026 年开源的智能体运行时框架 **DeepSeek Harness (`dsh`)**，在保持 Tcode 既有“总线-子线架构（Bus-Subline Architecture）”与“纸质暖橙美学”底座的基础上，全面融入其核心设计思想：
 
 #### 1. 核心架构哲学：Agent = Model + Harness (模型即灵魂，驾驭中枢即身躯)
 - 模型（LLM）负责推理与意图理解，而任务分发、上下文装配、沙箱隔离、工具路由与状态回溯均由 **Harness 驾驭系统** 强力承载；
@@ -939,7 +939,7 @@ To github.com:zhangqi77ok-sys/agent-learning.git
 1. **严禁硬编码 Mock Demo 数据**：
    - 用户首次安装启动时，绝不允许出现预设的假会话（如“Python 3.12 讨论”）、假代码变更集（Changeset）或虚假的后台执行中 Swarm 任务；
 2. **专业 Onboarding 引导面板**：
-   - 当会话消息为空时，中央区域展示优雅的 **“🚀 CodeMind-Hub 智能工作台” 欢迎卡片**，提供：
+   - 当会话消息为空时，中央区域展示优雅的 **“🚀 Tcode 智能工作台” 欢迎卡片**，提供：
      - `[ 📂 打开本地工程目录 / 仓库 (Ctrl+O) ]`；
      - `[ 💬 创建空白自由会话 (Ctrl+N) ]`；
      - `[ ⚙️ 快速配置模型 API Key 与端点 (Ctrl+,) ]`；
@@ -992,9 +992,9 @@ To github.com:zhangqi77ok-sys/agent-learning.git
    - 行内代码与重点加粗转为轻量气泡包裹。
 
 ### 12.5 双层物理磁盘历史持久化容灾架构 (Dual-Layer Fail-Safe Persistence)
-1. **第一层：固定永久 WebView2 Profile**：锁定本地目录 `%LOCALAPPDATA%\CodeMind-Hub\webview_profile\`，杜绝无痕临时沙盒造成的缓存丢失；
+1. **第一层：固定永久 WebView2 Profile**：锁定本地目录 `%LOCALAPPDATA%\Tcode\webview_profile\`，杜绝无痕临时沙盒造成的缓存丢失；
 2. **第二层：物理磁盘 JSON 存储引擎 (`/api/storage`)**：
-   - 会话索引 (`codemind_sessions.json`)、对话消息记录 (`codemind_session_messages.json`)、工作区工程 (`codemind_projects.json`) 实时物理落盘到 `%LOCALAPPDATA%\CodeMind-Hub\storage\`；
+   - 会话索引 (`codemind_sessions.json`)、对话消息记录 (`codemind_session_messages.json`)、工作区工程 (`codemind_projects.json`) 实时物理落盘到 `%LOCALAPPDATA%\Tcode\storage\`；
    - 每次程序启动或版本覆盖升级时，自动从物理磁盘热恢复全量数据，彻底解决跨版本历史记录丢失问题。
 
 ### 12.6 问答卡片左下角操作栏 (Bottom-Left Action Toolbar)
@@ -1282,7 +1282,7 @@ Act 模式中的工具调用采用单一 Agent Loop 控制器完成“思考 →
 
 
 ### 4.41 Windows 安装包构建与离线探活规约
-1. 每次原型或桌面宿主代码完成后，必须运行 `npm run build:installer`（或 `python build_installer.py`），生成根目录 `dist/CodeMind-Studio-Setup.exe`；历史 `release/` EXE 不可替代当前构建产物。
+1. 每次原型或桌面宿主代码完成后，必须运行 `npm run build:installer`（或 `python build_installer.py`），生成根目录 `dist/Tcode-Setup.exe`；历史 `release/` EXE 不可替代当前构建产物。
 2. 构建链路固定为：前端构建 → 前端测试 → PyInstaller 核心宿主（嵌入 `prototype/dist`）→ PyInstaller 单文件安装向导。任一步失败即失败，不得以 Web 静态构建冒充安装包。
 3. 安装后启动程序必须监听 `127.0.0.1:8010`，`GET /health` 返回 200，`GET /` 返回完整 HTML；验证必须在脱离源码目录的安装位置执行。
 

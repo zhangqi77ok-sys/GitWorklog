@@ -1,4 +1,4 @@
-// CodeMind-Hub 核心接口规范契约 (SDD Contract)
+// Tcode 核心接口规范契约 (SDD Contract)
 
 export type SessionTier1Type = 'global' | 'project';
 
@@ -401,7 +401,7 @@ export interface LiveLogItem {
 }
 
 export const liveLogStore: LiveLogItem[] = [
-  { id: 'log-1', timestamp: Date.now(), level: 'INFO', module: 'System', message: 'CodeMind-Hub 内核启动完成，本地同源网关已就绪' }
+  { id: 'log-1', timestamp: Date.now(), level: 'INFO', module: 'System', message: 'Tcode 内核启动完成，本地同源网关已就绪' }
 ];
 
 export function appendLiveLog(level: 'INFO' | 'WARN' | 'ERROR' | 'NET', module: string, message: string): LiveLogItem {
@@ -922,7 +922,7 @@ export const WORKSPACE_MOCK_DATA: Record<string, ProjectWorkspaceData> = {
       ]
     },
     searchableFiles: [
-      { path: 'codemind/harness.py', content: 'class CodeMindHarness:\n    def run_tests(self): pass' },
+      { path: 'codemind/harness.py', content: 'class TcodeHarness:\n    def run_tests(self): pass' },
       { path: 'codemind/ast_parser.py', content: 'import tree_sitter\ndef parse_ast(): pass' }
     ],
     gitChanges: [
@@ -3163,13 +3163,13 @@ export function loadSavedSessionMessages(): Record<string, ChatMessage[]> {
       {
         id: 'msg-init-user',
         role: 'user',
-        content: '请为我介绍 CodeMind-Hub 具备哪些企业级编码架构能力？',
+        content: '请为我介绍 Tcode 具备哪些企业级编码架构能力？',
         timestamp: Date.now() - 36000
       },
       {
         id: 'msg-init-assistant',
         role: 'assistant',
-        content: `<think>\n用户询问关于 CodeMind-Hub 的企业级编码架构能力。结合当前工程的技术特性：AST 差异补丁、实时流式网关总线、安全沙盒隔离、本地文件系统直读、Git 影子快照回滚与 Monaco 高级代码编辑器进行结构化阐述。\n</think>\n\n# 🎯 CodeMind-Hub 企业级编码架构能力总览\n\n## 一、核心系统能力\n\n| 能力维度 | 技术实现 | 业务价值 |\n| :--- | :--- | :--- |\n| **统一网关总线** | OpenCode Zen 与多模型双向流式透传 | 零缓冲毫秒级打字机逐行响应，无缝调度百大模型 |\n| **AST 真实上下文** | 深度语法树剪枝与骨架提取 | 节省 70% 上下文 Token，精准捕获函数级依赖拓扑 |\n| **文件与工程直读** | 本地 Python 宿主直连磁盘 | 真正的实时工程拓扑扫描与读写，杜绝假数据演示 |\n| **沙盒安全指令卫士** | 终端命令危险级 AST 拦截 | 拦截高危 Shell 操作，必须由开发者显式授予临时提权 |\n\n当前已自动就绪 **OpenCode 官方网关**，可随时发起流式编码问答或重构分析。`,
+        content: `<think>\n用户询问关于 Tcode 的企业级编码架构能力。结合当前工程的技术特性：AST 差异补丁、实时流式网关总线、安全沙盒隔离、本地文件系统直读、Git 影子快照回滚与 Monaco 高级代码编辑器进行结构化阐述。\n</think>\n\n# 🎯 Tcode 企业级编码架构能力总览\n\n## 一、核心系统能力\n\n| 能力维度 | 技术实现 | 业务价值 |\n| :--- | :--- | :--- |\n| **统一网关总线** | OpenCode Zen 与多模型双向流式透传 | 零缓冲毫秒级打字机逐行响应，无缝调度百大模型 |\n| **AST 真实上下文** | 深度语法树剪枝与骨架提取 | 节省 70% 上下文 Token，精准捕获函数级依赖拓扑 |\n| **文件与工程直读** | 本地 Python 宿主直连磁盘 | 真正的实时工程拓扑扫描与读写，杜绝假数据演示 |\n| **沙盒安全指令卫士** | 终端命令危险级 AST 拦截 | 拦截高危 Shell 操作，必须由开发者显式授予临时提权 |\n\n当前已自动就绪 **OpenCode 官方网关**，可随时发起流式编码问答或重构分析。`,
         timestamp: Date.now() - 32000,
         auditTag: '⚡ OpenCode Mimo v2.5 真实流式响应',
         tokensDetail: { promptTokens: 38, completionTokens: 284, totalTokens: 322 },

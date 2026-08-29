@@ -124,7 +124,7 @@ export const TokenAnalyticsModal: React.FC<TokenAnalyticsModalProps> = ({
           <div style={{ padding: '14px', borderRadius: '8px', background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--accent)' }}>
-                🧬 CodeMind 前缀对齐与 Prompt Caching 命中机制
+                🧬 Tcode 前缀对齐与 Prompt Caching 命中机制
               </span>
               <span style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '4px', background: 'rgba(22, 163, 74, 0.12)', color: '#16A34A', fontWeight: 600 }}>
                 DeepSeek / Claude / OpenAI 协议兼容
@@ -132,7 +132,7 @@ export const TokenAnalyticsModal: React.FC<TokenAnalyticsModalProps> = ({
             </div>
 
             <div style={{ fontSize: '11px', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-              CodeMind-Hub 采用<b>静态不可变前缀对齐架构</b>：在每次与大模型交互时，将全局 System Prompt、激活的 System Rules、Agent 专精能力与工程文件树锁定在 Prompt 最前端（固定占用 ~{kv.prefixTokens} tokens）。
+              Tcode 采用<b>静态不可变前缀对齐架构</b>：在每次与大模型交互时，将全局 System Prompt、激活的 System Rules、Agent 专精能力与工程文件树锁定在 Prompt 最前端（固定占用 ~{kv.prefixTokens} tokens）。
               在大模型服务端（如 DeepSeek V3、Claude 3.7、GPT-4o）触发 100% 缓存命中，单次提问仅对新增提问增量计费，综合节省 <b>89.5%</b> Token 支出！
             </div>
 

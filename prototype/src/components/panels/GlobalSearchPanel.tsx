@@ -25,7 +25,7 @@ export const GlobalSearchPanel: React.FC<GlobalSearchPanelProps> = ({
   onSelectProject,
   onOpenFileAndLine
 }) => {
-  const [query, setQuery] = useState('CodeMind');
+  const [query, setQuery] = useState('Tcode');
   const [results, setResults] = useState<RealSearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [showProjDropdown, setShowProjDropdown] = useState(false);

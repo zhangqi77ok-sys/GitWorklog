@@ -12,7 +12,7 @@ API_KEY = "sk-xh-ZVKvOZcvzLKxUSWECPQ3mUKfP9q9sxrz14NQmtoQ000"
 TARGET_MODEL = "deepseek-v4-flash"
 
 print("=" * 80)
-print("🚀 CodeMind-Hub 全链路真实自动化测试套件 (Real Automated Testing)")
+print("🚀 Tcode 全链路真实自动化测试套件 (Real Automated Testing)")
 print("=" * 80)
 
 passed = 0
@@ -52,7 +52,7 @@ def test_real_stream_chat():
         "model": TARGET_MODEL,
         "messages": [
             {"role": "system", "content": "You are a test assistant. Answer in one short sentence."},
-            {"role": "user", "content": "Ping: CodeMind real automated test"}
+            {"role": "user", "content": "Ping: Tcode real automated test"}
         ],
         "stream": True
     }
@@ -102,14 +102,14 @@ test_step("3. 真实异常凭据鉴权防御与 401 错误链路校验", test_re
 
 # 4. Real Windows Executable Binary Integrity
 def test_executable_integrity():
-    exe_file = ROOT / "release" / "CodeMind-Hub-v1.0.4.exe"
-    zip_file = ROOT / "release" / "CodeMind-Hub-v1.0.4-windows-x64.zip"
+    exe_file = ROOT / "release" / "Tcode-v1.0.4.exe"
+    zip_file = ROOT / "release" / "Tcode-v1.0.4-windows-x64.zip"
     assert exe_file.exists(), f"{exe_file} does not exist"
     assert zip_file.exists(), f"{zip_file} does not exist"
     exe_size_mb = exe_file.stat().st_size / (1024 * 1024)
     zip_size_mb = zip_file.stat().st_size / (1024 * 1024)
     assert exe_size_mb > 10, f"Executable too small: {exe_size_mb}MB"
-    return f"Windows 原生可执行文件校验通过: CodeMind-Hub-v1.0.4.exe ({exe_size_mb:.2f} MB)"
+    return f"Windows 原生可执行文件校验通过: Tcode-v1.0.4.exe ({exe_size_mb:.2f} MB)"
 
 test_step("4. Windows 桌面原生独立可执行安装包物理校验", test_executable_integrity)
 

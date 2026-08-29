@@ -960,7 +960,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
             </div>
 
             <h2 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '8px' }}>
-              欢迎使用 CodeMind-Hub
+              欢迎使用 Tcode
             </h2>
             <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '28px', lineHeight: 1.6, maxWidth: '520px' }}>
               生产级 Agentic AI 智能编码工作台 · 支持 Monaco 画布、AST 依赖拓扑感知与实时流式大模型生成

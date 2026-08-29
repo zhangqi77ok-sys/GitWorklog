@@ -1,4 +1,4 @@
-# CodeMind-Hub 全景架构设计规范 (ARCHITECTURE.md)
+# Tcode 全景架构设计规范 (ARCHITECTURE.md)
 
 > **设计哲学**：单一主轴、高度解耦、积木思想、Harness 治具思想、ReAct 循环思想，拒绝过度封装。  
 > 基于 **Tauri v2 (Rust 原生内核) + React 19 + TypeScript + GatewayBus 积木总线**。
@@ -138,7 +138,7 @@ sequenceDiagram
      ┌──────────────────────┐ ┌──────────────────────────────────────┐
      │ Layer 1: WebView2    │ │ Layer 2: 物理磁盘 JSON 引擎           │
      │ Persistent Profile   │ │ (POST /api/storage)                  │
-     │ (%LOCALAPPDATA%/...) │ │ (%LOCALAPPDATA%/CodeMind-Hub/storage)│
+     │ (%LOCALAPPDATA%/...) │ │ (%LOCALAPPDATA%/Tcode/storage)│
      └──────────────────────┘ └──────────────────┬───────────────────┘
                                                  │
                                                  ▼
@@ -214,7 +214,7 @@ sequenceDiagram
 
 ## 10. Windows Installer Pipeline（当前 PyInstaller 宿主）
 
-构建入口为根 `build_installer.py` 与 `npm run build:installer`。该入口先构建和验证 `prototype`，再将 `prototype/dist` 作为数据资源嵌入窗口化 Python 宿主 `CodeMind-Studio.exe`，最后将核心 EXE 嵌入窗口化单文件安装向导 `CodeMind-Studio-Setup.exe`。
+构建入口为根 `build_installer.py` 与 `npm run build:installer`。该入口先构建和验证 `prototype`，再将 `prototype/dist` 作为数据资源嵌入窗口化 Python 宿主 `Tcode.exe`，最后将核心 EXE 嵌入窗口化单文件安装向导 `Tcode-Setup.exe`。
 
 安装后宿主固定监听 `127.0.0.1:8010`：`/health` 供进程探活，`/` 提供已嵌入的静态前端。构建和验证都使用当前源码，绝不拷贝 `release/` 内的历史二进制。Tauri 链路保留为后续主轴迁移目标；在其完整构建脚本落地前，当前受支持的 Windows 安装器采用这一可复现的 Python 宿主链路。
 

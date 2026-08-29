@@ -1,4 +1,4 @@
-# CodeMind-Hub 研发团队与智能体开发守则 (AGENTS.md)
+# Tcode 研发团队与智能体开发守则 (AGENTS.md)
 
 ## 🚨 项目级绝对强制铁律 (Always-On Mandatory Iron Rules)
 
@@ -41,7 +41,7 @@
 
 
 ---
-# CodeMind-Hub 研发团队与智能体开发守则 (AGENTS.md)
+# Tcode 研发团队与智能体开发守则 (AGENTS.md)
 
 ## 🚨 项目级绝对强制规则 (Always-On Mandatory Rules)
 
@@ -62,7 +62,7 @@
 
 
 ---
-# CodeMind-Hub 项目级开发规范与规则 (Project Rules)
+# Tcode 项目级开发规范与规则 (Project Rules)
 
 ## 🚨 核心强制工作流规范 (Mandatory Workflow)
 
@@ -70,7 +70,7 @@
 
 ### 1. 增量打包 EXE 安装包 (Incremental Installer Packaging)
 - **命令**：`npm run build:installer` 或 `python build_installer.py`
-- **目标产物**：`dist/CodeMind-Studio-Setup.exe` (单文件 Windows 图形化安装向导)
+- **目标产物**：`dist/Tcode-Setup.exe` (单文件 Windows 图形化安装向导)
 - **要求**：禁止仅仅构建 Web 端，必须增量生成 EXE 安装包，便于用户在真实 Windows 宿主环境进行安装与功能验证。
 
 ### 2. 真实执行与安装探活测试 (Live Verification)

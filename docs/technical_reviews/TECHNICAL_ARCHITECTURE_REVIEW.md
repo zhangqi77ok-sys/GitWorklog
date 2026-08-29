@@ -1,4 +1,4 @@
-# CodeMind-Hub 核心技术评审白皮书与架构边界评估报告
+# Tcode 核心技术评审白皮书与架构边界评估报告
 > **评审角色**：Principal AI Architect (首席分布式与AI架构师) & Lead Agent Engineer (大模型与智能体工程专家)  
 > **评审阶段**：生产级发布前技术评审 (Pre-GA Technical Architecture Review)  
 > **文档版本**：v1.0-RC (Release Candidate)  
@@ -20,7 +20,7 @@
 
 ## 一、评审综述与系统定位
 
-`CodeMind-Hub` 定位于**下一代工业级、多智能体协同开发平台 (Production-Grade Agentic AI IDE)**。与当前市面上多数“单模型包裹型 (Single Model Wrapper)”的 AI 插件不同，本系统从底层构建了：
+`Tcode` 定位于**下一代工业级、多智能体协同开发平台 (Production-Grade Agentic AI IDE)**。与当前市面上多数“单模型包裹型 (Single Model Wrapper)”的 AI 插件不同，本系统从底层构建了：
 - **人机决策回环 (Human-in-the-Loop Orchestration)**
 - **多模型异构路由与流水线 (Intent-Driven Heterogeneous Model Routing)**
 - **基于 SDD（模式驱动）与 TDD（测试驱动）的前置确定性验证体系**
@@ -144,7 +144,7 @@ graph TD
 
 ## 六、行业未来演进与前瞻性布局 (2026-2028)
 
-从前瞻性 Agent 架构演化来看，`CodeMind-Hub` 需在以下三大方向建立核心技术壁垒：
+从前瞻性 Agent 架构演化来看，`Tcode` 需在以下三大方向建立核心技术壁垒：
 
 ### 1. 经验记忆库的自主参数微调 (Self-Evolving DPO / LoRA Distillation)
 - **现状**：目前经验沉淀为 Markdown 格式（`.codemind/lessons.md`），通过 Prompt 动态注入。
@@ -172,7 +172,7 @@ graph TD
 
 ```mermaid
 gantt
-    title CodeMind-Hub 生产交付与技术演进路线图
+    title Tcode 生产交付与技术演进路线图
     dateFormat  YYYY-MM-DD
     section P0: GA 稳定闭环
     SDD/TDD 契约与单元测试覆盖率达标 (88.4%) :done, p0_1, 2026-08-01, 2026-08-20
@@ -193,5 +193,5 @@ gantt
 > 
 > 当前产品架构方案、SDD/TDD 契约完备性、原型交互质感与三大生产级核心支柱（自适应路由、轨迹时光机、Monorepo 拓扑图谱）均达到商业级交付标准。请工程团队依据上述讨论点与风险矩阵，启动 P1 阶段本地 Sidecar 常驻进程与震荡熔断协议的工程实现。
 
-**首席架构师 / Lead Agent Engineer**：*CodeMind AI Architecture Review Board*  
+**首席架构师 / Lead Agent Engineer**：*Tcode AI Architecture Review Board*  
 **日期**：*2026-08-29*

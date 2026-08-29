@@ -89,7 +89,7 @@ export const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({
 
         {/* Right Code Content with Syntax Highlighting & Diff */}
         <div style={{ flex: 1, padding: '0 16px', lineHeight: '22px' }}>
-          <div style={{ color: '#6B7280' }}>// CodeMind-Hub 核心数据契约 (SDD Contract)</div>
+          <div style={{ color: '#6B7280' }}>// Tcode 核心数据契约 (SDD Contract)</div>
           <div>&nbsp;</div>
           <div>
             <span style={{ color: '#9333EA', fontWeight: 600 }}>export type</span> <span style={{ color: '#0284C7' }}>WorkMode</span> = <span style={{ color: '#10B981' }}>'act'</span> | <span style={{ color: '#10B981' }}>'plan'</span> | <span style={{ color: '#10B981' }}>'minimal'</span> | <span style={{ color: '#10B981' }}>'creator'</span>;

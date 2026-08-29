@@ -1,4 +1,4 @@
-# CodeMind-Hub (Tcode)
+# Tcode (Tcode)
 
 新一代企业级开源 AI 编程桌面工作台，基于 **Tauri v2 / Python Native Desktop Host + React 19 + TypeScript + 暖色极简设计**。
 
