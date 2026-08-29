@@ -1,3 +1,4 @@
+import { TargetStepProgressCard } from './TargetStepProgressCard';
 import { ActionApprovalModal } from './ActionApprovalModal';
 import { ShareCardModal } from './ShareCardModal';
 import React, { useState, useEffect } from 'react';
@@ -955,7 +956,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
           </div>
         )}
 
-        {messages.map(msg => (
+        {messages.filter(m => !m.isAgentFeedback).map(msg => (
           <div key={msg.id} style={{ marginBottom: '14px' }}>
             <div style={{
               display: 'flex',
@@ -1022,6 +1023,23 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
 
 
             </div>
+
+            {/* 🎯 Target-Driven Acceptance Criteria & Step Chain Card */}
+            {(msg.acceptanceItems?.length || msg.stepTags?.length) ? (
+              <TargetStepProgressCard
+                items={msg.acceptanceItems}
+                stepTags={msg.stepTags}
+                loopStatus={msg.loopStatus}
+                terminationSummary={msg.terminationSummary}
+                onSelectAction={(actionId) => {
+                  if (actionId === 'try_new_approach') {
+                    onSendMessage('请换一种全新架构思路重新设计并实施修复。');
+                  } else if (actionId === 'continue_anyway') {
+                    onSendMessage('请继续深入推演修复，重点解决当前失败的验收项。');
+                  }
+                }}
+              />
+            ) : null}
 
             {/* Message Body with Tag Folding, ThinkingBlock & Tool Calls */}
             {(() => {

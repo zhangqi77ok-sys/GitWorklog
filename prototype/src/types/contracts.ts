@@ -306,6 +306,29 @@ export interface QueuedPromptItem {
   selectedMentions?: MentionContextItem[];
 }
 
+export interface TargetAcceptanceItem {
+  id: string;
+  description: string;
+  status: 'pending' | 'passed' | 'failed';
+  evidence?: string;
+}
+
+export type LoopTerminationStatus =
+  | 'running'
+  | 'completed'          // ✓ 目标已全部验证通过
+  | 'needs_decision'      // ⏸ 需要用户在备选方案间决策
+  | 'blocked'             // ⚠ 任务被外部条件阻塞（如缺少凭据）
+  | 'no_progress'         // ⚠ 连续无进展/死循环熔断
+  | 'resource_limit';     // ⚠ 达到时间/费用/安全预算熔断
+
+export interface InternalStepTag {
+  turn: number;
+  step: number;
+  phase: 'understand' | 'inspect' | 'modify' | 'verify' | 'fix' | 'done';
+  status: 'running' | 'passed' | 'failed' | 'blocked';
+  label: string;
+}
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant' | 'system';
@@ -322,6 +345,10 @@ export interface ChatMessage {
   isAgentFeedback?: boolean;          // True for Agent Loop feedback messages (shown as compact system cards)
   checkpointRef?: string;             // Git plumbing shadow snapshot reference (e.g. refs/codemind/checkpoints/<sessionId>/<turnIndex>)
   turnIndex?: number;                 // 1-based user conversational turn index
+  acceptanceItems?: TargetAcceptanceItem[]; // 🎯 目标驱动验收项清单
+  stepTags?: InternalStepTag[];       // 🏷️ 内部执行步骤 Tag 列表
+  loopStatus?: LoopTerminationStatus; // 🏁 当前任务终止或进行状态
+  terminationSummary?: string;        // 总结描述（如：4/4 项验收通过 · 测试通过）
 }
 
 // Runtime L2 Session State Snapshot

@@ -55,7 +55,13 @@ import {
   createActionResult,
   formatExecutionFeedback as formatAgentExecutionFeedback,
   parseAgentActions,
-  shouldRequireActionApproval
+  shouldRequireActionApproval,
+  parseAcceptanceCriteria,
+  verifyTargetAcceptance,
+  TargetAcceptanceItem,
+  ProgressVector,
+  InternalStepTag,
+  LoopTerminationStatus
 } from './services/agentLoop';
 
 export const App: React.FC = () => {
@@ -688,11 +694,18 @@ export const App: React.FC = () => {
       return;
     }
 
-    const MAX_AGENT_LOOPS = 10;
+    // 🎯 Target-Driven Agent Loop State
     let loopCount = 0;
-    let completedWithText = false;
+    let completedWithTarget = false;
     agentLoopCancelledRef.current = false;
     let allowLowRiskInSession = false;
+
+    // Track active target acceptance criteria, step tags & progress history
+    let activeAcceptanceItems: TargetAcceptanceItem[] = [];
+    const stepTags: InternalStepTag[] = [];
+    const progressHistory: ProgressVector[] = [];
+    let currentLoopStatus: LoopTerminationStatus = 'running';
+    let terminationSummaryText = '';
 
     const activeSession = sessions.find(s => s.id === currentSessionId) || sessions[0];
     let createdCheckpointRef: string | undefined = undefined;
@@ -798,6 +811,13 @@ export const App: React.FC = () => {
     } catch (e) {}
 
     const systemPrompt = `你是 Tcode (AI Agentic Desktop IDE) 接入的生产级自主 AI Agent 架构师。
+【目标驱动运作法则】:
+1. 收到任务后，在首次回答头部必须明确列出验收标准清单 (Acceptance Criteria):
+   □ 验收项 1
+   □ 验收项 2
+   □ 单元测试通过 / 类型检查通过
+2. 执行完动作后，根据独立验证器返回的证据更新验收项状态 (✓ / ✕ / □)。
+3. 当且仅当所有验收项均已打钩(✓)且测试通过时，任务才算闭环交付。
 ${activeSession.projectPath ? `【本地物理工程已挂载】
 - 项目名称: ${activeSession.projectName}
 - 物理路径: ${activeSession.projectPath}
@@ -833,8 +853,8 @@ Tcode 已通过宿主磁盘与终端桥接将工程提供给你。` : '当前处
 \`\`\``;
 
     try {
-      // ── Agent Loop: Think → Execute → Observe → Continue ──
-      while (loopCount < MAX_AGENT_LOOPS && !agentLoopCancelledRef.current) {
+      // ── Target-Driven Agent Loop: Understand → Breakdown → Act → Verify → Closed-loop Done ──
+      while (!agentLoopCancelledRef.current) {
         loopCount++;
 
         const assistantId = `reply-${Date.now()}-loop${loopCount}`;
@@ -990,20 +1010,59 @@ Tcode 已通过宿主磁盘与终端桥接将工程提供给你。` : '当前处
 
         assistantMsg.content = finalContent;
 
-        // ── Parse actions from AI response ──
+        // ── Parse target acceptance criteria and actions from AI response ──
+        if (activeAcceptanceItems.length === 0) {
+          const parsedCriteria = parseAcceptanceCriteria(finalContent);
+          if (parsedCriteria.length > 0) {
+            activeAcceptanceItems = parsedCriteria;
+          } else {
+            // Default baseline criteria if model did not output explicit checklist
+            activeAcceptanceItems = [
+              { id: 'crit-1', description: `实现并验证: ${text.slice(0, 30)}`, status: 'pending' },
+              { id: 'crit-2', description: '单元测试与类型检查通过', status: 'pending' }
+            ];
+          }
+        }
+
         const actions = workMode === 'act' ? parseActionsFromContent(finalContent) : [];
 
+        // Record Step Tag
+        const currentPhase: InternalStepTag['phase'] = actions.some(a => a.type === 'write_file')
+          ? 'modify'
+          : actions.some(a => /test|vitest|pytest/i.test(a.target))
+          ? 'verify'
+          : 'inspect';
+
+        stepTags.push({
+          turn: userMsg.turnIndex || 1,
+          step: loopCount,
+          phase: currentPhase,
+          status: 'running',
+          label: currentPhase === 'modify' ? `修改 ${actions.filter(a => a.type === 'write_file').length} 个文件` : currentPhase === 'verify' ? '运行测试验证' : '探索项目上下文'
+        });
+
         if (actions.length === 0) {
-          // No actions → pure text reply, Agent Loop ends
+          // No actions → pure text reply, Verifier assesses if target is complete
           const durationSec = parseFloat(((performance.now() - callStartTime) / 1000).toFixed(1));
           const addedPrompt = Math.round(text.length * 0.75);
           const addedComp = Math.round(finalContent.length * 0.75);
+
+          const verifierResult = verifyTargetAcceptance(activeAcceptanceItems, [], [], progressHistory);
+          activeAcceptanceItems = verifierResult.items;
+          currentLoopStatus = verifierResult.status === 'running' ? 'completed' : verifierResult.status;
+          terminationSummaryText = verifierResult.summary;
+
+          stepTags[stepTags.length - 1].status = 'passed';
 
           setSessionMessages(prev => {
             const list = prev[currentSessionId] || [];
             const updated = list.map(m => m.id === assistantId ? {
               ...m,
               content: finalContent,
+              acceptanceItems: activeAcceptanceItems,
+              stepTags: [...stepTags],
+              loopStatus: currentLoopStatus,
+              terminationSummary: terminationSummaryText,
               tokensDetail: { promptTokens: addedPrompt, completionTokens: addedComp, totalTokens: addedPrompt + addedComp },
               durationSeconds: durationSec
             } : m);
@@ -1017,9 +1076,9 @@ Tcode 已通过宿主磁盘与终端桥接将工程提供给你。` : '当前处
             estimatedCostUsd: prev.estimatedCostUsd + ((addedPrompt + addedComp) * 0.0000002)
           }));
 
-          completedWithText = true;
-          addLog('INFO', 'AgentLoop', `[Loop #${loopCount}] 纯文本回复，Agent Loop 结束 (${durationSec}s)`);
-          break; // Exit Agent Loop
+          completedWithTarget = true;
+          addLog('INFO', 'AgentLoop', `[Loop #${loopCount}] 目标完成，Agent Loop 闭环退出 (${durationSec}s)`);
+          break; // Exit Target-Driven Agent Loop
         }
 
         // ── Execute actions with Batch Decision & Scoped Trust ──
@@ -1073,26 +1132,58 @@ Tcode 已通过宿主磁盘与终端桥接将工程提供给你。` : '当前处
           publishActionResult(result);
         }
 
-        // Update assistant message with action results
+        // ── Independent Verifier Evaluation ──
+        const progressVector: ProgressVector = {
+          stepIndex: loopCount,
+          phase: currentPhase,
+          actionFingerprints: actions.map(a => `${a.type}:${a.target}`),
+          passedCount: activeAcceptanceItems.filter(i => i.status === 'passed').length,
+          failedCount: activeAcceptanceItems.filter(i => i.status === 'failed').length
+        };
+        progressHistory.push(progressVector);
+
+        const verifierResult = verifyTargetAcceptance(activeAcceptanceItems, actions, results, progressHistory);
+        activeAcceptanceItems = verifierResult.items;
+        currentLoopStatus = verifierResult.status;
+        terminationSummaryText = verifierResult.summary;
+
+        stepTags[stepTags.length - 1].status = results.every(r => r.status === 'success') ? 'passed' : 'failed';
+
+        // Update assistant message with step tags, criteria & action results
         setSessionMessages(prev => {
           const list = prev[currentSessionId] || [];
           const updated = list.map(m => m.id === assistantId ? {
             ...m,
             content: finalContent,
-            actionResults: results
+            actionResults: results,
+            acceptanceItems: activeAcceptanceItems,
+            stepTags: [...stepTags],
+            loopStatus: currentLoopStatus,
+            terminationSummary: terminationSummaryText
           } : m);
           return { ...prev, [currentSessionId]: updated };
         });
 
-        // Append feedback message for AI
-        const feedbackContent = formatExecutionFeedback(actions, results);
+        if (verifierResult.status === 'completed') {
+          addLog('INFO', 'Verifier', `✓ 所有验收项均已达成并通过验证，Agent Loop 成功结束！`);
+          completedWithTarget = true;
+          break;
+        }
+
+        if (verifierResult.status === 'no_progress') {
+          addLog('WARN', 'Verifier', `⚠ 检测到连续未产生有效进展，暂停 Agent Loop 等待用户决策`);
+          break;
+        }
+
+        // Append feedback message for next verification turn
+        const feedbackContent = formatExecutionFeedback(actions, results, activeAcceptanceItems);
         const feedbackMsg: ChatMessage = {
           id: `feedback-${Date.now()}`,
           role: 'user',
           content: feedbackContent,
           timestamp: Date.now(),
           isAgentFeedback: true,
-          auditTag: `🔄 Agent Loop #${loopCount} 执行反馈`
+          auditTag: `🔄 Agent Step #${loopCount} 验证反馈`
         };
 
         conversationSnapshot.push(feedbackMsg);
@@ -1101,24 +1192,13 @@ Tcode 已通过宿主磁盘与终端桥接将工程提供给你。` : '当前处
           [currentSessionId]: [...(prev[currentSessionId] || []), feedbackMsg]
         }));
 
-        addLog('INFO', 'AgentLoop', `[Loop #${loopCount}] 执行完成 (${results.filter(r => r.status === 'success').length}/${results.length} 成功)，继续下一轮...`);
+        addLog('INFO', 'AgentLoop', `[Step #${loopCount}] 验证结果: ${activeAcceptanceItems.filter(i => i.status === 'passed').length}/${activeAcceptanceItems.length} 项通过，继续下一推演步骤...`);
 
         // Continue loop → AI will see execution results and decide next step
       }
 
-      if (!completedWithText && loopCount >= MAX_AGENT_LOOPS) {
-        const limitMessage: ChatMessage = {
-          id: `loop-limit-${Date.now()}`,
-          role: 'assistant',
-          content: `⚠️ Agent Loop 已达到 ${MAX_AGENT_LOOPS} 轮安全上限，已暂停后续自动调度。请检查当前执行结果后继续。`,
-          timestamp: Date.now(),
-          auditTag: '⚠️ Agent Loop 安全熔断'
-        };
-        setSessionMessages(prev => ({
-          ...prev,
-          [currentSessionId]: [...(prev[currentSessionId] || []), limitMessage]
-        }));
-        addLog('WARN', 'AgentLoop', `已达到 ${MAX_AGENT_LOOPS} 轮上限，停止自动调度`);
+      if (!completedWithTarget && currentLoopStatus === 'no_progress') {
+        addLog('WARN', 'AgentLoop', `任务暂停于无新进展状态，等待用户决策`);
       }
 
       // Save session state

@@ -4,7 +4,12 @@ import {
   formatExecutionFeedback,
   getActionResultForId,
   parseAgentActions,
-  shouldRequireActionApproval
+  shouldRequireActionApproval,
+  parseAcceptanceCriteria,
+  verifyTargetAcceptance,
+  detectProgressStall,
+  TargetAcceptanceItem,
+  ProgressVector
 } from '../src/services/agentLoop';
 
 describe('Agent Loop contract - action parsing', () => {
@@ -121,9 +126,75 @@ describe('Agent Loop contract - execution feedback and status matching', () => {
       createActionResult(actions[2]!, 'rejected')
     ]);
 
-    expect(feedback).toContain('[Tcode Agent 执行引擎反馈]');
+    expect(feedback).toContain('[Tcode Agent 执行引擎与独立验证器反馈]');
     expect(feedback).toContain('✅ write_file:src/a.ts — 写入成功 (21 字节)');
     expect(feedback).toContain('❌ run_command: npm test — 执行失败 (Exit Code: 1)');
     expect(feedback).toContain('🚫 run_command: git push origin main — 用户拒绝执行');
+  });
+});
+
+describe('Target-driven Agent Loop - Acceptance criteria & Verifier', () => {
+  it('parses target acceptance criteria from markdown goal breakdown', () => {
+    const markdown = [
+      '目标拆解如下：',
+      '□ 登录成功路径正常',
+      '✓ 密码加密处理正确',
+      '✕ 未登录拦截存在漏洞',
+      '- [ ] 补充自动化测试'
+    ].join('\n');
+
+    const items = parseAcceptanceCriteria(markdown);
+    expect(items).toHaveLength(4);
+    expect(items[0]).toEqual({ id: 'crit-1', description: '登录成功路径正常', status: 'pending' });
+    expect(items[1]).toEqual({ id: 'crit-2', description: '密码加密处理正确', status: 'passed' });
+    expect(items[2]).toEqual({ id: 'crit-3', description: '未登录拦截存在漏洞', status: 'failed' });
+    expect(items[3]).toEqual({ id: 'crit-4', description: '补充自动化测试', status: 'pending' });
+  });
+
+  it('verifier marks loop as completed only when all acceptance items are passed with real evidence', () => {
+    const items: TargetAcceptanceItem[] = [
+      { id: 'c1', description: '修改 src/auth.ts', status: 'pending' },
+      { id: 'c2', description: '单元测试通过', status: 'pending' }
+    ];
+
+    const actions = parseAgentActions([
+      '```write_file:src/auth.ts',
+      'export const auth = true;',
+      '```',
+      '```run_command',
+      'npm test',
+      '```'
+    ].join('\n'));
+
+    const results = [
+      createActionResult(actions[0]!, 'success', { fileSize: 25 }),
+      createActionResult(actions[1]!, 'success', { exitCode: 0, output: '2 passed' })
+    ];
+
+    const verifierResult = verifyTargetAcceptance(items, actions, results, []);
+    expect(verifierResult.status).toBe('completed');
+    expect(verifierResult.summary).toContain('2/2 项验收通过 · 测试通过');
+    expect(verifierResult.items.every(i => i.status === 'passed')).toBe(true);
+  });
+
+  it('detects progress stall when agent repeats identical actions with no new passed items', () => {
+    const stallHistory: ProgressVector[] = [
+      { stepIndex: 1, phase: 'act', actionFingerprints: ['write_file:src/a.ts'], passedCount: 1, failedCount: 1 },
+      { stepIndex: 2, phase: 'act', actionFingerprints: ['write_file:src/a.ts'], passedCount: 1, failedCount: 1 },
+      { stepIndex: 3, phase: 'act', actionFingerprints: ['write_file:src/a.ts'], passedCount: 1, failedCount: 1 }
+    ];
+
+    expect(detectProgressStall(stallHistory)).toBe(true);
+
+    const items: TargetAcceptanceItem[] = [
+      { id: 'c1', description: '修复死循环', status: 'failed' }
+    ];
+    const actions = parseAgentActions('```write_file:src/a.ts\nconst a = 1;\n```');
+    const results = [createActionResult(actions[0]!, 'success')];
+
+    const result = verifyTargetAcceptance(items, actions, results, stallHistory);
+    expect(result.status).toBe('no_progress');
+    expect(result.suggestedActions).toHaveLength(3);
+    expect(result.suggestedActions![0].label).toContain('换一种架构方案');
   });
 });

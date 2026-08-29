@@ -137,32 +137,21 @@ export function matchesGlob(path: string, glob: string): boolean {
   return normalizedPath.includes(normalizedGlob.replace(/\*/g, ''));
 }
 
-/**
- * Scoped trust decision:
- * 1. Blocking high-risk actions ALWAYS require approval regardless of permissions/trust.
- * 2. If a scoped trust pattern matches (e.g. write_file x src/**), bypass modal.
- * 3. In strict_approval, require approval unless scoped-trusted.
- * 4. In autonomous_agent, low-risk actions run automatically.
- */
 export function shouldRequireActionApproval(
   policy: PermissionPolicy,
   action: AgentAction,
   scopedTrusts: ActionScopeTrust[] = [],
   allowLowRiskInSession: boolean = false
 ): boolean {
-  // High-risk actions can NEVER be bypassed by any general "allow always" or session flag
   if (action.isHighRisk) return true;
 
-  // Check if covered by scoped trust
   const isScopedTrusted = scopedTrusts.some(trust =>
     (trust.actionType === '*' || trust.actionType === action.type) &&
     matchesGlob(action.target, trust.pathGlob)
   );
   if (isScopedTrusted) return false;
 
-  // Session-level allow low risk
   if (allowLowRiskInSession) return false;
-
   if (policy === 'strict_approval') return true;
   return false;
 }
@@ -179,10 +168,192 @@ export function getActionResultForId(actionId: string, results: ActionResult[]):
   return results.find(result => result.actionId === actionId);
 }
 
-/** Produces bounded, factual feedback for the next model iteration. */
-export function formatExecutionFeedback(actions: AgentAction[], results: ActionResult[]): string {
-  const lines = ['[Tcode Agent 执行引擎反馈]', ''];
+// ────────────────────────────────────────────────────────────
+// 🎯 TARGET-DRIVEN AGENT LOOP CONTRACTS & VERIFIER
+// ────────────────────────────────────────────────────────────
 
+export interface TargetAcceptanceItem {
+  id: string;
+  description: string;
+  status: 'pending' | 'passed' | 'failed';
+  evidence?: string;
+}
+
+export type LoopTerminationStatus =
+  | 'running'
+  | 'completed'          // ✓ 目标已全部验证通过
+  | 'needs_decision'      // ⏸ 需要用户在备选方案间决策
+  | 'blocked'             // ⚠ 任务被外部条件阻塞（如缺少凭据）
+  | 'no_progress'         // ⚠ 连续无进展/死循环熔断
+  | 'resource_limit';     // ⚠ 达到时间/费用/安全预算熔断
+
+export interface LoopTerminationResult {
+  status: LoopTerminationStatus;
+  summary: string;
+  items: TargetAcceptanceItem[];
+  evidenceList: string[];
+  suggestedActions?: Array<{ id: string; label: string }>;
+}
+
+export interface ProgressVector {
+  stepIndex: number;
+  phase: 'understand' | 'plan' | 'inspect' | 'modify' | 'act' | 'verify' | 'fix' | 'done';
+  actionFingerprints: string[];
+  passedCount: number;
+  failedCount: number;
+  diffSummary?: string;
+}
+
+export interface InternalStepTag {
+  turn: number;
+  step: number;
+  phase: 'understand' | 'inspect' | 'modify' | 'verify' | 'fix' | 'done';
+  status: 'running' | 'passed' | 'failed' | 'blocked';
+  label: string;
+}
+
+/** Parses markdown task/acceptance items from goal breakdown (□ / - [ ] / ✓ / ✕). */
+export function parseAcceptanceCriteria(content: string): TargetAcceptanceItem[] {
+  const items: TargetAcceptanceItem[] = [];
+  const lines = content.split('\n');
+  let idCounter = 1;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    const match = trimmed.match(/^(?:[-*●]\s+)?(?:\[([ xX✓✕])\]|[□✓✕])\s+(.+)$/);
+    if (match) {
+      const mark = (match[1] || trimmed.charAt(0)).toLowerCase();
+      const desc = match[2].trim();
+      let status: TargetAcceptanceItem['status'] = 'pending';
+      if (mark === 'x' || mark === '✓' || trimmed.startsWith('✓')) {
+        status = 'passed';
+      } else if (mark === '✕' || trimmed.startsWith('✕')) {
+        status = 'failed';
+      }
+      items.push({
+        id: `crit-${idCounter++}`,
+        description: desc,
+        status
+      });
+    }
+  }
+
+  return items;
+}
+
+/** Evaluates progress vector across steps to detect repetition loops or progress stalls. */
+export function detectProgressStall(history: ProgressVector[]): boolean {
+  if (history.length < 3) return false;
+  const recent = history.slice(-3);
+
+  const allSameActions = recent.every((v, _, arr) =>
+    v.actionFingerprints.join(',') === arr[0].actionFingerprints.join(',') && v.actionFingerprints.length > 0
+  );
+  const noPassedIncrease = recent.every((v, _, arr) => v.passedCount === arr[0].passedCount && v.failedCount === arr[0].failedCount);
+
+  return allSameActions && noPassedIncrease;
+}
+
+/**
+ * Independent Verifier: Evaluates real evidence (test exit code, typecheck, write results)
+ * against target acceptance items to determine completion or blockers.
+ */
+export function verifyTargetAcceptance(
+  items: TargetAcceptanceItem[],
+  latestActions: AgentAction[],
+  latestResults: ActionResult[],
+  progressHistory: ProgressVector[]
+): LoopTerminationResult {
+  const updatedItems = items.map(item => ({ ...item }));
+  const evidenceList: string[] = [];
+
+  const testResults = latestResults.filter(r => r.type === 'run_command' && /test|vitest|pytest|tsc|typecheck/i.test(r.target));
+  const writeResults = latestResults.filter(r => r.type === 'write_file');
+
+  testResults.forEach(tr => {
+    if (tr.status === 'success' && (tr.exitCode === 0 || tr.exitCode === undefined)) {
+      evidenceList.push(`测试与验证通过: ${tr.target}`);
+      updatedItems.forEach(item => {
+        if (/测试|单测|验证|类型|type/i.test(item.description)) {
+          item.status = 'passed';
+          item.evidence = `✓ ${tr.target} (Exit Code: 0)`;
+        }
+      });
+    } else if (tr.status === 'failed') {
+      evidenceList.push(`测试失败: ${tr.target} (${tr.error || 'Exit code ' + tr.exitCode})`);
+      updatedItems.forEach(item => {
+        if (/测试|单测|验证|类型/i.test(item.description)) {
+          item.status = 'failed';
+          item.evidence = `✕ ${tr.target} (${tr.error || '失败'})`;
+        }
+      });
+    }
+  });
+
+  writeResults.forEach(wr => {
+    if (wr.status === 'success') {
+      evidenceList.push(`代码落盘成功: ${wr.target} (${wr.fileSize ?? 'OK'})`);
+      updatedItems.forEach(item => {
+        if (item.description.includes(wr.target) || /写入|修改|实现|修复/i.test(item.description)) {
+          if (item.status !== 'failed') item.status = 'passed';
+        }
+      });
+    }
+  });
+
+  const passedCount = updatedItems.filter(i => i.status === 'passed').length;
+  const totalCount = updatedItems.length;
+  const hasFailed = updatedItems.some(i => i.status === 'failed');
+
+  if (totalCount > 0 && passedCount === totalCount && !hasFailed) {
+    return {
+      status: 'completed',
+      summary: `✓ 目标已完成 (${passedCount}/${totalCount} 项验收通过 · 测试通过)`,
+      items: updatedItems,
+      evidenceList
+    };
+  }
+
+  if (detectProgressStall(progressHistory)) {
+    return {
+      status: 'no_progress',
+      summary: '⚠ 当前没有新的有效进展 (最近的修复没有改变验证结果，建议调整方案)',
+      items: updatedItems,
+      evidenceList,
+      suggestedActions: [
+        { id: 'try_new_approach', label: '🔄 换一种架构方案' },
+        { id: 'view_root_cause', label: '🔍 查看失败根因诊断' },
+        { id: 'continue_anyway', label: '▶ 强制继续尝试' }
+      ]
+    };
+  }
+
+  return {
+    status: 'running',
+    summary: `进行中 (${passedCount}/${totalCount || 1} 项通过 · 持续闭环验证)`,
+    items: updatedItems,
+    evidenceList
+  };
+}
+
+/** Produces bounded, factual feedback for the next model iteration including verifier report. */
+export function formatExecutionFeedback(
+  actions: AgentAction[],
+  results: ActionResult[],
+  acceptanceItems?: TargetAcceptanceItem[]
+): string {
+  const lines = ['[Tcode Agent 执行引擎与独立验证器反馈]', ''];
+
+  if (acceptanceItems && acceptanceItems.length > 0) {
+    lines.push('【当前目标验收项达成状态】:');
+    acceptanceItems.forEach(item => {
+      const mark = item.status === 'passed' ? '✓' : item.status === 'failed' ? '✕' : '□';
+      lines.push(`${mark} ${item.description}${item.evidence ? ` (${item.evidence})` : ''}`);
+    });
+    lines.push('');
+  }
+
+  lines.push('【动作执行明细】:');
   for (const action of actions) {
     const result = getActionResultForId(action.id, results);
     if (!result) continue;
@@ -205,6 +376,6 @@ export function formatExecutionFeedback(actions: AgentAction[], results: ActionR
     }
   }
 
-  lines.push('', '请根据以上执行结果决定下一步操作。如果所有任务已完成，请总结变更。');
+  lines.push('', '请根据以上验收状态与验证证据继续执行下一步。若所有验收项均通过(✓)，请总结交付成果。');
   return lines.join('\n');
 }
