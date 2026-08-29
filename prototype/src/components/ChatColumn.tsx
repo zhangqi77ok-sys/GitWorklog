@@ -882,8 +882,8 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                       <MarkdownCard
                         content={parsed.cleanContent || (isLastAssistant ? '正在推演并分析工程结构...' : msg.content)}
                         isStreaming={isLastAssistant && isStreaming}
-                        autoExecute={workMode === 'act'}
-                        permissionPolicy={permissionPolicy}
+                        autoExecute={isLastAssistant && isStreaming && workMode === 'act'}
+                        permissionPolicy={isLastAssistant ? permissionPolicy : (msg.permissionPolicy || 'autonomous_agent')}
                         onOpenFile={(path) => {
                           if (onOpenFile) onOpenFile(path);
                           else if (onNavigateDiff) onNavigateDiff({ fileId: path, filePath: path, targetLine: 1 });

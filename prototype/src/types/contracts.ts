@@ -293,6 +293,7 @@ export interface ChatMessage {
   tokensUsed?: number;
   tokensDetail?: ChatMessageTokens;
   durationSeconds?: number;
+  permissionPolicy?: PermissionPolicy;
 }
 
 export interface LiveLogItem {

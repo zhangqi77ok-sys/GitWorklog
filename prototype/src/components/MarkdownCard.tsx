@@ -184,12 +184,12 @@ const CodeBlockCard: React.FC<CodeBlockCardProps> = ({
               </span>
             </div>
 
-            {permissionPolicy === 'strict_approval' && (
+            {isStreaming && permissionPolicy === 'strict_approval' && (
               <span style={{ fontSize: '9.5px', padding: '1px 5px', borderRadius: '3px', background: 'rgba(100, 116, 139, 0.3)', color: '#CBD5E1', flexShrink: 0 }}>
                 🛡️ 逐次审核
               </span>
             )}
-            {permissionPolicy === 'risk_adaptive' && isHighRisk && (
+            {isStreaming && permissionPolicy === 'risk_adaptive' && isHighRisk && (
               <span style={{ fontSize: '9.5px', padding: '1px 5px', borderRadius: '3px', background: 'rgba(239, 68, 68, 0.3)', color: '#FCA5A5', fontWeight: 700, flexShrink: 0 }}>
                 ⚠️ 风险熔断
               </span>

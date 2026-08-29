@@ -1206,3 +1206,8 @@ To github.com:zhangqi77ok-sys/agent-learning.git
 2. **全局区块与侧边栏拖拽交互强化 (Responsive Layout Drag Resizing & Global Drag Overlay)**：
    - 将侧边栏（左侧架构树）、右侧 Monaco 编辑器工作台的分隔拖拽区域扩展为 10px 灵敏响应热区；
    - 在拖拽调节宽度或高度期间，启动全屏透明拖拽遮罩 (`z-index: 99999`) 并锁定全局鼠标光标（`col-resize` / `row-resize`），杜绝因 iframe、Monaco 或文本选择抢占事件而导致拖拽失效的严重问题，实现丝滑流畅的拖拽响应！
+
+### 12.28 历史消息权限与执行状态免疫隔离 (Historic Message Policy Immunity) (v1.4.5)
+1. **历史消息快照隔离与权限切换免疫 (Historic Message Permission Snapshotting)**：
+   - 彻底修复当用户在底部工作台切换权限模式（如切换为逐次审核 / 智能自决）时，历史已经完成的对话消息卡片被动重新渲染、徽标突变以及被动触发写盘状态的问题；
+   - 消息在生成时自动对当时的 `permissionPolicy` 进行快照封装，历史卡片自动处于只读静止状态（`autoExecute: false`），无论后续如何切换全局权限，历史消息状态均 100% 保持稳定独立、绝不发生回溯污染！

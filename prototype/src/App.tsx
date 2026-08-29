@@ -503,10 +503,11 @@ export const App: React.FC = () => {
       id: `msg-${Date.now()}`,
       role: 'user',
       content: text,
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      permissionPolicy
     };
 
-    // Snapshot active model at call initiation to guarantee immunity against concurrent model switching
+    // Snapshot active model & permission policy at call initiation to guarantee total immunity for historic messages
     const streamingModel = { ...currentModel };
     const assistantId = `reply-${Date.now()}`;
     const assistantMsg: ChatMessage = {
@@ -514,7 +515,8 @@ export const App: React.FC = () => {
       role: 'assistant',
       content: '',
       timestamp: Date.now(),
-      auditTag: `⚡ ${streamingModel.name} 真实流式响应`
+      auditTag: `⚡ ${streamingModel.name} 真实流式响应`,
+      permissionPolicy
     };
 
     // Append both to current session in memory
