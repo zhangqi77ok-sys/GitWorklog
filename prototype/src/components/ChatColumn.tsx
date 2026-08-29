@@ -54,6 +54,7 @@ import {
   MOCK_REPO_GRAPH
 } from '../types/contracts';
 import { OptionsCard } from './OptionsCard';
+import { SemanticCommitModal } from './SemanticCommitModal';
 
 interface ChatColumnProps {
   rightWorkspaceOpen: boolean;
@@ -107,6 +108,9 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
   const [pipelineMode, setPipelineMode] = useState<'harness' | 'swarm'>('swarm');
   const [isForkedSession, setIsForkedSession] = useState<boolean>(true);
   const [swarmStages, setSwarmStages] = useState<SwarmPipelineStage[]>(INITIAL_SWARM_STAGES);
+  const [isCommitModalOpen, setIsCommitModalOpen] = useState<boolean>(false);
+  const [experienceLearned, setExperienceLearned] = useState<boolean>(false);
+  const [activeRuleCount, setActiveRuleCount] = useState<number>(3);
 
 
 
@@ -582,6 +586,39 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
           overflow: 'visible',
           position: 'relative'
         }}>
+          {/* Self-Learning Lessons Pill (Floating Suggestion) */}
+          {!experienceLearned && (
+            <div style={{
+              position: 'absolute',
+              top: '-28px',
+              left: '4px',
+              padding: '2px 8px',
+              borderRadius: '12px',
+              background: 'rgba(217, 107, 39, 0.12)',
+              border: '1px solid var(--accent)',
+              color: 'var(--accent)',
+              fontSize: '10.5px',
+              fontWeight: 600,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              cursor: 'pointer',
+              zIndex: 25,
+              boxShadow: '0 2px 8px rgba(217, 107, 39, 0.1)'
+            }}
+            onClick={() => {
+              setExperienceLearned(true);
+              setActiveRuleCount(prev => prev + 1);
+              setChangesetToast('💡 已将经验沉淀至 .codemind/lessons.md (全局永久生效)');
+              setTimeout(() => setChangesetToast(null), 3500);
+            }}
+            title="点击将当前纠错自动固化为项目规则"
+            >
+              <span>💡 检测到架构纠正: 点击一键沉淀为工程经验 (.codemind/lessons.md)</span>
+              <span style={{ textDecoration: 'underline' }}>沉淀</span>
+            </div>
+          )}
+
           {/* 1. ATTACHED FILES CHIPS (Inside Top of Card) */}
           {attachedFiles.length > 0 && (
             <div style={{
@@ -1100,6 +1137,19 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
           <span>💡 提示：按 <strong>Enter</strong> 发送，<strong>Shift+Enter</strong> 换行 · 剪贴板文件或截图支持 <strong>Ctrl+V</strong> 粘贴挂载</span>
           <span>已自动先行注入项目级三大铁律与活跃 Rule 规则</span>
         </div>
+        <SemanticCommitModal
+          isOpen={isCommitModalOpen}
+          onClose={() => setIsCommitModalOpen(false)}
+          files={[
+            { path: 'src/types/contracts.ts' },
+            { path: 'src/components/OptionsCard.tsx' },
+            { path: 'tests/contracts.test.ts' }
+          ]}
+          onExecuteCommits={() => {
+            setChangesetToast('✓ 3 条 Conventional Commits 均已顺序提交至 Git 树！');
+            setTimeout(() => setChangesetToast(null), 3500);
+          }}
+        />
       </div>
     </div>
   );

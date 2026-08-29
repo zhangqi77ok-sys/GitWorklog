@@ -66,7 +66,12 @@ import {
   unmaskSensitiveText,
   clampLeftPanelWidth,
   clampWorkbenchWidth,
-  clampTerminalHeightPercent
+  clampTerminalHeightPercent,
+  appendLessonRule,
+  generatePreFlightCiReport,
+  splitChangesetIntoSemanticCommits,
+  toggleDebugProbe,
+  calculateBlastRadius
 } from '../src/types/contracts';
 
 describe('SDD Contract - Token Telemetry & Gauge Algorithm', () => {
@@ -559,5 +564,55 @@ describe('SDD Contract - Fluid Resizable Layout Bounds', () => {
     expect(clampTerminalHeightPercent(10)).toBe(20);
     expect(clampTerminalHeightPercent(45)).toBe(45);
     expect(clampTerminalHeightPercent(95)).toBe(80);
+  });
+});
+
+
+describe('SDD Contract - Senior Dev Production Features', () => {
+  it('should append lessons rule and persist properly', () => {
+    const res = appendLessonRule([], {
+      category: 'architecture',
+      title: '禁止直接 new 实例化服务',
+      ruleContent: '必须通过 ServiceFactory 获取单例',
+      source: 'user_correction'
+    });
+    expect(res.updatedRules.length).toBe(1);
+    expect(res.addedRule.appliedCount).toBe(1);
+    expect(res.addedRule.source).toBe('user_correction');
+  });
+
+  it('should generate pre-flight CI report with delta and pass gate', () => {
+    const report = generatePreFlightCiReport(true, 88.4, 85.2);
+    expect(report.status).toBe('passed');
+    expect(report.lineCoverageDelta).toBe(3.2);
+    expect(report.allowPush).toBe(true);
+  });
+
+  it('should split changeset into semantic Conventional Commits', () => {
+    const files = [
+      { path: 'src/types/contracts.ts' },
+      { path: 'tests/contracts.test.ts' },
+      { path: 'src/components/ChatColumn.tsx' }
+    ];
+    const commits = splitChangesetIntoSemanticCommits(files);
+    expect(commits.length).toBe(3);
+    expect(commits[0].type).toBe('feat');
+    expect(commits[1].type).toBe('test');
+    expect(commits[2].type).toBe('refactor');
+  });
+
+  it('should toggle dynamic debug probes on line numbers', () => {
+    let probes: any[] = [];
+    probes = toggleDebugProbe(probes, 'file-contracts', 14, 'solveGeneric');
+    expect(probes.length).toBe(1);
+    expect(probes[0].line).toBe(14);
+    probes = toggleDebugProbe(probes, 'file-contracts', 14);
+    expect(probes.length).toBe(0);
+  });
+
+  it('should calculate Monorepo blast radius for core contracts', () => {
+    const blast = calculateBlastRadius('src/types/contracts.ts');
+    expect(blast.sourcePackage).toContain('packages/core');
+    expect(blast.totalAffectedCallsites).toBe(7);
   });
 });

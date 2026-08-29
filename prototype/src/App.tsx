@@ -1,4 +1,5 @@
 import { SettingsModal } from './components/SettingsModal';
+import { CommandPaletteModal } from './components/CommandPaletteModal';
 import { TokenAnalyticsModal } from './components/TokenAnalyticsModal';
 import React, { useState } from 'react';
 import './styles/theme.css';
@@ -30,6 +31,31 @@ import {
 export const App: React.FC = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isTokenAnalyticsOpen, setIsTokenAnalyticsOpen] = useState(false);
+  const [isPaletteOpen, setIsPaletteOpen] = useState(false);
+  const [paletteMode, setPaletteMode] = useState<'files' | 'commands'>('files');
+
+  // Global Keyboard Navigation (Ctrl+P, Ctrl+Shift+P, Alt+1/2/3)
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'p' && !e.shiftKey) {
+        e.preventDefault();
+        setPaletteMode('files');
+        setIsPaletteOpen(true);
+      } else if ((e.ctrlKey || e.metaKey) && e.key === 'P' && e.shiftKey) {
+        e.preventDefault();
+        setPaletteMode('commands');
+        setIsPaletteOpen(true);
+      } else if (e.altKey && e.key === '1') {
+        e.preventDefault();
+        setActiveNav('sessions');
+      } else if (e.altKey && e.key === '3') {
+        e.preventDefault();
+        setRightWorkspaceOpen(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
   const [accentHex, setAccentHex] = useState('#D96B27');
 
   const handleSelectAccentHex = (hex: string) => {
@@ -485,6 +511,21 @@ export const App: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Global Command Hub & Quick File Switcher (Ctrl+P / Ctrl+Shift+P) */}
+      <CommandPaletteModal
+        isOpen={isPaletteOpen}
+        onClose={() => setIsPaletteOpen(false)}
+        mode={paletteMode}
+        onOpenFile={(path) => {
+          setRightWorkspaceOpen(true);
+        }}
+        onRunAction={(actionId) => {
+          if (actionId === 'run-ci') {
+            setRightWorkspaceOpen(true);
+          }
+        }}
+      />
 
       {/* Token Financial & ROI Analytics Modal */}
       <TokenAnalyticsModal

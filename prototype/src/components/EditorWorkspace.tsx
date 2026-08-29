@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { PreFlightCiDrawer } from './PreFlightCiDrawer';
 import {
   X,
   FileCode,
@@ -16,7 +17,10 @@ import {
   INITIAL_OPENED_FILES,
   OpenedEditorFile,
   closeEditorFile,
-  clampTerminalHeightPercent
+  clampTerminalHeightPercent,
+  DebugProbeItem,
+  toggleDebugProbe,
+  calculateBlastRadius
 } from '../types/contracts';
 
 interface EditorWorkspaceProps {
@@ -49,6 +53,10 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
     'All tests passed. Zero errors.'
   ]);
   const [cmdInput, setCmdInput] = useState('');
+  const [isCiDrawerOpen, setIsCiDrawerOpen] = useState(false);
+  const [debugProbes, setDebugProbes] = useState<DebugProbeItem[]>([
+    { id: 'probe-contracts-13', fileId: 'file-contracts', line: 13, variableName: 'solveGeneric', capturedValue: '{ input: "test", resolved: true }', status: 'active' }
+  ]);
 
   // Vertical Resizable Split for Editor vs Terminal
   const [terminalHeightPercent, setTerminalHeightPercent] = useState<number>(40);
@@ -174,8 +182,45 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
           })}
         </div>
 
+        {/* Monorepo Blast Radius Badge */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '4px',
+          padding: '2px 7px',
+          borderRadius: '4px',
+          background: 'rgba(37, 99, 235, 0.1)',
+          border: '1px solid rgba(37, 99, 235, 0.25)',
+          color: '#2563EB',
+          fontSize: '10.5px',
+          fontWeight: 600
+        }} title="Monorepo 跨包波及分析：packages/core 变更波及 apps/web 与 apps/api">
+          <span>📦 core ➔ web (3处波及)</span>
+          <span style={{ textDecoration: 'underline', cursor: 'pointer' }}>级联修复</span>
+        </div>
+
         {/* Right Action Buttons */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <button
+            onClick={() => setIsCiDrawerOpen(true)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              padding: '2px 7px',
+              borderRadius: '4px',
+              background: 'rgba(22, 163, 74, 0.1)',
+              color: '#16A34A',
+              border: '1px solid #16A34A',
+              fontSize: '11px',
+              fontWeight: 600,
+              cursor: 'pointer'
+            }}
+            title="运行本地 CI 预检门禁与覆盖率分析"
+          >
+            <ShieldCheck size={11} />
+            <span>🚀 本地 CI 预检</span>
+          </button>
           <button
             onClick={() => setShowInlineEdit(!showInlineEdit)}
             style={{
@@ -310,22 +355,42 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
 
           {/* Editor Body with Gutter (Line Numbers) & Rich Syntax Coloring */}
           <div style={{ flex: 1, display: 'flex', overflowY: 'auto', padding: '8px 0' }}>
-            {/* Gutter Line Numbers */}
+            {/* Gutter Line Numbers with Interactive Probes */}
             <div style={{
-              width: '38px',
-              padding: '0 8px 0 0',
+              width: '42px',
+              padding: '0 6px 0 0',
               textAlign: 'right',
               color: 'var(--text-muted)',
-              opacity: 0.5,
+              opacity: 0.7,
               userSelect: 'none',
               borderRight: '1px solid var(--border-subtle)',
               fontSize: '11px',
               lineHeight: '20px'
             }}>
-              {codeLines.map(l => (
-                <div key={l.num}>{l.num}</div>
-              ))}
-              <div>13</div>
+              {codeLines.map(l => {
+                const hasProbe = debugProbes.some(p => p.line === l.num);
+                return (
+                  <div
+                    key={l.num}
+                    onClick={() => setDebugProbes(prev => toggleDebugProbe(prev, 'file-contracts', l.num))}
+                    style={{
+                      cursor: 'pointer',
+                      color: hasProbe ? '#F59E0B' : 'inherit',
+                      fontWeight: hasProbe ? 700 : 400
+                    }}
+                    title="点击插入/移除非侵入式动态探针 (Debug Probe)"
+                  >
+                    {hasProbe ? '⚡' : l.num}
+                  </div>
+                );
+              })}
+              <div
+                onClick={() => setDebugProbes(prev => toggleDebugProbe(prev, 'file-contracts', 13))}
+                style={{ cursor: 'pointer', color: debugProbes.some(p => p.line === 13) ? '#F59E0B' : 'inherit', fontWeight: 700 }}
+                title="点击插入动态探针"
+              >
+                {debugProbes.some(p => p.line === 13) ? '⚡' : '13'}
+              </div>
               <div>14</div>
             </div>
 
@@ -356,6 +421,25 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
                 <span style={{ color: 'var(--text-primary)' }}>forkedFromId?:</span> <span style={{ color: '#D97706' }}>string</span>;
               </div>
               <div>&#125;</div>
+
+              {/* Live Dynamic Probe Bubble */}
+              {debugProbes.some(p => p.line === 13) && (
+                <div style={{
+                  margin: '4px 0',
+                  padding: '3px 8px',
+                  borderRadius: '4px',
+                  background: 'rgba(245, 158, 11, 0.12)',
+                  border: '1px dashed #F59E0B',
+                  color: '#D97706',
+                  fontSize: '10.5px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between'
+                }}>
+                  <span>⚡ [动态探针捕获] input: &#123; mode: 'act', tokens: 21000 &#125; ➔ 返回: Promise&lt;Resolved&gt;</span>
+                  <span style={{ fontSize: '9px', opacity: 0.8 }}>零侵入式探针 (测试通过自动清除)</span>
+                </div>
+              )}
 
               {/* Live Inline Diff Block */}
               <div style={{
@@ -572,6 +656,10 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
           </form>
         </div>
       </div>
+      <PreFlightCiDrawer
+        isOpen={isCiDrawerOpen}
+        onClose={() => setIsCiDrawerOpen(false)}
+      />
     </aside>
   );
 };

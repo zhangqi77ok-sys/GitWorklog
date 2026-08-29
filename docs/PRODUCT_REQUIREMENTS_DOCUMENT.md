@@ -514,6 +514,34 @@
 2. **视觉降噪与呼吸感**：
    - 彻底告别大色块突兀横幅，采用纸质暖橙微透明毛玻璃底色，与聊天消息流融为一体。
 
+
+### 4.25 经验自动沉淀自进化与工程记忆库规约 (Self-Learning Lessons & Rules Persistence)
+1. **纠错实时感知**：当开发者在对话中纠正 AI（如规则偏差、调用方式指正、安全规范提醒）时，系统自动在输入区上方浮出 `[ 💡 沉淀为工程经验 (Rule) ]` 胶囊；
+2. **零阻力持久化**：点击一键写入 `.codemind/rules.yaml` 与 `.codemind/lessons.md`，即时载入当前工程的 Tier-1 上下文，同工程所有未来会话永久生效。
+
+### 4.26 本地 CI 预检门禁与测试覆盖率闭环规约 (Pre-Flight CI & Coverage Watcher)
+1. **一键并行预检**：在代码提交前，支持一键触发本地轻量 CI 门禁，并行运行 `TypeScript 类型检查`、`ESLint 规范检查` 与 `Vitest 覆盖率分析`；
+2. **覆盖率变化仪表盘**：直观展示行覆盖率 (Line)、分支覆盖率 (Branch) 与函数覆盖率 (Func) 变化指标（如 `Line Coverage: 88.4% ↑ +3.2%`），绿灯通过后方亮起 `[ 🟢 CI PASS · 允许 Push ]`。
+
+### 4.27 行级分块暂存与 Conventional Commit 智能拆分规约 (Semantic Commit Splitter)
+1. **多文件分块暂存 (Hunk Staging)**：多文件审阅卡片支持行级与文件级勾选暂存；
+2. **意图智能拆分提交**：AI 自动解析变更集并按意图生成原子级 Conventional Commits（例如 `feat(store): ...`、`test(store): ...`、`chore(deps): ...`），支持一键批量顺序执行提交。
+
+### 4.28 全键盘 Command Hub 与模糊文件检索规约 (Keyboard-First Command Hub)
+1. **全局快捷键网格**：
+   - `Ctrl + P`：唤起文件模糊搜索弹窗，快速定位并跳转至工作台打开；
+   - `Ctrl + Shift + P`：唤起全局 AI 动作命令台（运行预检、生成单测、切换 Swarm、导出经验）；
+   - `Alt + 1 / 2 / 3`：无缝在【左侧树】、【中间聊天区】、【右侧工作台】之间跳跃输入焦点；
+2. **极客手感**：支持 Vim Mode 状态切换与全键盘无鼠标闭环。
+
+### 4.29 动态非侵入式探针与运行时调用栈捕获规约 (Live Debug Probes & Trace Spy)
+1. **行号槽探针注入**：在代码编辑器行号槽支持一键放置 `[ ⚡ 动态探针 ]`；
+2. **运行变量快照**：测试运行时实时捕获函数入参和返回值的局部变量快照并高亮悬浮呈现，排障完成后自动清理，零脏代码残留。
+
+### 4.30 Monorepo 跨包级联波及分析矩阵规约 (Cross-Package Blast Radius Matrix)
+1. **波及面自动检测**：修改 Monorepo 底层子包（如 `packages/core`）时，自动基于 AST 调用链生成跨包破坏面拓扑徽章；
+2. **级联补丁生成**：一键生成对上层依赖包（如 `apps/web`、`apps/api`）的联动修复补丁包。
+
 ## 五、人机协同动态交互选择体系 (Dynamic Human-in-the-Loop)
 
 当 Agent 在推理过程中遇到技术分叉或歧义时，**严禁盲猜代劳**，主动触发结构化微型卡片挂起：

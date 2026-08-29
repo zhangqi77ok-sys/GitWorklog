@@ -1600,3 +1600,182 @@ export function clampWorkbenchWidth(width: number, containerWidth: number = 1440
 export function clampTerminalHeightPercent(percent: number): number {
   return Math.min(Math.max(percent, 20), 80);
 }
+
+
+// ============================================================================
+// 14. SENIOR DEV PRODUCTION FEATURES CONTRACTS (Lessons, CI, Commits, Probes, Blast)
+// ============================================================================
+
+export interface LessonRuleItem {
+  id: string;
+  category: 'architecture' | 'safety' | 'style' | 'performance';
+  title: string;
+  ruleContent: string;
+  source: 'user_correction' | 'manual' | 'ci_failure';
+  appliedCount: number;
+  createdAt: number;
+}
+
+export function appendLessonRule(
+  existingRules: LessonRuleItem[],
+  newRule: Omit<LessonRuleItem, 'id' | 'appliedCount' | 'createdAt'>
+): { updatedRules: LessonRuleItem[]; addedRule: LessonRuleItem } {
+  const addedRule: LessonRuleItem = {
+    ...newRule,
+    id: `lesson-${Date.now()}`,
+    appliedCount: 1,
+    createdAt: Date.now()
+  };
+  return {
+    updatedRules: [addedRule, ...existingRules],
+    addedRule
+  };
+}
+
+export interface PreFlightCiReport {
+  status: 'passed' | 'failed' | 'running';
+  tsErrorsCount: number;
+  eslintWarningsCount: number;
+  lineCoverage: number;
+  lineCoverageDelta: number;
+  branchCoverage: number;
+  durationMs: number;
+  allowPush: boolean;
+}
+
+export function generatePreFlightCiReport(
+  passed: boolean,
+  currentLineCoverage: number = 88.4,
+  previousLineCoverage: number = 85.2
+): PreFlightCiReport {
+  const delta = Number((currentLineCoverage - previousLineCoverage).toFixed(1));
+  return {
+    status: passed ? 'passed' : 'failed',
+    tsErrorsCount: passed ? 0 : 2,
+    eslintWarningsCount: passed ? 0 : 4,
+    lineCoverage: currentLineCoverage,
+    lineCoverageDelta: delta,
+    branchCoverage: 85.0,
+    durationMs: 340,
+    allowPush: passed && currentLineCoverage >= 80
+  };
+}
+
+export interface SemanticCommitItem {
+  id: string;
+  type: 'feat' | 'fix' | 'test' | 'refactor' | 'chore' | 'docs';
+  scope: string;
+  message: string;
+  files: string[];
+}
+
+export function splitChangesetIntoSemanticCommits(files: Array<{ path: string }>): SemanticCommitItem[] {
+  const commits: SemanticCommitItem[] = [];
+
+  const storeFiles = files.filter(f => f.path.includes('contract') || f.path.includes('store'));
+  if (storeFiles.length > 0) {
+    commits.push({
+      id: `commit-${Date.now()}-1`,
+      type: 'feat',
+      scope: 'contracts',
+      message: '定义三栏布局约束与老码农生产级进阶契约',
+      files: storeFiles.map(f => f.path)
+    });
+  }
+
+  const testFiles = files.filter(f => f.path.includes('test'));
+  if (testFiles.length > 0) {
+    commits.push({
+      id: `commit-${Date.now()}-2`,
+      type: 'test',
+      scope: 'contracts',
+      message: '补充 6 大杀手特性边界断言测试',
+      files: testFiles.map(f => f.path)
+    });
+  }
+
+  const uiFiles = files.filter(f => f.path.includes('component') || f.path.includes('App') || f.path.includes('styles'));
+  if (uiFiles.length > 0) {
+    commits.push({
+      id: `commit-${Date.now()}-3`,
+      type: 'refactor',
+      scope: 'ui',
+      message: '重塑单行毛玻璃 Ribbon 与全键盘命令台',
+      files: uiFiles.map(f => f.path)
+    });
+  }
+
+  if (commits.length === 0) {
+    commits.push({
+      id: `commit-${Date.now()}-fallback`,
+      type: 'chore',
+      scope: 'workspace',
+      message: '同步工程状态变更',
+      files: files.map(f => f.path)
+    });
+  }
+
+  return commits;
+}
+
+export interface DebugProbeItem {
+  id: string;
+  fileId: string;
+  line: number;
+  variableName: string;
+  capturedValue: string;
+  status: 'active' | 'cleared';
+}
+
+export function toggleDebugProbe(
+  probes: DebugProbeItem[],
+  fileId: string,
+  line: number,
+  variableName: string = 'output'
+): DebugProbeItem[] {
+  const existing = probes.find(p => p.fileId === fileId && p.line === line);
+  if (existing) {
+    return probes.filter(p => p.id !== existing.id);
+  }
+  return [
+    ...probes,
+    {
+      id: `probe-${fileId}-${line}`,
+      fileId,
+      line,
+      variableName,
+      capturedValue: '{ status: "passed", code: 200 }',
+      status: 'active'
+    }
+  ];
+}
+
+export interface BlastRadiusItem {
+  packagePath: string;
+  impactedSymbolsCount: number;
+  severity: 'low' | 'medium' | 'high';
+}
+
+export interface BlastRadiusReport {
+  sourcePackage: string;
+  impactedDownstream: BlastRadiusItem[];
+  totalAffectedCallsites: number;
+}
+
+export function calculateBlastRadius(sourceFile: string): BlastRadiusReport {
+  if (sourceFile.includes('contracts.ts')) {
+    return {
+      sourcePackage: 'packages/core (contracts)',
+      impactedDownstream: [
+        { packagePath: 'apps/web/ChatColumn.tsx', impactedSymbolsCount: 4, severity: 'medium' },
+        { packagePath: 'apps/web/EditorWorkspace.tsx', impactedSymbolsCount: 3, severity: 'low' }
+      ],
+      totalAffectedCallsites: 7
+    };
+  }
+  return {
+    sourcePackage: 'apps/web',
+    impactedDownstream: [],
+    totalAffectedCallsites: 0
+  };
+}
