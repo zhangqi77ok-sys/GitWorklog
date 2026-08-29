@@ -3,16 +3,86 @@ import sys
 import shutil
 import subprocess
 import threading
+import time
+import json
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from pathlib import Path
 
-VERSION = "1.1.3"
+VERSION = "1.1.4"
 APP_NAME = "CodeMind-Hub"
 
-def get_default_install_dir():
+def get_detected_installed_dir():
+    # 1. Check Windows Registry HKCU\Software\CodeMind-Hub\InstallPath
+    try:
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\CodeMind-Hub") as key:
+            val, _ = winreg.QueryValueEx(key, "InstallPath")
+            if val and os.path.exists(val):
+                return val
+    except Exception:
+        pass
+
+    # 2. Check %LOCALAPPDATA%\CodeMind-Hub\install_info.json
     local_app_data = os.environ.get("LOCALAPPDATA", os.path.expanduser("~"))
+    info_file = os.path.join(local_app_data, "CodeMind-Hub", "install_info.json")
+    if os.path.exists(info_file):
+        try:
+            with open(info_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                p = data.get("install_path")
+                if p and os.path.exists(p):
+                    return p
+        except Exception:
+            pass
+
+    # 3. Check common paths (e.g. D:\CodeMind-Hub)
+    for cand in [r"D:\CodeMind-Hub", os.path.join(local_app_data, "Programs", APP_NAME)]:
+        if os.path.exists(os.path.join(cand, "CodeMind-Hub.exe")):
+            return cand
+
     return os.path.join(local_app_data, "Programs", APP_NAME)
+
+def save_installed_dir(target_dir):
+    # Save to Registry
+    try:
+        import winreg
+        key = winreg.CreateKey(winreg.HKEY_CURRENT_USER, r"Software\CodeMind-Hub")
+        winreg.SetValueEx(key, "InstallPath", 0, winreg.REG_SZ, target_dir)
+        winreg.SetValueEx(key, "Version", 0, winreg.REG_SZ, VERSION)
+        winreg.CloseKey(key)
+    except Exception:
+        pass
+
+    # Save to json file
+    try:
+        local_app_data = os.environ.get("LOCALAPPDATA", os.path.expanduser("~"))
+        conf_dir = os.path.join(local_app_data, "CodeMind-Hub")
+        os.makedirs(conf_dir, exist_ok=True)
+        with open(os.path.join(conf_dir, "install_info.json"), "w", encoding="utf-8") as f:
+            json.dump({"install_path": target_dir, "version": VERSION, "timestamp": time.time()}, f)
+    except Exception:
+        pass
+
+def close_running_instances():
+    CREATE_NO_WINDOW = 0x08000000
+    # Terminate running CodeMind-Hub.exe instances
+    try:
+        res = subprocess.run(["tasklist", "/FI", "IMAGENAME eq CodeMind-Hub.exe"], capture_output=True, text=True, creationflags=CREATE_NO_WINDOW)
+        if "CodeMind-Hub.exe" in res.stdout:
+            subprocess.run(["taskkill", "/F", "/IM", "CodeMind-Hub.exe", "/T"], capture_output=True, creationflags=CREATE_NO_WINDOW)
+            time.sleep(1.2)
+    except Exception:
+        pass
+
+    # Terminate running CodeMind-Core.exe instances
+    try:
+        res2 = subprocess.run(["tasklist", "/FI", "IMAGENAME eq CodeMind-Core.exe"], capture_output=True, text=True, creationflags=CREATE_NO_WINDOW)
+        if "CodeMind-Core.exe" in res2.stdout:
+            subprocess.run(["taskkill", "/F", "/IM", "CodeMind-Core.exe", "/T"], capture_output=True, creationflags=CREATE_NO_WINDOW)
+            time.sleep(1.0)
+    except Exception:
+        pass
 
 def get_bundle_dir():
     if getattr(sys, 'frozen', False):
@@ -52,7 +122,9 @@ class SetupWizard(tk.Tk):
         self.configure(bg="#F8FAFC")
         
         self.current_step = 0
-        self.install_dir = tk.StringVar(value=get_default_install_dir())
+        self.detected_dir = get_detected_installed_dir()
+        self.is_upgrade = os.path.exists(os.path.join(self.detected_dir, "CodeMind-Hub.exe"))
+        self.install_dir = tk.StringVar(value=self.detected_dir)
         self.create_desktop_shortcut = tk.BooleanVar(value=True)
         self.create_start_menu_shortcut = tk.BooleanVar(value=True)
         self.launch_after_install = tk.BooleanVar(value=True)
@@ -96,15 +168,15 @@ class SetupWizard(tk.Tk):
         self.prev_btn.config(state="disabled")
         self.next_btn.config(text="下一步 >", state="normal", command=self.next_step)
         
-        title = tk.Label(self.content_frame, text=f"欢迎使用 {APP_NAME} 安装向导", font=("Segoe UI", 15, "bold"), bg="#F8FAFC", fg="#0F172A")
+        title_text = f"欢迎使用 {APP_NAME} 升级向导" if self.is_upgrade else f"欢迎使用 {APP_NAME} 安装向导"
+        title = tk.Label(self.content_frame, text=title_text, font=("Segoe UI", 15, "bold"), bg="#F8FAFC", fg="#0F172A")
         title.pack(anchor="w", pady=(10, 8))
         
         desc = (
-            f"本向导将指引您在当前计算机上安装 {APP_NAME} (版本 v{VERSION})。\n\n"
-            f"{APP_NAME} 是一款企业级 AI Agentic IDE，集成了真机大模型网关总线、"
-            f"本地真实文件读写系统、DSML 工具调度与全真机开发工作台。\n\n"
-            "建议在安装前关闭正在运行的旧版本程序。\n\n"
-            "点击“下一步”继续安装。"
+            f"本向导将指引您在当前计算机上安装或更新 {APP_NAME} (版本 v{VERSION})。\n\n"
+            f"{'● 系统已自动定位到您此前安装的历史路径。' if self.is_upgrade else ''}\n"
+            f"● 安装程序在写入前会自动安全关闭正在运行的 {APP_NAME} 实例。\n\n"
+            "点击“下一步”继续。"
         )
         body = tk.Label(self.content_frame, text=desc, font=("Segoe UI", 10), justify="left", bg="#F8FAFC", fg="#334155")
         body.pack(anchor="w", pady=6)
@@ -116,8 +188,18 @@ class SetupWizard(tk.Tk):
         title = tk.Label(self.content_frame, text="选择安装位置", font=("Segoe UI", 13, "bold"), bg="#F8FAFC", fg="#0F172A")
         title.pack(anchor="w", pady=(4, 6))
         
-        desc = tk.Label(self.content_frame, text=f"向导将把 {APP_NAME} 安装到以下文件夹。若要安装到其他位置，请点击“浏览”。", font=("Segoe UI", 9), justify="left", bg="#F8FAFC", fg="#475569")
-        desc.pack(anchor="w", pady=(0, 16))
+        if self.is_upgrade:
+            tip = tk.Label(
+                self.content_frame,
+                text=f"✓ 已自动检测到您已安装的路径: {self.detected_dir} (将自动覆盖更新)",
+                font=("Segoe UI", 9, "bold"),
+                bg="#F8FAFC",
+                fg="#16A34A"
+            )
+            tip.pack(anchor="w", pady=(0, 6))
+
+        desc = tk.Label(self.content_frame, text=f"向导将把 {APP_NAME} 安装到以下文件夹。若要更改位置，请点击“浏览”。", font=("Segoe UI", 9), justify="left", bg="#F8FAFC", fg="#475569")
+        desc.pack(anchor="w", pady=(0, 14))
         
         frame_input = tk.Frame(self.content_frame, bg="#F8FAFC")
         frame_input.pack(fill="x", pady=6)
@@ -134,16 +216,19 @@ class SetupWizard(tk.Tk):
     def browse_dir(self):
         f = filedialog.askdirectory(title="选择安装目录", initialdir=self.install_dir.get())
         if f:
-            self.install_dir.set(os.path.join(f, APP_NAME))
+            if not f.endswith(APP_NAME):
+                self.install_dir.set(os.path.join(f, APP_NAME))
+            else:
+                self.install_dir.set(f)
 
     def step_choose_tasks(self):
         self.prev_btn.config(state="normal")
-        self.next_btn.config(text="安装", state="normal", command=self.start_install)
+        self.next_btn.config(text="开始安装", state="normal", command=self.start_install)
         
         title = tk.Label(self.content_frame, text="选择附加任务", font=("Segoe UI", 13, "bold"), bg="#F8FAFC", fg="#0F172A")
         title.pack(anchor="w", pady=(4, 6))
         
-        desc = tk.Label(self.content_frame, text="选择您希望安装程序在安装 CodeMind-Hub 时执行的附加任务：", font=("Segoe UI", 9), justify="left", bg="#F8FAFC", fg="#475569")
+        desc = tk.Label(self.content_frame, text="选择您希望安装程序执行的附加任务：", font=("Segoe UI", 9), justify="left", bg="#F8FAFC", fg="#475569")
         desc.pack(anchor="w", pady=(0, 16))
         
         chk1 = tk.Checkbutton(self.content_frame, text="创建桌面快捷方式 (Desktop Shortcut)", variable=self.create_desktop_shortcut, font=("Segoe UI", 10), bg="#F8FAFC", activebackground="#F8FAFC")
@@ -165,7 +250,7 @@ class SetupWizard(tk.Tk):
         title = tk.Label(self.content_frame, text=f"正在安装 {APP_NAME}...", font=("Segoe UI", 13, "bold"), bg="#F8FAFC", fg="#0F172A")
         title.pack(anchor="w", pady=(4, 6))
         
-        self.status_label = tk.Label(self.content_frame, text="正在准备释放安装文件...", font=("Segoe UI", 9), bg="#F8FAFC", fg="#475569")
+        self.status_label = tk.Label(self.content_frame, text="正在检测并安全关闭正在运行的程序实例...", font=("Segoe UI", 9), bg="#F8FAFC", fg="#475569")
         self.status_label.pack(anchor="w", pady=(0, 16))
         
         self.progress = ttk.Progressbar(self.content_frame, mode="determinate", length=490)
@@ -174,8 +259,14 @@ class SetupWizard(tk.Tk):
     def do_install(self):
         target_dir = self.install_dir.get()
         try:
+            # 1. Close any running instances before overwriting
+            self.progress['value'] = 10
+            self.status_label.config(text="正在安全关闭运行中的程序实例...")
+            self.update_idletasks()
+            close_running_instances()
+
             os.makedirs(target_dir, exist_ok=True)
-            self.progress['value'] = 20
+            self.progress['value'] = 30
             self.status_label.config(text="正在解压程序主核心与运行环境...")
             self.update_idletasks()
             
@@ -183,11 +274,15 @@ class SetupWizard(tk.Tk):
             payload_src = os.path.join(bundle_dir, "payload", "CodeMind-Core.exe")
             target_exe = os.path.join(target_dir, "CodeMind-Hub.exe")
             
+            # Copy executable
             shutil.copyfile(payload_src, target_exe)
             self.progress['value'] = 60
-            self.status_label.config(text="正在注册快捷方式与快捷指令...")
+            self.status_label.config(text="正在注册快捷方式与安装路径记录...")
             self.update_idletasks()
             
+            # Persist installation path in Registry & LocalAppData for future updates
+            save_installed_dir(target_dir)
+
             # Desktop Shortcut
             if self.create_desktop_shortcut.get():
                 desktop = os.path.join(os.path.expanduser("~"), "Desktop")
@@ -211,7 +306,7 @@ class SetupWizard(tk.Tk):
             self.status_label.config(text="安装完成！")
             self.update_idletasks()
             
-            self.after(500, lambda: self.show_step(4))
+            self.after(600, lambda: self.show_step(4))
         except Exception as e:
             messagebox.showerror("安装错误", f"安装过程中发生错误:\n{e}")
             self.destroy()
@@ -227,8 +322,8 @@ class SetupWizard(tk.Tk):
         desc = (
             f"{APP_NAME} 已成功安装到您的计算机。\n\n"
             f"程序安装位置: {self.install_dir.get()}\n\n"
-            "快捷方式已根据您的设置创建在系统桌面与开始菜单中。\n\n"
-            "点击“完成”以退出安装向导。"
+            "系统已自动保存安装路径，下次升级安装将自动选定此目录并自动关闭正在运行的旧版本。\n\n"
+            "点击“完成”退出向导。"
         )
         body = tk.Label(self.content_frame, text=desc, font=("Segoe UI", 10), justify="left", bg="#F8FAFC", fg="#334155")
         body.pack(anchor="w", pady=6)
