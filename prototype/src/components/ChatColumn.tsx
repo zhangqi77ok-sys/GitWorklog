@@ -444,7 +444,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
       {/* 1. SINGLE-LINE FLUID GLASS RIBBON (Seamless Integration of Breadcrumb, Fork, Swarm & Actions) */}
       <div style={{
         height: '36px',
-        padding: '0 12px',
+        padding: '0 20px',
         borderBottom: '1px solid var(--border-subtle)',
         background: 'var(--bg-surface)',
         display: 'flex',
@@ -648,7 +648,8 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
       )}
 
       {/* Messages Stream Area */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        <div style={{ width: '100%', maxWidth: '960px', display: 'flex', flexDirection: 'column' }}>
         {/* Real Product Onboarding / Zero-State Welcome Screen */}
         {messages.length === 0 && (
           <div style={{
@@ -1190,18 +1191,20 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
         ))}
         {/* Auto-scroll anchor */}
         <div ref={messagesEndRef} style={{ height: '1px', width: '100%' }} />
+        </div>
       </div>
 
       {/* INPUT AREA: UNIFIED COMMAND DECK (Cursor Composer / Claude Desktop Grade) */}
       <div style={{
-        padding: '10px 16px 12px 16px',
+        padding: '12px 20px 14px 20px',
         borderTop: '1px solid var(--border-subtle)',
         position: 'relative',
         background: 'var(--bg-surface)',
         display: 'flex',
         flexDirection: 'column',
-        gap: '6px'
+        alignItems: 'center'
       }}>
+        <div style={{ width: '100%', maxWidth: '960px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
         {/* UNIFIED ELEVATED COMMAND CARD */}
         <div style={{
           background: 'var(--bg-surface-elevated)',
@@ -2365,12 +2368,13 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          padding: '0 4px',
+          padding: '2px 4px 0 4px',
           fontSize: '10px',
           color: 'var(--text-muted)'
         }}>
           <span>💡 提示：按 <strong>Enter</strong> 发送，<strong>Shift+Enter</strong> 换行 · 剪贴板文件或截图支持 <strong>Ctrl+V</strong> 粘贴挂载</span>
           <span>已自动先行注入项目级三大铁律与活跃 Rule 规则</span>
+        </div>
         </div>
         {/* Trajectory Snapshot Time Travel Modal */}
         <TrajectorySnapshotModal
