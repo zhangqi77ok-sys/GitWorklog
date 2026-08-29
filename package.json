@@ -6,7 +6,6 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "build:installer": "python build_installer.py",
     "preview": "vite preview",
     "tauri": "tauri"
   },

@@ -140,33 +140,23 @@ npm run dev
 npm run tauri dev
 ```
 
-### 4. 生产构建与自动化测试
+### 4. 生产构建与质量保障
 ```bash
-# 1. 构建前端静态资源 (TypeScript 类型检查 + Vite 优化压缩)
+# 构建前端静态资源 (TypeScript 类型检查 + Vite 优化压缩)
 npm run build
 
-# 2. 执行后端自动化测试治具 (10/10 测试 100% 绿色通过)
-uv run --with pytest --with pytest-asyncio pytest tests/test_cockpit_studio.py
-
-# 3. 构建桌面执行程序目录
-uv run --with pyinstaller pyinstaller CodeMind-Studio.spec --noconfirm
+# 运行 Tauri 原生桌面端构建
+npm run tauri build
 ```
 
-### 5. 打包为 Windows 单文件 EXE 安装向导 (Setup Wizard)
-系统自带现代化向导式安装包套件，一键产出单文件安装包：
-```bash
-# 压缩载荷并编译单文件图形化安装向导 CodeMind-Studio-Setup.exe
-python -c "import os, zipfile; zf = zipfile.ZipFile('app_payload.zip', 'w', zipfile.ZIP_DEFLATED, 6); [zf.write(os.path.join(r, f), os.path.relpath(os.path.join(r, f), 'dist/CodeMind-Studio')) for r, d, files in os.walk('dist/CodeMind-Studio') for f in files]; zf.close()"
-uv run --with pyinstaller pyinstaller CodeMind-Studio-Setup.spec --noconfirm
+---
 
-# 最终产物位置：
-# dist/CodeMind-Studio-Setup.exe (约 35MB 单文件自包含安装包)
-```
-- **GUI 安装体验**：双击即可调出暖米白风格安装向导，支持浏览更改安装路径，自动创建桌面与开始菜单快捷方式（`CodeMind-Hub.lnk`）；
-- **静默自动化安装**：支持流水线与运维脚本无弹窗静默部署：
-  ```cmd
-  CodeMind-Studio-Setup.exe /S /D=C:\Your\Target\Path
-  ```
+## 📜 研发规约与 SDD + TDD 驱动规范
+
+本项目全面推行 **规范驱动开发 (SDD) + 测试驱动开发 (TDD)**，已在 [`.agents/skills/sdd-tdd-workflow/`](.agents/skills/sdd-tdd-workflow/) 安装强制工作流 Skill，并在 [`AGENTS.md`](AGENTS.md) 中全局生效：
+1. **SDD (Spec-Driven)**：编码前必须在回复中先输出接口契约（Spec Contract）与边界设计；
+2. **TDD (Test-Driven)**：遵循 **Red (编写前置失败测试) → Green (编写最简通过代码) → Refactor (双向钢人审查)** 节奏；
+3. **架构参考**：详见核心设计文档 [`ARCHITECTURE.md`](ARCHITECTURE.md)。
 
 ---
 
