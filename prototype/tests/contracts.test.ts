@@ -174,7 +174,7 @@ describe('SDD Contract - AI Model Registry & Dynamic Switching', () => {
     expect(deepseek.provider).toBe('DeepSeek');
 
     const fallback = findModelById('non-existent-id');
-    expect(fallback.id).toBe('claude-3-5-sonnet');
+    expect(fallback.id).toBe('deepseek-v4-flash');
   });
 });
 

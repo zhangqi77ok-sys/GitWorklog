@@ -24,7 +24,8 @@ import {
   FolderGit2,
   Terminal,
   CheckCheck,
-  Undo2
+  Undo2,
+  Bot
 } from 'lucide-react';
 import {
   SessionItem,
@@ -130,6 +131,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
   const [lessonPrompt, setLessonPrompt] = useState('必须通过 StoreFactory 单例方法获取全局 Store，保持单状态源');
   const [activeRuleCount, setActiveRuleCount] = useState<number>(3);
   const [routingStrategy, setRoutingStrategy] = useState<RoutingStrategyId>('auto');
+  const [isAutoRouting, setIsAutoRouting] = useState<boolean>(false);
   const [showStrategyMenu, setShowStrategyMenu] = useState<boolean>(false);
   const [selectedTrajectoryStep, setSelectedTrajectoryStep] = useState<TrajectoryStepSnapshot | null>(null);
   const [isChangesetCollapsed, setIsChangesetCollapsed] = useState<boolean>(false);
@@ -1019,12 +1021,13 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                 )}
               </div>
 
-              {/* Intent-Driven Smart Auto Model Router Pill */}
+              {/* Model Selector & Smart Router Pill */}
               <div style={{ position: 'relative' }}>
                 <button
                   onClick={() => {
-                    setShowStrategyMenu(!showStrategyMenu);
+                    setShowModelMenu(!showModelMenu);
                     setShowModeMenu(false);
+                    setShowMentionMenu(false);
                     setShowRulesPopover(false);
                   }}
                   style={{
@@ -1033,62 +1036,145 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                     gap: '5px',
                     padding: '2px 8px',
                     borderRadius: '4px',
-                    background: 'rgba(217, 107, 39, 0.1)',
-                    border: '1px solid rgba(217, 107, 39, 0.3)',
-                    color: 'var(--accent)',
+                    background: isAutoRouting ? 'rgba(217, 107, 39, 0.1)' : 'var(--bg-base)',
+                    border: '1px solid var(--border-subtle)',
+                    color: isAutoRouting ? 'var(--accent)' : 'var(--text-primary)',
                     fontSize: '11px',
                     fontWeight: 600,
                     cursor: 'pointer'
                   }}
-                  title="意图自适应模型路由策略：点击切换偏好"
+                  title="点击切换大模型或开启意图自适应调度"
                 >
-                  <Sparkles size={11} />
-                  <span>🧠 自动调度: {resolveOptimalModel(inputText, routingStrategy).modelName} ({MODEL_ROUTING_STRATEGIES.find(s => s.id === routingStrategy)?.name})</span>
-                  <ChevronDown size={10} />
+                  {isAutoRouting ? (
+                    <>
+                      <Sparkles size={11} color="var(--accent)" />
+                      <span>🧠 自动调度: {resolveOptimalModel(inputText, routingStrategy).modelName}</span>
+                    </>
+                  ) : (
+                    <>
+                      <Bot size={12} color="var(--accent)" />
+                      <span>{currentModel.name}</span>
+                      {currentModel.badge && (
+                        <span style={{
+                          fontSize: '9px',
+                          padding: '0 4px',
+                          borderRadius: '3px',
+                          background: 'var(--accent-subtle)',
+                          color: 'var(--accent)',
+                          fontWeight: 500
+                        }}>
+                          {currentModel.badge}
+                        </span>
+                      )}
+                    </>
+                  )}
+                  <ChevronDown size={10} color="var(--text-muted)" />
                 </button>
 
-                {/* Strategy Dropdown */}
-                {showStrategyMenu && (
+                {/* Unified Model & Router Dropdown Menu */}
+                {showModelMenu && (
                   <div style={{
                     position: 'absolute',
                     bottom: '30px',
                     left: 0,
-                    width: '260px',
+                    width: '300px',
                     background: 'var(--bg-surface-elevated)',
                     border: '1px solid var(--border-strong)',
                     borderRadius: '6px',
                     boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
-                    padding: '6px',
+                    padding: '8px',
                     zIndex: 100,
                     display: 'flex',
                     flexDirection: 'column',
-                    gap: '4px'
+                    gap: '4px',
+                    maxHeight: '380px',
+                    overflowY: 'auto'
                   }}>
-                    <div style={{ fontSize: '10px', color: 'var(--text-muted)', padding: '2px 6px', fontWeight: 600 }}>
-                      意图驱动模型路由策略 (Auto Model Router)
+                    {/* Section 1: Direct Model Selection */}
+                    <div style={{ fontSize: '10px', color: 'var(--text-muted)', padding: '2px 6px', fontWeight: 700, borderBottom: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between' }}>
+                      <span>🌟 选择指定大模型</span>
+                      <span>{AVAILABLE_MODELS.length} 个可用</span>
                     </div>
-                    {MODEL_ROUTING_STRATEGIES.map(st => (
-                      <div
-                        key={st.id}
-                        onClick={() => {
-                          setRoutingStrategy(st.id);
-                          setShowStrategyMenu(false);
-                        }}
-                        style={{
-                          padding: '6px 8px',
-                          borderRadius: '4px',
-                          background: routingStrategy === st.id ? 'var(--accent-subtle)' : 'transparent',
-                          color: routingStrategy === st.id ? 'var(--accent)' : 'var(--text-primary)',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          gap: '2px'
-                        }}
-                      >
-                        <div style={{ fontSize: '11px', fontWeight: 600 }}>{st.name}</div>
-                        <div style={{ fontSize: '9.5px', color: 'var(--text-muted)' }}>{st.desc}</div>
-                      </div>
-                    ))}
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                      {AVAILABLE_MODELS.map(m => {
+                        const isSelected = !isAutoRouting && currentModel.id === m.id;
+                        return (
+                          <div
+                            key={m.id}
+                            onClick={() => {
+                              onSelectModel(m);
+                              setIsAutoRouting(false);
+                              setShowModelMenu(false);
+                            }}
+                            style={{
+                              padding: '5px 8px',
+                              borderRadius: '4px',
+                              background: isSelected ? 'var(--accent-subtle)' : 'transparent',
+                              border: isSelected ? '1px solid rgba(217, 107, 39, 0.3)' : '1px solid transparent',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              fontSize: '11px'
+                            }}
+                          >
+                            <div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                <span style={{ fontWeight: 600, color: isSelected ? 'var(--accent)' : 'var(--text-primary)' }}>{m.name}</span>
+                                {m.badge && (
+                                  <span style={{ fontSize: '9px', padding: '0 3px', borderRadius: '3px', background: 'rgba(0,0,0,0.05)', color: 'var(--text-muted)' }}>
+                                    {m.badge}
+                                  </span>
+                                )}
+                              </div>
+                              <div style={{ fontSize: '9.5px', color: 'var(--text-muted)', marginTop: '1px' }}>
+                                {m.provider} · {Math.round(m.contextLimit / 1000)}k · {m.description}
+                              </div>
+                            </div>
+                            {isSelected && <Check size={12} color="var(--accent)" />}
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Section 2: Intent-Driven Auto Router */}
+                    <div style={{ fontSize: '10px', color: 'var(--text-muted)', padding: '6px 6px 2px', fontWeight: 700, borderTop: '1px solid var(--border-subtle)', marginTop: '4px' }}>
+                      🧠 意图驱动智能自适应调度
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                      {MODEL_ROUTING_STRATEGIES.map(st => {
+                        const isSelected = isAutoRouting && routingStrategy === st.id;
+                        return (
+                          <div
+                            key={st.id}
+                            onClick={() => {
+                              setRoutingStrategy(st.id);
+                              setIsAutoRouting(true);
+                              setShowModelMenu(false);
+                            }}
+                            style={{
+                              padding: '5px 8px',
+                              borderRadius: '4px',
+                              background: isSelected ? 'var(--accent-subtle)' : 'transparent',
+                              border: isSelected ? '1px solid rgba(217, 107, 39, 0.3)' : '1px solid transparent',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              fontSize: '11px'
+                            }}
+                          >
+                            <div>
+                              <div style={{ fontWeight: 600, color: isSelected ? 'var(--accent)' : 'var(--text-primary)' }}>{st.name}</div>
+                              <div style={{ fontSize: '9.5px', color: 'var(--text-muted)' }}>{st.desc}</div>
+                            </div>
+                            {isSelected && <Check size={12} color="var(--accent)" />}
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
               </div>

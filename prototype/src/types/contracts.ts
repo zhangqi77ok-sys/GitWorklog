@@ -167,6 +167,36 @@ export interface AIModelOption {
 
 export const AVAILABLE_MODELS: AIModelOption[] = [
   {
+    id: 'deepseek-v4-flash',
+    name: 'DeepSeek V4 Flash',
+    provider: 'DeepSeek',
+    contextLimit: 128000,
+    inputPricePerM: 0.10,
+    outputPricePerM: 0.20,
+    badge: '极速闪电',
+    description: '极速响应与超低延迟高吞吐，适配星海大模型平台'
+  },
+  {
+    id: 'deepseek-r1',
+    name: 'DeepSeek-R1',
+    provider: 'DeepSeek',
+    contextLimit: 128000,
+    inputPricePerM: 0.55,
+    outputPricePerM: 2.19,
+    badge: '深度思考',
+    description: '长链条逻辑推演与算法突破'
+  },
+  {
+    id: 'deepseek-v3',
+    name: 'DeepSeek-V3',
+    provider: 'DeepSeek',
+    contextLimit: 128000,
+    inputPricePerM: 0.14,
+    outputPricePerM: 0.28,
+    badge: '极致性价比',
+    description: '超低成本与毫秒级高吞吐'
+  },
+  {
     id: 'claude-3-5-sonnet',
     name: 'Claude 3.5 Sonnet',
     provider: 'Anthropic',
@@ -185,26 +215,6 @@ export const AVAILABLE_MODELS: AIModelOption[] = [
     outputPricePerM: 15.0,
     badge: 'Thinking',
     description: '深度推理与混合思考模型'
-  },
-  {
-    id: 'deepseek-v3',
-    name: 'DeepSeek-V3',
-    provider: 'DeepSeek',
-    contextLimit: 128000,
-    inputPricePerM: 0.14,
-    outputPricePerM: 0.28,
-    badge: '极致性价比',
-    description: '超低成本与毫秒级高吞吐'
-  },
-  {
-    id: 'deepseek-v4-flash',
-    name: 'DeepSeek V4 Flash',
-    provider: 'DeepSeek',
-    contextLimit: 128000,
-    inputPricePerM: 0.10,
-    outputPricePerM: 0.20,
-    badge: '极速闪电',
-    description: '极速响应与超低延迟高吞吐，适配星海大模型平台'
   },
   {
     id: 'deepseek-r1',
