@@ -1285,3 +1285,66 @@ Act 模式中的工具调用采用单一 Agent Loop 控制器完成“思考 →
 1. 每次原型或桌面宿主代码完成后，必须运行 `npm run build:installer`（或 `python build_installer.py`），生成根目录 `dist/CodeMind-Studio-Setup.exe`；历史 `release/` EXE 不可替代当前构建产物。
 2. 构建链路固定为：前端构建 → 前端测试 → PyInstaller 核心宿主（嵌入 `prototype/dist`）→ PyInstaller 单文件安装向导。任一步失败即失败，不得以 Web 静态构建冒充安装包。
 3. 安装后启动程序必须监听 `127.0.0.1:8010`，`GET /health` 返回 200，`GET /` 返回完整 HTML；验证必须在脱离源码目录的安装位置执行。
+
+
+---
+
+## 4.42 目标驱动 Agent Loop 与独立验证器规约 (Goal-Driven Agent Loop & Verifier)
+
+### 1. 核心运行哲学
+```text
+Agent 不因执行了多少轮而结束，
+只因目标已经被验证完成而结束。
+```
+
+### 2. 闭环执行流程
+```text
+理解目标 ➔ 拆解验收项 ➔ 执行动作 ➔ 获取真实结果 ➔ 独立验证器验证 ➔ 未完成: 继续修复 ➔ 全部通过: 结束
+```
+
+### 3. 单任务卡片聚合 (AgentRunCard)
+- **拒绝多轮刷屏**：一次用户请求聚合成单个 Agent Run 卡片，多轮内部步骤以 Tag 链与目标验收清单（Acceptance Criteria Checklist）展现；
+- **展示要素**：目标描述、验收项状态（`✓ 通过` / `✕ 失败` / `○ 待验证`）、内部 Step 链（`[分析] ✓` ➔ `[修改] ✓` ➔ `[验证] ⟳`）、阻塞原因与人工确认入口；
+- **终止条件**：
+  - `completed`：全部验收项通过；
+  - `no_progress`：连续 2 轮无有效进展，主动暂停并向用户反馈；
+  - `blocked`：触发高危审批或外部不可抗力，进入阻塞等待状态。
+
+---
+
+## 4.43 三栏百分比流体拉伸与工作台体验规范 (Fluid Three-Column Layout & IDE Workspace)
+
+### 1. 布局结构与百分比分配
+```text
+┌─────────────────┬──────────────────────────────────────────┬──────────────────────┐
+│ 左侧导航与工程   │ 中间对话与 Agent Run                      │ 右侧 Monaco 工作台   │
+│ 12% ~ 35% (18%) │ flex: 1 (minWidth: 320px 自动填满)       │ 20% ~ 50% (32%)      │
+└─────────────────┴──────────────────────────────────────────┴──────────────────────┘
+```
+- **全局原生 Pointer 跟踪**：在 `window` 级别捕获 `pointermove` 与 `pointerup`，跨越 Monaco 编辑器、终端和 iframe 时绝不丢失拖拽焦点；
+- **实时百分比 HUD**：拖拽时显示实时比例气泡（如 `左侧 18%` / `工作台 32%`），双击任何分割线一键恢复默认比例；
+- **优雅折叠与自愈**：左侧向左拖拽压缩至 7% 以下自动折叠；窗口过小自适应弹性收缩并保证对话区最小 320px。
+
+### 2. 工作台体验规范 (IDE-Level Workspace)
+- **确定性空状态 (Actionable Empty State)**：
+  > 从对话中点击文件，或使用快捷键打开文件  
+  > 当前没有打开任何工作区文件。按 `Ctrl + P` 快速检索并打开工程文件。
+- **路径面包屑 (Breadcrumbs)**：工作台顶部标题栏实时显示完整路径（如 `工作台 / src/App.tsx`）；
+- **多文件 Tab 工作流 (Multi-Tab)**：支持多文件并发编辑、活动状态高亮与独立关闭。
+
+---
+
+## 4.44 统一宿主安全网关与文件真实闭环 (HostGateway & openFile)
+
+### 1. 统一文件打开入口 (`openFile(path, line)`)
+所有文件打开请求（Command Palette、Changeset Diff、搜索、错误堆栈、对话代码块）必须调用统一通道 `handleOpenFile(path, fileName, line)`，直达右侧工作台并异步拉取物理磁盘内容与行号定位。
+
+### 2. 统一宿主安全网关 (`HostGatewayService`)
+前端禁止散落调用底层接口，统一经过 `HostGateway`：
+```text
+Agent 执行请求 ➔ SecurityShield (脱敏) ➔ SandboxGuard (分类) ➔ HostGateway ➔ Python Host (/api/terminal/exec)
+```
+高危指令由宿主物理拦截，拒绝前端绕过。
+
+### 3. Git 影子快照与真实物理回滚
+快照回滚直通 `revertCheckpoint`，执行底层 `git checkout <ref> -- .` 与 `git clean -fd`，真实恢复磁盘物理文件并同步刷新工作台。

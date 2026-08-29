@@ -217,3 +217,39 @@ sequenceDiagram
 构建入口为根 `build_installer.py` 与 `npm run build:installer`。该入口先构建和验证 `prototype`，再将 `prototype/dist` 作为数据资源嵌入窗口化 Python 宿主 `CodeMind-Studio.exe`，最后将核心 EXE 嵌入窗口化单文件安装向导 `CodeMind-Studio-Setup.exe`。
 
 安装后宿主固定监听 `127.0.0.1:8010`：`/health` 供进程探活，`/` 提供已嵌入的静态前端。构建和验证都使用当前源码，绝不拷贝 `release/` 内的历史二进制。Tauri 链路保留为后续主轴迁移目标；在其完整构建脚本落地前，当前受支持的 Windows 安装器采用这一可复现的 Python 宿主链路。
+
+
+---
+
+## 🏛️ 八、宿主网关与三栏百分比流体架构 (HostGateway & Layout Engine)
+
+```mermaid
+graph TB
+    subgraph View ["1. 表现层与流体布局 (React 19)"]
+        LeftCol["LeftPanel (18% 百分比自适应 · 12%~35%)"]
+        ChatCol["ChatColumn (flex: 1 · 最小 320px 弹性自适应)"]
+        WorkCol["EditorWorkspace (32% 百分比自适应 · 20%~50%)"]
+        AgentRunView["AgentRunCard (目标验收清单 + 内部 Step 链路)"]
+    end
+
+    subgraph SecurityGateway ["2. 统一宿主安全网关 (HostGateway)"]
+        Shield["SecurityShield (敏感凭据脱敏审查)"]
+        Guard["SandboxGuard (破坏性指令分类与沙箱阻断)"]
+        Gateway["HostGatewayService (统一 IPC 抽象与派发)"]
+    end
+
+    subgraph DesktopHost ["3. 桌面宿主服务 (Python Desktop Core)"]
+        TermExec["/api/terminal/exec (命令执行与管道捕获)"]
+        FSReadWrite["/api/fs/read & /api/fs/write (文件原子 IO)"]
+        GitShadowEngine["/api/git/checkpoint & /api/git/revert (物理文件级影子快照与回滚)"]
+    end
+
+    View --> SecurityGateway
+    Shield --> Guard --> Gateway
+    Gateway --> TermExec & FSReadWrite & GitShadowEngine
+```
+
+### 核心架构原则
+1. **单一入口 openFile**：全链路收敛为 `handleOpenFile(path, fileName, line)`；
+2. **百分比流体拖拽**：基于全局 `PointerEvent` 监听与百分比弹性分配，双击复位；
+3. **真实物理闭环**：杜绝模拟 Toast，回滚与读写直接作用于磁盘与 Git 检查点。
