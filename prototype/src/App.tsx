@@ -1,3 +1,4 @@
+import { hostGateway } from './services/hostGateway';
 // ────────────────────────────────────────────────────────────
 // 🧠 CONTEXT TELEMETRY & SMART AUTO-COMPRESSION ENGINE
 // ────────────────────────────────────────────────────────────
@@ -721,40 +722,22 @@ export const App: React.FC = () => {
 
   const parseActionsFromContent = parseAgentActions;
 
-  // Execute one parsed action on the host. A non-zero command exit code is always failure.
+  // Execute one parsed action on the host via unified HostGateway with SandboxGuard & SecurityShield.
   const executeActionOnHost = async (action: AgentAction): Promise<ActionResult> => {
     if (action.type === 'write_file') {
-      try {
-        const res = await fetch('/api/fs/write', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ path: action.target, content: action.code })
-        });
-        const data = await res.json();
-        return data.success
-          ? createActionResult(action, 'success', { fileSize: data.size })
-          : createActionResult(action, 'failed', { error: data.error || '写入失败' });
-      } catch (e: any) {
-        return createActionResult(action, 'failed', { error: e.message || '网络连接异常' });
-      }
+      const res = await hostGateway.writeFile(action.target, action.code);
+      return res.success
+        ? createActionResult(action, 'success', { fileSize: res.size })
+        : createActionResult(action, 'failed', { error: res.error || '写入失败' });
     }
 
-    try {
-      const res = await fetch('/api/terminal/exec', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ command: action.code })
-      });
-      const data = await res.json();
-      const succeeded = Boolean(data.success) && (typeof data.exitCode !== 'number' || data.exitCode === 0);
-      return createActionResult(action, succeeded ? 'success' : 'failed', {
-        output: data.stdout,
-        error: data.stderr || data.error,
-        exitCode: data.exitCode
-      });
-    } catch (e: any) {
-      return createActionResult(action, 'failed', { error: e.message || '无法连接宿主执行引擎' });
-    }
+    const activeSession = sessions.find(s => s.id === currentSessionId) || sessions[0];
+    const execRes = await hostGateway.executeCommand(action.code, { cwd: activeSession.projectPath });
+    return createActionResult(action, execRes.success ? 'success' : 'failed', {
+      output: execRes.stdout,
+      error: execRes.stderr || execRes.error,
+      exitCode: execRes.exitCode
+    });
   };
 
   const formatExecutionFeedback = formatAgentExecutionFeedback;
@@ -1607,7 +1590,7 @@ Tcode 已通过宿主磁盘与终端桥接将工程提供给你。` : '当前处
               onResolveOptions={handleResolveOptions}
               onForkMessage={handleForkSessionFromMessage}
               onNavigateDiff={(target) => {
-                setRightWorkspaceOpen(true);
+                handleOpenFile(target.filePath, undefined, target.targetLine);
                 setActiveDiffTarget({ ...target, highlightToken: `diff-${target.fileId}` });
               }}
             />
@@ -1693,7 +1676,7 @@ Tcode 已通过宿主磁盘与终端桥接将工程提供给你。` : '当前处
         onClose={() => setIsPaletteOpen(false)}
         mode={paletteMode}
         onOpenFile={(path) => {
-          setRightWorkspaceOpen(true);
+          handleOpenFile(path);
         }}
         onRunAction={(actionId) => {
           if (actionId === 'run-ci') {
