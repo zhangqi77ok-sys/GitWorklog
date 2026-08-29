@@ -1211,3 +1211,8 @@ To github.com:zhangqi77ok-sys/agent-learning.git
 1. **历史消息快照隔离与权限切换免疫 (Historic Message Permission Snapshotting)**：
    - 彻底修复当用户在底部工作台切换权限模式（如切换为逐次审核 / 智能自决）时，历史已经完成的对话消息卡片被动重新渲染、徽标突变以及被动触发写盘状态的问题；
    - 消息在生成时自动对当时的 `permissionPolicy` 进行快照封装，历史卡片自动处于只读静止状态（`autoExecute: false`），无论后续如何切换全局权限，历史消息状态均 100% 保持稳定独立、绝不发生回溯污染！
+
+### 12.29 人机协同审批弹窗挂载激活与动态连续响应引擎 (v1.4.6)
+1. **人机协同审批弹窗挂载激活 (ActionApprovalModal Engine Active Wiring)**：
+   - 彻底修复 `ActionApprovalModal` 在主聊天流树中未挂载渲染的问题；
+   - 当大模型在会话中生成 `write_file` 物理写盘或 `run_command` 终端命令，且处于【逐次审核】或【风险熔断】策略时，屏幕正下方立即高保真弹出悬浮交互审批窗口，支持【执行】、【不执行】与【当前对话所有都执行】，并具备连续队列自动弹出与 Enter/Esc/Shift+Enter 全键盘盲操能力！
