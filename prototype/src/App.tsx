@@ -147,6 +147,7 @@ export const App: React.FC = () => {
 
   // Per-Session Message Map (100% Isolated: each session has its own message stream)
   const [sessionMessages, setSessionMessages] = useState<Record<string, ChatMessage[]>>(loadSavedSessionMessages());
+  const [isStreaming, setIsStreaming] = useState<boolean>(false);
 
   // Messages for active session
   const messages = sessionMessages[currentSessionId] || [];
@@ -350,7 +351,7 @@ export const App: React.FC = () => {
   };
 
   const handleSendMessage = async (text: string) => {
-    if (!text.trim()) return;
+    if (!text.trim() || isStreaming) return;
 
     const userMsg: ChatMessage = {
       id: `msg-${Date.now()}`,
@@ -358,9 +359,7 @@ export const App: React.FC = () => {
       content: text,
       timestamp: Date.now()
     };
-    setMessages(prev => [...prev, userMsg]);
 
-    // Active assistant message placeholder for real streaming
     const assistantId = `reply-${Date.now()}`;
     const assistantMsg: ChatMessage = {
       id: assistantId,
@@ -369,7 +368,13 @@ export const App: React.FC = () => {
       timestamp: Date.now(),
       auditTag: `⚡ ${currentModel.name} 真实流式响应`
     };
-    setMessages(prev => [...prev, assistantMsg]);
+
+    // Append both to current session in memory
+    setSessionMessages(prev => ({
+      ...prev,
+      [currentSessionId]: [...(prev[currentSessionId] || []), userMsg, assistantMsg]
+    }));
+    setIsStreaming(true);
 
     try {
       const savedProviders = loadSavedProviders();
@@ -380,9 +385,10 @@ export const App: React.FC = () => {
       const apiKey = provider?.apiKey?.trim() || 'sk-xh-ZVKvOZcvzLKxUSWECPQ3mUKfP9q9sxrz14NQmtoQ000';
       const targetModel = currentModel.id.includes('deepseek') ? 'deepseek-v4-flash' : currentModel.id;
 
+      const currentList = sessionMessages[currentSessionId] || [];
       const apiMessages = [
         { role: 'system', content: '你是 CodeMind-Hub 接入的真实生产级大模型助手。请针对用户的需求给出专业、精炼且正确的回答与代码。' },
-        ...messages.slice(-6).map(m => ({ role: m.role, content: m.content })),
+        ...currentList.slice(-6).map(m => ({ role: m.role, content: m.content })),
         { role: 'user', content: text }
       ];
 
@@ -429,7 +435,12 @@ export const App: React.FC = () => {
                 const delta = parsed.choices?.[0]?.delta?.content || '';
                 if (delta) {
                   accumulated += delta;
-                  setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, content: accumulated } : m));
+                  // Fast non-blocking in-memory state update for smooth typewriter streaming
+                  setSessionMessages(prev => {
+                    const list = prev[currentSessionId] || [];
+                    const updated = list.map(m => m.id === assistantId ? { ...m, content: accumulated } : m);
+                    return { ...prev, [currentSessionId]: updated };
+                  });
                 }
               } catch (e) {}
             }
@@ -439,7 +450,11 @@ export const App: React.FC = () => {
 
       if (!accumulated.trim()) {
         accumulated = '（大模型已生成完成）';
-        setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, content: accumulated } : m));
+        setSessionMessages(prev => {
+          const list = prev[currentSessionId] || [];
+          const updated = list.map(m => m.id === assistantId ? { ...m, content: accumulated } : m);
+          return { ...prev, [currentSessionId]: updated };
+        });
       }
 
       // Realistic Token increment
@@ -464,12 +479,25 @@ export const App: React.FC = () => {
         return updated;
       });
 
+      // Save complete session messages to localStorage ONCE at end of stream
+      setSessionMessages(latest => {
+        saveSessionMessagesToStorage(latest);
+        return latest;
+      });
+
     } catch (err: any) {
-      setMessages(prev => prev.map(m => m.id === assistantId ? {
-        ...m,
-        content: `✕ 大模型连接异常: ${err.message}。请在左侧系统设置中检查服务商 Base URL 与 API Key 凭据。`,
-        auditTag: '⚠️ 网络或鉴权异常'
-      } : m));
+      setSessionMessages(prev => {
+        const list = prev[currentSessionId] || [];
+        const updated = list.map(m => m.id === assistantId ? {
+          ...m,
+          content: `✕ 大模型连接异常: ${err.message}。请在左侧系统设置中检查服务商 Base URL 与 API Key 凭据。`,
+          auditTag: '⚠️ 网络或鉴权异常'
+        } : m);
+        saveSessionMessagesToStorage({ ...prev, [currentSessionId]: updated });
+        return { ...prev, [currentSessionId]: updated };
+      });
+    } finally {
+      setIsStreaming(false);
     }
   };
 

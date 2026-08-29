@@ -81,6 +81,7 @@ interface ChatColumnProps {
   onSelectModel: (model: AIModelOption) => void;
   permissionPolicy: PermissionPolicy;
   setPermissionPolicy: (p: PermissionPolicy) => void;
+  isStreaming?: boolean;
   onSendMessage: (text: string) => void;
   onResolveOptions: (messageId: string, selectedIds: string[], customInput?: string) => void;
   onForkMessage?: (fromMessageId: string) => void;
@@ -99,6 +100,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
   onSelectModel,
   permissionPolicy,
   setPermissionPolicy,
+  isStreaming = false,
   onSendMessage,
   onResolveOptions,
   onForkMessage,
@@ -260,24 +262,37 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', overflowX: 'auto', padding: '0 4px' }}>
           {pipelineMode === 'swarm' ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--accent)' }}>🐝 Swarm 协同:</span>
-              {messages.length > 0 ? (
-                <>
-                  <span style={{ padding: '1px 5px', borderRadius: '3px', background: 'rgba(22, 163, 74, 0.1)', color: '#16A34A', fontSize: '9.5px', fontWeight: 600 }}>
-                    🧭 R1 ✓
-                  </span>
-                  <span style={{ color: 'var(--text-muted)', fontSize: '9px' }}>➔</span>
-                  <span style={{ padding: '1px 5px', borderRadius: '3px', background: 'rgba(217, 107, 39, 0.15)', border: '1px solid var(--accent)', color: 'var(--accent)', fontSize: '9.5px', fontWeight: 700 }}>
-                    ⚡ Sonnet (50%)
-                  </span>
-                  <span style={{ color: 'var(--text-muted)', fontSize: '9px' }}>➔</span>
-                  <span style={{ padding: '1px 5px', borderRadius: '3px', background: 'var(--bg-base)', color: 'var(--text-muted)', fontSize: '9.5px' }}>
-                    🧪 GLM
-                  </span>
-                </>
+              <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--accent)' }}>🐝 调度拓扑:</span>
+              {isStreaming ? (
+                <span style={{
+                  padding: '1px 8px',
+                  borderRadius: '10px',
+                  background: 'rgba(217, 107, 39, 0.15)',
+                  border: '1px solid var(--accent)',
+                  color: 'var(--accent)',
+                  fontSize: '9.5px',
+                  fontWeight: 700,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}>
+                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--accent)' }} />
+                  <span>⚡ {currentModel.name} 实时流式响应中...</span>
+                </span>
               ) : (
-                <span style={{ padding: '1px 6px', borderRadius: '3px', background: 'rgba(22, 163, 74, 0.08)', color: '#16A34A', fontSize: '9.5px', fontWeight: 600 }}>
-                  ● 待命中 (就绪)
+                <span style={{
+                  padding: '1px 6px',
+                  borderRadius: '3px',
+                  background: 'rgba(22, 163, 74, 0.08)',
+                  color: '#16A34A',
+                  fontSize: '9.5px',
+                  fontWeight: 600,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}>
+                  <span>● 待命中 (就绪)</span>
+                  <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>· {currentModel.name}</span>
                 </span>
               )}
             </div>
@@ -379,22 +394,20 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
         </div>
       </div>
 
-      {/* Task Plan Breathing Capsule (Only shown when there are active messages/task) */}
-      {messages.length > 0 && (
+      {/* Task Plan Breathing Capsule: Dynamic lifecycle (Only shown during active generation) */}
+      {isStreaming && (
         <div style={{
           borderBottom: '1px solid var(--border-subtle)',
-          background: 'var(--bg-surface)',
+          background: 'rgba(217, 107, 39, 0.04)',
           transition: 'all 0.2s ease'
         }}>
           <div
-            onClick={() => setPlanExpanded(!planExpanded)}
             style={{
               padding: '6px 12px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
               fontSize: '11px',
-              cursor: 'pointer',
               fontWeight: 600
             }}
           >
@@ -405,27 +418,10 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                 borderRadius: '50%',
                 background: 'var(--accent)'
               }} />
-              <span>📋 任务执行进度: 正在分析与生成代码</span>
+              <span style={{ color: 'var(--accent)' }}>⚡ 正在实时流式生成: {currentModel.name} ...</span>
             </div>
-            {planExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>SSE 流式通道已连通</span>
           </div>
-
-          {planExpanded && (
-            <div style={{ padding: '6px 12px 10px', fontSize: '11px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#16A34A' }}>
-                <CheckCircle size={13} />
-                <span>1. 扫描工作区 AST 依赖与工程规则</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--accent)', fontWeight: 600 }}>
-                <Clock size={13} />
-                <span>2. 实时调用大模型生成架构方案</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-muted)' }}>
-                <span style={{ width: '13px', textAlign: 'center' }}>○</span>
-                <span>3. 校验 AST 语法并打上安全影子快照</span>
-              </div>
-            </div>
-          )}
         </div>
       )}
 
@@ -591,9 +587,21 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                 background: msg.role === 'user' ? 'var(--bg-surface)' : 'var(--bg-base)',
                 border: '1px solid var(--border-subtle)',
                 fontSize: '12px',
-                lineHeight: 1.6
+                lineHeight: 1.6,
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word'
               }}>
                 {msg.content}
+                {isStreaming && msg.role === 'assistant' && msg.id === messages[messages.length - 1]?.id && (
+                  <span style={{
+                    display: 'inline-block',
+                    width: '6px',
+                    height: '14px',
+                    background: 'var(--accent)',
+                    marginLeft: '3px',
+                    verticalAlign: 'middle'
+                  }} />
+                )}
               </div>
             )}
 
@@ -851,7 +859,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
           position: 'relative'
         }}>
           {/* Self-Learning Lessons Pill & Confirmation Card */}
-          {messages.length > 0 && !experienceLearned && !showLessonConfirm && (
+          {false && (
             <div style={{
               position: 'absolute',
               top: '-28px',
