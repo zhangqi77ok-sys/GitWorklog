@@ -307,12 +307,15 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
           <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-            工作台 · 高精代码与终端
+            工作台
           </span>
-          {currentFile && (
-            <span style={{ fontSize: '11.5px', color: 'var(--accent)', fontWeight: 600 }}>
-              📁 {currentFile.name}
-            </span>
+          {currentFile ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11.5px', color: 'var(--text-secondary)' }}>
+              <span style={{ color: 'var(--text-muted)' }}>/</span>
+              <span style={{ color: 'var(--accent)', fontWeight: 600 }}>{currentFile.path}</span>
+            </div>
+          ) : (
+            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>· 无活动文件</span>
           )}
         </div>
 
@@ -385,7 +388,7 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
             </div>
           )}
 
-          {/* Editor Body: Clean Empty State OR Real Code Lines */}
+          {/* Editor Body: Clean Empty State with Actionable Guidance OR Real Code Lines */}
           {openedFiles.length === 0 ? (
             <div style={{
               flex: 1,
@@ -394,14 +397,30 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
               alignItems: 'center',
               justifyContent: 'center',
               color: 'var(--text-muted)',
-              gap: '10px'
+              gap: '12px',
+              padding: '24px',
+              textAlign: 'center'
             }}>
-              <FileCode size={36} color="var(--border-strong)" />
-              <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)' }}>
-                未打开任何代码文件
+              <div style={{
+                width: '48px',
+                height: '48px',
+                borderRadius: '12px',
+                background: 'var(--bg-surface)',
+                border: '1px solid var(--border-subtle)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}>
+                <FileCode size={24} color="var(--accent)" />
               </div>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                从左侧【项目代码】或按 <kbd style={{ padding: '2px 6px', borderRadius: '4px', background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', color: 'var(--text-primary)' }}>Ctrl+P</kbd> 选择文件打开编辑
+              <div>
+                <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>
+                  从对话中点击文件，或使用快捷键打开文件
+                </div>
+                <div style={{ fontSize: '11.5px', color: 'var(--text-muted)', lineHeight: '1.6' }}>
+                  当前没有打开任何工作区文件。<br />
+                  按 <kbd style={{ padding: '2px 6px', borderRadius: '4px', background: 'var(--bg-surface)', border: '1px solid var(--border-strong)', color: 'var(--text-primary)', fontWeight: 600 }}>Ctrl + P</kbd> 快速检索并打开工程文件。
+                </div>
               </div>
             </div>
           ) : (
