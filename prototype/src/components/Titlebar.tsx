@@ -32,20 +32,26 @@ export const Titlebar: React.FC<TitlebarProps> = ({
   ).toFixed(1);
 
   return (
-    <header style={{
-      height: '38px',
-      background: 'var(--bg-surface)',
-      borderBottom: '1px solid var(--border-subtle)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      padding: '0 12px',
-      fontSize: '12px',
-      position: 'relative',
-      zIndex: 50
-    }}>
+    <header
+      className="pywebview-drag-region"
+      style={{
+        height: '38px',
+        background: 'var(--bg-surface)',
+        borderBottom: '1px solid var(--border-subtle)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '0 0 0 12px',
+        fontSize: '12px',
+        position: 'relative',
+        zIndex: 50,
+        userSelect: 'none',
+        WebkitUserSelect: 'none',
+        WebkitAppRegion: 'drag'
+      } as any}
+    >
       {/* Left: Brand & Breadcrumb */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+      <div className="pywebview-no-drag" style={{ display: 'flex', alignItems: 'center', gap: '8px', WebkitAppRegion: 'no-drag' } as any}>
         <div style={{
           width: '18px',
           height: '18px',
@@ -99,7 +105,7 @@ export const Titlebar: React.FC<TitlebarProps> = ({
       </div>
 
       {/* Right: Token Telemetry HUD Capsule & Window controls */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+      <div className="pywebview-no-drag" style={{ display: 'flex', alignItems: 'center', gap: '12px', WebkitAppRegion: 'no-drag' } as any}>
         {/* Air-gapped PII Shield Capsule */}
         <div style={{
           display: 'flex',
@@ -219,6 +225,86 @@ export const Titlebar: React.FC<TitlebarProps> = ({
           )}
         </div>
 
+      </div>
+
+      {/* Far Right: Native Frameless Window Action Controls (Minimize, Maximize, Close) */}
+      <div
+        className="pywebview-no-drag"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          height: '100%',
+          WebkitAppRegion: 'no-drag'
+        } as any}
+      >
+        <button
+          onClick={() => fetch('/api/window/minimize')}
+          style={{
+            width: '44px',
+            height: '100%',
+            background: 'transparent',
+            border: 'none',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            color: 'var(--text-secondary)',
+            transition: 'background 0.15s ease'
+          }}
+          onMouseEnter={e => e.currentTarget.style.background = 'rgba(0, 0, 0, 0.06)'}
+          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+          title="最小化"
+        >
+          <Minus size={14} />
+        </button>
+
+        <button
+          onClick={() => fetch('/api/window/maximize')}
+          style={{
+            width: '44px',
+            height: '100%',
+            background: 'transparent',
+            border: 'none',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            color: 'var(--text-secondary)',
+            transition: 'background 0.15s ease'
+          }}
+          onMouseEnter={e => e.currentTarget.style.background = 'rgba(0, 0, 0, 0.06)'}
+          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+          title="最大化 / 还原"
+        >
+          <Square size={12} />
+        </button>
+
+        <button
+          onClick={() => fetch('/api/window/close')}
+          style={{
+            width: '46px',
+            height: '100%',
+            background: 'transparent',
+            border: 'none',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            color: 'var(--text-secondary)',
+            transition: 'all 0.15s ease'
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.background = '#E81123';
+            e.currentTarget.style.color = '#FFFFFF';
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.background = 'transparent';
+            e.currentTarget.style.color = 'var(--text-secondary)';
+          }}
+          title="关闭"
+        >
+          <X size={14} />
+        </button>
       </div>
     </header>
   );

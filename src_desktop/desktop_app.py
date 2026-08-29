@@ -1,3 +1,4 @@
+global_window = None
 import os
 import sys
 import json
@@ -248,6 +249,37 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_header('Content-Type', 'application/json')
                 self.end_headers()
                 self.wfile.write(json.dumps({'error': str(e)}).encode('utf-8'))
+            return
+
+        # 6. Frameless Window Controls API
+        if parsed.path == '/api/window/minimize':
+            if global_window:
+                global_window.minimize()
+            self.send_response(200)
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(b'{"success": true}')
+            return
+
+        if parsed.path == '/api/window/maximize':
+            if global_window:
+                global_window.toggle_fullscreen()
+            self.send_response(200)
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(b'{"success": true}')
+            return
+
+        if parsed.path == '/api/window/close':
+            self.send_response(200)
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(b'{"success": true}')
+            if global_window:
+                threading.Timer(0.1, global_window.destroy).start()
             return
 
         # 5. Persistent Local Storage Read from Disk (Never lost on upgrade)
@@ -522,8 +554,11 @@ if __name__ == '__main__':
         height=900,
         min_size=(1024, 640),
         text_select=True,
-        zoomable=True
+        zoomable=True,
+        frameless=True,
+        easy_drag=True
     )
+    global_window = window
     appdata = os.environ.get('LOCALAPPDATA', os.path.expanduser('~'))
     webview_data = os.path.join(appdata, 'CodeMind-Hub', 'webview_profile')
     os.makedirs(webview_data, exist_ok=True)
