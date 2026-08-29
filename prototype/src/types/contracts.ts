@@ -2544,8 +2544,54 @@ export const STORAGE_KEYS = {
   OPENAI_PROTOCOL: 'codemind_openai_protocol',
   SESSIONS: 'codemind_sessions',
   ACTIVE_SESSION_ID: 'codemind_active_session_id',
+  SESSION_MESSAGES: 'codemind_session_messages',
   PROJECTS: 'codemind_projects'
 };
+
+export function loadSavedSessions(): SessionItem[] {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEYS.SESSIONS);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch (e) {}
+  return [
+    {
+      id: 'session-1',
+      tier1: 'global',
+      title: '新的自由会话',
+      tags: ['new'],
+      messagesCount: 0,
+      totalTokens: 0,
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    }
+  ];
+}
+
+export function saveSessionsToStorage(sessions: SessionItem[]): void {
+  try {
+    localStorage.setItem(STORAGE_KEYS.SESSIONS, JSON.stringify(sessions));
+  } catch (e) {}
+}
+
+export function loadSavedSessionMessages(): Record<string, ChatMessage[]> {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEYS.SESSION_MESSAGES);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (parsed && typeof parsed === 'object') return parsed;
+    }
+  } catch (e) {}
+  return {};
+}
+
+export function saveSessionMessagesToStorage(messagesMap: Record<string, ChatMessage[]>): void {
+  try {
+    localStorage.setItem(STORAGE_KEYS.SESSION_MESSAGES, JSON.stringify(messagesMap));
+  } catch (e) {}
+}
 
 export function loadSavedProviders(): ModelProviderItem[] {
   try {

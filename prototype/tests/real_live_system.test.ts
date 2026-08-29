@@ -4,6 +4,11 @@ import {
   saveProvidersToStorage,
   loadSavedProjects,
   saveProjectsToStorage,
+  loadSavedSessions,
+  saveSessionsToStorage,
+  loadSavedSessionMessages,
+  saveSessionMessagesToStorage,
+  ChatMessage,
   createEmptySession,
   isFirstLaunchState,
   evaluateSandboxCommandSafety,
@@ -74,6 +79,35 @@ describe('Real Production Lifecycle & Persistence Contracts', () => {
     expect(deepseek).toBeDefined();
     expect(deepseek?.baseUrl).toContain('platform.ai.hixinghai.com');
     expect(deepseek?.apiKey).toContain('sk-xh-');
+  });
+
+
+  it('should isolate chat messages strictly per session without cross-session pollution', () => {
+    const session1Id = 'session-global-1';
+    const session2Id = 'session-project-agent-learning';
+
+    const mockMessagesMap: Record<string, ChatMessage[]> = {
+      [session1Id]: [
+        { id: 'm1', role: 'user', content: '全局自由提问', timestamp: 1000 },
+        { id: 'm2', role: 'assistant', content: '这是全局回答', timestamp: 1001 }
+      ],
+      [session2Id]: [
+        { id: 'm3', role: 'user', content: '审查当前工程架构', timestamp: 2000 }
+      ]
+    };
+
+    saveSessionMessagesToStorage(mockMessagesMap);
+    const loaded = loadSavedSessionMessages();
+
+    expect(loaded[session1Id]).toHaveLength(2);
+    expect(loaded[session1Id][0].content).toBe('全局自由提问');
+
+    expect(loaded[session2Id]).toHaveLength(1);
+    expect(loaded[session2Id][0].content).toBe('审查当前工程架构');
+
+    // Verify isolation: session2 does not contain session1 messages
+    const session2Contents = loaded[session2Id].map(m => m.content);
+    expect(session2Contents).not.toContain('全局自由提问');
   });
 
   it('should persist modified provider settings and reload accurately', () => {

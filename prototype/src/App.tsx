@@ -31,7 +31,11 @@ import {
   loadSavedProviders,
   loadSavedProjects,
   saveProjectsToStorage,
-  resolveApiEndpoint
+  resolveApiEndpoint,
+  loadSavedSessions,
+  saveSessionsToStorage,
+  loadSavedSessionMessages,
+  saveSessionMessagesToStorage
 } from './types/contracts';
 
 export const App: React.FC = () => {
@@ -74,7 +78,10 @@ export const App: React.FC = () => {
   };
 
   const [activeNav, setActiveNav] = useState('sessions');
-  const [currentSessionId, setCurrentSessionId] = useState('session-2');
+  const [currentSessionId, setCurrentSessionId] = useState<string>(() => {
+    const initialSessions = loadSavedSessions();
+    return initialSessions[0]?.id || 'session-1';
+  });
   const [rightWorkspaceOpen, setRightWorkspaceOpen] = useState<boolean>(false);
   const [workMode, setWorkMode] = useState<WorkMode>('act');
   const [currentModel, setCurrentModel] = useState<AIModelOption>(AVAILABLE_MODELS[0]);
@@ -135,29 +142,31 @@ export const App: React.FC = () => {
     contextMaxTokens: 128000
   });
 
-  // Hierarchical Sessions (Clean initial state)
-  const [sessions, setSessions] = useState<SessionItem[]>([
-    {
-      id: 'session-1',
-      tier1: 'global',
-      title: '新的自由会话',
-      tags: ['new'],
-      messagesCount: 0,
-      totalTokens: 0,
-      createdAt: Date.now(),
-      updatedAt: Date.now()
-    }
-  ]);
+  // Hierarchical Sessions with Local Persistence
+  const [sessions, setSessions] = useState<SessionItem[]>(loadSavedSessions());
 
-  // Messages (Clean empty on initial launch)
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  // Per-Session Message Map (100% Isolated: each session has its own message stream)
+  const [sessionMessages, setSessionMessages] = useState<Record<string, ChatMessage[]>>(loadSavedSessionMessages());
+
+  // Messages for active session
+  const messages = sessionMessages[currentSessionId] || [];
+  const setMessages = (updater: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])) => {
+    setSessionMessages(prevMap => {
+      const prevList = prevMap[currentSessionId] || [];
+      const newList = typeof updater === 'function' ? updater(prevList) : updater;
+      const updatedMap = { ...prevMap, [currentSessionId]: newList };
+      saveSessionMessagesToStorage(updatedMap);
+      return updatedMap;
+    });
+  };
 
   const activeSession = sessions.find(s => s.id === currentSessionId) || sessions[0];
 
   // Session Tree Operations
   const handleNewGlobalSession = () => {
+    const newSessionId = `session-${Date.now()}`;
     const newSession: SessionItem = {
-      id: `session-${Date.now()}`,
+      id: newSessionId,
       tier1: 'global',
       title: '新的全局自由会话',
       tags: ['docs'],
@@ -166,37 +175,64 @@ export const App: React.FC = () => {
       createdAt: Date.now(),
       updatedAt: Date.now()
     };
-    setSessions(prev => [newSession, ...prev]);
-    setCurrentSessionId(newSession.id);
+    setSessions(prev => {
+      const updated = [newSession, ...prev];
+      saveSessionsToStorage(updated);
+      return updated;
+    });
+    setSessionMessages(prev => {
+      const updated = { ...prev, [newSessionId]: [] };
+      saveSessionMessagesToStorage(updated);
+      return updated;
+    });
+    setCurrentSessionId(newSessionId);
   };
 
   const handleNewProjectSession = (projectId: string) => {
     const proj = projects.find(p => p.id === projectId);
+    const newSessionId = `session-proj-${Date.now()}`;
     const newSession: SessionItem = {
-      id: `session-${Date.now()}`,
+      id: newSessionId,
       tier1: 'project',
       projectId: projectId,
-      projectName: proj?.name || 'agent-learning',
+      projectName: proj?.name || 'project',
+      projectPath: proj?.path,
       gitBranch: proj?.gitBranch || 'main',
-      title: `新工程会话 (${proj?.name})`,
+      title: `新工程会话 (${proj?.name || 'project'})`,
       tags: ['feat'],
       messagesCount: 0,
       totalTokens: 0,
       createdAt: Date.now(),
       updatedAt: Date.now()
     };
-    setSessions(prev => [newSession, ...prev]);
-    setCurrentSessionId(newSession.id);
+    setSessions(prev => {
+      const updated = [newSession, ...prev];
+      saveSessionsToStorage(updated);
+      return updated;
+    });
+    setSessionMessages(prev => {
+      const updated = { ...prev, [newSessionId]: [] };
+      saveSessionMessagesToStorage(updated);
+      return updated;
+    });
+    setCurrentSessionId(newSessionId);
   };
 
 
   const handleDeleteSession = (id: string) => {
     setSessions(prev => {
       const remaining = prev.filter(s => s.id !== id);
+      saveSessionsToStorage(remaining);
       if (currentSessionId === id && remaining.length > 0) {
         setCurrentSessionId(remaining[0].id);
       }
       return remaining;
+    });
+    setSessionMessages(prev => {
+      const copy = { ...prev };
+      delete copy[id];
+      saveSessionMessagesToStorage(copy);
+      return copy;
     });
   };
 
@@ -223,23 +259,38 @@ export const App: React.FC = () => {
     const { projects: updatedProjects, newProject } = addProjectToWorkspace(projects, folderPath, 'main');
     setProjects(updatedProjects);
     saveProjectsToStorage(updatedProjects);
-    // Create an initial session under this new project
+
+    // Create a dedicated clean initial session under this new project (0 messages, completely isolated)
+    const newSessionId = `session-proj-${Date.now()}`;
     const newSession: SessionItem = {
-      id: `session-${Date.now()}`,
+      id: newSessionId,
       tier1: 'project',
       projectId: newProject.id,
       projectName: newProject.name,
       projectPath: newProject.path,
-      gitBranch: newProject.gitBranch,
-      title: `项目初始化对话 (${newProject.name})`,
-      tags: ['init'],
-      messagesCount: 1,
-      totalTokens: 1200,
+      gitBranch: newProject.gitBranch || 'main',
+      title: `${newProject.name} (主工程会话)`,
+      tags: ['project'],
+      messagesCount: 0,
+      totalTokens: 0,
       createdAt: Date.now(),
       updatedAt: Date.now()
     };
-    setSessions(prev => [newSession, ...prev]);
-    setCurrentSessionId(newSession.id);
+
+    setSessions(prev => {
+      const updated = [newSession, ...prev];
+      saveSessionsToStorage(updated);
+      return updated;
+    });
+
+    // Initialize clean empty message stream for the new project session
+    setSessionMessages(prev => {
+      const updated = { ...prev, [newSessionId]: [] };
+      saveSessionMessagesToStorage(updated);
+      return updated;
+    });
+
+    setCurrentSessionId(newSessionId);
   };
 
   const handleRemoveProject = (projectId: string) => {
@@ -400,6 +451,18 @@ export const App: React.FC = () => {
         completionTokens: prev.completionTokens + addedComp,
         estimatedCostUsd: prev.estimatedCostUsd + ((addedPrompt + addedComp) * 0.0000002)
       }));
+
+      // Update session messageCount and tokens
+      setSessions(prev => {
+        const updated = prev.map(s => s.id === currentSessionId ? {
+          ...s,
+          messagesCount: s.messagesCount + 2,
+          totalTokens: s.totalTokens + addedPrompt + addedComp,
+          updatedAt: Date.now()
+        } : s);
+        saveSessionsToStorage(updated);
+        return updated;
+      });
 
     } catch (err: any) {
       setMessages(prev => prev.map(m => m.id === assistantId ? {
