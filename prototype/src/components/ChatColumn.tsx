@@ -98,6 +98,7 @@ import { ThinkingBlock } from './ThinkingBlock';
 import { extractThinkingFromText, SLASH_COMMANDS, SlashCommandItem, loadSavedProfile, DeveloperProfile } from '../types/contracts';
 import { GitPullRequest, RotateCcw } from 'lucide-react';
 import type { AgentAction } from '../services/agentLoop';
+import { getContextTelemetry, compressModelContext } from '../services/contextTelemetry';
 
 interface ChatColumnProps {
   rightWorkspaceOpen: boolean;
@@ -828,21 +829,28 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
             </button>
           )}
 
-          {/* Context Telemetry HUD Capsule */}
+          {/* Context Telemetry HUD Capsule (Dynamic Real LLM Feed Telemetry) */}
           {(() => {
-            const rawChars = messages.reduce((acc, m) => acc + (m.content || '').length, 0);
-            const estimatedTokens = Math.ceil(rawChars / 3.5);
-            const totalPercent = Math.min(100, Math.max(1, Math.round((estimatedTokens / 128000) * 100)));
-            const convPercent = Math.max(1, Math.round(totalPercent * 0.95));
-            const steeringPercent = 1;
-            const toolsPercent = Math.max(0, totalPercent - convPercent - steeringPercent);
+            const limit = currentModel?.contextLimit || 131072;
+            const telemetry = getContextTelemetry(messages, limit);
+            
+            // Calculate real breakdown percentages
+            const totalPercent = telemetry.usagePercent;
+            const convTokens = telemetry.conversationTokens;
+            const toolTokens = telemetry.toolsTokens;
+            const sysTokens = telemetry.systemTokens;
+            const usedTokens = Math.max(1, telemetry.usedTokens);
 
-            const statusColor = totalPercent >= 90 ? '#DC2626' : totalPercent >= 75 ? '#EA580C' : totalPercent >= 60 ? '#D97706' : '#16A34A';
-            const statusLabel = totalPercent >= 90 ? '强制压缩' : totalPercent >= 75 ? '自动压缩' : totalPercent >= 60 ? '建议压缩' : '正常';
+            const convRatio = Math.round((convTokens / usedTokens) * 100);
+            const toolRatio = Math.round((toolTokens / usedTokens) * 100);
+            const sysRatio = Math.max(1, 100 - convRatio - toolRatio);
+
+            const statusColor = totalPercent >= 95 ? '#DC2626' : totalPercent >= 85 ? '#EA580C' : totalPercent >= 75 ? '#D97706' : '#16A34A';
+            const statusLabel = totalPercent >= 95 ? '已强制压缩' : totalPercent >= 85 ? '自动压缩' : totalPercent >= 75 ? '建议压缩' : '容量充裕';
 
             return (
               <div
-                title={`会话上下文容量：${totalPercent}% (${statusLabel})\n• Conversation: ${convPercent}%\n• MCP Tools: ${toolsPercent}%\n• Steering: ${steeringPercent}%`}
+                title={`模型上下文容量：${totalPercent}% (${statusLabel})\n• 实际占用: ${Math.round(telemetry.usedTokens / 1000)}k / ${Math.round(limit / 1000)}k tokens\n• 对话历史: ${convRatio}% (${Math.round(convTokens / 1000)}k)\n• 工具/代码: ${toolRatio}% (${Math.round(toolTokens / 1000)}k)\n• 系统规则: ${sysRatio}% (${Math.round(sysTokens / 1000)}k)`}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -859,7 +867,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
               >
                 <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: statusColor }} />
                 <span style={{ fontWeight: 700 }}>上下文 {totalPercent}%</span>
-                <span style={{ fontSize: '9px', color: 'var(--text-muted)' }}>({convPercent}% / {toolsPercent}% / {steeringPercent}%)</span>
+                <span style={{ fontSize: '9px', color: 'var(--text-muted)' }}>({convRatio}% / {toolRatio}% / {sysRatio}%)</span>
               </div>
             );
           })()}
