@@ -98,7 +98,8 @@ export interface ChatMessageTokens {
 export interface AgentSkillItem {
   id: string;
   name: string;
-  category: 'code' | 'test' | 'security' | 'docs' | 'perf' | 'git' | 'database' | 'mcp';
+  tier: 'capability' | 'skill' | 'mcp'; // 3-Tier: 专精能力, Domain Skill, MCP 工具
+  category: string;
   icon: string;
   description: string;
   promptInstruction: string;
@@ -107,10 +108,12 @@ export interface AgentSkillItem {
 }
 
 export const INITIAL_AGENT_SKILLS: AgentSkillItem[] = [
+  // Tier 1: 专精能力 (Capabilities / 技能)
   {
     id: 'skill-refactor',
     name: '代码架构重构专家',
-    category: 'code',
+    tier: 'capability',
+    category: '重构',
     icon: '⚡',
     description: '识别代码坏味道、消除循环依赖、重构冗长函数与提取复用积木组件',
     promptInstruction: '你作为代码架构与重构专家，请针对目标代码进行严格的架构坏味道分析，识别圈复杂度过高与高耦合区域，并给出模块化、单一职责的重构方案与单元测试保障。',
@@ -119,7 +122,8 @@ export const INITIAL_AGENT_SKILLS: AgentSkillItem[] = [
   {
     id: 'skill-unit-test',
     name: '单元测试生成器',
-    category: 'test',
+    tier: 'capability',
+    category: '测试',
     icon: '🧪',
     description: '深入分析边界条件、异常分支并生成高质量 Vitest / Pytest 单元测试',
     promptInstruction: '你作为严谨的自动化测试专家，请为代码补充完整的单元测试用例，覆盖正常流、边界边界值、空异常与错误拦截，确保断言精确且测试独立。',
@@ -128,25 +132,18 @@ export const INITIAL_AGENT_SKILLS: AgentSkillItem[] = [
   {
     id: 'skill-security-audit',
     name: '安全漏洞与敏感信息审计',
-    category: 'security',
+    tier: 'capability',
+    category: '安全',
     icon: '🔍',
     description: '全面检测硬编码密钥、SQL注入、XSS跨站脚本、反序列化与鉴权缺陷',
     promptInstruction: '你作为企业级安全审计专家，请全面审查代码中的潜在安全隐患，包括凭据泄露风险、OWASP Top 10 漏洞、不安全系统调用并提供修复补丁。',
     enabled: true
   },
   {
-    id: 'skill-api-docs',
-    name: 'API 与架构文档自动化',
-    category: 'docs',
-    icon: '📝',
-    description: '解析 AST 与接口类型，自动生成标准化 Markdown / OpenAPI 接口规范文档',
-    promptInstruction: '你作为资深技术文档专家，请基于代码中的类型与实现，生成结构严谨、包含请求响应示例与边界说明的生产级 API 与系统架构文档。',
-    enabled: true
-  },
-  {
     id: 'skill-performance',
     name: '性能剖析与瓶颈调优',
-    category: 'perf',
+    tier: 'capability',
+    category: '性能',
     icon: '🚀',
     description: '分析前端重渲染、内存泄漏、后端算法时间复杂度与 IO 吞吐瓶颈',
     promptInstruction: '你作为性能优化与性能剖析专家，请分析代码中的性能瓶颈（如不必要渲染、O(N^2) 嵌套循环、内存泄漏），并给出极致优化的修改方案。',
@@ -155,28 +152,95 @@ export const INITIAL_AGENT_SKILLS: AgentSkillItem[] = [
   {
     id: 'skill-db-migration',
     name: '数据库变更与索引专家',
-    category: 'database',
+    tier: 'capability',
+    category: '数据库',
     icon: '🗄️',
     description: '设计无锁 DDL 迁移脚本、SQL 查询计划 EXPLAIN 分析与联合索引调优',
     promptInstruction: '你作为高并发数据库架构师，请评估数据库变更方案，编写支持向后兼容且带安全回滚机制的 DDL/DML 脚本，并针对慢查询优化索引。',
     enabled: true
   },
+
+  // Tier 2: 专属 Skill (Domain Skills)
+  {
+    id: 'skill-api-docs',
+    name: 'API 与架构文档自动化',
+    tier: 'skill',
+    category: '文档',
+    icon: '📝',
+    description: '解析 AST 与接口类型，自动生成标准化 Markdown / OpenAPI 接口规范文档',
+    promptInstruction: '你作为资深技术文档专家，请基于代码中的类型与实现，生成结构严谨、包含请求响应示例与边界说明的生产级 API 与系统架构文档。',
+    enabled: true
+  },
   {
     id: 'skill-git-pr',
     name: 'Git 语义提交与 PR 专家',
-    category: 'git',
+    tier: 'skill',
+    category: 'Git',
     icon: '🛠️',
     description: '自动分析变更集并生成 Conventional Commits 语义化提交与 PR 摘要',
     promptInstruction: '你作为开源工程规范专家，请分析当前变更内容，生成符合 Conventional Commits 规范的语义化 Commit 信息与详尽的 Pull Request 描述。',
     enabled: true
   },
   {
-    id: 'skill-mcp-tool',
-    name: 'MCP 工具调度助手',
-    category: 'mcp',
-    icon: '🔌',
-    description: '智能解析并组装 Model Context Protocol 工具调用链与上下文资源',
-    promptInstruction: '你作为 MCP (Model Context Protocol) 调度助手，请优先将任务拆解为标准 MCP Tool 调用，并验证各工具链参数与返回数据。',
+    id: 'skill-react-ts',
+    name: 'React & TypeScript 架构师',
+    tier: 'skill',
+    category: '前端',
+    icon: '⚛️',
+    description: '严格遵循 React 18+ 状态下沉、Custom Hooks 解耦与零 TS Any 类型规范',
+    promptInstruction: '你作为 React & TypeScript 高级架构师，请遵循声明式组件设计，严禁使用 any，并采用高性能状态派生与 Memoization 模式。',
+    enabled: true
+  },
+  {
+    id: 'skill-python-backend',
+    name: 'Python 高并发后端专家',
+    tier: 'skill',
+    category: '后端',
+    icon: '🐍',
+    description: '深入 FastAPI/AsyncIO 异步高并发、Pydantic V2 校验与连接池优化',
+    promptInstruction: '你作为 Python 高性能后端架构师，请严格采用异步协程、强类型 Pydantic 模型与高可靠异常处理中间件。',
+    enabled: true
+  },
+
+  // Tier 3: MCP 工具 (Model Context Protocol)
+  {
+    id: 'skill-mcp-fs',
+    name: 'MCP 磁盘文件系统工具',
+    tier: 'mcp',
+    category: 'MCP',
+    icon: '📂',
+    description: '利用 Model Context Protocol 进行工作区文件的安全读写与正则检索',
+    promptInstruction: '你作为配备 MCP Filesystem 工具的智能体，请调用标准文件读写与搜索协议工具执行代码探索与变更。',
+    enabled: true
+  },
+  {
+    id: 'skill-mcp-github',
+    name: 'MCP GitHub 协同管理',
+    tier: 'mcp',
+    category: 'MCP',
+    icon: '🐙',
+    description: '通过 MCP 协议管理 GitHub Issue、Pull Request 与分支工作流',
+    promptInstruction: '你作为连接 GitHub MCP Server 的智能体，请调用 PR 与 Issue 接口协助代码审查与持续集成。',
+    enabled: true
+  },
+  {
+    id: 'skill-mcp-postgres',
+    name: 'MCP 数据库智能查询器',
+    tier: 'mcp',
+    category: 'MCP',
+    icon: '🐘',
+    description: '通过 MCP Postgres 接口安全执行只读 Schema 审查与慢查询分析',
+    promptInstruction: '你作为连接数据库 MCP 的智能体，请仅执行安全只读查询以排查数据结构与执行计划。',
+    enabled: true
+  },
+  {
+    id: 'skill-mcp-browser',
+    name: 'MCP 浏览器端到端测试',
+    tier: 'mcp',
+    category: 'MCP',
+    icon: '🌐',
+    description: '通过 MCP Puppeteer/Playwright 执行无头浏览器页面巡检与交互截图',
+    promptInstruction: '你作为连接浏览器 MCP 的智能体，请自动导航至页面端点并执行 DOM 元素验证与渲染巡检。',
     enabled: true
   }
 ];

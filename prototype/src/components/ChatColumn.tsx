@@ -1,3 +1,4 @@
+import { ShareCardModal } from './ShareCardModal';
 import React, { useState } from 'react';
 import { MarkdownCard } from './MarkdownCard';
 import {
@@ -184,9 +185,27 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
   // DX & PM Power States: Mentions, Changeset, Pinned Files
   const [showSkillMenu, setShowSkillMenu] = useState(false);
   const [skillQuery, setSkillQuery] = useState('');
-  const [activeSkillCategory, setActiveSkillCategory] = useState<string>('all');
+  const [activeSkillTier, setActiveSkillTier] = useState<'capability' | 'skill' | 'mcp'>('capability');
   const [agentSkills, setAgentSkills] = useState<AgentSkillItem[]>(loadSavedSkills());
-  const [selectedSkills, setSelectedSkills] = useState<AgentSkillItem[]>([]);
+  const [selectedSkill, setSelectedSkill] = useState<AgentSkillItem | null>(null);
+  const [shareTargetMessage, setShareTargetMessage] = useState<ChatMessage | null>(null);
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+
+  // Auto-scroll to latest message
+  const messagesEndRef = React.useRef<HTMLDivElement>(null);
+  const scrollToBottom = (smooth = true) => {
+    messagesEndRef.current?.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto', block: 'end' });
+  };
+
+  // Auto-scroll when switching sessions (instant)
+  React.useEffect(() => {
+    scrollToBottom(false);
+  }, [session.id]);
+
+  // Auto-scroll on new messages & streaming tokens
+  React.useEffect(() => {
+    scrollToBottom(true);
+  }, [messages, isStreaming, promptQueue]);
   const [availableModelList, setAvailableModelList] = useState<AIModelOption[]>(getAllAvailableModels());
   const [activeProviderTab, setActiveProviderTab] = useState<string>('opencode');
   const [modelSearchQuery, setModelSearchQuery] = useState('');
@@ -318,11 +337,11 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
 
   const handleSend = () => {
     if (!inputText.trim()) return;
-    const skillContext = selectedSkills.map(s => `[已激活技能 @${s.name}]: ${s.promptInstruction}`).join('\n');
+    const skillContext = selectedSkill ? `[已激活能力 @${selectedSkill.name}]: ${selectedSkill.promptInstruction}` : '';
     const fullPrompt = skillContext ? `${skillContext}\n\n${inputText}` : inputText;
     onSendMessage(fullPrompt);
     setInputText('');
-    setSelectedSkills([]);
+    setSelectedSkill(null);
   };
 
   return (
@@ -1088,6 +1107,8 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
             )}
           </div>
         ))}
+        {/* Auto-scroll anchor */}
+        <div ref={messagesEndRef} style={{ height: '1px', width: '100%' }} />
       </div>
 
       {/* INPUT AREA: UNIFIED COMMAND DECK (Cursor Composer / Claude Desktop Grade) */}
@@ -1752,16 +1773,16 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                     gap: '4px',
                     padding: '3px 8px',
                     borderRadius: '4px',
-                    background: selectedSkills.length > 0 ? 'var(--accent-subtle)' : 'var(--bg-base)',
-                    border: selectedSkills.length > 0 ? '1px solid var(--accent)' : '1px solid var(--border-subtle)',
+                    background: selectedSkill ? 'var(--accent-subtle)' : 'var(--bg-base)',
+                    border: selectedSkill ? '1px solid var(--accent)' : '1px solid var(--border-subtle)',
                     fontSize: '11px',
                     cursor: 'pointer',
-                    color: selectedSkills.length > 0 ? 'var(--accent)' : 'var(--text-secondary)'
+                    color: selectedSkill ? 'var(--accent)' : 'var(--text-secondary)'
                   }}
                   title="引用应用配置的 Agent 专精能力与技能 (Skills)"
                 >
                   <Sparkles size={12} color="var(--accent)" />
-                  <span>{selectedSkills.length > 0 ? `已激活 ${selectedSkills.length} 个技能` : '@ 技能引用'}</span>
+                  <span>{selectedSkill ? `@ ${selectedSkill.name}` : '@ 技能引用'}</span>
                 </button>
 
                 {showSkillMenu && (
@@ -1770,13 +1791,13 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                     bottom: '36px',
                     right: 0,
                     left: 'auto',
-                    width: 'min(460px, calc(100vw - 48px))',
+                    width: 'min(480px, calc(100vw - 48px))',
                     maxWidth: 'calc(100vw - 48px)',
-                    height: '360px',
+                    height: '380px',
                     maxHeight: 'min(500px, 75vh)',
                     resize: 'both',
-                    minWidth: '320px',
-                    minHeight: '220px',
+                    minWidth: '340px',
+                    minHeight: '260px',
                     background: 'var(--bg-surface-elevated)',
                     border: '1px solid var(--border-strong)',
                     borderRadius: '8px',
@@ -1787,22 +1808,55 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                     flexDirection: 'column',
                     overflow: 'hidden'
                   }}>
-                    {/* Header */}
-                    <div style={{ fontSize: '10.5px', color: 'var(--text-muted)', padding: '2px 6px 6px', fontWeight: 700, borderBottom: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <Sparkles size={12} color="var(--accent)" />
-                        <span style={{ color: 'var(--text-strong)' }}>Agent 专精能力与技能库 (Skills)</span>
-                      </div>
-                      <span style={{ color: 'var(--accent)', fontWeight: 600 }}>{agentSkills.length} 个可用技能</span>
+                    {/* 3-Tier Navigation Tabs (技能 / Skill / MCP) */}
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      background: 'var(--bg-base)',
+                      borderRadius: '6px',
+                      padding: '2px',
+                      marginBottom: '6px'
+                    }}>
+                      {[
+                        { id: 'capability', label: '🛠️ 技能 (专精能力)' },
+                        { id: 'skill', label: '📦 Skill (领域技能)' },
+                        { id: 'mcp', label: '🔌 MCP (工具集)' }
+                      ].map(tab => (
+                        <button
+                          key={tab.id}
+                          onClick={() => setActiveSkillTier(tab.id as any)}
+                          style={{
+                            flex: 1,
+                            padding: '5px 4px',
+                            border: 'none',
+                            borderRadius: '4px',
+                            background: activeSkillTier === tab.id ? 'var(--bg-surface-elevated)' : 'transparent',
+                            color: activeSkillTier === tab.id ? 'var(--accent)' : 'var(--text-muted)',
+                            fontWeight: activeSkillTier === tab.id ? 700 : 500,
+                            fontSize: '11px',
+                            cursor: 'pointer',
+                            boxShadow: activeSkillTier === tab.id ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                            transition: 'all 0.12s ease'
+                          }}
+                        >
+                          {tab.label}
+                        </button>
+                      ))}
                     </div>
 
                     {/* Search Input */}
-                    <div style={{ padding: '6px 2px 4px' }}>
+                    <div style={{ padding: '2px 2px 6px' }}>
                       <div style={{ position: 'relative' }}>
                         <Search size={12} style={{ position: 'absolute', left: '8px', top: '7px', color: 'var(--text-muted)' }} />
                         <input
                           type="text"
-                          placeholder="搜索专精技能 (如: 架构重构, 单测生成, 安全审计, 性能调优)..."
+                          placeholder={
+                            activeSkillTier === 'capability'
+                              ? '搜索专精能力 (如: 架构重构, 单测生成, 安全审计, 性能调优)...'
+                              : activeSkillTier === 'skill'
+                              ? '搜索专属 Skill (如: React TS, Python 后端, Git PR)...'
+                              : '搜索 MCP 工具链 (如: Filesystem, GitHub, Postgres)...'
+                          }
                           value={skillQuery}
                           onChange={e => setSkillQuery(e.target.value)}
                           autoFocus
@@ -1820,21 +1874,24 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                       </div>
                     </div>
 
-                    {/* Skill List */}
-                    <div style={{ flex: 1, maxHeight: '240px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '4px' }}>
+                    {/* Skill List (Single Select Only & Close on Click) */}
+                    <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                       {agentSkills
+                        .filter(s => s.tier === activeSkillTier)
                         .filter(s => !skillQuery || s.name.toLowerCase().includes(skillQuery.toLowerCase()) || s.description.toLowerCase().includes(skillQuery.toLowerCase()))
                         .map(skill => {
-                          const isSelected = selectedSkills.some(s => s.id === skill.id);
+                          const isSelected = selectedSkill?.id === skill.id;
                           return (
                             <div
                               key={skill.id}
                               onClick={() => {
+                                // Single-select only: click selects, clicking selected deselects, immediately closes popover!
                                 if (isSelected) {
-                                  setSelectedSkills(prev => prev.filter(s => s.id !== skill.id));
+                                  setSelectedSkill(null);
                                 } else {
-                                  setSelectedSkills(prev => [...prev, skill]);
+                                  setSelectedSkill(skill);
                                 }
+                                setShowSkillMenu(false);
                               }}
                               style={{
                                 display: 'flex',
@@ -1847,6 +1904,12 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                                 cursor: 'pointer',
                                 transition: 'all 0.12s ease'
                               }}
+                              onMouseEnter={e => {
+                                if (!isSelected) e.currentTarget.style.background = 'var(--bg-surface-elevated)';
+                              }}
+                              onMouseLeave={e => {
+                                if (!isSelected) e.currentTarget.style.background = 'var(--bg-surface)';
+                              }}
                             >
                               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
                                 <span style={{ fontSize: '15px' }}>{skill.icon}</span>
@@ -1855,7 +1918,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                                     <span style={{ fontWeight: 700, fontSize: '11.5px', color: isSelected ? 'var(--accent)' : 'var(--text-strong)' }}>
                                       @{skill.name}
                                     </span>
-                                    <span style={{ fontSize: '9px', padding: '0 4px', borderRadius: '3px', background: 'rgba(0,0,0,0.06)', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                                    <span style={{ fontSize: '9px', padding: '0 4px', borderRadius: '3px', background: 'rgba(0,0,0,0.06)', color: 'var(--text-muted)' }}>
                                       {skill.category}
                                     </span>
                                   </div>
@@ -1868,6 +1931,12 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                             </div>
                           );
                         })}
+                    </div>
+
+                    {/* Footer Tip */}
+                    <div style={{ padding: '6px 4px 2px', borderTop: '1px solid var(--border-subtle)', fontSize: '10px', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between' }}>
+                      <span>💡 单选模式：点击任一能力立即装载并关闭弹窗</span>
+                      <span style={{ color: 'var(--accent)' }}>3层分类体系</span>
                     </div>
                   </div>
                 )}
@@ -2108,6 +2177,16 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
           }}
         />
       </div>
+      {/* 4. Share Preview Card Modal */}
+      <ShareCardModal
+        isOpen={isShareModalOpen}
+        onClose={() => {
+          setIsShareModalOpen(false);
+          setShareTargetMessage(null);
+        }}
+        message={shareTargetMessage}
+        session={session}
+      />
     </div>
   );
 };
