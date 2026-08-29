@@ -153,162 +153,10 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
   onOpenFile
 }) => {
   const [inputText, setInputText] = useState('');
-  // Interactive Human-in-the-Loop Action Approval Queue
   const [pendingActionQueue, setPendingActionQueue] = useState<AgentPendingAction[]>([]);
   const [sessionAutoAllowed, setSessionAutoAllowed] = useState<boolean>(false);
   const [processedActionIds, setProcessedActionIds] = useState<Set<string>>(new Set());
 
-  // Scan messages to detect newly generated actions that require approval
-  React.useEffect(() => {
-    if (sessionAutoAllowed || permissionPolicy === 'autonomous_agent') {
-      return;
-    }
-
-    const latestMsg = messages[messages.length - 1];
-    if (!latestMsg || latestMsg.role !== 'assistant') return;
-
-    const content = latestMsg.content || '';
-    if (!content.includes('```write_file:') && !content.includes('```file:') && !content.includes('```create_file:') && !content.includes('```run_command') && !content.includes('```bash') && !content.includes('```sh')) {
-      return;
-    }
-
-    const newActions: AgentPendingAction[] = [];
-    const lines = content.split('\n');
-    let inCode = false;
-    let codeLang = '';
-    let currentCode: string[] = [];
-
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      const trimmed = line.trimStart();
-      if (trimmed.startsWith('```')) {
-        if (inCode) {
-          const fullCode = currentCode.join('\n');
-          const cleanLang = codeLang.trim();
-          const isWrite = cleanLang.startsWith('write_file:') || cleanLang.startsWith('file:') || cleanLang.startsWith('create_file:');
-          const targetPath = isWrite ? cleanLang.replace(/^(write_file:|file:|create_file:)/, '').trim() : '';
-          const isCmd = ['run_command', 'bash', 'sh', 'powershell', 'cmd'].includes(cleanLang.toLowerCase()) || (cleanLang === '' && (fullCode.startsWith('git ') || fullCode.startsWith('npm ')));
-
-          if (isWrite && targetPath) {
-            const actId = `act-${latestMsg.id}-${targetPath}`;
-            if (!processedActionIds.has(actId)) {
-              const isHighRisk = targetPath.includes('package.json') || targetPath.includes('.env') || targetPath.includes('.git');
-              newActions.push({
-                id: actId,
-                type: 'write_file',
-                target: targetPath,
-                code: fullCode,
-                linesCount: currentCode.length,
-                isHighRisk,
-                messageId: latestMsg.id,
-                status: 'pending'
-              });
-            }
-          } else if (isCmd && fullCode.trim()) {
-            const actId = `act-${latestMsg.id}-cmd-${i}`;
-            if (!processedActionIds.has(actId)) {
-              const isHighRisk = /(\b(git\s+push|git\s+reset\s+--hard|git\s+clean|rm\s+-rf|Remove-Item|del\s+\/f)\b)/i.test(fullCode);
-              newActions.push({
-                id: actId,
-                type: 'run_command',
-                target: fullCode.split('\n')[0].slice(0, 50),
-                code: fullCode,
-                linesCount: currentCode.length,
-                isHighRisk,
-                messageId: latestMsg.id,
-                status: 'pending'
-              });
-            }
-          }
-          inCode = false;
-          codeLang = '';
-          currentCode = [];
-        } else {
-          inCode = true;
-          codeLang = trimmed.slice(3).trim();
-          currentCode = [];
-        }
-      } else if (inCode) {
-        currentCode.push(line);
-      }
-    }
-
-    if (newActions.length > 0) {
-      setPendingActionQueue(prev => {
-        const existingIds = new Set(prev.map(a => a.id));
-        const toAdd = newActions.filter(a => !existingIds.has(a.id));
-        return toAdd.length > 0 ? [...prev, ...toAdd] : prev;
-      });
-    }
-  }, [messages, sessionAutoAllowed, permissionPolicy, processedActionIds]);
-
-  // Execute a single action on host engine
-  const executePendingAction = async (action: AgentPendingAction) => {
-    if (action.type === 'write_file') {
-      try {
-        const res = await fetch('/api/fs/write', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ path: action.target, content: action.code })
-        });
-        const data = await res.json();
-        if (data.success) {
-          setChangesetToast(`✨ 成功将代码落地写入至: ${action.target} (${data.size || action.code.length} 字节)`);
-        } else {
-          setChangesetToast(`❌ 写入 ${action.target} 失败: ${data.error}`);
-        }
-      } catch (e: any) {
-        setChangesetToast(`❌ 写入 ${action.target} 异常: ${e.message}`);
-      }
-    } else {
-      try {
-        const res = await fetch('/api/terminal/exec', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ command: action.code })
-        });
-        const data = await res.json();
-        if (data.success) {
-          setChangesetToast(`▶️ 终端指令已执行完成 (Exit Code: ${data.exitCode ?? 0})`);
-        } else {
-          setChangesetToast(`❌ 终端指令执行失败: ${data.error}`);
-        }
-      } catch (e: any) {
-        setChangesetToast(`❌ 终端指令异常: ${e.message}`);
-      }
-    }
-    setTimeout(() => setChangesetToast(null), 3500);
-  };
-
-  // 1. Allow Once: execute this action and pop next if any
-  const handleAllowOnce = async (action: AgentPendingAction) => {
-    await executePendingAction(action);
-    setProcessedActionIds(prev => new Set(prev).add(action.id));
-    setPendingActionQueue(prev => prev.filter(a => a.id !== action.id));
-  };
-
-  // 2. Reject Once: skip this action and pop next
-  const handleRejectOnce = (action: AgentPendingAction) => {
-    setProcessedActionIds(prev => new Set(prev).add(action.id));
-    setPendingActionQueue(prev => prev.filter(a => a.id !== action.id));
-    setChangesetToast(`🛑 已拒绝并跳过执行: ${action.target}`);
-    setTimeout(() => setChangesetToast(null), 2500);
-  };
-
-  // 3. Allow All in Session: execute all remaining actions and enable session auto-execution
-  const handleAllowAllInSession = async (action: AgentPendingAction) => {
-    setSessionAutoAllowed(true);
-    setPermissionPolicy('autonomous_agent');
-    const queueToRun = [...pendingActionQueue];
-    setPendingActionQueue([]);
-
-    for (const act of queueToRun) {
-      await executePendingAction(act);
-      setProcessedActionIds(prev => new Set(prev).add(act.id));
-    }
-    setChangesetToast(`⚡ 已允许当前会话全部执行！共自动落地 ${queueToRun.length} 项操作。`);
-    setTimeout(() => setChangesetToast(null), 3500);
-  };
   // Slash Commands & Session References
   const [devProfile, setDevProfile] = useState<DeveloperProfile>(loadSavedProfile());
   const [showSlashMenu, setShowSlashMenu] = useState(false);
@@ -570,6 +418,159 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
   // Popover states for unified mode button and model selector button
   const [showModeMenu, setShowModeMenu] = useState(false);
   const [showModelMenu, setShowModelMenu] = useState(false);
+
+
+  // Scan messages to detect newly generated actions that require approval
+  React.useEffect(() => {
+    if (sessionAutoAllowed || permissionPolicy === 'autonomous_agent') {
+      return;
+    }
+
+    const latestMsg = messages[messages.length - 1];
+    if (!latestMsg || latestMsg.role !== 'assistant') return;
+
+    const content = latestMsg.content || '';
+    if (!content.includes('```write_file:') && !content.includes('```file:') && !content.includes('```create_file:') && !content.includes('```run_command') && !content.includes('```bash') && !content.includes('```sh')) {
+      return;
+    }
+
+    const newActions: AgentPendingAction[] = [];
+    const lines = content.split('\n');
+    let inCode = false;
+    let codeLang = '';
+    let currentCode: string[] = [];
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const trimmed = line.trimStart();
+      if (trimmed.startsWith('```')) {
+        if (inCode) {
+          const fullCode = currentCode.join('\n');
+          const cleanLang = codeLang.trim();
+          const isWrite = cleanLang.startsWith('write_file:') || cleanLang.startsWith('file:') || cleanLang.startsWith('create_file:');
+          const targetPath = isWrite ? cleanLang.replace(/^(write_file:|file:|create_file:)/, '').trim() : '';
+          const isCmd = ['run_command', 'bash', 'sh', 'powershell', 'cmd'].includes(cleanLang.toLowerCase()) || (cleanLang === '' && (fullCode.startsWith('git ') || fullCode.startsWith('npm ')));
+
+          if (isWrite && targetPath) {
+            const actId = `act-${latestMsg.id}-${targetPath}`;
+            if (!processedActionIds.has(actId)) {
+              const isHighRisk = targetPath.includes('package.json') || targetPath.includes('.env') || targetPath.includes('.git');
+              newActions.push({
+                id: actId,
+                type: 'write_file',
+                target: targetPath,
+                code: fullCode,
+                linesCount: currentCode.length,
+                isHighRisk,
+                messageId: latestMsg.id,
+                status: 'pending'
+              });
+            }
+          } else if (isCmd && fullCode.trim()) {
+            const actId = `act-${latestMsg.id}-cmd-${i}`;
+            if (!processedActionIds.has(actId)) {
+              const isHighRisk = /(\b(git\s+push|git\s+reset\s+--hard|git\s+clean|rm\s+-rf|Remove-Item|del\s+\/f)\b)/i.test(fullCode);
+              newActions.push({
+                id: actId,
+                type: 'run_command',
+                target: fullCode.split('\n')[0].slice(0, 50),
+                code: fullCode,
+                linesCount: currentCode.length,
+                isHighRisk,
+                messageId: latestMsg.id,
+                status: 'pending'
+              });
+            }
+          }
+          inCode = false;
+          codeLang = '';
+          currentCode = [];
+        } else {
+          inCode = true;
+          codeLang = trimmed.slice(3).trim();
+          currentCode = [];
+        }
+      } else if (inCode) {
+        currentCode.push(line);
+      }
+    }
+
+    if (newActions.length > 0) {
+      setPendingActionQueue(prev => {
+        const existingIds = new Set(prev.map(a => a.id));
+        const toAdd = newActions.filter(a => !existingIds.has(a.id));
+        return toAdd.length > 0 ? [...prev, ...toAdd] : prev;
+      });
+    }
+  }, [messages, sessionAutoAllowed, permissionPolicy, processedActionIds]);
+
+  // Execute a single action on host engine
+  const executePendingAction = async (action: AgentPendingAction) => {
+    if (action.type === 'write_file') {
+      try {
+        const res = await fetch('/api/fs/write', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: action.target, content: action.code })
+        });
+        const data = await res.json();
+        if (data.success) {
+          setChangesetToast(`✨ 成功将代码落地写入至: ${action.target} (${data.size || action.code.length} 字节)`);
+        } else {
+          setChangesetToast(`❌ 写入 ${action.target} 失败: ${data.error}`);
+        }
+      } catch (e: any) {
+        setChangesetToast(`❌ 写入 ${action.target} 异常: ${e.message}`);
+      }
+    } else {
+      try {
+        const res = await fetch('/api/terminal/exec', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ command: action.code })
+        });
+        const data = await res.json();
+        if (data.success) {
+          setChangesetToast(`▶️ 终端指令已执行完成 (Exit Code: ${data.exitCode ?? 0})`);
+        } else {
+          setChangesetToast(`❌ 终端指令执行失败: ${data.error}`);
+        }
+      } catch (e: any) {
+        setChangesetToast(`❌ 终端指令异常: ${e.message}`);
+      }
+    }
+    setTimeout(() => setChangesetToast(null), 3500);
+  };
+
+  // 1. Allow Once: execute this action and pop next if any
+  const handleAllowOnce = async (action: AgentPendingAction) => {
+    await executePendingAction(action);
+    setProcessedActionIds(prev => new Set(prev).add(action.id));
+    setPendingActionQueue(prev => prev.filter(a => a.id !== action.id));
+  };
+
+  // 2. Reject Once: skip this action and pop next
+  const handleRejectOnce = (action: AgentPendingAction) => {
+    setProcessedActionIds(prev => new Set(prev).add(action.id));
+    setPendingActionQueue(prev => prev.filter(a => a.id !== action.id));
+    setChangesetToast(`🛑 已拒绝并跳过执行: ${action.target}`);
+    setTimeout(() => setChangesetToast(null), 2500);
+  };
+
+  // 3. Allow All in Session: execute all remaining actions and enable session auto-execution
+  const handleAllowAllInSession = async (action: AgentPendingAction) => {
+    setSessionAutoAllowed(true);
+    setPermissionPolicy('autonomous_agent');
+    const queueToRun = [...pendingActionQueue];
+    setPendingActionQueue([]);
+
+    for (const act of queueToRun) {
+      await executePendingAction(act);
+      setProcessedActionIds(prev => new Set(prev).add(act.id));
+    }
+    setChangesetToast(`⚡ 已允许当前会话全部执行！共自动落地 ${queueToRun.length} 项操作。`);
+    setTimeout(() => setChangesetToast(null), 3500);
+  };
 
   const handleSend = () => {
     if (!inputText.trim()) return;

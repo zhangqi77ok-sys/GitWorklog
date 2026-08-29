@@ -1216,3 +1216,8 @@ To github.com:zhangqi77ok-sys/agent-learning.git
 1. **人机协同审批弹窗挂载激活 (ActionApprovalModal Engine Active Wiring)**：
    - 彻底修复 `ActionApprovalModal` 在主聊天流树中未挂载渲染的问题；
    - 当大模型在会话中生成 `write_file` 物理写盘或 `run_command` 终端命令，且处于【逐次审核】或【风险熔断】策略时，屏幕正下方立即高保真弹出悬浮交互审批窗口，支持【执行】、【不执行】与【当前对话所有都执行】，并具备连续队列自动弹出与 Enter/Esc/Shift+Enter 全键盘盲操能力！
+
+### 12.30 全局 React Hook 顶层严谨排序与零崩溃启动保障 (v1.4.7)
+1. **React Hook 顶层顺序重构与零崩溃保障 (Strict React Hooks Ordering)**：
+   - 彻底修复因 `ChatColumn.tsx` 内部 Action Queue 副作用钩子定义在部分状态之前导致的 `Uncaught TypeError: Cannot read properties of null (reading 'useState')` 启动白屏报错；
+   - 严格重构所有组件的 Hooks 顺序（所有 `useState` 与 `useRef` 统一置于最顶层，随后为 `useEffect` 与纯事件处理函数），彻底杜绝 Hook 规则违背与启动崩溃。
