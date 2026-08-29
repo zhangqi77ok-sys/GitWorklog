@@ -1221,3 +1221,11 @@ To github.com:zhangqi77ok-sys/agent-learning.git
 1. **React Hook 顶层顺序重构与零崩溃保障 (Strict React Hooks Ordering)**：
    - 彻底修复因 `ChatColumn.tsx` 内部 Action Queue 副作用钩子定义在部分状态之前导致的 `Uncaught TypeError: Cannot read properties of null (reading 'useState')` 启动白屏报错；
    - 严格重构所有组件的 Hooks 顺序（所有 `useState` 与 `useRef` 统一置于最顶层，随后为 `useEffect` 与纯事件处理函数），彻底杜绝 Hook 规则违背与启动崩溃。
+
+### 12.31 模型选择全对象持久化与智能自决自动执行引擎修复 (v1.4.8)
+1. **模型选择全对象持久化 (Full Model Object Persistence)**：
+   - 修复因动态 Provider 返回模型 ID 与静态列表不一致，导致重启后模型回退到默认值的问题；
+   - 选择模型时同步序列化完整模型对象 (`codemind_current_model_obj`)，重启时优先反序列化对象匹配，其次 ID 匹配，再次名称模糊匹配，保证 100% 精准复原。
+2. **智能自决模式自动执行引擎修复 (Autonomous Auto-Execution Engine Fix)**：
+   - 修复 `autoExecute` 属性受 `isStreaming` 条件死锁的根因：流式生成中 `isStreaming=true` 时 MarkdownCard 内部 useEffect 等待流结束，但流结束后 `isStreaming=false` 导致 `autoExecute` 也变 `false`，形成执行死锁；
+   - 参考业界标准（Cursor/Windsurf/Claude Code）：在 Act + 智能自决模式下，动作在生成完成后**自动无感执行**，无需用户手动点击任何按钮。

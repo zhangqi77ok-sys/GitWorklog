@@ -107,8 +107,16 @@ export const App: React.FC = () => {
 
   const [activeNav, setActiveNav] = useState('sessions');
   const [currentSessionId, setCurrentSessionId] = useState<string>(() => {
-    const initialSessions = loadSavedSessions();
-    return initialSessions[0]?.id || 'session-1';
+    try {
+      const savedSessionId = localStorage.getItem('codemind_current_session_id');
+      const initialSessions = loadSavedSessions();
+      if (savedSessionId && initialSessions.some(s => s.id === savedSessionId)) {
+        return savedSessionId;
+      }
+      return initialSessions[0]?.id || 'session-1';
+    } catch (e) {
+      return 'session-1';
+    }
   });
   const [rightWorkspaceOpen, setRightWorkspaceOpen] = useState<boolean>(false);
   const [workMode, setWorkMode] = useState<WorkMode>('act');
@@ -123,20 +131,46 @@ export const App: React.FC = () => {
 
   const [currentModel, setCurrentModel] = useState<AIModelOption>(() => {
     const all = getAllAvailableModels();
+
+    // Priority 1: Try to restore the full serialized model object
+    try {
+      const savedObj = localStorage.getItem('codemind_current_model_obj');
+      if (savedObj) {
+        const parsed = JSON.parse(savedObj) as AIModelOption;
+        // Verify it's still a valid model in the available list
+        const exactMatch = all.find((m: AIModelOption) => m.id === parsed.id);
+        if (exactMatch) return exactMatch;
+        // If the id changed (dynamic providers), try matching by name
+        const nameMatch = all.find((m: AIModelOption) => m.name === parsed.name);
+        if (nameMatch) return nameMatch;
+        // If it's a full valid object with endpoint info, use it directly
+        if (parsed.id && parsed.name) return parsed;
+      }
+    } catch (e) {}
+
+    // Priority 2: Fall back to id-based lookup from session map
     let savedId = '';
     try {
+      const savedSessionId = localStorage.getItem('codemind_current_session_id');
       const raw = localStorage.getItem('codemind_session_models_map');
       const map = raw ? JSON.parse(raw) : {};
-      const initialSessions = loadSavedSessions();
-      const initialSessionId = initialSessions[0]?.id || 'session-1';
-      savedId = map[initialSessionId] || localStorage.getItem('codemind_current_model_id') || '';
+      if (savedSessionId && map[savedSessionId]) {
+        savedId = map[savedSessionId];
+      } else {
+        savedId = localStorage.getItem('codemind_current_model_id') || '';
+      }
     } catch (e) {}
 
     if (savedId) {
       const found = all.find((m: AIModelOption) => m.id === savedId);
       if (found) return found;
+      // Also try partial match (e.g. saved 'hunyuan-t1-latest' matches model containing 'hunyuan')
+      const partial = all.find((m: AIModelOption) => m.id.includes(savedId) || savedId.includes(m.id));
+      if (partial) return partial;
     }
-    return all.find((m: AIModelOption) => m.id === 'mimo-v2.5-free') || all[0] || AVAILABLE_MODELS[0];
+    const hunyuan = all.find((m: AIModelOption) => m.id.includes('hy3') || m.id.includes('hunyuan'));
+    if (hunyuan) return hunyuan;
+    return all[0] || AVAILABLE_MODELS[0];
   });
   const [permissionPolicy, setPermissionPolicy] = useState<PermissionPolicy>('autonomous_agent');
 
@@ -400,8 +434,44 @@ export const App: React.FC = () => {
     });
   };
 
+  const handleSelectSession = (id: string) => {
+    setCurrentSessionId(id);
+    try {
+      localStorage.setItem('codemind_current_session_id', id);
+      const raw = localStorage.getItem('codemind_session_models_map');
+      const map = raw ? JSON.parse(raw) : {};
+      const boundModelId = map[id] || localStorage.getItem('codemind_current_model_id');
+      if (boundModelId) {
+        const all = getAllAvailableModels();
+        let targetModel = all.find((m: AIModelOption) => m.id === boundModelId);
+        // Fallback: try partial id match or name match
+        if (!targetModel) {
+          targetModel = all.find((m: AIModelOption) => m.id.includes(boundModelId) || boundModelId.includes(m.id));
+        }
+        if (targetModel) {
+          setCurrentModel(targetModel);
+          localStorage.setItem('codemind_current_model_obj', JSON.stringify(targetModel));
+          setTokenStats(prev => ({
+            ...prev,
+            contextMaxTokens: targetModel!.contextLimit
+          }));
+        }
+      }
+    } catch (e) {}
+  };
+
   const handleSelectModel = (model: AIModelOption) => {
     setCurrentModel(model);
+    try {
+      localStorage.setItem('codemind_current_model_id', model.id);
+      localStorage.setItem('codemind_current_model_obj', JSON.stringify(model));
+      setSessionModelMap(prev => {
+        const updated = { ...prev, [currentSessionId]: model.id };
+        localStorage.setItem('codemind_session_models_map', JSON.stringify(updated));
+        return updated;
+      });
+    } catch (e) {}
+
     // Update Token stats context window max
     setTokenStats(prev => ({
       ...prev,
@@ -938,7 +1008,7 @@ Tcode 已通过宿主磁盘与终端桥接将工程提供给你。` : '当前处
             projects={projects}
             sessions={sessions}
             currentSessionId={currentSessionId}
-            onSelectSession={setCurrentSessionId}
+            onSelectSession={handleSelectSession}
             onNewGlobalSession={handleNewGlobalSession}
             onNewProjectSession={handleNewProjectSession}
             onDeleteSession={handleDeleteSession}
