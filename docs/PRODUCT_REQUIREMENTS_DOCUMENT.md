@@ -879,3 +879,34 @@ To github.com:zhangqi77ok-sys/agent-learning.git
 ### 4.45.2 离线敏感凭据与 PII 脱敏盾 (`securityShield.ts`)
 - **脱敏范围**：OpenAI/Anthropic API Keys (`sk-...`)、GitHub Token (`ghp_...`)、数据库密码连接串 (`postgres://user:pass@host`)、手机号与邮箱；
 - **双向透明还原**：发送给大模型时替换为唯一安全锚点 `<REDACTED_SECRET_n>`，大模型输出返回后在本地内存透明替换还原。
+
+
+---
+
+## 4.46 终端 AST 安全沙箱拦截与 Sudo 授权规约 (Sandbox Guard & Sudo Authorization)
+
+### 4.46.1 拦截准则与黑名单模型
+1. **高危指令黑名单**：
+   - 包含破坏性删除（`rm -rf /`, `rm -rf *`, `rmdir /s /q`）；
+   - 包含数据库抹除（`DROP TABLE`, `DROP DATABASE`, `TRUNCATE`）；
+   - 包含磁盘格式化与裸写（`format C:`, `mkfs.ext4`, `dd if=/dev/zero`）；
+2. **Sudo 交互授权**：
+   - 一旦触发黑名单，终端立即挂起执行，弹出警示卡片：
+     `[ 🚨 检测到高危破坏性指令: rm -rf / ]`
+   - 提供 `[ 🔓 Sudo 临时放行单次执行 ]` 与 `[ 🛑 彻底阻断并终止当前 Step ]`。
+
+---
+
+## 4.47 Git 影子快照自愈与模糊 @提及上下文注入规约 (Shadow Snapshots & Mention Engine)
+
+### 4.47.1 Git 影子快照自愈引擎 (`shadowSnapshotEngine.ts`)
+- **自动触发时机**：Agent 在修改任何文件前，自动在后台静默执行 `git2` 影子提交，生成 `refs/shadow-snapshots/{session}-step-{n}`；
+- **自愈回滚机制**：当后续本地 CI 或单元测试报错时，支持一键毫秒级原子回滚工作区代码，确保开发安全 0 风险。
+
+### 4.47.2 模糊 `@` 提及上下文注入 (`mentionEngine.ts`)
+- **触发与联想**：在输入框中输入 `@` 时，支持基于权重排序的模糊联想：
+  - `@file` (工作区文件树)；
+  - `@symbol` (AST 导出的类名、接口名、函数名)；
+  - `@diff` (当前工作区未暂存的修改行)；
+  - `@doc` (PRD 需求与架构文档)；
+- **切片注入**：被提及的项目自动抽取核心 Interface 骨架注入 Prompt 上下文。

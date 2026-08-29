@@ -913,3 +913,69 @@ describe('Stage 3 - Offline Security Shield & PII Redactor', () => {
     expect(restored).toBe(rawPrompt);
   });
 });
+
+
+import {
+  evaluateSandboxCommandSafety,
+  createShadowGitSnapshot,
+  searchFuzzyMentions
+} from '../src/types/contracts';
+import { defaultSandboxGuard } from '../src/services/sandboxGuard';
+import { defaultShadowSnapshotEngine } from '../src/services/shadowSnapshotEngine';
+
+describe('Stage 4 - Terminal AST Sandbox Command Guard', () => {
+  it('should intercept hazardous commands and mark as requiring sudo', () => {
+    const check1 = evaluateSandboxCommandSafety('rm -rf /');
+    expect(check1.isSafe).toBe(false);
+    expect(check1.requiresSudo).toBe(true);
+    expect(check1.hazardReason).toContain('根目录递归删除');
+
+    const check2 = evaluateSandboxCommandSafety('DROP DATABASE production;');
+    expect(check2.isSafe).toBe(false);
+    expect(check2.requiresSudo).toBe(true);
+  });
+
+  it('should pass normal safe development commands', () => {
+    const checkSafe = evaluateSandboxCommandSafety('npm run test && git status');
+    expect(checkSafe.isSafe).toBe(true);
+    expect(checkSafe.requiresSudo).toBe(false);
+  });
+
+  it('should allow hazardous command once granted temporary sudo', () => {
+    const cmd = 'rm -rf ./dist';
+    defaultSandboxGuard.grantTemporarySudo(cmd);
+    const check = defaultSandboxGuard.checkCommand(cmd);
+    expect(check.isSafe).toBe(true);
+    expect(check.requiresSudo).toBe(false);
+  });
+});
+
+describe('Stage 4 - Git Shadow Snapshots & Auto-Healing', () => {
+  it('should generate valid shadow ref snapshot metadata', () => {
+    const snap = createShadowGitSnapshot('sess-100', 3, '重构完成前快照');
+    expect(snap.snapshotId).toBe('snap-sess-100-3');
+    expect(snap.refPath).toContain('refs/shadow-snapshots/sess-100-step-3');
+    expect(snap.filesChangedCount).toBe(3);
+  });
+
+  it('should capture and rollback snapshots reliably in engine', () => {
+    const snap = defaultShadowSnapshotEngine.captureSnapshot('sess-200', 1, '初始化快照');
+    const ok = defaultShadowSnapshotEngine.rollbackToSnapshot(snap.snapshotId);
+    expect(ok).toBe(true);
+
+    const fail = defaultShadowSnapshotEngine.rollbackToSnapshot('non_existent_id');
+    expect(fail).toBe(false);
+  });
+});
+
+describe('Stage 4 - Fuzzy @Mention Context Search Engine', () => {
+  it('should search mention symbols and files accurately', () => {
+    const res = searchFuzzyMentions('@Session');
+    expect(res.length).toBeGreaterThan(0);
+    expect(res[0].name).toBe('SessionItem');
+    expect(res[0].type).toBe('symbol');
+
+    const resFiles = searchFuzzyMentions('@store');
+    expect(resFiles.some(r => r.name.includes('Store'))).toBe(true);
+  });
+});

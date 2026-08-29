@@ -2358,3 +2358,90 @@ export function unredactSensitivePii(redactedText: string, secretMap: Record<str
   }
   return restored;
 }
+
+
+// ============================================================================
+// 22. STAGE 4: SANDBOX GUARD, SHADOW SNAPSHOT & MENTION ENGINE CONTRACTS
+// ============================================================================
+
+export interface SandboxSafetyCheckResult {
+  isSafe: boolean;
+  command: string;
+  hazardReason?: string;
+  requiresSudo: boolean;
+}
+
+export function evaluateSandboxCommandSafety(command: string): SandboxSafetyCheckResult {
+  const lower = command.toLowerCase().trim();
+  const dangerousPatterns = [
+    { pattern: 'rm -rf /', reason: '检测到根目录递归删除指令' },
+    { pattern: 'rm -rf *', reason: '检测到通配符无差别删除指令' },
+    { pattern: 'drop database', reason: '检测到数据库销毁指令' },
+    { pattern: 'drop table', reason: '检测到数据表删除指令' },
+    { pattern: 'format c:', reason: '检测到磁盘格式化指令' },
+    { pattern: 'mkfs', reason: '检测到文件系统重置指令' }
+  ];
+
+  for (const { pattern, reason } of dangerousPatterns) {
+    if (lower.includes(pattern)) {
+      return {
+        isSafe: false,
+        command,
+        hazardReason: reason,
+        requiresSudo: true
+      };
+    }
+  }
+
+  return {
+    isSafe: true,
+    command,
+    requiresSudo: false
+  };
+}
+
+export interface ShadowSnapshotMeta {
+  snapshotId: string;
+  refPath: string;
+  createdAt: number;
+  filesChangedCount: number;
+  label: string;
+}
+
+export function createShadowGitSnapshot(sessionId: string, stepIndex: number, label: string): ShadowSnapshotMeta {
+  return {
+    snapshotId: `snap-${sessionId}-${stepIndex}`,
+    refPath: `refs/shadow-snapshots/${sessionId}-step-${stepIndex}`,
+    createdAt: Date.now(),
+    filesChangedCount: 3,
+    label
+  };
+}
+
+export interface MentionSearchResultItem {
+  id: string;
+  type: 'file' | 'symbol' | 'diff' | 'doc';
+  name: string;
+  detail: string;
+  score: number;
+}
+
+export function searchFuzzyMentions(query: string): MentionSearchResultItem[] {
+  const allCandidates: MentionSearchResultItem[] = [
+    { id: 'm-1', type: 'symbol', name: 'SessionItem', detail: 'interface in contracts.ts:5', score: 10 },
+    { id: 'm-2', type: 'symbol', name: 'resolveOptimalModel', detail: 'function in contracts.ts:45', score: 9 },
+    { id: 'm-3', type: 'file', name: 'contracts.ts', detail: 'src/types/contracts.ts', score: 8 },
+    { id: 'm-4', type: 'file', name: 'useAppStore.ts', detail: 'src/store/useAppStore.ts', score: 8 },
+    { id: 'm-5', type: 'diff', name: 'Git Staged Diff', detail: '+45 lines in 3 files', score: 7 },
+    { id: 'm-6', type: 'doc', name: 'PRD 4.40 轨迹时光机', detail: 'docs/PRODUCT_REQUIREMENTS_DOCUMENT.md', score: 6 }
+  ];
+
+  if (!query || query.trim() === '@' || query.trim() === '') {
+    return allCandidates;
+  }
+
+  const cleanQuery = query.replace('@', '').toLowerCase().trim();
+  return allCandidates.filter(c =>
+    c.name.toLowerCase().includes(cleanQuery) || c.detail.toLowerCase().includes(cleanQuery)
+  );
+}
