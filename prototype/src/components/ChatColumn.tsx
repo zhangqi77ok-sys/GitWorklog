@@ -227,6 +227,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
   const [collapsedTools, setCollapsedTools] = useState<Record<string, boolean>>({});
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
   const [showRulesPopover, setShowRulesPopover] = useState(false);
+  const [selectedRoundByMsgId, setSelectedRoundByMsgId] = useState<Record<string, number>>({});
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
     setInputText(val);
@@ -1066,11 +1067,11 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                 items={msg.acceptanceItems}
                 stepTags={msg.stepTags}
                 rounds={msg.rounds}
-                activeRoundId={msg.activeRoundId}
+                activeRoundId={selectedRoundByMsgId[msg.id] || msg.activeRoundId || (msg.rounds?.length ? msg.rounds[msg.rounds.length - 1].roundId : undefined)}
                 loopStatus={msg.loopStatus}
                 terminationSummary={msg.terminationSummary}
                 onSelectRound={(roundId) => {
-                  // Round switching without page jumping
+                  setSelectedRoundByMsgId(prev => ({ ...prev, [msg.id]: roundId }));
                 }}
                 onSelectAction={(actionId) => {
                   if (actionId === 'try_new_approach') {
@@ -1084,7 +1085,10 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
 
             {/* Message Body with Tag Folding, ThinkingBlock & Tool Calls */}
             {(() => {
-              const parsed = parseAgentMessage(msg.content);
+              const curRoundId = selectedRoundByMsgId[msg.id] || msg.activeRoundId;
+              const curRound = msg.rounds?.find(r => r.roundId === curRoundId);
+              const displayContent = curRound ? curRound.content : msg.content;
+              const parsed = parseAgentMessage(displayContent);
               const isLastAssistant = isStreaming && msg.role === 'assistant' && msg.id === messages[messages.length - 1]?.id;
 
               return (

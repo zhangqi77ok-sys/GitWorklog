@@ -371,6 +371,21 @@ export const App: React.FC = () => {
 
   // Per-Session Message Map (100% Isolated: each session has its own message stream)
   const [sessionMessages, setSessionMessages] = useState<Record<string, ChatMessage[]>>(loadSavedSessionMessages());
+
+  // 🧠 Single Source of Truth: Synchronize real Token telemetry and context percentage dynamically
+  React.useEffect(() => {
+    const curMsgs = sessionMessages[currentSessionId] || [];
+    const limit = currentModel?.contextLimit || 128000;
+    const telemetry = getContextTelemetry(curMsgs, limit);
+
+    setTokenStats(prev => ({
+      ...prev,
+      contextCurrentTokens: telemetry.usedTokens,
+      contextMaxTokens: limit,
+      promptTokens: Math.max(prev.promptTokens, telemetry.conversationTokens),
+      completionTokens: Math.max(prev.completionTokens, telemetry.toolsTokens)
+    }));
+  }, [sessionMessages, currentSessionId, currentModel]);
   const [isStreaming, setIsStreaming] = useState<boolean>(false);
   const [promptQueue, setPromptQueue] = useState<QueuedPromptItem[]>([]);
   const promptQueueRef = React.useRef<QueuedPromptItem[]>([]);
