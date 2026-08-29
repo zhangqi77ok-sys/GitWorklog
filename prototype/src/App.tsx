@@ -150,6 +150,15 @@ export const App: React.FC = () => {
   // Per-Session Message Map (100% Isolated: each session has its own message stream)
   const [sessionMessages, setSessionMessages] = useState<Record<string, ChatMessage[]>>(loadSavedSessionMessages());
   const [isStreaming, setIsStreaming] = useState<boolean>(false);
+  const abortControllerRef = React.useRef<AbortController | null>(null);
+
+  const handleStopGeneration = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setIsStreaming(false);
+  };
 
   // Messages for active session
   const messages = sessionMessages[currentSessionId] || [];
@@ -469,8 +478,12 @@ CodeMind 已通过本地磁盘桥接将工程目录结构与核心配置自动�
 
       const { url: requestUrl, headers: proxyHeaders } = resolveApiEndpoint(`${baseUrl}/chat/completions`);
 
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+
       const response = await fetch(requestUrl, {
         method: 'POST',
+        signal: controller.signal,
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${apiKey}`,

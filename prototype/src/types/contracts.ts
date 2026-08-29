@@ -2185,6 +2185,90 @@ export interface ThinkingBlockPayload {
   tokensCount: number;
 }
 
+export interface ParsedToolCall {
+  id: string;
+  name: string;
+  parameters: Record<string, string>;
+  raw: string;
+}
+
+export interface ParsedAgentMessage {
+  thinkingText: string;
+  toolCalls: ParsedToolCall[];
+  cleanContent: string;
+}
+
+export function parseAgentMessage(rawText: string): ParsedAgentMessage {
+  let text = rawText || '';
+  let thinkingText = '';
+  const toolCalls: ParsedToolCall[] = [];
+
+  // 1. Extract <think>...</think>
+  const thinkStart = text.indexOf('<think>');
+  const thinkEnd = text.indexOf('</think>');
+  if (thinkStart !== -1) {
+    if (thinkEnd !== -1) {
+      thinkingText = text.substring(thinkStart + 7, thinkEnd).trim();
+      text = (text.substring(0, thinkStart) + text.substring(thinkEnd + 8)).trim();
+    } else {
+      thinkingText = text.substring(thinkStart + 7).trim();
+      text = text.substring(0, thinkStart).trim();
+    }
+  }
+
+  // 2. Extract DeepSeek DSML / Standard Tool Calls
+  // Patterns: < | DSML | tool_calls> ... </ | DSML | tool_calls> OR <tool_calls> ... </tool_calls>
+  const dsmlRegex = /<\s*\|?\s*DSML\s*\|?\s*tool_calls>([\s\S]*?)<\/\s*\|?\s*DSML\s*\|?\s*tool_calls>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = dsmlRegex.exec(text)) !== null) {
+    const blockContent = match[1];
+    // Extract invoke name and parameters
+    const invokeRegex = /<\s*\|?\s*DSML\s*\|?\s*invoke\s+name="([^"]+)">([\s\S]*?)<\/\s*\|?\s*DSML\s*\|?\s*invoke>/gi;
+    let invMatch: RegExpExecArray | null;
+    while ((invMatch = invokeRegex.exec(blockContent)) !== null) {
+      const toolName = invMatch[1];
+      const paramsContent = invMatch[2];
+      const params: Record<string, string> = {};
+      const paramRegex = /<\s*\|?\s*DSML\s*\|?\s*parameter\s+name="([^"]+)"[^>]*>([\s\S]*?)<\/\s*\|?\s*DSML\s*\|?\s*parameter>/gi;
+      let pMatch: RegExpExecArray | null;
+      while ((pMatch = paramRegex.exec(paramsContent)) !== null) {
+        params[pMatch[1]] = pMatch[2].trim();
+      }
+      toolCalls.push({
+        id: `tool-${Date.now()}-${toolCalls.length}`,
+        name: toolName,
+        parameters: params,
+        raw: invMatch[0]
+      });
+    }
+  }
+
+  // Also support standard <tool_calls> or incomplete streaming DSML
+  text = text.replace(dsmlRegex, '').trim();
+
+  // Strip unclosed streaming < | DSML | tool_calls>
+  const unclosedIdx = text.search(/<\s*\|?\s*DSML\s*\|?\s*tool_calls>/i);
+  if (unclosedIdx !== -1) {
+    const partial = text.substring(unclosedIdx);
+    const invokeMatch = /name="([^"]+)"/i.exec(partial);
+    if (invokeMatch) {
+      toolCalls.push({
+        id: `tool-streaming`,
+        name: invokeMatch[1],
+        parameters: { status: '正在调度执行...' },
+        raw: partial
+      });
+    }
+    text = text.substring(0, unclosedIdx).trim();
+  }
+
+  return {
+    thinkingText,
+    toolCalls,
+    cleanContent: text
+  };
+}
+
 export function extractThinkingFromText(rawText: string, elapsedSeconds: number = 0): ThinkingBlockPayload {
   const thinkStart = rawText.indexOf('<think>');
   const thinkEnd = rawText.indexOf('</think>');

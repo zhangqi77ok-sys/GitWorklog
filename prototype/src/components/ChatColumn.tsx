@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import {
   Send,
+  Copy,
+  Share2,
+  Square,
   X,
   Shield,
   Paperclip,
@@ -37,6 +40,8 @@ import {
   MOCK_TRAJECTORY_STEPS,
   TrajectoryStepSnapshot,
   ChatMessage,
+  parseAgentMessage,
+  ParsedToolCall,
   AttachedFile,
   RuleItem,
   INITIAL_RULES,
@@ -87,6 +92,7 @@ interface ChatColumnProps {
   permissionPolicy: PermissionPolicy;
   setPermissionPolicy: (p: PermissionPolicy) => void;
   isStreaming?: boolean;
+  onStopGeneration?: () => void;
   onSendMessage: (text: string, mentions?: MentionContextItem[]) => void;
   onResolveOptions: (messageId: string, selectedIds: string[], customInput?: string) => void;
   onForkMessage?: (fromMessageId: string) => void;
@@ -106,12 +112,15 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
   permissionPolicy,
   setPermissionPolicy,
   isStreaming = false,
+  onStopGeneration,
   onSendMessage,
   onResolveOptions,
   onForkMessage,
   onNavigateDiff
 }) => {
   const [inputText, setInputText] = useState('');
+  const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null);
+  const [collapsedTools, setCollapsedTools] = useState<Record<string, boolean>>({});
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
   const [showRulesPopover, setShowRulesPopover] = useState(false);
   const [isInputFocused, setIsInputFocused] = useState(false);
@@ -601,7 +610,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
               display: 'flex',
               alignItems: 'center',
               gap: '6px',
-              marginBottom: '4px',
+              marginBottom: '6px',
               fontSize: '11px',
               color: 'var(--text-muted)'
             }}>
@@ -614,69 +623,182 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                   {msg.auditTag}
                 </span>
               )}
-              {msg.role === 'assistant' && onForkMessage && (
+
+              {/* Action Buttons: Copy, Share, Fork */}
+              <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <button
-                  onClick={() => onForkMessage(msg.id)}
-                  title="Harness 事件溯源: 从该思考节点分叉出独立会话分支"
+                  onClick={() => {
+                    navigator.clipboard.writeText(msg.content);
+                    setCopiedMsgId(msg.id);
+                    setTimeout(() => setCopiedMsgId(null), 2000);
+                  }}
                   style={{
-                    marginLeft: 'auto',
                     display: 'flex',
                     alignItems: 'center',
                     gap: '3px',
-                    padding: '2px 7px',
+                    padding: '2px 6px',
                     borderRadius: '3px',
                     background: 'var(--bg-base)',
                     border: '1px solid var(--border-subtle)',
-                    color: 'var(--text-secondary)',
+                    color: copiedMsgId === msg.id ? '#16A34A' : 'var(--text-muted)',
                     fontSize: '10px',
-                    fontWeight: 600,
                     cursor: 'pointer'
                   }}
+                  title="复制回答文本到剪贴板"
                 >
-                  <GitBranch size={10} color="var(--accent)" />
-                  <span>分叉分支 (Fork)</span>
+                  {copiedMsgId === msg.id ? <Check size={10} color="#16A34A" /> : <Copy size={10} />}
+                  <span>{copiedMsgId === msg.id ? '已复制' : '复制'}</span>
                 </button>
-              )}
-            </div>
 
-            {msg.role === 'assistant' && msg.content.includes('<think>') ? (
-              <>
-                <ThinkingBlock payload={extractThinkingFromText(msg.content, 8.2)} />
-                <div style={{
-                  padding: '10px 12px',
-                  borderRadius: '6px',
-                  background: 'var(--bg-base)',
-                  border: '1px solid var(--border-subtle)',
-                  fontSize: '12px',
-                  lineHeight: 1.6
-                }}>
-                  {extractThinkingFromText(msg.content).contentText || msg.content}
-                </div>
-              </>
-            ) : (
-              <div style={{
-                padding: '10px 12px',
-                borderRadius: '6px',
-                background: msg.role === 'user' ? 'var(--bg-surface)' : 'var(--bg-base)',
-                border: '1px solid var(--border-subtle)',
-                fontSize: '12px',
-                lineHeight: 1.6,
-                whiteSpace: 'pre-wrap',
-                wordBreak: 'break-word'
-              }}>
-                {msg.content}
-                {isStreaming && msg.role === 'assistant' && msg.id === messages[messages.length - 1]?.id && (
-                  <span style={{
-                    display: 'inline-block',
-                    width: '6px',
-                    height: '14px',
-                    background: 'var(--accent)',
-                    marginLeft: '3px',
-                    verticalAlign: 'middle'
-                  }} />
+                <button
+                  onClick={() => {
+                    const blob = new Blob([msg.content], { type: 'text/markdown;charset=utf-8;' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `codemind-${msg.id}.md`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '3px',
+                    padding: '2px 6px',
+                    borderRadius: '3px',
+                    background: 'var(--bg-base)',
+                    border: '1px solid var(--border-subtle)',
+                    color: 'var(--text-muted)',
+                    fontSize: '10px',
+                    cursor: 'pointer'
+                  }}
+                  title="导出为 Markdown 文件"
+                >
+                  <Share2 size={10} />
+                  <span>导出</span>
+                </button>
+
+                {msg.role === 'assistant' && onForkMessage && (
+                  <button
+                    onClick={() => onForkMessage(msg.id)}
+                    title="Harness 事件溯源: 从该思考节点分叉出独立会话分支"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '3px',
+                      padding: '2px 7px',
+                      borderRadius: '3px',
+                      background: 'var(--bg-base)',
+                      border: '1px solid var(--border-subtle)',
+                      color: 'var(--text-secondary)',
+                      fontSize: '10px',
+                      fontWeight: 600,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <GitBranch size={10} color="var(--accent)" />
+                    <span>分叉分支</span>
+                  </button>
                 )}
               </div>
-            )}
+            </div>
+
+            {/* Message Body with Tag Folding, ThinkingBlock & Tool Calls */}
+            {(() => {
+              const parsed = parseAgentMessage(msg.content);
+              const isLastAssistant = isStreaming && msg.role === 'assistant' && msg.id === messages[messages.length - 1]?.id;
+
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', userSelect: 'text', WebkitUserSelect: 'text' }}>
+                  {/* Collapsible Thinking Process */}
+                  {parsed.thinkingText && (
+                    <ThinkingBlock
+                      payload={{
+                        thinkingText: parsed.thinkingText,
+                        contentText: parsed.cleanContent,
+                        isThinkingFinished: !isStreaming || !isLastAssistant,
+                        durationSeconds: 6.5,
+                        tokensCount: Math.ceil(parsed.thinkingText.length / 4)
+                      }}
+                      defaultExpanded={isLastAssistant}
+                    />
+                  )}
+
+                  {/* Collapsible Agent DSML Tool Calls Badge */}
+                  {parsed.toolCalls.length > 0 && (
+                    <div style={{
+                      borderRadius: '6px',
+                      border: '1px solid rgba(217, 107, 39, 0.3)',
+                      background: 'rgba(217, 107, 39, 0.04)',
+                      overflow: 'hidden'
+                    }}>
+                      <div
+                        onClick={() => setCollapsedTools(prev => ({ ...prev, [msg.id]: !prev[msg.id] }))}
+                        style={{
+                          padding: '6px 10px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          background: 'rgba(217, 107, 39, 0.08)',
+                          cursor: 'pointer',
+                          userSelect: 'none',
+                          fontSize: '11px',
+                          fontWeight: 600,
+                          color: 'var(--accent)'
+                        }}
+                        title="点击折叠/展开工具调用细节"
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <Wrench size={13} />
+                          <span>🛠️ Agent 工具调度: 已调用 {parsed.toolCalls.length} 个函数 ({parsed.toolCalls.map((t: ParsedToolCall) => t.name).join(', ')})</span>
+                        </div>
+                        {collapsedTools[msg.id] ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+                      </div>
+
+                      {!collapsedTools[msg.id] && (
+                        <div style={{ padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '11px', fontFamily: 'var(--font-mono)' }}>
+                          {parsed.toolCalls.map((tc: ParsedToolCall, idx: number) => (
+                            <div key={idx} style={{ padding: '3px 6px', borderRadius: '4px', background: 'var(--bg-base)' }}>
+                              <span style={{ color: 'var(--accent)', fontWeight: 700 }}>▶ {tc.name}</span>
+                              <span style={{ color: 'var(--text-muted)', marginLeft: '6px' }}>{JSON.stringify(tc.parameters)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Clean Content Text */}
+                  {(parsed.cleanContent || (!parsed.thinkingText && parsed.toolCalls.length === 0)) && (
+                    <div style={{
+                      padding: '10px 12px',
+                      borderRadius: '6px',
+                      background: msg.role === 'user' ? 'var(--bg-surface)' : 'var(--bg-base)',
+                      border: '1px solid var(--border-subtle)',
+                      fontSize: '12px',
+                      lineHeight: 1.6,
+                      whiteSpace: 'pre-wrap',
+                      wordBreak: 'break-word',
+                      userSelect: 'text',
+                      WebkitUserSelect: 'text',
+                      cursor: 'text'
+                    }}>
+                      {parsed.cleanContent || (isLastAssistant ? '正在推演并分析工程结构...' : msg.content)}
+                      {isLastAssistant && (
+                        <span style={{
+                          display: 'inline-block',
+                          width: '6px',
+                          height: '14px',
+                          background: 'var(--accent)',
+                          marginLeft: '3px',
+                          verticalAlign: 'middle'
+                        }} />
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {msg.optionsPayload && (
               <OptionsCard
@@ -1670,27 +1792,51 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                 Ctrl+↵
               </span>
 
-              {/* Primary Send Button */}
-              <button
-                onClick={handleSend}
-                disabled={!inputText.trim() && attachedFiles.length === 0}
-                style={{
-                  width: '28px',
-                  height: '28px',
-                  borderRadius: '6px',
-                  background: (inputText.trim() || attachedFiles.length > 0) ? 'var(--accent)' : 'var(--bg-base)',
-                  border: (inputText.trim() || attachedFiles.length > 0) ? 'none' : '1px solid var(--border-subtle)',
-                  color: (inputText.trim() || attachedFiles.length > 0) ? '#FFF' : 'var(--text-muted)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: (inputText.trim() || attachedFiles.length > 0) ? 'pointer' : 'not-allowed',
-                  boxShadow: (inputText.trim() || attachedFiles.length > 0) ? '0 2px 8px rgba(217, 107, 39, 0.35)' : 'none',
-                  transition: 'all 0.15s ease'
-                }}
-              >
-                <Send size={13} />
-              </button>
+              {/* Primary Send or Stop Generation Button */}
+              {isStreaming ? (
+                <button
+                  onClick={onStopGeneration}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    padding: '4px 10px',
+                    borderRadius: '6px',
+                    background: '#DC2626',
+                    color: '#FFF',
+                    border: 'none',
+                    cursor: 'pointer',
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    boxShadow: '0 2px 8px rgba(220, 38, 38, 0.35)'
+                  }}
+                  title="中断大模型当前输出 (Esc)"
+                >
+                  <Square size={10} fill="#FFF" />
+                  <span>停止</span>
+                </button>
+              ) : (
+                <button
+                  onClick={handleSend}
+                  disabled={!inputText.trim() && attachedFiles.length === 0}
+                  style={{
+                    width: '28px',
+                    height: '28px',
+                    borderRadius: '6px',
+                    background: (inputText.trim() || attachedFiles.length > 0) ? 'var(--accent)' : 'var(--bg-base)',
+                    border: (inputText.trim() || attachedFiles.length > 0) ? 'none' : '1px solid var(--border-subtle)',
+                    color: (inputText.trim() || attachedFiles.length > 0) ? '#FFF' : 'var(--text-muted)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: (inputText.trim() || attachedFiles.length > 0) ? 'pointer' : 'not-allowed',
+                    boxShadow: (inputText.trim() || attachedFiles.length > 0) ? '0 2px 8px rgba(217, 107, 39, 0.35)' : 'none',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  <Send size={13} />
+                </button>
+              )}
             </div>
           </div>
         </div>

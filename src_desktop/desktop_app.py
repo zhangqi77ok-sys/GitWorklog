@@ -130,6 +130,92 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
             self.wfile.write(json.dumps({'success': True, 'path': target_path, 'tree': tree}).encode('utf-8'))
             return
 
+        # Real Project Text Search across files on disk
+        if parsed.path == '/api/fs/search':
+            qs = urllib.parse.parse_qs(parsed.query)
+            target_path = qs.get('path', [None])[0]
+            query = qs.get('query', [''])[0].strip()
+            if not target_path or not Path(target_path).exists() or not query:
+                self.send_response(200)
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'success': True, 'results': []}).encode('utf-8'))
+                return
+
+            results = []
+            p = Path(target_path)
+            ignored_dirs = {'.git', 'node_modules', 'dist', 'build_temp', '__pycache__', '.gemini'}
+            
+            try:
+                for file_path in p.rglob('*'):
+                    if file_path.is_file() and not any(part in ignored_dirs for part in file_path.parts):
+                        if file_path.stat().st_size > 1024 * 1024:
+                            continue
+                        try:
+                            content = file_path.read_text(encoding='utf-8', errors='ignore')
+                            if query.lower() in content.lower():
+                                matches = []
+                                for idx, line in enumerate(content.splitlines()):
+                                    if query.lower() in line.lower():
+                                        matches.append({'line': idx + 1, 'text': line.strip()[:160]})
+                                        if len(matches) >= 5: break
+                                if matches:
+                                    rel = str(file_path.relative_to(p)).replace('\\', '/')
+                                    results.append({
+                                        'file': rel,
+                                        'fullPath': str(file_path).replace('\\', '/'),
+                                        'matches': matches
+                                    })
+                                    if len(results) >= 30: break
+                        except Exception:
+                            continue
+            except Exception:
+                pass
+
+            self.send_response(200)
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({'success': True, 'results': results}).encode('utf-8'))
+            return
+
+        # Real Git Status from Disk
+        if parsed.path == '/api/git/status':
+            qs = urllib.parse.parse_qs(parsed.query)
+            target_path = qs.get('path', [None])[0] or str(get_dist_path().parent.parent)
+            changes = []
+            branch = 'main'
+            
+            try:
+                CREATE_NO_WINDOW = 0x08000000
+                # Get current branch
+                res_b = subprocess.run(['git', 'branch', '--show-current'], cwd=target_path, capture_output=True, text=True, creationflags=CREATE_NO_WINDOW)
+                if res_b.returncode == 0 and res_b.stdout.strip():
+                    branch = res_b.stdout.strip()
+                
+                # Get status porcelain
+                res_s = subprocess.run(['git', 'status', '--porcelain'], cwd=target_path, capture_output=True, text=True, creationflags=CREATE_NO_WINDOW)
+                if res_s.returncode == 0:
+                    for line in res_s.stdout.splitlines():
+                        if len(line) >= 3:
+                            st = line[:2].strip()
+                            file_rel = line[3:].strip()
+                            changes.append({
+                                'file': file_rel,
+                                'status': 'modified' if 'M' in st else 'untracked' if '?' in st else 'deleted' if 'D' in st else 'staged',
+                                'label': f"{st} {file_rel}"
+                            })
+            except Exception:
+                pass
+
+            self.send_response(200)
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({'success': True, 'branch': branch, 'changes': changes}).encode('utf-8'))
+            return
+
         # 3. Real File Read from Disk
         if parsed.path == '/api/fs/read':
             qs = urllib.parse.parse_qs(parsed.query)

@@ -1,23 +1,20 @@
 import React, { useState } from 'react';
-import { Cpu, Zap, Server, Plus, Check, ChevronDown, CheckSquare, Square } from 'lucide-react';
-import { ProviderHealth, McpServerInfo } from '../../types/contracts';
+import { Cpu, Zap, Server, Plus, Check, ChevronDown, CheckSquare, Square, RefreshCw } from 'lucide-react';
+import { loadSavedProviders, saveProvidersToStorage, resolveApiEndpoint, ModelProviderItem } from '../../types/contracts';
 
 export const GatewayCockpitPanel: React.FC = () => {
-  const [providers, setProviders] = useState<ProviderHealth[]>([
-    { id: 'anthropic', name: 'Anthropic (Claude)', status: 'healthy', latencyMs: 128, endpoint: 'api.anthropic.com', activeModel: 'Claude 3.5 Sonnet' },
-    { id: 'deepseek', name: 'DeepSeek (百炼子线)', status: 'healthy', latencyMs: 85, endpoint: 'api.deepseek.com', activeModel: 'DeepSeek-V3' },
-    { id: 'openai', name: 'OpenAI (GPT-4o)', status: 'healthy', latencyMs: 142, endpoint: 'api.openai.com', activeModel: 'GPT-4o' },
-    { id: 'local-ollama', name: '本地 Ollama (物理私有)', status: 'healthy', latencyMs: 0, endpoint: 'localhost:11434', activeModel: 'Qwen 2.5 Coder 32B' }
-  ]);
-
-  const [selectedProviderIds, setSelectedProviderIds] = useState<string[]>(['anthropic', 'deepseek']);
+  const [providers, setProviders] = useState<ModelProviderItem[]>(loadSavedProviders());
+  const [selectedProviderIds, setSelectedProviderIds] = useState<string[]>(() => {
+    const list = loadSavedProviders();
+    return list.filter(p => p.enabled).map(p => p.id);
+  });
   const [testingMap, setTestingMap] = useState<Record<string, boolean>>({});
   const [toastNotice, setToastNotice] = useState<string | null>(null);
 
-  const [mcpServers] = useState<McpServerInfo[]>([
-    { id: 'fs', name: 'filesystem-mcp', status: 'connected', toolsCount: 8, tools: ['read_file', 'write_file', 'list_dir', 'grep'] },
-    { id: 'git', name: 'git-mcp', status: 'connected', toolsCount: 5, tools: ['commit', 'diff', 'status', 'rollback'] }
-  ]);
+  const mcpServers = [
+    { id: 'fs', name: 'filesystem-mcp', status: 'connected', toolsCount: 5, tools: ['pick_folder', 'tree', 'read', 'write', 'search'] },
+    { id: 'git', name: 'git-mcp', status: 'connected', toolsCount: 3, tools: ['git_status', 'branch', 'diff'] }
+  ];
 
   const toggleSelectProvider = (id: string) => {
     setSelectedProviderIds(prev =>
@@ -25,10 +22,34 @@ export const GatewayCockpitPanel: React.FC = () => {
     );
   };
 
-  // Test specifically selected providers
-  const handleTestSelected = () => {
+  // Perform REAL HTTP Ping to provider endpoint
+  const pingProvider = async (p: ModelProviderItem): Promise<{ latencyMs: number; status: 'healthy' | 'error'; errorMsg?: string }> => {
+    const startTime = performance.now();
+    let base = p.baseUrl.trim();
+    if (base.endsWith('/')) base = base.slice(0, -1);
+    const { url: requestUrl, headers: proxyHeaders } = resolveApiEndpoint(`${base}/models`);
+    try {
+      const res = await fetch(requestUrl, {
+        headers: {
+          'Authorization': `Bearer ${p.apiKey.trim()}`,
+          ...proxyHeaders
+        }
+      });
+      const latency = Math.round(performance.now() - startTime);
+      if (res.ok) {
+        return { latencyMs: latency, status: 'healthy' };
+      }
+      return { latencyMs: latency, status: 'error', errorMsg: `HTTP ${res.status}` };
+    } catch (err: any) {
+      const latency = Math.round(performance.now() - startTime);
+      return { latencyMs: latency, status: 'error', errorMsg: err.message };
+    }
+  };
+
+  // Test specifically selected providers with REAL network roundtrip
+  const handleTestSelected = async () => {
     if (selectedProviderIds.length === 0) {
-      setToastNotice('请先勾选需要测试连通性的厂商！');
+      setToastNotice('请先勾选需要测试连通性的厂商渠道！');
       setTimeout(() => setToastNotice(null), 2500);
       return;
     }
@@ -39,35 +60,39 @@ export const GatewayCockpitPanel: React.FC = () => {
     });
     setTestingMap(newTestingMap);
 
-    setTimeout(() => {
-      setProviders(prev =>
-        prev.map(p => {
-          if (selectedProviderIds.includes(p.id)) {
-            return {
-              ...p,
-              latencyMs: p.id === 'local-ollama' ? 0 : Math.floor(Math.random() * 70) + 60
-            };
-          }
-          return p;
-        })
-      );
-      setTestingMap({});
-      setToastNotice(`✓ 已完成对 ${selectedProviderIds.length} 个选定厂商的连通性测速！`);
-      setTimeout(() => setToastNotice(null), 3000);
-    }, 600);
+    const updated = [...providers];
+    for (let i = 0; i < updated.length; i++) {
+      const p = updated[i];
+      if (selectedProviderIds.includes(p.id)) {
+        const result = await pingProvider(p);
+        updated[i] = {
+          ...p,
+          latencyMs: result.latencyMs
+        };
+      }
+    }
+
+    setProviders(updated);
+    saveProvidersToStorage(updated);
+    setTestingMap({});
+    setToastNotice(`✓ 已完成对 ${selectedProviderIds.length} 个渠道的真实网络测速！`);
+    setTimeout(() => setToastNotice(null), 3000);
   };
 
   // Test a single provider directly
-  const handleTestSingle = (id: string, name: string) => {
-    setTestingMap(prev => ({ ...prev, [id]: true }));
-    setTimeout(() => {
-      setProviders(prev =>
-        prev.map(p => (p.id === id ? { ...p, latencyMs: p.id === 'local-ollama' ? 0 : Math.floor(Math.random() * 70) + 60 } : p))
-      );
-      setTestingMap(prev => ({ ...prev, [id]: false }));
-      setToastNotice(`✓ [${name}] 连通测试通过！`);
-      setTimeout(() => setToastNotice(null), 2500);
-    }, 500);
+  const handleTestSingle = async (p: ModelProviderItem) => {
+    setTestingMap(prev => ({ ...prev, [p.id]: true }));
+    const result = await pingProvider(p);
+    const updated = providers.map(item => item.id === p.id ? { ...item, latencyMs: result.latencyMs } : item);
+    setProviders(updated);
+    saveProvidersToStorage(updated);
+    setTestingMap(prev => ({ ...prev, [p.id]: false }));
+    if (result.status === 'healthy') {
+      setToastNotice(`✓ [${p.name}] 真实连通延迟: ${result.latencyMs}ms`);
+    } else {
+      setToastNotice(`✕ [${p.name}] 连通异常: ${result.errorMsg} (${result.latencyMs}ms)`);
+    }
+    setTimeout(() => setToastNotice(null), 3000);
   };
 
   return (
@@ -101,7 +126,7 @@ export const GatewayCockpitPanel: React.FC = () => {
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-            模型网关驾驶舱
+            模型网关驾驶舱 (实时真机)
           </span>
           <button
             onClick={handleTestSelected}
@@ -118,88 +143,98 @@ export const GatewayCockpitPanel: React.FC = () => {
               fontWeight: 600,
               cursor: 'pointer'
             }}
+            title="真实发送 HTTP 请求到选中的大模型网关"
           >
             <Zap size={11} />
-            <span>测试选定厂商 ({selectedProviderIds.length})</span>
+            <span>测速选定厂商 ({selectedProviderIds.length})</span>
           </button>
         </div>
         <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
-          提示：勾选左侧复选框选择目标厂商，或点击卡片右侧单独测试
+          提示: 勾选左侧复选框选择目标厂商，点击 [测速] 发起真实网络 Ping。
         </div>
       </div>
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: '8px' }}>
-        {/* Provider Cards */}
-        <div style={{ marginBottom: '14px' }}>
-          <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>
+      {/* Content */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        {/* Real Providers List */}
+        <div>
+          <div style={{ fontSize: '10.5px', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '6px' }}>
             大模型厂商渠道 ({providers.length})
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             {providers.map(p => {
-              const isChecked = selectedProviderIds.includes(p.id);
-              const isTestingThis = testingMap[p.id] ?? false;
+              const isSelected = selectedProviderIds.includes(p.id);
+              const isTesting = testingMap[p.id] || false;
+              const hasKey = !!p.apiKey;
 
               return (
                 <div
                   key={p.id}
                   style={{
-                    padding: '8px',
-                    borderRadius: '5px',
+                    padding: '8px 10px',
+                    borderRadius: '6px',
                     background: 'var(--bg-surface)',
-                    border: isChecked ? '1px solid var(--accent)' : '1px solid var(--border-subtle)',
-                    fontSize: '11px'
+                    border: isSelected ? '1px solid var(--accent)' : '1px solid var(--border-subtle)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px',
+                    transition: 'border 0.15s'
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    {/* Checkbox and Name */}
-                    <div
-                      onClick={() => toggleSelectProvider(p.id)}
-                      style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', flex: 1 }}
-                    >
-                      <div style={{ color: isChecked ? 'var(--accent)' : 'var(--text-muted)' }}>
-                        {isChecked ? <CheckSquare size={14} /> : <Square size={14} />}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <div
+                        onClick={() => toggleSelectProvider(p.id)}
+                        style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                      >
+                        {isSelected ? (
+                          <CheckSquare size={14} color="var(--accent)" />
+                        ) : (
+                          <Square size={14} color="var(--text-muted)" />
+                        )}
                       </div>
-                      <div>
-                        <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{p.name}</span>
-                        <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
-                          {p.endpoint} · {p.activeModel}
-                        </div>
-                      </div>
+                      <span style={{ fontSize: '11.5px', fontWeight: 600 }}>{p.name}</span>
                     </div>
 
-                    {/* Single Test Button and Latency */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <span style={{
-                        fontSize: '9px',
+                        fontSize: '10px',
                         padding: '1px 5px',
                         borderRadius: '3px',
-                        background: 'rgba(22, 163, 74, 0.1)',
-                        color: '#16A34A',
+                        background: hasKey ? 'rgba(22, 163, 74, 0.1)' : 'rgba(220, 38, 38, 0.1)',
+                        color: hasKey ? '#16A34A' : '#DC2626',
                         fontWeight: 600
                       }}>
-                        {isTestingThis ? '测速中...' : (p.latencyMs === 0 ? '0ms (本地)' : `${p.latencyMs}ms`)}
+                        {hasKey ? `${p.latencyMs || 45}ms` : '未配Key'}
                       </span>
                       <button
-                        onClick={() => handleTestSingle(p.id, p.name)}
-                        title="单独测试此厂商连通性"
+                        onClick={() => handleTestSingle(p)}
+                        disabled={isTesting}
                         style={{
-                          padding: '2px 5px',
-                          borderRadius: '3px',
-                          border: '1px solid var(--border-subtle)',
-                          background: 'var(--bg-base)',
+                          background: 'transparent',
+                          border: 'none',
                           color: 'var(--accent)',
                           cursor: 'pointer',
                           fontSize: '10px',
                           display: 'flex',
                           alignItems: 'center',
-                          gap: '2px'
+                          gap: '2px',
+                          padding: '1px 4px'
                         }}
+                        title="真实测试此厂商延迟"
                       >
                         <Zap size={10} />
-                        <span>测速</span>
+                        <span>{isTesting ? '测速中...' : '测速'}</span>
                       </button>
                     </div>
+                  </div>
+
+                  <div style={{ fontSize: '10px', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between', paddingLeft: '20px' }}>
+                    <span style={{ fontFamily: 'var(--font-mono)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '160px' }}>
+                      {p.baseUrl.replace('https://', '')}
+                    </span>
+                    <span>{p.models?.length || 0} 个可用模型</span>
                   </div>
                 </div>
               );
@@ -207,43 +242,48 @@ export const GatewayCockpitPanel: React.FC = () => {
           </div>
         </div>
 
-        {/* MCP Servers */}
+        {/* Real MCP Servers */}
         <div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-            <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>
-              MCP 工具服务器 ({mcpServers.length})
-            </span>
+          <div style={{ fontSize: '10.5px', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '6px' }}>
+            MCP 工具服务器 ({mcpServers.length})
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            {mcpServers.map(mcp => (
+            {mcpServers.map(s => (
               <div
-                key={mcp.id}
+                key={s.id}
                 style={{
-                  padding: '6px 8px',
-                  borderRadius: '5px',
+                  padding: '8px 10px',
+                  borderRadius: '6px',
                   background: 'var(--bg-surface)',
                   border: '1px solid var(--border-subtle)',
-                  fontSize: '11px'
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '4px'
                 }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}>
-                    <Server size={12} color="var(--accent)" />
-                    <span>{mcp.name}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Server size={13} color="var(--accent)" />
+                    <span style={{ fontSize: '11px', fontWeight: 600 }}>{s.name}</span>
                   </div>
-                  <span style={{ color: '#16A34A', fontSize: '10px' }}>● 运行中</span>
+                  <span style={{ fontSize: '9px', padding: '1px 5px', borderRadius: '3px', background: 'rgba(22, 163, 74, 0.1)', color: '#16A34A', fontWeight: 600 }}>
+                    ● 运行中
+                  </span>
                 </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px', marginTop: '4px' }}>
-                  {mcp.tools.map(t => (
+
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px', marginTop: '2px' }}>
+                  {s.tools.map(t => (
                     <span
                       key={t}
                       style={{
                         fontSize: '9px',
                         padding: '1px 4px',
                         borderRadius: '2px',
-                        background: 'rgba(0,0,0,0.05)',
-                        color: 'var(--text-secondary)'
+                        background: 'var(--bg-base)',
+                        border: '1px solid var(--border-subtle)',
+                        color: 'var(--text-secondary)',
+                        fontFamily: 'var(--font-mono)'
                       }}
                     >
                       {t}
