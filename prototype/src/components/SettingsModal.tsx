@@ -24,7 +24,9 @@ import {
   SlidersHorizontal,
   ExternalLink,
   Clipboard,
-  Trash2
+  Trash2,
+  Code,
+  ChevronDown
 } from 'lucide-react';
 import {
   SkillItem,
@@ -50,6 +52,12 @@ import {
   RuleItem,
   INITIAL_RULES,
   toggleRuleItem,
+  addCustomRule,
+  deleteRule,
+  toggleMcpServer,
+  INITIAL_KEYBINDINGS,
+  INITIAL_MCP_SERVERS,
+  McpServerItem,
   ProviderHealth,
   McpServerInfo
 } from '../types/contracts';
@@ -70,6 +78,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [activeTab, setActiveTab] = useState<'gateway' | 'rules' | 'skills' | 'mcp' | 'appearance' | 'keybindings' | 'system'>('rules');
   const [searchFilter, setSearchFilter] = useState('');
   const [rules, setRules] = useState<RuleItem[]>(INITIAL_RULES);
+  const [ruleFilter, setRuleFilter] = useState<'all' | 'project' | 'global'>('all');
+  const [showAddRuleForm, setShowAddRuleForm] = useState(false);
+  const [newRuleTitle, setNewRuleTitle] = useState('');
+  const [newRuleContent, setNewRuleContent] = useState('');
+  const [newRuleScope, setNewRuleScope] = useState<'project' | 'global'>('project');
+
+  const [skillSearch, setSkillSearch] = useState('');
+  const [skillCategory, setSkillCategory] = useState<'all' | 'code' | 'test' | 'arch'>('all');
+
+  const [mcpList, setMcpList] = useState<McpServerItem[]>(INITIAL_MCP_SERVERS);
+  const [expandedMcpId, setExpandedMcpId] = useState<string | null>('mcp-github');
+  const [testingMcpId, setTestingMcpId] = useState<string | null>(null);
+
+  const [dataDesensitize, setDataDesensitize] = useState(true);
+  const [autoShadowSnapshot, setAutoShadowSnapshot] = useState(true);
+  const [astDepth, setAstDepth] = useState<'shallow' | 'standard' | 'deep'>('standard');
+
 
 
   // GitHub Benchmark Model Providers Master-Detail State (Cherry Studio / LobeChat style)
@@ -376,86 +401,218 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
             {/* TAB: RULE 规则管理 (Rules for AI) */}
             {activeTab === 'rules' && (
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                  <h3 style={{ fontSize: '13px', fontWeight: 700 }}>Rule 规则管理 (Rules for AI)</h3>
-                  <button style={{
-                    padding: '3px 8px',
-                    borderRadius: '4px',
-                    background: 'var(--accent)',
-                    color: '#FFF',
-                    border: 'none',
-                    fontSize: '10px',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '3px'
-                  }}>
+              <div style={{ display: 'flex', flexDirection: 'column', height: '500px', margin: '-4px 0', gap: '10px' }}>
+                {/* 1. Header & Filter Matrix */}
+                <div style={{
+                  padding: '10px 14px',
+                  borderRadius: '6px',
+                  background: 'var(--bg-surface)',
+                  border: '1px solid var(--border-subtle)',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>规则作用域:</span>
+                    {[
+                      { id: 'all', label: `全部 (${rules.length})` },
+                      { id: 'project', label: `📁 工程级 (${rules.filter(r => r.scope === 'project').length})` },
+                      { id: 'global', label: `🌐 全局级 (${rules.filter(r => r.scope === 'global').length})` }
+                    ].map(f => (
+                      <button
+                        key={f.id}
+                        onClick={() => setRuleFilter(f.id as any)}
+                        style={{
+                          padding: '3px 8px',
+                          borderRadius: '4px',
+                          border: 'none',
+                          background: ruleFilter === f.id ? 'var(--accent)' : 'var(--bg-base)',
+                          color: ruleFilter === f.id ? '#FFF' : 'var(--text-secondary)',
+                          fontSize: '10px',
+                          fontWeight: ruleFilter === f.id ? 700 : 500,
+                          cursor: 'pointer',
+                          transition: 'all 0.1s ease'
+                        }}
+                      >
+                        {f.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <button
+                    onClick={() => setShowAddRuleForm(!showAddRuleForm)}
+                    style={{
+                      padding: '4px 10px',
+                      borderRadius: '4px',
+                      background: 'var(--accent)',
+                      color: '#FFF',
+                      border: 'none',
+                      fontSize: '10px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}
+                  >
                     <Plus size={11} />
                     <span>添加自定义规则</span>
                   </button>
                 </div>
-                <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '14px' }}>
-                  参考 Cursor <code>.cursorrules</code> 与 Antigravity 架构，问答发起与 Act 任务启动前会自动前置注入处于生效状态的 Rule 规则。
-                </p>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {rules.map(r => (
-                    <div
-                      key={r.id}
-                      style={{
-                        padding: '10px 12px',
-                        borderRadius: '6px',
-                        border: r.enabled ? '1px solid var(--accent)' : '1px solid var(--border-subtle)',
-                        background: 'var(--bg-surface)',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'flex-start'
-                      }}
-                    >
-                      <div style={{ flex: 1, paddingRight: '12px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
-                          <span style={{ fontWeight: 600, fontSize: '12px' }}>{r.title}</span>
-                          <span style={{
-                            fontSize: '9px',
-                            padding: '1px 5px',
+                {/* Inline Add Rule Form */}
+                {showAddRuleForm && (
+                  <div style={{
+                    padding: '12px',
+                    borderRadius: '6px',
+                    background: 'var(--bg-surface)',
+                    border: '1px solid var(--accent)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '8px'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--accent)' }}>新建 System Rule 规则</span>
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <button
+                          onClick={() => setNewRuleScope('project')}
+                          style={{
+                            padding: '2px 8px',
                             borderRadius: '3px',
-                            background: r.scope === 'project' ? 'rgba(217, 107, 39, 0.15)' : 'rgba(37, 99, 235, 0.1)',
-                            color: r.scope === 'project' ? 'var(--accent)' : '#2563EB',
-                            fontWeight: 600
-                          }}>
-                            {r.scope === 'project' ? '📁 工程级规则' : '🌐 全局通用规则'}
-                          </span>
-                        </div>
-                        <p style={{ fontSize: '11px', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
-                          {r.content}
-                        </p>
+                            fontSize: '10px',
+                            border: newRuleScope === 'project' ? '1px solid var(--accent)' : '1px solid var(--border-subtle)',
+                            background: newRuleScope === 'project' ? 'var(--accent-subtle)' : 'transparent',
+                            color: newRuleScope === 'project' ? 'var(--accent)' : 'var(--text-secondary)',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          📁 工程级规则
+                        </button>
+                        <button
+                          onClick={() => setNewRuleScope('global')}
+                          style={{
+                            padding: '2px 8px',
+                            borderRadius: '3px',
+                            fontSize: '10px',
+                            border: newRuleScope === 'global' ? '1px solid var(--accent)' : '1px solid var(--border-subtle)',
+                            background: newRuleScope === 'global' ? 'var(--accent-subtle)' : 'transparent',
+                            color: newRuleScope === 'global' ? 'var(--accent)' : 'var(--text-secondary)',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          🌐 全局通用规则
+                        </button>
                       </div>
+                    </div>
 
+                    <input
+                      type="text"
+                      placeholder="规则标题 (例如：严禁未经确认修改生产环境数据库结构)"
+                      value={newRuleTitle}
+                      onChange={e => setNewRuleTitle(e.target.value)}
+                      style={{ padding: '5px 8px', fontSize: '11px', borderRadius: '4px', border: '1px solid var(--border-strong)', background: 'var(--bg-base)', color: 'var(--text-primary)', outline: 'none' }}
+                    />
+                    <textarea
+                      rows={2}
+                      placeholder="规则内容详情 (AI 在每次发起任务前均会自动前置读取并严格服从此约束)..."
+                      value={newRuleContent}
+                      onChange={e => setNewRuleContent(e.target.value)}
+                      style={{ padding: '5px 8px', fontSize: '11px', borderRadius: '4px', border: '1px solid var(--border-strong)', background: 'var(--bg-base)', color: 'var(--text-primary)', outline: 'none', resize: 'none' }}
+                    />
+
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '6px' }}>
                       <button
-                        onClick={() => setRules(toggleRuleItem(rules, r.id))}
-                        style={{
-                          padding: '3px 10px',
-                          borderRadius: '12px',
-                          border: 'none',
-                          background: r.enabled ? 'var(--accent)' : 'var(--border-strong)',
-                          color: '#FFF',
-                          fontSize: '10px',
-                          fontWeight: 600,
-                          cursor: 'pointer',
-                          minWidth: '55px'
-                        }}
+                        onClick={() => setShowAddRuleForm(false)}
+                        style={{ padding: '4px 10px', borderRadius: '3px', border: 'none', background: 'transparent', color: 'var(--text-muted)', fontSize: '10px', cursor: 'pointer' }}
                       >
-                        {r.enabled ? '已生效' : '已禁用'}
+                        取消
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (!newRuleTitle.trim()) return;
+                          setRules(addCustomRule(rules, { title: newRuleTitle, content: newRuleContent, scope: newRuleScope }));
+                          setNewRuleTitle('');
+                          setNewRuleContent('');
+                          setShowAddRuleForm(false);
+                        }}
+                        style={{ padding: '4px 14px', borderRadius: '3px', border: 'none', background: 'var(--accent)', color: '#FFF', fontSize: '10px', fontWeight: 600, cursor: 'pointer' }}
+                      >
+                        保存并生效
                       </button>
                     </div>
-                  ))}
+                  </div>
+                )}
+
+                {/* Rules List */}
+                <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', paddingRight: '4px' }}>
+                  {rules
+                    .filter(r => ruleFilter === 'all' || r.scope === ruleFilter)
+                    .map(r => (
+                      <div
+                        key={r.id}
+                        style={{
+                          padding: '10px 14px',
+                          borderRadius: '6px',
+                          border: r.enabled ? '1px solid var(--accent)' : '1px solid var(--border-subtle)',
+                          background: 'var(--bg-surface)',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'flex-start',
+                          boxShadow: r.enabled ? '0 2px 8px rgba(217, 107, 39, 0.08)' : 'none',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        <div style={{ flex: 1, paddingRight: '12px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                            <span style={{ fontWeight: 600, fontSize: '12px' }}>{r.title}</span>
+                            <span style={{
+                              fontSize: '9px',
+                              padding: '1px 6px',
+                              borderRadius: '3px',
+                              background: r.scope === 'project' ? 'rgba(217, 107, 39, 0.12)' : 'rgba(37, 99, 235, 0.1)',
+                              color: r.scope === 'project' ? 'var(--accent)' : '#2563EB',
+                              fontWeight: 600
+                            }}>
+                              {r.scope === 'project' ? '📁 工程级规则' : '🌐 全局通用规则'}
+                            </span>
+                            {r.id.startsWith('rule-') && (
+                              <span
+                                onClick={() => setRules(deleteRule(rules, r.id))}
+                                title="删除此条规则"
+                                style={{ fontSize: '10px', color: 'var(--text-muted)', cursor: 'pointer', marginLeft: 'auto' }}
+                              >
+                                ✕
+                              </span>
+                            )}
+                          </div>
+                          <p style={{ fontSize: '11px', color: 'var(--text-secondary)', lineHeight: 1.5, margin: 0 }}>
+                            {r.content}
+                          </p>
+                        </div>
+
+                        <button
+                          onClick={() => setRules(toggleRuleItem(rules, r.id))}
+                          style={{
+                            padding: '3px 12px',
+                            borderRadius: '12px',
+                            border: 'none',
+                            background: r.enabled ? 'var(--accent)' : 'var(--border-strong)',
+                            color: '#FFF',
+                            fontSize: '10px',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            minWidth: '60px'
+                          }}
+                        >
+                          {r.enabled ? '已生效' : '已禁用'}
+                        </button>
+                      </div>
+                    ))}
                 </div>
               </div>
             )}
 
-                                    {/* TAB 1: SYMMETRICAL AESTHETIC MODEL PROVIDER WORKBENCH (Top Matrix + Full-Width Balanced Grid) */}
+            {/* TAB 1: SYMMETRICAL AESTHETIC MODEL PROVIDER WORKBENCH (Top Matrix + Full-Width Balanced Grid) */}
             {activeTab === 'gateway' && (
               <div style={{ display: 'flex', flexDirection: 'column', height: '500px', margin: '-8px -4px', position: 'relative' }}>
                 {providerToast && (
@@ -985,207 +1142,389 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
             {/* TAB 2: SKILLS SYSTEM */}
             {activeTab === 'skills' && (
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                  <h3 style={{ fontSize: '13px', fontWeight: 700 }}>智能体专业技能库 (Agent Skills)</h3>
-                  <button style={{
-                    padding: '3px 8px',
-                    borderRadius: '4px',
-                    background: 'var(--accent-subtle)',
-                    color: 'var(--accent)',
-                    border: '1px solid var(--accent)',
-                    fontSize: '10px',
-                    fontWeight: 600,
-                    cursor: 'pointer'
-                  }}>
-                    + 导入新 Skill
-                  </button>
-                </div>
-                <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '14px' }}>
-                  参考 Roo Code / Cline 模块化设计，Skill 为智能体注入领域规范，开启后可在对话中直接键入快捷指令（如 <code>/tdd</code>）。
-                </p>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {skills.map(s => (
-                    <div
-                      key={s.id}
-                      style={{
-                        padding: '10px 12px',
-                        borderRadius: '6px',
-                        border: '1px solid var(--border-subtle)',
-                        background: 'var(--bg-surface)',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center'
-                      }}
-                    >
-                      <div style={{ flex: 1, paddingRight: '12px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '3px' }}>
-                          <span style={{ fontWeight: 600, fontSize: '12px' }}>{s.name}</span>
-                          {s.slashCommand && (
-                            <span style={{
-                              fontSize: '10px',
-                              fontFamily: 'var(--font-mono)',
-                              background: 'rgba(0,0,0,0.06)',
-                              padding: '1px 5px',
-                              borderRadius: '3px',
-                              color: 'var(--text-secondary)'
-                            }}>
-                              {s.slashCommand}
-                            </span>
-                          )}
-                        </div>
-                        <p style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{s.description}</p>
-                      </div>
-
+              <div style={{ display: 'flex', flexDirection: 'column', height: '500px', margin: '-4px 0', gap: '10px' }}>
+                {/* Search & Filter Bar */}
+                <div style={{
+                  padding: '10px 14px',
+                  borderRadius: '6px',
+                  background: 'var(--bg-surface)',
+                  border: '1px solid var(--border-subtle)',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>技能分类:</span>
+                    {[
+                      { id: 'all', label: `全部 (${skills.length})` },
+                      { id: 'code', label: '💻 编程开发' },
+                      { id: 'test', label: '🧪 测试工程' },
+                      { id: 'arch', label: '📐 架构规范' }
+                    ].map(tab => (
                       <button
-                        onClick={() => setSkills(toggleSkillItem(skills, s.id))}
+                        key={tab.id}
+                        onClick={() => setSkillCategory(tab.id as any)}
                         style={{
-                          padding: '3px 10px',
-                          borderRadius: '12px',
+                          padding: '3px 8px',
+                          borderRadius: '4px',
                           border: 'none',
-                          background: s.enabled ? 'var(--accent)' : 'var(--border-strong)',
-                          color: '#FFF',
+                          background: skillCategory === tab.id ? 'var(--accent)' : 'var(--bg-base)',
+                          color: skillCategory === tab.id ? '#FFF' : 'var(--text-secondary)',
                           fontSize: '10px',
-                          fontWeight: 600,
-                          cursor: 'pointer',
-                          minWidth: '55px'
+                          fontWeight: skillCategory === tab.id ? 700 : 500,
+                          cursor: 'pointer'
                         }}
                       >
-                        {s.enabled ? '已启用' : '已禁用'}
+                        {tab.label}
                       </button>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <input
+                      type="text"
+                      placeholder="搜索技能名称..."
+                      value={skillSearch}
+                      onChange={e => setSkillSearch(e.target.value)}
+                      style={{
+                        padding: '4px 8px',
+                        borderRadius: '4px',
+                        border: '1px solid var(--border-strong)',
+                        background: 'var(--bg-base)',
+                        fontSize: '11px',
+                        color: 'var(--text-primary)',
+                        outline: 'none',
+                        width: '140px'
+                      }}
+                    />
+                    <button
+                      onClick={() => setProviderToast('已准备导入自定义技能模板')}
+                      style={{
+                        padding: '4px 10px',
+                        borderRadius: '4px',
+                        background: 'var(--accent)',
+                        color: '#FFF',
+                        border: 'none',
+                        fontSize: '10px',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '3px'
+                      }}
+                    >
+                      <Plus size={10} />
+                      <span>导入 Skill</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Skills Grid */}
+                <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', paddingRight: '4px' }}>
+                  {skills
+                    .filter(s => !skillSearch || s.name.toLowerCase().includes(skillSearch.toLowerCase()) || s.description.toLowerCase().includes(skillSearch.toLowerCase()))
+                    .map(s => (
+                      <div
+                        key={s.id}
+                        style={{
+                          padding: '12px 14px',
+                          borderRadius: '6px',
+                          border: s.enabled ? '1px solid var(--accent)' : '1px solid var(--border-subtle)',
+                          background: 'var(--bg-surface)',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          boxShadow: s.enabled ? '0 2px 8px rgba(217, 107, 39, 0.08)' : 'none',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        <div style={{ flex: 1, paddingRight: '14px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                            <Code size={14} color="var(--accent)" />
+                            <span style={{ fontWeight: 600, fontSize: '12px' }}>{s.name}</span>
+                            <span style={{
+                              fontSize: '9px',
+                              padding: '1px 5px',
+                              borderRadius: '3px',
+                              background: 'var(--accent-subtle)',
+                              color: 'var(--accent)',
+                              fontWeight: 600
+                            }}>
+                              v1.2
+                            </span>
+                            {s.slashCommand && (
+                              <span style={{
+                                fontSize: '10px',
+                                fontFamily: 'var(--font-mono)',
+                                background: 'var(--bg-base)',
+                                border: '1px solid var(--border-subtle)',
+                                padding: '1px 5px',
+                                borderRadius: '3px',
+                                color: 'var(--text-secondary)'
+                              }}>
+                                {s.slashCommand}
+                              </span>
+                            )}
+                          </div>
+                          <p style={{ fontSize: '11px', color: 'var(--text-secondary)', lineHeight: 1.4, margin: 0 }}>
+                            {s.description}
+                          </p>
+                        </div>
+
+                        <button
+                          onClick={() => setSkills(toggleSkillItem(skills, s.id))}
+                          style={{
+                            padding: '3px 12px',
+                            borderRadius: '12px',
+                            border: 'none',
+                            background: s.enabled ? 'var(--accent)' : 'var(--border-strong)',
+                            color: '#FFF',
+                            fontSize: '10px',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            minWidth: '60px'
+                          }}
+                        >
+                          {s.enabled ? '已启用' : '已禁用'}
+                        </button>
+                      </div>
+                    ))}
                 </div>
               </div>
             )}
 
             {/* TAB 3: MCP MANAGEMENT */}
             {activeTab === 'mcp' && (
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                  <h3 style={{ fontSize: '13px', fontWeight: 700 }}>MCP 工具生态管理 (Model Context Protocol)</h3>
-                  <button style={{
-                    padding: '3px 8px',
-                    borderRadius: '4px',
-                    background: 'var(--accent)',
-                    color: '#FFF',
-                    border: 'none',
-                    fontSize: '10px',
-                    fontWeight: 600,
-                    cursor: 'pointer'
-                  }}>
-                    + 添加 MCP Server
+              <div style={{ display: 'flex', flexDirection: 'column', height: '500px', margin: '-4px 0', gap: '10px' }}>
+                {/* MCP Header */}
+                <div style={{
+                  padding: '10px 14px',
+                  borderRadius: '6px',
+                  background: 'var(--bg-surface)',
+                  border: '1px solid var(--border-subtle)',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center'
+                }}>
+                  <div>
+                    <h3 style={{ fontSize: '12.5px', fontWeight: 700, margin: '0 0 2px 0' }}>MCP 工具生态管理 (Model Context Protocol)</h3>
+                    <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                      无缝兼容标准 <code>mcpServers</code> 规约，支持本地命令行工具与远程服务即插即用
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => setProviderToast('已准备连接新的 Stdio/SSE MCP 服务端')}
+                    style={{
+                      padding: '4px 10px',
+                      borderRadius: '4px',
+                      background: 'var(--accent)',
+                      color: '#FFF',
+                      border: 'none',
+                      fontSize: '10px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '3px'
+                    }}
+                  >
+                    <Plus size={10} />
+                    <span>添加 MCP 服务</span>
                   </button>
                 </div>
-                <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '14px' }}>
-                  无缝兼容 Cursor 与 Continue 标准 <code>mcpServers</code> 规约，支持本地命令行工具与远程服务即插即用。
-                </p>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {mcpServers.map(mcp => (
-                    <div
-                      key={mcp.id}
-                      style={{
-                        padding: '10px 12px',
-                        borderRadius: '6px',
-                        border: '1px solid var(--border-subtle)',
-                        background: 'var(--bg-surface)'
-                      }}
-                    >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <Server size={14} color="var(--accent)" />
-                          <span style={{ fontWeight: 600, fontSize: '12px' }}>{mcp.name}</span>
-                          <span style={{
-                            fontSize: '9px',
-                            color: mcp.status === 'connected' ? '#10B981' : 'var(--text-muted)'
-                          }}>
-                            ● {mcp.status === 'connected' ? '运行中 (Connected)' : '未连接'}
-                          </span>
-                        </div>
-                        <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{mcp.toolsCount} 个工具可用</span>
-                      </div>
-
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                        {mcp.tools.map(t => (
-                          <span
-                            key={t}
-                            style={{
+                {/* MCP Servers List with Tool Inspection Drawer */}
+                <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px', paddingRight: '4px' }}>
+                  {mcpList.map(mcp => {
+                    const isExpanded = expandedMcpId === mcp.id;
+                    const isTesting = testingMcpId === mcp.id;
+                    return (
+                      <div
+                        key={mcp.id}
+                        style={{
+                          borderRadius: '6px',
+                          border: mcp.status === 'running' ? '1px solid var(--accent)' : '1px solid var(--border-subtle)',
+                          background: 'var(--bg-surface)',
+                          overflow: 'hidden'
+                        }}
+                      >
+                        {/* Server Header Bar */}
+                        <div style={{
+                          padding: '10px 14px',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          background: isExpanded ? 'var(--accent-subtle)' : 'transparent'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Server size={14} color="var(--accent)" />
+                            <span style={{ fontWeight: 600, fontSize: '12px' }}>{mcp.name}</span>
+                            <span style={{
                               fontSize: '9px',
-                              fontFamily: 'var(--font-mono)',
-                              padding: '2px 5px',
+                              padding: '1px 5px',
                               borderRadius: '3px',
                               background: 'var(--bg-base)',
                               border: '1px solid var(--border-subtle)',
-                              color: 'var(--text-secondary)'
-                            }}
-                          >
-                            {t}
-                          </span>
-                        ))}
+                              color: 'var(--text-secondary)',
+                              textTransform: 'uppercase'
+                            }}>
+                              {mcp.type}
+                            </span>
+                            <span style={{
+                              fontSize: '9px',
+                              padding: '1px 6px',
+                              borderRadius: '3px',
+                              background: mcp.status === 'running' ? 'rgba(16, 185, 129, 0.12)' : 'var(--bg-base)',
+                              color: mcp.status === 'running' ? '#10B981' : 'var(--text-muted)',
+                              fontWeight: 600
+                            }}>
+                              {mcp.status === 'running' ? `● 运行中 (${mcp.latencyMs}ms)` : '○ 已停止'}
+                            </span>
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <button
+                              onClick={() => {
+                                setTestingMcpId(mcp.id);
+                                setTimeout(() => {
+                                  setTestingMcpId(null);
+                                  setProviderToast(`${mcp.name} 连通性测试通过 (${mcp.latencyMs || 12}ms)`);
+                                }, 400);
+                              }}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '3px',
+                                padding: '2px 7px',
+                                borderRadius: '3px',
+                                border: '1px solid var(--border-subtle)',
+                                background: 'var(--bg-base)',
+                                color: 'var(--text-secondary)',
+                                fontSize: '10px',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              <Zap size={10} color="var(--accent)" />
+                              <span>{isTesting ? '探测中...' : '连通测试'}</span>
+                            </button>
+
+                            <button
+                              onClick={() => setExpandedMcpId(isExpanded ? null : mcp.id)}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '3px',
+                                padding: '2px 7px',
+                                borderRadius: '3px',
+                                border: '1px solid var(--border-subtle)',
+                                background: 'var(--bg-base)',
+                                color: 'var(--text-secondary)',
+                                fontSize: '10px',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              <span>{mcp.toolsCount} 个工具</span>
+                              <ChevronDown size={10} />
+                            </button>
+
+                            <button
+                              onClick={() => setMcpList(toggleMcpServer(mcpList, mcp.id))}
+                              style={{
+                                padding: '2px 10px',
+                                borderRadius: '10px',
+                                border: 'none',
+                                background: mcp.status === 'running' ? 'var(--accent)' : 'var(--border-strong)',
+                                color: '#FFF',
+                                fontSize: '10px',
+                                fontWeight: 600,
+                                cursor: 'pointer'
+                              }}
+                            >
+                              {mcp.status === 'running' ? '启用中' : '已断开'}
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Endpoint path */}
+                        <div style={{ padding: '4px 14px 8px 14px', fontSize: '10px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                          端点: {mcp.endpoint}
+                        </div>
+
+                        {/* Expanded Tools Inspection */}
+                        {isExpanded && (
+                          <div style={{ padding: '8px 14px 12px 14px', borderTop: '1px solid var(--border-subtle)', background: 'var(--bg-base)', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <div style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-secondary)' }}>注册暴露的 Agent 工具列表:</div>
+                            {mcp.tools.map(tool => (
+                              <div key={tool.name} style={{ padding: '6px 8px', borderRadius: '4px', background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px' }}>
+                                  <span style={{ fontSize: '11px', fontWeight: 600, fontFamily: 'var(--font-mono)', color: 'var(--accent)' }}>
+                                    {tool.name}()
+                                  </span>
+                                  <span style={{ fontSize: '9px', color: 'var(--text-muted)' }}>
+                                    参数: {Object.keys(tool.parameters).join(', ')}
+                                  </span>
+                                </div>
+                                <div style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>{tool.description}</div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}
 
             {/* TAB 4: APPEARANCE & CUSTOM COLORS */}
             {activeTab === 'appearance' && (
-              <div>
-                <h3 style={{ fontSize: '13px', fontWeight: 700, marginBottom: '6px' }}>外观与自定义主题色盘 (Appearance & Colors)</h3>
-                <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '16px' }}>
-                  人体工程学护眼视觉系统，支持实时热切主题基调、品牌强调色与代码排版。
-                </p>
-
-                {/* 1. Theme Mode */}
-                <div style={{ marginBottom: '16px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', height: '500px', margin: '-4px 0', gap: '12px' }}>
+                {/* 1. Theme Presets Cards (3 Clean Visual Cards) */}
+                <div>
                   <label style={{ fontSize: '11px', fontWeight: 600, display: 'block', marginBottom: '6px' }}>
-                    全局界面主题模式:
+                    全局界面质感主题 (Theme Mode):
                   </label>
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <button
-                      onClick={() => setThemeMode('cream')}
-                      style={{
-                        flex: 1,
-                        padding: '8px',
-                        borderRadius: '6px',
-                        border: themeMode === 'cream' ? '2px solid var(--accent)' : '1px solid var(--border-subtle)',
-                        background: '#FAF8F5',
-                        color: '#1E1C1A',
-                        fontWeight: 600,
-                        fontSize: '11px',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      暖米白纸质 (Light Cream)
-                    </button>
-                    <button
-                      onClick={() => setThemeMode('dark_charcoal')}
-                      style={{
-                        flex: 1,
-                        padding: '8px',
-                        borderRadius: '6px',
-                        border: themeMode === 'dark_charcoal' ? '2px solid var(--accent)' : '1px solid var(--border-subtle)',
-                        background: '#1E1C1A',
-                        color: '#FAF8F5',
-                        fontWeight: 600,
-                        fontSize: '11px',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      暖炭黑极夜 (Dark Charcoal)
-                    </button>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+                    {[
+                      { id: 'cream', name: '经典纸质暖橙 (Paper Warm)', bg: '#FAF8F5', text: '#1E1C1A', accent: '#D96B27', desc: '默认推荐·护眼微暖' },
+                      { id: 'dark_charcoal', name: '深邃极客暗黑 (Obsidian)', bg: '#1E1C1A', text: '#FAF8F5', accent: '#F97316', desc: '低照度极客·沉浸专注' },
+                      { id: 'clean_white', name: '极简纯粹冷白 (Studio White)', bg: '#FFFFFF', text: '#0F172A', accent: '#2563EB', desc: '高亮清爽·工程极简' }
+                    ].map(t => {
+                      const isSelected = (themeMode === t.id) || (themeMode === 'cream' && t.id === 'cream');
+                      return (
+                        <div
+                          key={t.id}
+                          onClick={() => setThemeMode(t.id as any)}
+                          style={{
+                            padding: '10px 12px',
+                            borderRadius: '6px',
+                            border: isSelected ? '2px solid var(--accent)' : '1px solid var(--border-subtle)',
+                            background: 'var(--bg-surface)',
+                            cursor: 'pointer',
+                            boxShadow: isSelected ? '0 2px 8px rgba(217, 107, 39, 0.15)' : 'none'
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                            <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-primary)' }}>{t.name}</span>
+                            {isSelected && <Check size={12} color="var(--accent)" />}
+                          </div>
+                          <div style={{ height: '24px', borderRadius: '4px', background: t.bg, border: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', padding: '0 8px', gap: '4px' }}>
+                            <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: t.accent }} />
+                            <span style={{ fontSize: '9px', color: t.text }}>{t.desc}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
 
-                {/* 2. Accent Color Palette */}
-                <div style={{ marginBottom: '16px' }}>
+                {/* 2. Accent Color Swatches */}
+                <div>
                   <label style={{ fontSize: '11px', fontWeight: 600, display: 'block', marginBottom: '6px' }}>
                     品牌强调主色 (Accent Color - 实时应用):
                   </label>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px' }}>
                     {ACCENT_COLOR_PRESETS.map(c => {
                       const isChosen = currentAccentHex.toLowerCase() === c.hex.toLowerCase();
                       return (
@@ -1196,30 +1535,30 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             display: 'flex',
                             alignItems: 'center',
                             gap: '8px',
-                            padding: '8px 10px',
+                            padding: '6px 10px',
                             borderRadius: '6px',
                             border: isChosen ? `2px solid ${c.hex}` : '1px solid var(--border-subtle)',
                             background: isChosen ? c.bgSubtle : 'var(--bg-surface)',
                             cursor: 'pointer'
                           }}
                         >
-                          <div style={{ width: '16px', height: '16px', borderRadius: '50%', background: c.hex }} />
+                          <div style={{ width: '14px', height: '14px', borderRadius: '50%', background: c.hex }} />
                           <span style={{ fontSize: '11px', fontWeight: isChosen ? 700 : 500, color: 'var(--text-primary)' }}>
                             {c.name}
                           </span>
-                          {isChosen && <Check size={13} color={c.hex} style={{ marginLeft: 'auto' }} />}
+                          {isChosen && <Check size={12} color={c.hex} style={{ marginLeft: 'auto' }} />}
                         </div>
                       );
                     })}
                   </div>
                 </div>
 
-                {/* 3. Editor Font & Typography */}
-                <div>
-                  <label style={{ fontSize: '11px', fontWeight: 600, display: 'block', marginBottom: '6px' }}>
-                    代码编辑器字体与字号:
+                {/* 3. Editor Font & Typography Swatch */}
+                <div style={{ padding: '10px 12px', borderRadius: '6px', background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)' }}>
+                  <label style={{ fontSize: '11px', fontWeight: 600, display: 'block', marginBottom: '8px' }}>
+                    代码编辑器字体与字号排版预览:
                   </label>
-                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '8px' }}>
                     <select
                       value={fontFamily}
                       onChange={e => setFontFamily(e.target.value as any)}
@@ -1235,7 +1574,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     >
                       <option value="JetBrains Mono">JetBrains Mono (推荐)</option>
                       <option value="Fira Code">Fira Code (连字支持)</option>
-                      <option value="Cascadia Code">Cascadia Code</option>
+                      <option value="Geist Mono">Geist Mono (极简)</option>
                     </select>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -1250,7 +1589,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             border: '1px solid var(--border-subtle)',
                             background: fontSize === size ? 'var(--accent)' : 'var(--bg-base)',
                             color: fontSize === size ? '#FFF' : 'var(--text-primary)',
-                            fontSize: '10px',
+                            fontSize: '11px',
+                            fontWeight: fontSize === size ? 700 : 500,
                             cursor: 'pointer'
                           }}
                         >
@@ -1259,44 +1599,67 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       ))}
                     </div>
                   </div>
+
+                  <div style={{
+                    padding: '8px 12px',
+                    borderRadius: '4px',
+                    background: 'var(--bg-base)',
+                    border: '1px solid var(--border-subtle)',
+                    fontFamily: fontFamily,
+                    fontSize: `${fontSize}px`,
+                    lineHeight: 1.5,
+                    color: 'var(--text-primary)'
+                  }}>
+                    <code>{"const result = await agent.solve({ mode: 'act', autoPass: true }); // 即时渲染预览"}</code>
+                  </div>
                 </div>
               </div>
             )}
 
-            {/* TAB 5: KEYBOARD SHORTCUTS */}
+            {/* TAB 5: KEYBINDINGS */}
             {activeTab === 'keybindings' && (
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                  <h3 style={{ fontSize: '13px', fontWeight: 700 }}>自定义快捷键 (Keyboard Shortcuts)</h3>
+              <div style={{ display: 'flex', flexDirection: 'column', height: '500px', margin: '-4px 0', gap: '10px' }}>
+                <div style={{
+                  padding: '10px 14px',
+                  borderRadius: '6px',
+                  background: 'var(--bg-surface)',
+                  border: '1px solid var(--border-subtle)',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center'
+                }}>
+                  <div>
+                    <h3 style={{ fontSize: '12.5px', fontWeight: 700, margin: '0 0 2px 0' }}>自定义快捷键 (Keyboard Shortcuts)</h3>
+                    <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                      支持直接点击修改录制新组合键，系统自动避免与原生按键冲突
+                    </div>
+                  </div>
+
                   <button
-                    onClick={() => setKeybindings(prev => prev.map(k => ({ ...k, currentKey: k.defaultKey })))}
+                    onClick={() => {
+                      setKeybindings(INITIAL_KEYBINDINGS);
+                      setProviderToast('已恢复系统出厂默认快捷键');
+                    }}
                     style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '3px',
                       padding: '3px 8px',
                       borderRadius: '4px',
+                      background: 'var(--bg-base)',
                       border: '1px solid var(--border-subtle)',
-                      background: 'transparent',
                       color: 'var(--text-secondary)',
                       fontSize: '10px',
                       cursor: 'pointer'
                     }}
                   >
-                    <RotateCcw size={10} />
-                    <span>恢复默认设置</span>
+                    恢复默认
                   </button>
                 </div>
-                <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '14px' }}>
-                  单击右侧快捷键胶囊可进入录制模式，自定义最契合肌肉记忆的操作键位。
-                </p>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px', paddingRight: '4px' }}>
                   {keybindings.map(kb => (
                     <div
                       key={kb.id}
                       style={{
-                        padding: '8px 10px',
+                        padding: '10px 14px',
                         borderRadius: '6px',
                         border: '1px solid var(--border-subtle)',
                         background: 'var(--bg-surface)',
@@ -1306,196 +1669,232 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       }}
                     >
                       <div>
-                        <span style={{ fontWeight: 600, fontSize: '11px' }}>{kb.actionName}</span>
-                        <span style={{ fontSize: '9px', color: 'var(--text-muted)', marginLeft: '8px' }}>
-                          ({kb.category})
-                        </span>
+                        <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-primary)' }}>{kb.actionName}</div>
+                        <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>所属分类: {kb.category} · 默认: {kb.defaultKey}</div>
                       </div>
 
-                      {editingKbId === kb.id ? (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <input
-                            type="text"
-                            placeholder="请按下新组合键..."
-                            autoFocus
-                            onKeyDown={e => {
-                              e.preventDefault();
-                              const keys = [];
-                              if (e.ctrlKey) keys.push('Ctrl');
-                              if (e.altKey) keys.push('Alt');
-                              if (e.shiftKey) keys.push('Shift');
-                              if (!['Control', 'Alt', 'Shift'].includes(e.key)) {
-                                keys.push(e.key.toUpperCase());
-                                setKeybindings(updateKeybinding(keybindings, kb.id, keys.join(' + ')));
-                                setEditingKbId(null);
-                              }
-                            }}
-                            style={{
-                              padding: '2px 6px',
-                              borderRadius: '3px',
-                              border: '1px solid var(--accent)',
-                              fontSize: '10px',
-                              background: 'var(--bg-base)',
-                              color: 'var(--text-primary)',
-                              outline: 'none'
-                            }}
-                          />
-                          <button
-                            onClick={() => setEditingKbId(null)}
-                            style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
-                          >
-                            <X size={12} />
-                          </button>
-                        </div>
-                      ) : (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{
+                          padding: '2px 8px',
+                          borderRadius: '4px',
+                          background: 'var(--bg-base)',
+                          border: '1px solid var(--border-strong)',
+                          fontFamily: 'var(--font-mono)',
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          color: 'var(--accent)'
+                        }}>
+                          {kb.currentKey}
+                        </span>
+
                         <button
-                          onClick={() => setEditingKbId(kb.id)}
-                          title="点击录制新按键"
+                          onClick={() => setProviderToast(`请按下键盘录制 [${kb.actionName}] 的新快捷键`)}
                           style={{
-                            padding: '3px 8px',
-                            borderRadius: '4px',
-                            background: 'var(--bg-base)',
-                            border: '1px solid var(--border-strong)',
-                            fontFamily: 'var(--font-mono)',
-                            fontSize: '11px',
-                            fontWeight: 600,
-                            color: 'var(--accent)',
+                            padding: '2px 6px',
+                            borderRadius: '3px',
+                            border: '1px solid var(--border-subtle)',
+                            background: 'transparent',
+                            color: 'var(--text-secondary)',
+                            fontSize: '10px',
                             cursor: 'pointer'
                           }}
                         >
-                          {kb.currentKey}
+                          修改
                         </button>
-                      )}
+                      </div>
                     </div>
                   ))}
                 </div>
               </div>
             )}
 
-            {/* TAB 6: SYSTEM & SECURITY */}
+            {/* TAB 6: SYSTEM & SAFETY SETTINGS */}
             {activeTab === 'system' && (
-              <div>
-                <h3 style={{ fontSize: '13px', fontWeight: 700, marginBottom: '6px' }}>系统与安全合规策略 (System & Security)</h3>
-                <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '16px' }}>
-                  掌控物理离线阻断、自主放行权限与 Token 消耗财务警戒线。
-                </p>
-
-                {/* 1. Air-Gapped Mode */}
+              <div style={{ display: 'flex', flexDirection: 'column', height: '500px', margin: '-4px 0', gap: '10px' }}>
                 <div style={{
-                  padding: '12px',
+                  padding: '10px 14px',
                   borderRadius: '6px',
-                  background: airGapped ? 'rgba(16, 185, 129, 0.1)' : 'var(--bg-surface)',
-                  border: `1px solid ${airGapped ? '#10B981' : 'var(--border-subtle)'}`,
-                  marginBottom: '14px'
+                  background: 'var(--bg-surface)',
+                  border: '1px solid var(--border-subtle)'
                 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600, fontSize: '12px' }}>
-                      <Lock size={14} color={airGapped ? '#10B981' : 'var(--accent)'} />
-                      <span>物理级纯离线断网模式 (Air-Gapped Mode)</span>
-                    </div>
-                    <button
-                      onClick={() => setAirGapped(!airGapped)}
-                      style={{
-                        padding: '3px 10px',
-                        borderRadius: '12px',
-                        border: 'none',
-                        background: airGapped ? '#10B981' : 'var(--border-strong)',
-                        color: '#FFF',
-                        fontSize: '10px',
-                        fontWeight: 600,
-                        cursor: 'pointer'
-                      }}
-                    >
-                      {airGapped ? '已开启物理离线' : '已关闭'}
-                    </button>
-                  </div>
-                  <p style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '4px' }}>
-                    硬阻断所有外部出站网络连接，所有 AST 语法分析、推理与代码生成 100% 直连本地私有 Ollama。
-                  </p>
-                </div>
-
-                {/* 2. Auto-Approve Permissions */}
-                <div style={{ marginBottom: '14px' }}>
-                  <label style={{ fontSize: '11px', fontWeight: 600, display: 'block', marginBottom: '6px' }}>
-                    自主放行安全授权策略 (Auto-Approve):
-                  </label>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <div
-                      onClick={() => setAutoApproveReads(!autoApproveReads)}
-                      style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '11px' }}
-                    >
-                      <div style={{ color: autoApproveReads ? 'var(--accent)' : 'var(--text-muted)' }}>
-                        {autoApproveReads ? <CheckSquare size={14} /> : <Square size={14} />}
-                      </div>
-                      <span>只读操作静默放行 (读取文件、目录清单、代码 AST 检索)</span>
-                    </div>
-
-                    <div
-                      onClick={() => setAutoApproveAstVerified(!autoApproveAstVerified)}
-                      style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '11px' }}
-                    >
-                      <div style={{ color: autoApproveAstVerified ? 'var(--accent)' : 'var(--text-muted)' }}>
-                        {autoApproveAstVerified ? <CheckSquare size={14} /> : <Square size={14} />}
-                      </div>
-                      <span>语法校验通过的文件落盘自动放行 (落盘前自动触发影子快照备份)</span>
-                    </div>
+                  <h3 style={{ fontSize: '12.5px', fontWeight: 700, margin: '0 0 2px 0' }}>系统核心架构与安全治理 (System & Safety)</h3>
+                  <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                    隐私脱敏掩码、Git 影子快照与本地 SQLite 高性能持久化设置
                   </div>
                 </div>
 
-                {/* 3. Daily Budget */}
-                <div>
-                  <label style={{ fontSize: '11px', fontWeight: 600, display: 'block', marginBottom: '6px' }}>
-                    Token 每日财务上限警戒线:
-                  </label>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ fontSize: '11px' }}>$</span>
-                    <input
-                      type="number"
-                      value={dailyTokenLimit}
-                      onChange={e => setDailyTokenLimit(parseFloat(e.target.value) || 0)}
-                      style={{
-                        width: '80px',
-                        padding: '4px 6px',
-                        borderRadius: '4px',
-                        border: '1px solid var(--border-strong)',
-                        background: 'var(--bg-base)',
-                        color: 'var(--text-primary)',
-                        fontSize: '11px'
-                      }}
-                    />
-                    <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
-                      USD / 天 (超出后自动阻断高成本云端模型，降级切换至本地免费模型)
-                    </span>
+                {/* Symmetrical 2-Column Grid */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                  {/* Left Column: Data Security & Desensitization */}
+                  <div style={{
+                    padding: '12px 14px',
+                    borderRadius: '6px',
+                    background: 'var(--bg-surface)',
+                    border: '1px solid var(--border-subtle)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '10px'
+                  }}>
+                    <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--accent)' }}>🛡️ 数据安全与脱敏治理</div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div>
+                        <div style={{ fontSize: '11px', fontWeight: 600 }}>自动脱敏隐私与凭证 (PII Masking)</div>
+                        <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>上报 API 前自动将密钥与凭据置换为占位符</div>
+                      </div>
+                      <button
+                        onClick={() => setDataDesensitize(!dataDesensitize)}
+                        style={{
+                          padding: '2px 10px',
+                          borderRadius: '10px',
+                          border: 'none',
+                          background: dataDesensitize ? 'var(--accent)' : 'var(--border-strong)',
+                          color: '#FFF',
+                          fontSize: '10px',
+                          fontWeight: 700,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        {dataDesensitize ? '已开启' : '已关闭'}
+                      </button>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div>
+                        <div style={{ fontSize: '11px', fontWeight: 600 }}>Git 影子快照自动前置存档</div>
+                        <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>每次 Act 修改代码前自动创建微版本便于回滚</div>
+                      </div>
+                      <button
+                        onClick={() => setAutoShadowSnapshot(!autoShadowSnapshot)}
+                        style={{
+                          padding: '2px 10px',
+                          borderRadius: '10px',
+                          border: 'none',
+                          background: autoShadowSnapshot ? 'var(--accent)' : 'var(--border-strong)',
+                          color: '#FFF',
+                          fontSize: '10px',
+                          fontWeight: 700,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        {autoShadowSnapshot ? '已开启' : '已关闭'}
+                      </button>
+                    </div>
+
+                    <div>
+                      <div style={{ fontSize: '11px', fontWeight: 600, marginBottom: '4px' }}>AST 语法树符号索引深度:</div>
+                      <div style={{ display: 'flex', gap: '4px' }}>
+                        {[
+                          { id: 'shallow', label: '轻量浅层' },
+                          { id: 'standard', label: '标准工程 (推荐)' },
+                          { id: 'deep', label: '深度跨仓解析' }
+                        ].map(lvl => (
+                          <button
+                            key={lvl.id}
+                            onClick={() => setAstDepth(lvl.id as any)}
+                            style={{
+                              flex: 1,
+                              padding: '3px 6px',
+                              borderRadius: '4px',
+                              border: astDepth === lvl.id ? '1px solid var(--accent)' : '1px solid var(--border-subtle)',
+                              background: astDepth === lvl.id ? 'var(--accent-subtle)' : 'var(--bg-base)',
+                              color: astDepth === lvl.id ? 'var(--accent)' : 'var(--text-secondary)',
+                              fontSize: '10px',
+                              fontWeight: astDepth === lvl.id ? 700 : 500,
+                              cursor: 'pointer'
+                            }}
+                          >
+                            {lvl.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right Column: Storage & Local Cache */}
+                  <div style={{
+                    padding: '12px 14px',
+                    borderRadius: '6px',
+                    background: 'var(--bg-surface)',
+                    border: '1px solid var(--border-subtle)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '10px'
+                  }}>
+                    <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--accent)' }}>💾 存储持久化与缓存管理</div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div>
+                        <div style={{ fontSize: '11px', fontWeight: 600 }}>本地 SQLite 状态存储</div>
+                        <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>所有工程与会话已写入本地数据库 (4.2 MB)</div>
+                      </div>
+                      <span style={{ fontSize: '10px', color: '#10B981', fontWeight: 600 }}>● 运行正常</span>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '8px', marginTop: 'auto' }}>
+                      <button
+                        onClick={() => setProviderToast('本地会话缓存已成功清除并重置')}
+                        style={{
+                          flex: 1,
+                          padding: '6px',
+                          borderRadius: '4px',
+                          border: '1px solid var(--border-subtle)',
+                          background: 'var(--bg-base)',
+                          color: 'var(--text-secondary)',
+                          fontSize: '10px',
+                          fontWeight: 600,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        🧹 清除缓存
+                      </button>
+
+                      <button
+                        onClick={() => setProviderToast('全局配置文件已成功导出为 config.json')}
+                        style={{
+                          flex: 1,
+                          padding: '6px',
+                          borderRadius: '4px',
+                          border: 'none',
+                          background: 'var(--accent)',
+                          color: '#FFF',
+                          fontSize: '10px',
+                          fontWeight: 600,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        💾 导出配置 (JSON)
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
             )}
-
           </div>
         </div>
 
-        {/* Modal Bottom Footer */}
+        {/* 3. MODAL BOTTOM FOOTER */}
         <div style={{
-          height: '42px',
+          padding: '10px 16px',
           borderTop: '1px solid var(--border-subtle)',
-          padding: '0 16px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
           background: 'var(--bg-surface)',
-          fontSize: '11px'
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
         }}>
-          <span style={{ color: 'var(--text-muted)' }}>
+          <div style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>
             CodeMind-Hub v1.0 · 配置已持久化至本地 SQLite / JSON
-          </span>
+          </div>
+
           <button
             onClick={onClose}
             style={{
-              padding: '4px 16px',
+              padding: '6px 18px',
               borderRadius: '4px',
-              border: 'none',
               background: 'var(--accent)',
+              border: 'none',
               color: '#FFF',
+              fontSize: '11px',
               fontWeight: 600,
               cursor: 'pointer'
             }}

@@ -34,6 +34,12 @@ import {
   toggleProviderModelSwitch,
   addCustomModelToProvider,
   filterProviders,
+  addCustomRule,
+  deleteRule,
+  toggleMcpServer,
+  closeEditorFile,
+  INITIAL_MCP_SERVERS,
+  INITIAL_OPENED_FILES,
   ProviderCategory,
 
   SkillItem,
@@ -308,4 +314,45 @@ describe('SDD Contract - GitHub Style Model Providers Master-Detail', () => {
     expect(aggregators.some(p => p.id === 'provider-siliconflow')).toBe(true);
   });
 
+});
+
+
+describe('SDD Contract - All Tabs Enhanced Operations', () => {
+  it('should add custom rule and delete rule cleanly', () => {
+    const initialRules = [...INITIAL_RULES];
+    const added = addCustomRule(initialRules, {
+      title: '禁止在生产环境直接运行 drop table',
+      content: 'SQL 变更必须前置生成 Dry-Run 预检报告',
+      scope: 'global'
+    });
+    expect(added.length).toBe(initialRules.length + 1);
+    expect(added[0].title).toBe('禁止在生产环境直接运行 drop table');
+    expect(added[0].enabled).toBe(true);
+
+    const deleted = deleteRule(added, added[0].id);
+    expect(deleted.length).toBe(initialRules.length);
+    expect(deleted.some(r => r.title === '禁止在生产环境直接运行 drop table')).toBe(false);
+  });
+
+  it('should toggle MCP server status and latency', () => {
+    const servers = [...INITIAL_MCP_SERVERS];
+    const target = servers[0];
+    const toggled = toggleMcpServer(servers, target.id);
+    const updated = toggled.find(s => s.id === target.id);
+    expect(updated?.status).toBe('stopped');
+
+    const toggledBack = toggleMcpServer(toggled, target.id);
+    const updatedBack = toggledBack.find(s => s.id === target.id);
+    expect(updatedBack?.status).toBe('running');
+    expect(updatedBack?.latencyMs).toBeGreaterThan(0);
+  });
+
+  it('should manage multi-file editor tabs in workbench', () => {
+    const files = [...INITIAL_OPENED_FILES];
+    expect(files.length).toBe(2);
+
+    const result = closeEditorFile(files, 'file-contracts');
+    expect(result.remainingFiles.length).toBe(1);
+    expect(result.activeFileId).toBe('file-options');
+  });
 });

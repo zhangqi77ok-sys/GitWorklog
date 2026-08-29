@@ -11,7 +11,7 @@ import {
   ChevronUp,
   PanelRightClose
 } from 'lucide-react';
-import { TerminalTab, createTerminalTab, closeTerminalTab } from '../types/contracts';
+import { TerminalTab, createTerminalTab, closeTerminalTab, INITIAL_OPENED_FILES, OpenedEditorFile, closeEditorFile } from '../types/contracts';
 
 interface EditorWorkspaceProps {
   onCloseWorkspace: () => void;
@@ -21,6 +21,9 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ onCloseWorkspa
   const [activeTab, setActiveTab] = useState<'code' | 'canvas'>('code');
   const [splitView, setSplitView] = useState(false);
   const [terminalOpen, setTerminalOpen] = useState(true);
+  const [openedFiles, setOpenedFiles] = useState<OpenedEditorFile[]>(INITIAL_OPENED_FILES);
+  const [activeFileId, setActiveFileId] = useState<string>('file-contracts');
+
 
   // Multi-terminal tabs
   const [terminalTabs, setTerminalTabs] = useState<TerminalTab[]>([
@@ -107,41 +110,49 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ onCloseWorkspa
         justifyContent: 'space-between',
         padding: '0 8px'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-          <div
-            onClick={() => setActiveTab('code')}
-            style={{
-              padding: '4px 10px',
-              borderRadius: '4px 4px 0 0',
-              background: activeTab === 'code' ? 'var(--bg-base)' : 'transparent',
-              border: activeTab === 'code' ? '1px solid var(--border-subtle)' : 'none',
-              borderBottom: 'none',
-              fontSize: '11px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              cursor: 'pointer',
-              fontWeight: activeTab === 'code' ? 600 : 400
-            }}
-          >
-            <FileCode size={13} color="var(--accent)" />
-            <span>contracts.ts</span>
-          </div>
-
-          <div
-            style={{
-              padding: '4px 10px',
-              fontStyle: 'italic',
-              fontSize: '11px',
-              color: 'var(--text-secondary)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              cursor: 'pointer'
-            }}
-          >
-            <span>📄 GatewayBus.ts (临时预览)</span>
-          </div>
+        {/* Dynamic Multi-File Tabs */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '2px', overflowX: 'auto' }}>
+          {openedFiles.map(file => {
+            const isActive = activeFileId === file.id;
+            return (
+              <div
+                key={file.id}
+                onClick={() => setActiveFileId(file.id)}
+                style={{
+                  padding: '4px 10px',
+                  borderRadius: '4px 4px 0 0',
+                  background: isActive ? 'var(--bg-base)' : 'transparent',
+                  border: isActive ? '1px solid var(--border-subtle)' : '1px solid transparent',
+                  borderBottom: 'none',
+                  fontSize: '11px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  cursor: 'pointer',
+                  fontWeight: isActive ? 600 : 400,
+                  color: isActive ? 'var(--accent)' : 'var(--text-secondary)',
+                  transition: 'all 0.1s ease'
+                }}
+              >
+                <FileCode size={12} color={isActive ? 'var(--accent)' : 'var(--text-muted)'} />
+                <span>{file.name}</span>
+                {file.isDirty && (
+                  <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: 'var(--accent)' }} title="未保存更改" />
+                )}
+                <span
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const res = closeEditorFile(openedFiles, file.id);
+                    setOpenedFiles(res.remainingFiles);
+                    if (res.activeFileId) setActiveFileId(res.activeFileId);
+                  }}
+                  style={{ fontSize: '10px', color: 'var(--text-muted)', cursor: 'pointer', marginLeft: '2px' }}
+                >
+                  ✕
+                </span>
+              </div>
+            );
+          })}
         </div>
 
         {/* Right Action Buttons */}

@@ -1007,3 +1007,182 @@ export function addCustomModelToProvider(providers: ModelProviderItem[], provide
     return { ...p, models: [...p.models, newModel] };
   });
 }
+
+
+// ============================================================================
+// ALL-TABS SYSTEM CONTRACTS & DATA MODELS
+// ============================================================================
+
+// 1. MCP Server & Tools Contracts
+export interface McpToolItem {
+  name: string;
+  description: string;
+  parameters: Record<string, any>;
+}
+
+export interface McpServerItem {
+  id: string;
+  name: string;
+  type: 'stdio' | 'sse';
+  endpoint: string;
+  status: 'running' | 'stopped' | 'error';
+  latencyMs: number;
+  toolsCount: number;
+  tools: McpToolItem[];
+}
+
+export const INITIAL_MCP_SERVERS: McpServerItem[] = [
+  {
+    id: 'mcp-github',
+    name: 'GitHub Remote MCP',
+    type: 'sse',
+    endpoint: 'https://mcp.github.com/v1',
+    status: 'running',
+    latencyMs: 45,
+    toolsCount: 8,
+    tools: [
+      { name: 'create_or_update_file', description: '向远程 Git 仓库提交或修改文件内容', parameters: { path: 'string', content: 'string' } },
+      { name: 'search_repositories', description: '按关键词检索远程开源仓库代码与文档', parameters: { query: 'string' } }
+    ]
+  },
+  {
+    id: 'mcp-filesystem',
+    name: 'Local Filesystem MCP',
+    type: 'stdio',
+    endpoint: 'npx -y @modelcontextprotocol/server-filesystem e:\pro',
+    status: 'running',
+    latencyMs: 4,
+    toolsCount: 5,
+    tools: [
+      { name: 'read_file_content', description: '安全沙箱内读取本地文件', parameters: { path: 'string' } },
+      { name: 'write_file_content', description: '写盘持久化至沙箱工程', parameters: { path: 'string', content: 'string' } }
+    ]
+  },
+  {
+    id: 'mcp-devtools',
+    name: 'Chrome DevTools MCP',
+    type: 'stdio',
+    endpoint: 'node chrome-devtools-mcp.js --port=9222',
+    status: 'stopped',
+    latencyMs: 0,
+    toolsCount: 6,
+    tools: [
+      { name: 'capture_screenshot', description: '截取当前渲染视图的无头浏览器实机快照', parameters: { format: 'png' } }
+    ]
+  }
+];
+
+// 2. Rules Management Contracts
+export function addCustomRule(
+  rules: RuleItem[],
+  newRule: { title: string; content: string; scope: 'project' | 'global' }
+): RuleItem[] {
+  const rule: RuleItem = {
+    id: `rule-${Date.now()}`,
+    title: newRule.title.trim(),
+    content: newRule.content.trim(),
+    scope: newRule.scope,
+    enabled: true,
+    priority: 1
+  };
+  return [rule, ...rules];
+}
+
+export function deleteRule(rules: RuleItem[], ruleId: string): RuleItem[] {
+  return rules.filter(r => r.id !== ruleId);
+}
+
+// 3. MCP Server Operations
+export function toggleMcpServer(servers: McpServerItem[], serverId: string): McpServerItem[] {
+  return servers.map(s => {
+    if (s.id === serverId) {
+      const nextStatus = s.status === 'running' ? 'stopped' : 'running';
+      return { ...s, status: nextStatus, latencyMs: nextStatus === 'running' ? 32 : 0 };
+    }
+    return s;
+  });
+}
+
+// 4. Workbench Multi-File Tabs
+export interface OpenedEditorFile {
+  id: string;
+  path: string;
+  name: string;
+  language: string;
+  isDirty: boolean;
+  content: string;
+}
+
+export const INITIAL_OPENED_FILES: OpenedEditorFile[] = [
+  {
+    id: 'file-options',
+    path: 'prototype/src/components/OptionsCard.tsx',
+    name: 'OptionsCard.tsx',
+    language: 'typescript',
+    isDirty: false,
+    content: '// OptionsCard.tsx - 人机协同动态决策分叉卡片组件\nimport React, { useState } from "react";\n\nexport const OptionsCard = () => {\n  return <div className="options-card">决策组件就绪</div>;\n};'
+  },
+  {
+    id: 'file-contracts',
+    path: 'prototype/src/types/contracts.ts',
+    name: 'contracts.ts',
+    language: 'typescript',
+    isDirty: true,
+    content: '// contracts.ts - 严格契约类型与状态转换纯函数\nexport interface ModelItem { ... }'
+  }
+];
+
+export function closeEditorFile(
+  files: OpenedEditorFile[],
+  fileId: string
+): { remainingFiles: OpenedEditorFile[]; activeFileId: string | null } {
+  const remaining = files.filter(f => f.id !== fileId);
+  return {
+    remainingFiles: remaining,
+    activeFileId: remaining.length > 0 ? remaining[remaining.length - 1].id : null
+  };
+}
+
+// 5. Appearance Theme Preset Contracts
+export type ThemeMode = 'paper-warm' | 'cyberpunk-dark' | 'clean-white';
+
+export interface ThemeConfig {
+  mode: ThemeMode;
+  fontSize: number; // 12, 13, 14, 15, 16
+  fontFamily: 'JetBrains Mono' | 'Fira Code' | 'PingFang SC' | 'Geist Mono';
+  accentColor: string;
+}
+
+export const INITIAL_THEME_CONFIG: ThemeConfig = {
+  mode: 'paper-warm',
+  fontSize: 13,
+  fontFamily: 'JetBrains Mono',
+  accentColor: '#D96B27'
+};
+
+// 6. System & Safety Settings Contracts
+export interface SystemSafetyConfig {
+  dataDesensitization: boolean; // 是否自动脱敏 API Key 与邮箱等 PII 数据
+  gitShadowAutoSnapshot: boolean; // 是否在每次 AI 发起操作前自动打影子快照
+  astDepthLevel: 'shallow' | 'standard' | 'deep'; // AST 符号索引解析深度
+  maxConcurrentTasks: number; // 并发多 Agent 任务最大数
+  localPersistence: boolean; // 是否本地 SQLite 持久化
+}
+
+export const INITIAL_SAFETY_CONFIG: SystemSafetyConfig = {
+  dataDesensitization: true,
+  gitShadowAutoSnapshot: true,
+  astDepthLevel: 'standard',
+  maxConcurrentTasks: 4,
+  localPersistence: true
+};
+
+export const INITIAL_KEYBINDINGS: KeybindingItem[] = [
+  { id: 'kb-act', actionName: '唤醒 Act 落地模式并提交', category: 'agent', currentKey: 'Ctrl + Enter', defaultKey: 'Ctrl + Enter' },
+  { id: 'kb-new-chat', actionName: '新建当前工程会话', category: 'chat', currentKey: 'Ctrl + L', defaultKey: 'Ctrl + L' },
+  { id: 'kb-inline', actionName: '代码行内智能重构 (Inline Edit)', category: 'editor', currentKey: 'Ctrl + K', defaultKey: 'Ctrl + K' },
+  { id: 'kb-toggle-ws', actionName: '开关右侧工作台与 4:6 终端', category: 'editor', currentKey: 'Ctrl + `', defaultKey: 'Ctrl + `' },
+  { id: 'kb-palette', actionName: '打开全局命令面板 (Command Palette)', category: 'navigation', currentKey: 'Ctrl + Shift + P', defaultKey: 'Ctrl + Shift + P' },
+  { id: 'kb-search', actionName: '全局符号与文本检索', category: 'navigation', currentKey: 'Ctrl + Shift + F', defaultKey: 'Ctrl + Shift + F' },
+  { id: 'kb-settings', actionName: '打开全局首选项与设置弹窗', category: 'navigation', currentKey: 'Ctrl + ,', defaultKey: 'Ctrl + ,' }
+];
