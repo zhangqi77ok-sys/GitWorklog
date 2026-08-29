@@ -260,27 +260,25 @@ export const App: React.FC = () => {
   const [scopedTrusts, setScopedTrusts] = useState<ActionScopeTrust[]>([]);
   const [activeAutoExecutedToast, setActiveAutoExecutedToast] = useState<{ count: number; glob: string } | null>(null);
 
-  // 📐 Stable Single Layout State: Left 240px | Chat 1fr | Workbench 480px with Bounds Self-Healing
+  // 📐 Percentage & Pixel Synchronized Fluid Three-Column Layout (Left 20% | Chat 1fr | Workbench 30%)
   const [isLeftDrawerCollapsed, setIsLeftDrawerCollapsed] = useState<boolean>(false);
-  const [leftWidth, setLeftWidth] = useState<number>(() => {
+  const [leftPercent, setLeftPercent] = useState<number>(() => {
     try {
-      const saved = localStorage.getItem('codemind_layout_left_width');
-      const val = saved ? parseInt(saved, 10) : 240;
-      if (isNaN(val) || val < 180 || val > 420) return 240;
-      return val;
+      const saved = localStorage.getItem('codemind_layout_left_percent');
+      const val = saved ? parseFloat(saved) : 18;
+      return (val >= 10 && val <= 35) ? val : 18;
     } catch (e) {
-      return 240;
+      return 18;
     }
   });
 
-  const [workbenchWidth, setWorkbenchWidth] = useState<number>(() => {
+  const [workbenchPercent, setWorkbenchPercent] = useState<number>(() => {
     try {
-      const saved = localStorage.getItem('codemind_layout_wb_width');
-      const val = saved ? parseInt(saved, 10) : 480;
-      if (isNaN(val) || val < 320 || val > 760) return 480;
-      return val;
+      const saved = localStorage.getItem('codemind_layout_wb_percent');
+      const val = saved ? parseFloat(saved) : 32;
+      return (val >= 20 && val <= 50) ? val : 32;
     } catch (e) {
-      return 480;
+      return 32;
     }
   });
 
@@ -289,76 +287,66 @@ export const App: React.FC = () => {
   const [activeDiffTarget, setActiveDiffTarget] = useState<DiffNavigationTarget | null>(null);
   const [activeFile, setActiveFile] = useState<{ path: string; name: string; line?: number } | null>(null);
 
-  // Self-healing check on window resize
+  // Global window pointermove & pointerup listeners for 100% reliable dragging across Monaco/Iframe/Terminals
   React.useEffect(() => {
-    const handleCheckLayoutBounds = () => {
+    const onPointerMove = (e: PointerEvent) => {
       const totalWidth = window.innerWidth - 42; // exclude 42px ActivityBar
-      let currentLeft = isLeftDrawerCollapsed ? 0 : leftWidth;
-      let currentRight = rightWorkspaceOpen ? workbenchWidth : 0;
-      let chatWidth = totalWidth - currentLeft - currentRight - 12;
+      if (totalWidth <= 0) return;
 
-      if (chatWidth < 320) {
-        // Self-heal: recover standard default layout
-        setLeftWidth(240);
-        setWorkbenchWidth(480);
+      if (isDraggingLeft) {
+        const mouseX = e.clientX - 42;
+        const rawPercent = (mouseX / totalWidth) * 100;
+        if (rawPercent < 7) {
+          setIsLeftDrawerCollapsed(true);
+        } else {
+          setIsLeftDrawerCollapsed(false);
+          const clamped = Math.max(12, Math.min(35, Math.round(rawPercent * 10) / 10));
+          setLeftPercent(clamped);
+          try { localStorage.setItem('codemind_layout_left_percent', clamped.toString()); } catch (err) {}
+        }
+      } else if (isDraggingRight) {
+        const rightPx = window.innerWidth - e.clientX;
+        const rawPercent = (rightPx / totalWidth) * 100;
+        const clamped = Math.max(20, Math.min(50, Math.round(rawPercent * 10) / 10));
+        setWorkbenchPercent(clamped);
+        try { localStorage.setItem('codemind_layout_wb_percent', clamped.toString()); } catch (err) {}
       }
     };
-    window.addEventListener('resize', handleCheckLayoutBounds);
-    return () => window.removeEventListener('resize', handleCheckLayoutBounds);
-  }, [isLeftDrawerCollapsed, rightWorkspaceOpen, leftWidth, workbenchWidth]);
 
-  // Pointer Events with setPointerCapture for Left Divider
+    const onPointerUp = () => {
+      if (isDraggingLeft) setIsDraggingLeft(false);
+      if (isDraggingRight) setIsDraggingRight(false);
+    };
+
+    if (isDraggingLeft || isDraggingRight) {
+      window.addEventListener('pointermove', onPointerMove, { passive: true });
+      window.addEventListener('pointerup', onPointerUp);
+    }
+    return () => {
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+    };
+  }, [isDraggingLeft, isDraggingRight]);
+
   const handleLeftPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    e.currentTarget.setPointerCapture(e.pointerId);
+    e.preventDefault();
     setIsDraggingLeft(true);
   };
 
-  const handleLeftPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!isDraggingLeft) return;
-    const rawWidth = e.clientX - 42; // ActivityBar is 42px
-    if (rawWidth < 120) {
-      setIsLeftDrawerCollapsed(true);
-    } else {
-      setIsLeftDrawerCollapsed(false);
-      const clamped = Math.max(180, Math.min(420, Math.round(rawWidth)));
-      setLeftWidth(clamped);
-      try { localStorage.setItem('codemind_layout_left_width', clamped.toString()); } catch (err) {}
-    }
-  };
-
-  const handleLeftPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
-    try { e.currentTarget.releasePointerCapture(e.pointerId); } catch (err) {}
-    setIsDraggingLeft(false);
-  };
-
-  // Pointer Events with setPointerCapture for Right Divider
   const handleRightPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    e.currentTarget.setPointerCapture(e.pointerId);
+    e.preventDefault();
     setIsDraggingRight(true);
   };
 
-  const handleRightPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!isDraggingRight) return;
-    const rawWidth = window.innerWidth - e.clientX;
-    const clamped = Math.max(320, Math.min(760, Math.round(rawWidth)));
-    setWorkbenchWidth(clamped);
-    try { localStorage.setItem('codemind_layout_wb_width', clamped.toString()); } catch (err) {}
-  };
-
-  const handleRightPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
-    try { e.currentTarget.releasePointerCapture(e.pointerId); } catch (err) {}
-    setIsDraggingRight(false);
-  };
-
   const handleResetLayout = () => {
-    setLeftWidth(240);
-    setWorkbenchWidth(480);
+    setLeftPercent(18);
+    setWorkbenchPercent(32);
     setIsLeftDrawerCollapsed(false);
     try {
-      localStorage.setItem('codemind_layout_left_width', '240');
-      localStorage.setItem('codemind_layout_wb_width', '480');
+      localStorage.setItem('codemind_layout_left_percent', '18');
+      localStorage.setItem('codemind_layout_wb_percent', '32');
     } catch (err) {}
-    setActiveAutoExecutedToast({ count: 1, glob: '已恢复默认布局：左侧 240px ｜ 对话 1fr ｜ 工作台 480px' });
+    setActiveAutoExecutedToast({ count: 1, glob: '已恢复默认三栏比例：左侧 18% ｜ 对话 50% ｜ 工作台 32%' });
     setTimeout(() => setActiveAutoExecutedToast(null), 3000);
   };
 
@@ -1490,11 +1478,18 @@ Tcode 已通过宿主磁盘与终端桥接将工程提供给你。` : '当前处
             background: 'var(--chat-bg)'
           }}
         >
-          {/* Column 1: LeftPanel (Fixed width px with collapse) */}
+          {/* Column 1: LeftPanel (Percentage fluid width with collapse) */}
           {!isLeftDrawerCollapsed && (
-            <div style={{ width: `${leftWidth}px`, flexShrink: 0, height: '100%', display: 'flex' }}>
+            <div style={{
+              width: `${leftPercent}%`,
+              minWidth: '180px',
+              maxWidth: '460px',
+              flexShrink: 0,
+              height: '100%',
+              display: 'flex'
+            }}>
               <LeftPanel
-                width={leftWidth}
+                width={260}
                 activeNav={activeNav}
                 onOpenFile={handleOpenFile}
                 projects={projects}
@@ -1517,10 +1512,8 @@ Tcode 已通过宿主磁盘与终端桥接将工程提供给你。` : '当前处
           {!isLeftDrawerCollapsed && (
             <div
               onPointerDown={handleLeftPointerDown}
-              onPointerMove={handleLeftPointerMove}
-              onPointerUp={handleLeftPointerUp}
               onDoubleClick={handleResetLayout}
-              title="拖拽调节宽度 (双击恢复默认 240px)"
+              title="拖拽调节比例 (双击恢复默认 18%)"
               style={{
                 width: '6px',
                 flexShrink: 0,
@@ -1541,18 +1534,19 @@ Tcode 已通过宿主磁盘与终端桥接将工程提供给你。` : '当前处
                   position: 'absolute',
                   top: '12px',
                   left: '10px',
-                  padding: '2px 6px',
-                  borderRadius: '3px',
+                  padding: '2px 8px',
+                  borderRadius: '4px',
                   background: 'var(--accent)',
                   color: '#FFF',
-                  fontSize: '9.5px',
+                  fontSize: '10px',
                   fontWeight: 700,
                   fontFamily: 'var(--font-mono)',
                   pointerEvents: 'none',
                   zIndex: 100,
-                  whiteSpace: 'nowrap'
+                  whiteSpace: 'nowrap',
+                  boxShadow: '0 2px 6px rgba(0,0,0,0.2)'
                 }}>
-                  左侧 {leftWidth}px
+                  左侧 {leftPercent}%
                 </div>
               )}
             </div>
@@ -1600,10 +1594,8 @@ Tcode 已通过宿主磁盘与终端桥接将工程提供给你。` : '当前处
           {rightWorkspaceOpen && (
             <div
               onPointerDown={handleRightPointerDown}
-              onPointerMove={handleRightPointerMove}
-              onPointerUp={handleRightPointerUp}
               onDoubleClick={handleResetLayout}
-              title="拖拽调节工作台宽度 (双击恢复默认 480px)"
+              title="拖拽调节工作台比例 (双击恢复默认 32%)"
               style={{
                 width: '6px',
                 flexShrink: 0,
@@ -1624,26 +1616,34 @@ Tcode 已通过宿主磁盘与终端桥接将工程提供给你。` : '当前处
                   position: 'absolute',
                   top: '12px',
                   right: '10px',
-                  padding: '2px 6px',
-                  borderRadius: '3px',
+                  padding: '2px 8px',
+                  borderRadius: '4px',
                   background: 'var(--accent)',
                   color: '#FFF',
-                  fontSize: '9.5px',
+                  fontSize: '10px',
                   fontWeight: 700,
                   fontFamily: 'var(--font-mono)',
                   pointerEvents: 'none',
                   zIndex: 100,
-                  whiteSpace: 'nowrap'
+                  whiteSpace: 'nowrap',
+                  boxShadow: '0 2px 6px rgba(0,0,0,0.2)'
                 }}>
-                  工作台 {workbenchWidth}px
+                  工作台 {workbenchPercent}%
                 </div>
               )}
             </div>
           )}
 
-          {/* Column 3: Right Monaco Code Workspace & Terminal Deck (Strictly mounted with fixed px) */}
+          {/* Column 3: Right Monaco Code Workspace & Terminal Deck (Percentage fluid width) */}
           {rightWorkspaceOpen && (
-            <div style={{ width: `${workbenchWidth}px`, flexShrink: 0, height: '100%', display: 'flex' }}>
+            <div style={{
+              width: `${workbenchPercent}%`,
+              minWidth: '320px',
+              maxWidth: '800px',
+              flexShrink: 0,
+              height: '100%',
+              display: 'flex'
+            }}>
               <EditorWorkspace
                 isOpen={rightWorkspaceOpen}
                 onClose={() => setRightWorkspaceOpen(false)}
