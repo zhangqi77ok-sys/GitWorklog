@@ -29,4 +29,6 @@ _*/
 .idea/
 .vscode/
 *.tsbuildinfo
+build_temp/
+release/
 
