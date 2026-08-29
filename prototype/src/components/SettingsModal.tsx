@@ -21,7 +21,10 @@ import {
   Eye,
   EyeOff,
   RefreshCw,
-  SlidersHorizontal
+  SlidersHorizontal,
+  ExternalLink,
+  Clipboard,
+  Trash2
 } from 'lucide-react';
 import {
   SkillItem,
@@ -37,6 +40,11 @@ import {
   INITIAL_CHANNELS,
   toggleChannelModel,
   addCustomChannel,
+  ModelProviderItem,
+  INITIAL_PROVIDERS,
+  toggleProviderSwitch,
+  toggleProviderModelSwitch,
+  addCustomModelToProvider,
   RuleItem,
   INITIAL_RULES,
   toggleRuleItem,
@@ -61,6 +69,45 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [searchFilter, setSearchFilter] = useState('');
   const [rules, setRules] = useState<RuleItem[]>(INITIAL_RULES);
 
+
+  // GitHub Benchmark Model Providers Master-Detail State (Cherry Studio / LobeChat style)
+  const [providers, setProviders] = useState<ModelProviderItem[]>(INITIAL_PROVIDERS);
+  const [selectedProviderId, setSelectedProviderId] = useState<string>('provider-deepseek');
+  const [providerSearch, setProviderSearch] = useState<string>('');
+  const [showAddCustomModel, setShowAddCustomModel] = useState<boolean>(false);
+  const [customModelInput, setCustomModelInput] = useState<string>('');
+  const [testingProviderId, setTestingProviderId] = useState<string | null>(null);
+  const [providerToast, setProviderToast] = useState<string | null>(null);
+  const [showProviderKeyMap, setShowProviderKeyMap] = useState<Record<string, boolean>>({});
+
+  const selectedProvider = providers.find(p => p.id === selectedProviderId) || providers[0];
+
+  const handleTestProvider = (p: ModelProviderItem) => {
+    setTestingProviderId(p.id);
+    setTimeout(() => {
+      setProviders(prev => prev.map(item => item.id === p.id ? { ...item, status: 'healthy', latencyMs: item.id === 'provider-ollama' ? 0 : Math.floor(Math.random() * 50) + 65 } : item));
+      setTestingProviderId(null);
+      setProviderToast(`✓ [${p.name}] 连通性测试成功！HTTP 200 OK · ${p.id === 'provider-ollama' ? '0ms 本地直连' : '78ms'}`);
+      setTimeout(() => setProviderToast(null), 3000);
+    }, 500);
+  };
+
+  const handleFetchProviderModels = (p: ModelProviderItem) => {
+    setProviderToast(`🔄 正在向 ${p.baseUrl}/models 发起请求拉取最新模型...`);
+    setTimeout(() => {
+      setProviderToast(`✓ 成功从 ${p.name} 动态拉取并同步 ${p.models.length} 个最新可用模型！`);
+      setTimeout(() => setProviderToast(null), 3000);
+    }, 600);
+  };
+
+  const handleAddCustomModelSubmit = () => {
+    if (!customModelInput.trim()) return;
+    setProviders(addCustomModelToProvider(providers, selectedProvider.id, customModelInput.trim()));
+    setProviderToast(`✓ 成功添加自定义模型 [${customModelInput.trim()}] 到 ${selectedProvider.name}`);
+    setCustomModelInput('');
+    setShowAddCustomModel(false);
+    setTimeout(() => setProviderToast(null), 3000);
+  };
 
   // Gateway Full Architecture States
   const [gatewaySubTab, setGatewaySubTab] = useState<'roles' | 'channels'>('roles');
@@ -122,15 +169,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setTimeout(() => setChannelNotice(null), 3000);
   };
 
-  // 1. Gateway State
-  const [providers, setProviders] = useState<ProviderHealth[]>([
-    { id: 'anthropic', name: 'Anthropic (Claude 3.5/3.7)', status: 'healthy', latencyMs: 128, endpoint: 'https://api.anthropic.com/v1', activeModel: 'claude-3-5-sonnet-20241022' },
-    { id: 'deepseek', name: 'DeepSeek (百炼推理总线)', status: 'healthy', latencyMs: 85, endpoint: 'https://api.deepseek.com/v1', activeModel: 'deepseek-reasoner' },
-    { id: 'openai', name: 'OpenAI (GPT-4o/o3-mini)', status: 'healthy', latencyMs: 142, endpoint: 'https://api.openai.com/v1', activeModel: 'gpt-4o' },
-    { id: 'ollama', name: '本地私有 Ollama (物理隔离)', status: 'healthy', latencyMs: 0, endpoint: 'http://localhost:11434', activeModel: 'qwen2.5-coder:32b' }
-  ]);
-  const [selectedProviderIds, setSelectedProviderIds] = useState<string[]>(['anthropic', 'deepseek']);
-  const [testingId, setTestingId] = useState<string | null>(null);
+
 
   // 2. Skills State
   const [skills, setSkills] = useState<SkillItem[]>([
@@ -185,18 +224,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleTestProvider = (id: string) => {
-    setTestingId(id);
-    setTimeout(() => {
-      setProviders(prev =>
-        prev.map(p => (p.id === id ? { ...p, latencyMs: p.id === 'ollama' ? 0 : Math.floor(Math.random() * 60) + 70 } : p))
-      );
-      setTestingId(null);
-    }, 500);
-  };
+
 
   const navTabs = [
-    { id: 'gateway', label: '模型网关', icon: Cpu },
+    { id: 'gateway', label: '模型服务商', icon: Cpu },
     { id: 'rules', label: 'Rule 规则管理', icon: ScrollText },
     { id: 'skills', label: 'Skill 技能库', icon: Boxes },
     { id: 'mcp', label: 'MCP 工具管理', icon: Server },
@@ -421,466 +452,486 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
             )}
 
-                        {/* TAB 1: MODEL GATEWAY FULL ARCHITECTURE */}
+                                    {/* TAB 1: GITHUB BENCHMARK MASTER-DETAIL MODEL PROVIDER (Cherry Studio / LobeChat Style) */}
             {activeTab === 'gateway' && (
-              <div style={{ position: 'relative' }}>
-                {channelNotice && (
+              <div style={{ display: 'flex', height: '460px', margin: '-8px -4px', position: 'relative' }}>
+                {providerToast && (
                   <div style={{
-                    marginBottom: '12px',
-                    padding: '8px 12px',
+                    position: 'absolute',
+                    top: '8px',
+                    right: '12px',
+                    zIndex: 100,
+                    padding: '8px 14px',
                     borderRadius: '6px',
                     background: 'var(--accent)',
                     color: '#FFF',
                     fontSize: '11px',
                     fontWeight: 600,
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.2)'
                   }}>
-                    {channelNotice}
+                    {providerToast}
                   </div>
                 )}
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                  <div>
-                    <h3 style={{ fontSize: '13px', fontWeight: 700 }}>模型网关与调度中心 (Model Gateway & Routing)</h3>
-                    <p style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                      具备工业级“智能任务角色路由”与“多渠道凭证/模型池统一管理”。
-                    </p>
-                  </div>
-                </div>
-
-                {/* Sub-Tabs Switcher */}
-                <div style={{ display: 'flex', gap: '6px', marginBottom: '14px', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '8px' }}>
-                  <button
-                    onClick={() => setGatewaySubTab('roles')}
+                {/* 1. LEFT MASTER SIDEBAR: Provider List (210px) */}
+                <div style={{
+                  width: '210px',
+                  borderRight: '1px solid var(--border-subtle)',
+                  paddingRight: '10px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px'
+                }}>
+                  {/* Search Bar */}
+                  <input
+                    type="text"
+                    placeholder="搜索服务商..."
+                    value={providerSearch}
+                    onChange={e => setProviderSearch(e.target.value)}
                     style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                      padding: '4px 10px',
+                      padding: '4px 8px',
                       borderRadius: '4px',
-                      border: 'none',
-                      background: gatewaySubTab === 'roles' ? 'var(--accent)' : 'var(--bg-surface)',
-                      color: gatewaySubTab === 'roles' ? '#FFF' : 'var(--text-secondary)',
+                      border: '1px solid var(--border-strong)',
+                      background: 'var(--bg-base)',
                       fontSize: '11px',
-                      fontWeight: 600,
-                      cursor: 'pointer'
+                      color: 'var(--text-primary)',
+                      outline: 'none'
                     }}
-                  >
-                    <SlidersHorizontal size={12} />
-                    <span>🎯 智能任务角色路由 (Role Routing)</span>
-                  </button>
-                  <button
-                    onClick={() => setGatewaySubTab('channels')}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                      padding: '4px 10px',
-                      borderRadius: '4px',
-                      border: 'none',
-                      background: gatewaySubTab === 'channels' ? 'var(--accent)' : 'var(--bg-surface)',
-                      color: gatewaySubTab === 'channels' ? '#FFF' : 'var(--text-secondary)',
-                      fontSize: '11px',
-                      fontWeight: 600,
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <Server size={12} />
-                    <span>🌐 渠道凭据与模型池 ({channels.length} 个渠道)</span>
-                  </button>
-                </div>
+                  />
 
-                {/* ============================================================= */}
-                {/* SUBTAB 1: MODEL ROLES ROUTING                                 */}
-                {/* ============================================================= */}
-                {gatewaySubTab === 'roles' && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    <div style={{ padding: '8px 10px', background: 'rgba(217, 107, 39, 0.08)', borderRadius: '6px', border: '1px solid rgba(217, 107, 39, 0.25)', fontSize: '11px', color: 'var(--accent)', lineHeight: 1.5 }}>
-                      💡 <strong>智能角色分工机理</strong>：底座杜绝全局使用单一模型，不同开发任务交由最擅长该领域的专有模型调度（例如思考方案交给 R1 推理模型，修改落地代码交给 3.5 Sonnet，断网或限流时零感知平滑降级至本地私有 Ollama）。
-                    </div>
-
-                    {/* 1. Planner Model */}
-                    <div style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid var(--border-subtle)', background: 'var(--bg-surface)' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                        <div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <span style={{ fontWeight: 700, fontSize: '12px' }}>📐 架构规划与思考模型 (Plan / Reasoner)</span>
-                            <span style={{ fontSize: '9px', padding: '1px 4px', borderRadius: '2px', background: 'rgba(147, 51, 234, 0.1)', color: '#9333EA', fontWeight: 600 }}>深度思维链</span>
-                          </div>
-                          <p style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                            用于 SDD 契约制定、复杂跨文件重构方案决策、深度架构选型（不直接写盘）
-                          </p>
-                        </div>
-                        <select
-                          value={roleRouting.planModelId}
-                          onChange={e => setRoleRouting(updateModelRoleRouting(roleRouting, 'planModelId', e.target.value))}
-                          style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid var(--border-strong)', background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: '11px', outline: 'none' }}
-                        >
-                          <option value="deepseek-reasoner">DeepSeek R1 (百炼推理总线)</option>
-                          <option value="claude-3-7-sonnet">Claude 3.7 Sonnet (Thinking Mode)</option>
-                          <option value="o3-mini">OpenAI o3-mini (深度推理)</option>
-                        </select>
-                      </div>
-                    </div>
-
-                    {/* 2. Act Model */}
-                    <div style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid var(--border-subtle)', background: 'var(--bg-surface)' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                        <div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <span style={{ fontWeight: 700, fontSize: '12px' }}>⚡ 代码工程落地执行模型 (Act / Coder)</span>
-                            <span style={{ fontSize: '9px', padding: '1px 4px', borderRadius: '2px', background: 'rgba(217, 107, 39, 0.15)', color: 'var(--accent)', fontWeight: 600 }}>高准确率落地</span>
-                          </div>
-                          <p style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                            用于极速改写代码、运行 Vitest 自动化单测、根据报错自动自愈纠错
-                          </p>
-                        </div>
-                        <select
-                          value={roleRouting.actModelId}
-                          onChange={e => setRoleRouting(updateModelRoleRouting(roleRouting, 'actModelId', e.target.value))}
-                          style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid var(--border-strong)', background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: '11px', outline: 'none' }}
-                        >
-                          <option value="claude-3-5-sonnet">Claude 3.5 Sonnet (主力旗舰)</option>
-                          <option value="deepseek-chat">DeepSeek-V3 (极速代码)</option>
-                          <option value="gpt-4o">OpenAI GPT-4o</option>
-                        </select>
-                      </div>
-                    </div>
-
-                    {/* 3. Inline Model */}
-                    <div style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid var(--border-subtle)', background: 'var(--bg-surface)' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                        <div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <span style={{ fontWeight: 700, fontSize: '12px' }}>⚡ 行内极速补全模型 (Inline / Fast)</span>
-                            <span style={{ fontSize: '9px', padding: '1px 4px', borderRadius: '2px', background: 'rgba(16, 185, 129, 0.1)', color: '#10B981', fontWeight: 600 }}>毫秒级时延</span>
-                          </div>
-                          <p style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                            用于代码编辑器行内 Ghost Text 补全预测与单行代码解释
-                          </p>
-                        </div>
-                        <select
-                          value={roleRouting.inlineModelId}
-                          onChange={e => setRoleRouting(updateModelRoleRouting(roleRouting, 'inlineModelId', e.target.value))}
-                          style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid var(--border-strong)', background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: '11px', outline: 'none' }}
-                        >
-                          <option value="claude-3-5-haiku">Claude 3.5 Haiku (轻快低时延)</option>
-                          <option value="deepseek-chat">DeepSeek-V3 (低延迟)</option>
-                          <option value="gpt-4o-mini">GPT-4o-mini</option>
-                        </select>
-                      </div>
-                    </div>
-
-                    {/* 4. Fallback Model */}
-                    <div style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid var(--border-subtle)', background: 'var(--bg-surface)' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                        <div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <span style={{ fontWeight: 700, fontSize: '12px' }}>🛡️ 离线与限流容灾兜底模型 (Fallback / Offline)</span>
-                            <span style={{ fontSize: '9px', padding: '1px 4px', borderRadius: '2px', background: 'rgba(37, 99, 235, 0.1)', color: '#2563EB', fontWeight: 600 }}>物理私有防故障</span>
-                          </div>
-                          <p style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                            当云端出现 429 限流、网络中断或进入涉密脱密模式时，自动无损无感知接管
-                          </p>
-                        </div>
-                        <select
-                          value={roleRouting.fallbackModelId}
-                          onChange={e => setRoleRouting(updateModelRoleRouting(roleRouting, 'fallbackModelId', e.target.value))}
-                          style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid var(--border-strong)', background: 'var(--bg-base)', color: 'var(--text-primary)', fontSize: '11px', outline: 'none' }}
-                        >
-                          <option value="qwen2.5-coder:32b">本地 Ollama (Qwen2.5-Coder 32B)</option>
-                          <option value="deepseek-r1:14b">本地 Ollama (DeepSeek-R1 14B)</option>
-                        </select>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* ============================================================= */}
-                {/* SUBTAB 2: PROVIDERS & MODEL POOLS                             */}
-                {/* ============================================================= */}
-                {gatewaySubTab === 'channels' && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                      <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>
-                        已配置的 upstream 上游服务商渠道
-                      </span>
-                      <button
-                        onClick={() => setShowAddChannelModal(true)}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '4px',
-                          padding: '3px 8px',
-                          borderRadius: '4px',
-                          background: 'var(--accent)',
-                          color: '#FFF',
-                          border: 'none',
-                          fontSize: '10px',
-                          fontWeight: 600,
-                          cursor: 'pointer'
-                        }}
-                      >
-                        <Plus size={11} />
-                        <span>添加自定义渠道 / 中转</span>
-                      </button>
-                    </div>
-
-                    {channels.map(chan => {
-                      const isShowKey = showKeyMap[chan.id] ?? false;
-                      const isTestingThis = channelTestingId === chan.id;
-
-                      return (
-                        <div
-                          key={chan.id}
-                          style={{
-                            padding: '10px 12px',
-                            borderRadius: '6px',
-                            border: '1px solid var(--border-subtle)',
-                            background: 'var(--bg-surface)',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: '8px'
-                          }}
-                        >
-                          {/* Channel Header */}
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                              <span style={{ fontWeight: 700, fontSize: '12px' }}>{chan.name}</span>
+                  {/* Providers List */}
+                  <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    {providers
+                      .filter(p => p.name.toLowerCase().includes(providerSearch.toLowerCase()))
+                      .map(p => {
+                        const isSelected = selectedProvider.id === p.id;
+                        return (
+                          <div
+                            key={p.id}
+                            onClick={() => setSelectedProviderId(p.id)}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              padding: '6px 8px',
+                              borderRadius: '6px',
+                              cursor: 'pointer',
+                              background: isSelected ? 'var(--accent-subtle)' : 'transparent',
+                              border: isSelected ? '1px solid var(--accent)' : '1px solid transparent',
+                              transition: 'all 0.15s ease'
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+                              <span style={{ fontSize: '13px' }}>{p.icon}</span>
                               <span style={{
-                                fontSize: '9px',
-                                padding: '1px 5px',
-                                borderRadius: '3px',
-                                background: 'rgba(16, 185, 129, 0.12)',
-                                color: '#10B981',
-                                fontWeight: 600
+                                fontSize: '11px',
+                                fontWeight: isSelected ? 700 : 500,
+                                color: isSelected ? 'var(--accent)' : 'var(--text-primary)',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap'
                               }}>
-                                {isTestingThis ? '探测测速中...' : (chan.latencyMs === 0 ? '🟢 本地直连 · 0ms' : `🟢 正常 · ${chan.latencyMs}ms`)}
+                                {p.name}
                               </span>
                             </div>
 
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              <button
-                                onClick={() => handleTestChannel(chan)}
-                                title="测试此渠道网络连通性与延迟"
-                                style={{
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: '3px',
-                                  padding: '2px 7px',
-                                  borderRadius: '3px',
-                                  border: '1px solid var(--border-subtle)',
-                                  background: 'var(--bg-base)',
-                                  color: 'var(--accent)',
-                                  fontSize: '10px',
-                                  fontWeight: 600,
-                                  cursor: 'pointer'
-                                }}
-                              >
-                                <Zap size={10} />
-                                <span>连通性测试</span>
-                              </button>
-                              <button
-                                onClick={() => handleFetchModels(chan)}
-                                title="自动向 /v1/models 拉取该渠道的最新可用模型"
-                                style={{
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: '3px',
-                                  padding: '2px 7px',
-                                  borderRadius: '3px',
-                                  border: '1px solid var(--border-subtle)',
-                                  background: 'var(--bg-base)',
-                                  color: 'var(--text-secondary)',
-                                  fontSize: '10px',
-                                  fontWeight: 600,
-                                  cursor: 'pointer'
-                                }}
-                              >
-                                <RefreshCw size={10} />
-                                <span>拉取模型列表</span>
-                              </button>
-                            </div>
+                            {/* Enable/Disable Mini Pill */}
+                            <span
+                              onClick={e => {
+                                e.stopPropagation();
+                                setProviders(toggleProviderSwitch(providers, p.id));
+                              }}
+                              title={p.enabled ? '点击禁用' : '点击启用'}
+                              style={{
+                                fontSize: '9px',
+                                padding: '1px 5px',
+                                borderRadius: '8px',
+                                background: p.enabled ? 'rgba(16, 185, 129, 0.15)' : 'var(--bg-base)',
+                                color: p.enabled ? '#10B981' : 'var(--text-muted)',
+                                border: p.enabled ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid var(--border-subtle)',
+                                fontWeight: 600
+                              }}
+                            >
+                              {p.enabled ? 'ON' : 'OFF'}
+                            </span>
                           </div>
+                        );
+                      })}
+                  </div>
 
-                          {/* Base URL & API Key Inputs */}
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                            <div>
-                              <label style={{ fontSize: '10px', color: 'var(--text-muted)', display: 'block', marginBottom: '2px' }}>
-                                Base URL (端点服务地址):
-                              </label>
-                              <input
-                                type="text"
-                                value={chan.baseUrl}
-                                onChange={e => {
-                                  const val = e.target.value;
-                                  setChannels(prev => prev.map(c => c.id === chan.id ? { ...c, baseUrl: val } : c));
-                                }}
-                                style={{
-                                  width: '100%',
-                                  padding: '4px 6px',
-                                  fontSize: '11px',
-                                  borderRadius: '4px',
-                                  border: '1px solid var(--border-strong)',
-                                  background: 'var(--bg-base)',
-                                  color: 'var(--text-primary)',
-                                  fontFamily: 'var(--font-mono)',
-                                  outline: 'none'
-                                }}
-                              />
-                            </div>
+                  {/* Add Provider Button */}
+                  <button
+                    onClick={() => {
+                      const newP: ModelProviderItem = {
+                        id: `provider-custom-${Date.now()}`,
+                        name: '自定义 OpenAI 兼容',
+                        icon: '🌐',
+                        enabled: true,
+                        protocol: 'openai',
+                        baseUrl: 'https://api.openai-proxy.com/v1',
+                        defaultBaseUrl: 'https://api.openai-proxy.com/v1',
+                        apiKey: '',
+                        status: 'untested',
+                        latencyMs: 0,
+                        models: [
+                          { id: 'custom-model', name: 'Custom-GPT-4o', enabled: true, contextLimit: 128000, capabilities: ['code', 'custom'] }
+                        ]
+                      };
+                      setProviders([...providers, newP]);
+                      setSelectedProviderId(newP.id);
+                    }}
+                    style={{
+                      padding: '5px 8px',
+                      borderRadius: '4px',
+                      border: '1px dashed var(--border-strong)',
+                      background: 'transparent',
+                      color: 'var(--text-secondary)',
+                      fontSize: '10px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '4px'
+                    }}
+                  >
+                    <Plus size={11} />
+                    <span>添加自定义服务商</span>
+                  </button>
+                </div>
 
+                {/* 2. RIGHT DETAIL WORKBENCH: Selected Provider Config (Flex 1) */}
+                <div style={{ flex: 1, paddingLeft: '14px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {/* Top Bar: Title, Protocol, Status, Master Switch */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '18px' }}>{selectedProvider.icon}</span>
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <h3 style={{ fontSize: '13px', fontWeight: 700 }}>{selectedProvider.name}</h3>
+                          <span style={{
+                            fontSize: '9px',
+                            padding: '1px 5px',
+                            borderRadius: '3px',
+                            background: 'var(--bg-base)',
+                            border: '1px solid var(--border-subtle)',
+                            color: 'var(--text-muted)'
+                          }}>
+                            {selectedProvider.protocol.toUpperCase()} 协议
+                          </span>
+                        </div>
+                        {selectedProvider.docUrl && (
+                          <a
+                            href={selectedProvider.docUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            style={{ fontSize: '10px', color: 'var(--accent)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '2px', marginTop: '2px' }}
+                          >
+                            <span>获取 API Key / 官方文档</span>
+                            <ExternalLink size={9} />
+                          </a>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Master Switch */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>服务商总开关:</span>
+                      <button
+                        onClick={() => setProviders(toggleProviderSwitch(providers, selectedProvider.id))}
+                        style={{
+                          padding: '3px 12px',
+                          borderRadius: '12px',
+                          border: 'none',
+                          background: selectedProvider.enabled ? 'var(--accent)' : 'var(--border-strong)',
+                          color: '#FFF',
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        {selectedProvider.enabled ? '已启用 (ON)' : '已禁用 (OFF)'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Section 1: Endpoints & API Credentials */}
+                  <div style={{
+                    padding: '10px 12px',
+                    borderRadius: '6px',
+                    border: '1px solid var(--border-subtle)',
+                    background: 'var(--bg-surface)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '10px'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: '11px', fontWeight: 700 }}>API 凭证与端点设置</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{
+                          fontSize: '10px',
+                          padding: '2px 6px',
+                          borderRadius: '3px',
+                          background: selectedProvider.status === 'healthy' ? 'rgba(16, 185, 129, 0.12)' : 'var(--bg-base)',
+                          color: selectedProvider.status === 'healthy' ? '#10B981' : 'var(--text-muted)',
+                          fontWeight: 600
+                        }}>
+                          {testingProviderId === selectedProvider.id
+                            ? '正在测速...'
+                            : (selectedProvider.latencyMs === 0 ? '🟢 本地直连 0ms' : `🟢 正常 ${selectedProvider.latencyMs}ms`)}
+                        </span>
+                        <button
+                          onClick={() => handleTestProvider(selectedProvider)}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '3px',
+                            padding: '3px 8px',
+                            borderRadius: '4px',
+                            border: '1px solid var(--border-subtle)',
+                            background: 'var(--accent-subtle)',
+                            color: 'var(--accent)',
+                            fontSize: '10px',
+                            fontWeight: 600,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <Zap size={11} />
+                          <span>连通性测试</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* API Key */}
+                    <div>
+                      <label style={{ fontSize: '10px', color: 'var(--text-muted)', display: 'block', marginBottom: '2px' }}>
+                        API Key (密钥凭据):
+                      </label>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'var(--bg-base)', borderRadius: '4px', border: '1px solid var(--border-strong)', padding: '0 6px' }}>
+                        <input
+                          type={showProviderKeyMap[selectedProvider.id] ? 'text' : 'password'}
+                          value={selectedProvider.apiKey}
+                          placeholder={selectedProvider.id === 'provider-ollama' ? '本地 Ollama 免密钥' : 'sk-...'}
+                          onChange={e => {
+                            const val = e.target.value;
+                            setProviders(prev => prev.map(item => item.id === selectedProvider.id ? { ...item, apiKey: val } : item));
+                          }}
+                          style={{
+                            flex: 1,
+                            padding: '5px 0',
+                            fontSize: '11px',
+                            border: 'none',
+                            background: 'transparent',
+                            color: 'var(--text-primary)',
+                            fontFamily: 'var(--font-mono)',
+                            outline: 'none'
+                          }}
+                        />
+                        {selectedProvider.apiKey && (
+                          <button
+                            onClick={() => setShowProviderKeyMap(prev => ({ ...prev, [selectedProvider.id]: !prev[selectedProvider.id] }))}
+                            style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '2px' }}
+                          >
+                            {showProviderKeyMap[selectedProvider.id] ? <EyeOff size={13} /> : <Eye size={13} />}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Base URL */}
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
+                        <label style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                          API 地址 (Base URL):
+                        </label>
+                        {selectedProvider.baseUrl !== selectedProvider.defaultBaseUrl && (
+                          <span
+                            onClick={() => setProviders(prev => prev.map(item => item.id === selectedProvider.id ? { ...item, baseUrl: item.defaultBaseUrl } : item))}
+                            style={{ fontSize: '9px', color: 'var(--accent)', cursor: 'pointer' }}
+                          >
+                            恢复默认
+                          </span>
+                        )}
+                      </div>
+                      <input
+                        type="text"
+                        value={selectedProvider.baseUrl}
+                        onChange={e => {
+                          const val = e.target.value;
+                          setProviders(prev => prev.map(item => item.id === selectedProvider.id ? { ...item, baseUrl: val } : item));
+                        }}
+                        style={{
+                          width: '100%',
+                          padding: '5px 8px',
+                          fontSize: '11px',
+                          borderRadius: '4px',
+                          border: '1px solid var(--border-strong)',
+                          background: 'var(--bg-base)',
+                          color: 'var(--text-primary)',
+                          fontFamily: 'var(--font-mono)',
+                          outline: 'none'
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Section 2: Model Management Table (核心 GitHub 交互!) */}
+                  <div style={{
+                    padding: '10px 12px',
+                    borderRadius: '6px',
+                    border: '1px solid var(--border-subtle)',
+                    background: 'var(--bg-surface)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '8px'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ fontSize: '11px', fontWeight: 700 }}>模型列表与管理</span>
+                        <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                          (已启用 {selectedProvider.models.filter(m => m.enabled).length}/{selectedProvider.models.length})
+                        </span>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <button
+                          onClick={() => handleFetchProviderModels(selectedProvider)}
+                          title="向服务商 API 发送 /v1/models 探测请求"
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '3px',
+                            padding: '3px 8px',
+                            borderRadius: '4px',
+                            border: '1px solid var(--border-subtle)',
+                            background: 'var(--bg-base)',
+                            color: 'var(--text-secondary)',
+                            fontSize: '10px',
+                            fontWeight: 600,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <RefreshCw size={10} />
+                          <span>获取模型列表</span>
+                        </button>
+
+                        <button
+                          onClick={() => setShowAddCustomModel(true)}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '3px',
+                            padding: '3px 8px',
+                            borderRadius: '4px',
+                            border: 'none',
+                            background: 'var(--accent)',
+                            color: '#FFF',
+                            fontSize: '10px',
+                            fontWeight: 600,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <Plus size={10} />
+                          <span>添加模型</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Inline Add Model Input */}
+                    {showAddCustomModel && (
+                      <div style={{ display: 'flex', gap: '6px', padding: '6px', background: 'var(--bg-base)', borderRadius: '4px', border: '1px solid var(--accent)' }}>
+                        <input
+                          type="text"
+                          placeholder="输入模型 ID (如 deepseek-coder 或 qwen2.5:72b)"
+                          value={customModelInput}
+                          onChange={e => setCustomModelInput(e.target.value)}
+                          style={{ flex: 1, padding: '3px 6px', fontSize: '11px', border: '1px solid var(--border-subtle)', borderRadius: '3px', background: 'var(--bg-surface)', color: 'var(--text-primary)', outline: 'none' }}
+                        />
+                        <button
+                          onClick={handleAddCustomModelSubmit}
+                          style={{ padding: '3px 10px', borderRadius: '3px', background: 'var(--accent)', color: '#FFF', border: 'none', fontSize: '10px', fontWeight: 600, cursor: 'pointer' }}
+                        >
+                          确定
+                        </button>
+                        <button
+                          onClick={() => setShowAddCustomModel(false)}
+                          style={{ padding: '3px 6px', borderRadius: '3px', background: 'transparent', border: 'none', color: 'var(--text-muted)', fontSize: '10px', cursor: 'pointer' }}
+                        >
+                          取消
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Models Rows */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      {selectedProvider.models.map(m => (
+                        <div
+                          key={m.id}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '6px 8px',
+                            borderRadius: '4px',
+                            background: m.enabled ? 'var(--bg-base)' : 'transparent',
+                            border: m.enabled ? '1px solid var(--border-subtle)' : '1px solid transparent',
+                            opacity: m.enabled ? 1 : 0.6
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <input
+                              type="checkbox"
+                              checked={m.enabled}
+                              onChange={() => setProviders(toggleProviderModelSwitch(providers, selectedProvider.id, m.id))}
+                              style={{ cursor: 'pointer' }}
+                            />
                             <div>
-                              <label style={{ fontSize: '10px', color: 'var(--text-muted)', display: 'block', marginBottom: '2px' }}>
-                                API Key 凭据:
-                              </label>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'var(--bg-base)', borderRadius: '4px', border: '1px solid var(--border-strong)', padding: '0 6px' }}>
-                                <input
-                                  type={isShowKey ? 'text' : 'password'}
-                                  value={chan.apiKey}
-                                  placeholder={chan.id === 'chan-ollama' ? '本地 Ollama 免秘钥' : 'sk-...'}
-                                  onChange={e => {
-                                    const val = e.target.value;
-                                    setChannels(prev => prev.map(c => c.id === chan.id ? { ...c, apiKey: val } : c));
-                                  }}
-                                  style={{
-                                    flex: 1,
-                                    padding: '4px 0',
-                                    fontSize: '11px',
-                                    border: 'none',
-                                    background: 'transparent',
-                                    color: 'var(--text-primary)',
-                                    fontFamily: 'var(--font-mono)',
-                                    outline: 'none'
-                                  }}
-                                />
-                                {chan.apiKey && (
-                                  <button
-                                    onClick={() => toggleShowKey(chan.id)}
-                                    style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '2px' }}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <span style={{ fontSize: '11px', fontWeight: 600, fontFamily: 'var(--font-mono)' }}>{m.id}</span>
+                                {m.capabilities.map(cap => (
+                                  <span
+                                    key={cap}
+                                    style={{
+                                      fontSize: '9px',
+                                      padding: '0 4px',
+                                      borderRadius: '2px',
+                                      background: cap === 'reasoning' || cap === 'thinking' ? 'rgba(147, 51, 234, 0.12)' : 'rgba(217, 107, 39, 0.1)',
+                                      color: cap === 'reasoning' || cap === 'thinking' ? '#9333EA' : 'var(--accent)',
+                                      fontWeight: 500
+                                    }}
                                   >
-                                    {isShowKey ? <EyeOff size={12} /> : <Eye size={12} />}
-                                  </button>
-                                )}
+                                    {cap === 'reasoning' || cap === 'thinking' ? '思考链' : (cap === 'vision' ? '视觉' : '代码')}
+                                  </span>
+                                ))}
+                              </div>
+                              <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                                {m.name} · 上限 {Math.round(m.contextLimit / 1000)}k tokens
                               </div>
                             </div>
                           </div>
 
-                          {/* Model Checklist */}
-                          <div>
-                            <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginBottom: '4px' }}>
-                              该渠道下已启用的模型池 ({chan.models.filter(m => m.enabled).length}/{chan.models.length}):
-                            </div>
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                              {chan.models.map(m => (
-                                <div
-                                  key={m.id}
-                                  onClick={() => setChannels(toggleChannelModel(channels, chan.id, m.id))}
-                                  style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '4px',
-                                    padding: '2px 6px',
-                                    borderRadius: '3px',
-                                    border: m.enabled ? '1px solid var(--accent)' : '1px solid var(--border-subtle)',
-                                    background: m.enabled ? 'var(--accent-subtle)' : 'var(--bg-base)',
-                                    color: m.enabled ? 'var(--accent)' : 'var(--text-muted)',
-                                    cursor: 'pointer',
-                                    fontSize: '10px',
-                                    fontFamily: 'var(--font-mono)'
-                                  }}
-                                >
-                                  {m.enabled ? <CheckSquare size={11} /> : <Square size={11} />}
-                                  <span>{m.name}</span>
-                                  <span style={{ fontSize: '9px', opacity: 0.7 }}>({Math.round(m.contextLimit / 1000)}k)</span>
-                                </div>
-                              ))}
-                            </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <button
+                              onClick={() => setProviders(toggleProviderModelSwitch(providers, selectedProvider.id, m.id))}
+                              style={{
+                                padding: '2px 8px',
+                                borderRadius: '10px',
+                                border: 'none',
+                                background: m.enabled ? 'var(--accent)' : 'var(--border-strong)',
+                                color: '#FFF',
+                                fontSize: '10px',
+                                fontWeight: 600,
+                                cursor: 'pointer'
+                              }}
+                            >
+                              {m.enabled ? '已启用' : '已禁用'}
+                            </button>
                           </div>
                         </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {/* Add Custom Channel Modal */}
-                {showAddChannelModal && (
-                  <div style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    background: 'rgba(0,0,0,0.5)',
-                    borderRadius: '8px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    zIndex: 90
-                  }}>
-                    <div style={{
-                      width: '380px',
-                      background: 'var(--bg-surface-elevated)',
-                      border: '1px solid var(--border-strong)',
-                      borderRadius: '8px',
-                      padding: '16px',
-                      boxShadow: '0 12px 32px rgba(0,0,0,0.25)'
-                    }}>
-                      <h4 style={{ fontSize: '13px', fontWeight: 700, marginBottom: '10px' }}>添加自定义服务商渠道 / 中转站</h4>
-
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '14px' }}>
-                        <div>
-                          <label style={{ fontSize: '10px', color: 'var(--text-muted)', display: 'block', marginBottom: '2px' }}>渠道别名:</label>
-                          <input
-                            type="text"
-                            placeholder="例如: 硅基流动 / OpenRouter / 自建反代"
-                            value={newChanName}
-                            onChange={e => setNewChanName(e.target.value)}
-                            style={{ width: '100%', padding: '4px 6px', fontSize: '11px', borderRadius: '4px', border: '1px solid var(--border-strong)', background: 'var(--bg-base)', color: 'var(--text-primary)', outline: 'none' }}
-                          />
-                        </div>
-
-                        <div>
-                          <label style={{ fontSize: '10px', color: 'var(--text-muted)', display: 'block', marginBottom: '2px' }}>Base URL (兼容 OpenAI 格式):</label>
-                          <input
-                            type="text"
-                            placeholder="https://api.siliconflow.cn/v1"
-                            value={newChanUrl}
-                            onChange={e => setNewChanUrl(e.target.value)}
-                            style={{ width: '100%', padding: '4px 6px', fontSize: '11px', borderRadius: '4px', border: '1px solid var(--border-strong)', background: 'var(--bg-base)', color: 'var(--text-primary)', outline: 'none' }}
-                          />
-                        </div>
-
-                        <div>
-                          <label style={{ fontSize: '10px', color: 'var(--text-muted)', display: 'block', marginBottom: '2px' }}>API Key:</label>
-                          <input
-                            type="password"
-                            placeholder="sk-..."
-                            value={newChanKey}
-                            onChange={e => setNewChanKey(e.target.value)}
-                            style={{ width: '100%', padding: '4px 6px', fontSize: '11px', borderRadius: '4px', border: '1px solid var(--border-strong)', background: 'var(--bg-base)', color: 'var(--text-primary)', outline: 'none' }}
-                          />
-                        </div>
-                      </div>
-
-                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '6px' }}>
-                        <button
-                          onClick={() => setShowAddChannelModal(false)}
-                          style={{ padding: '4px 10px', borderRadius: '4px', border: '1px solid var(--border-subtle)', background: 'transparent', color: 'var(--text-secondary)', fontSize: '11px', cursor: 'pointer' }}
-                        >
-                          取消
-                        </button>
-                        <button
-                          onClick={handleAddCustomChannel}
-                          disabled={!newChanName.trim() || !newChanUrl.trim()}
-                          style={{ padding: '4px 12px', borderRadius: '4px', border: 'none', background: 'var(--accent)', color: '#FFF', fontSize: '11px', fontWeight: 600, cursor: 'pointer' }}
-                        >
-                          确认添加
-                        </button>
-                      </div>
+                      ))}
                     </div>
                   </div>
-                )}
+                </div>
               </div>
             )}
 

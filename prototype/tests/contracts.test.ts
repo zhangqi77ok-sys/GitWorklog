@@ -28,6 +28,11 @@ import {
   toggleChannelModel,
   addCustomChannel,
   GatewayChannel,
+  INITIAL_PROVIDERS,
+  ModelProviderItem,
+  toggleProviderSwitch,
+  toggleProviderModelSwitch,
+  addCustomModelToProvider,
 
   SkillItem,
   KeybindingItem,
@@ -267,5 +272,25 @@ describe('SDD Contract - Industrial Model Gateway & Roles Routing', () => {
     const added = addCustomChannel(toggled, custom);
     expect(added.length).toBe(5);
     expect(added[4].name).toBe('硅基流动 (SiliconFlow)');
+  });
+});
+
+
+describe('SDD Contract - GitHub Style Model Providers Master-Detail', () => {
+  it('should toggle provider overall enabled switch', () => {
+    const providers = [...INITIAL_PROVIDERS];
+    const toggled = toggleProviderSwitch(providers, 'provider-siliconflow');
+    expect(toggled.find(p => p.id === 'provider-siliconflow')?.enabled).toBe(true);
+  });
+
+  it('should toggle individual model inside provider and add custom model', () => {
+    const providers = [...INITIAL_PROVIDERS];
+    const deepseek = toggleProviderModelSwitch(providers, 'provider-deepseek', 'deepseek-chat');
+    const model = deepseek.find(p => p.id === 'provider-deepseek')?.models.find(m => m.id === 'deepseek-chat');
+    expect(model?.enabled).toBe(false);
+
+    const withCustom = addCustomModelToProvider(deepseek, 'provider-deepseek', 'deepseek-coder-33b');
+    const targetProvider = withCustom.find(p => p.id === 'provider-deepseek');
+    expect(targetProvider?.models.some(m => m.id === 'deepseek-coder-33b')).toBe(true);
   });
 });

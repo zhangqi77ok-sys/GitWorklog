@@ -275,21 +275,23 @@
    - 智能体执行胶囊透明提示：`[Rule Preload]: 已预加载 N 条规则（含三大铁律与严格类型约束）先行生效`。
 
 
-### 4.11 工业级模型网关与调度中心架构规约 (Model Gateway & Routing Center)
-参考 OneAPI、Cherry Studio、Cursor 与 Continue.dev 最佳工程实践，模型网关绝非简单的供应商卡片陈列，必须具备“**角色智能路由分工**”与“**多渠道凭据与模型池管理**”两大核心能力体系：
+### 4.11 GitHub 标杆级模型服务与网关管理体系 (Model Providers Master-Detail)
+深度对标 GitHub 最受开发者欢迎的顶级开源 AI 客户端（**Cherry Studio**、**LobeChat**、**NextChat**），将“模型网关与服务商设置”重构为标准的 **Master-Detail（左侧服务商列表 + 右侧配置与模型工作台）** 专业架构：
 
-1. **智能任务角色路由分工 (Task Role Routing)**：
-   - 杜绝全局使用单一模型。网关必须将工作流解构为四大专业职能角色，各司其职：
-     - **架构规划模型 (Plan / Reasoner)**：高深度推理模型（如 DeepSeek R1、Claude 3.7 Sonnet、o3-mini），负责复杂架构剖析、SDD 契约推演与方案比选；
-     - **代码落地模型 (Act / Coder)**：高工程落地执行力模型（如 Claude 3.5 Sonnet、DeepSeek V3），负责高准确率改写代码、执行 Vitest 自测与语法修复；
-     - **行内极速补全 (Inline / Fast)**：极速低时延模型（如 Claude 3.5 Haiku、GPT-4o-mini），负责敲击过程中的补全预测与代码行解释；
-     - **离线与容灾兜底 (Fallback / Offline)**：本地私有化模型（如 Ollama Qwen 2.5 Coder），当外部云端出现 429 限流、网络波动或开启 Air-Gapped 离线模式时，零感知平滑兜底接管。
+1. **左侧服务商导航栏 (Master Providers Sidebar)**：
+   - **服务商矩阵**：内置 DeepSeek、Anthropic (Claude)、OpenAI、本地私有 Ollama、硅基流动 (SiliconFlow)、OpenRouter 等主流服务商，支持快速检索；
+   - **独立总开关 (Provider Switch)**：每个服务商配备全局启闭开关，未启用的服务商不会在对话框的模型下拉列表中出现；
+   - **添加自定义服务商**：底部提供 `[ ➕ 添加自定义服务商 ]`，支持任意兼容 OpenAI 规范的中转或企业内部部署。
 
-2. **渠道凭据与模型池管理 (Providers & API Keys Management)**：
-   - **渠道凭据标准化配置**：每个 Provider 包含协议类型（OpenAI / Anthropic / Ollama）、Base URL 输入框（支持各类第三方中转站、OneAPI 或内网代理）、API Key（带掩码保护与明文切换眼睛 `👁️`）；
-   - **动态模型发现 (Fetch Models)**：支持一键向 `/v1/models` 发起模型元数据拉取，动态探测可用模型清单并可视化复选启用；
-   - **靶向连通性探测 (Ping & Latency)**：对特定渠道或模型下发轻量探测请求，精确测量真实 HTTP 状态码与毫秒级延迟（如 `🟢 85ms` 或明确错误码如 `401 Unauthorized`）；
-   - **自定义中转渠道挂载**：支持用户随时添加自定义渠道（如硅基流动 SiliconFlow、OpenRouter、自建 vLLM），并赋予专属别名与参数配置。
+2. **右侧配置与模型管理工作台 (Detail Workbench)**：
+   - **端点与安全凭证 (Endpoints & Credentials)**：
+     - **API 密钥 (API Key)**：支持密码掩码保护与明文切换眼睛 `👁️`，支持一键粘贴；
+     - **API 地址 (Base URL)**：支持自定义反代或第三方中转地址，配备“恢复默认地址”；
+     - **连通性即时检查**：独立 `[ ⚡ 检查连通性 / 测速 ]`，显示 HTTP 状态与毫秒延迟（如 `🟢 正常 · 85ms`）。
+   - **模型管理与动态发现 (Models Management & Fetch)**：
+     - **动态获取模型 (Fetch Models)**：提供 `[ 🔄 获取模型列表 ]` 按钮，一键向 `/v1/models` 发起请求，自动拉取并同步该服务商支持的全部可用模型；
+     - **添加自定义模型**：支持点击 `[ ➕ 添加自定义模型 ]` 输入任意私有或较新模型 ID（如 `deepseek-reasoner`、`qwen2.5-coder:32b`）；
+     - **模型颗粒度开关与能力标签**：每个模型具备独立启闭开关、上下文上限提示（如 `64k`、`200k`）及能力标识（思考推理、代码、视觉）。
 
 ## 五、人机协同动态交互选择体系 (Dynamic Human-in-the-Loop)
 

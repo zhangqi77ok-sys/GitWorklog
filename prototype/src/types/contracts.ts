@@ -709,3 +709,144 @@ export function addCustomChannel(
 ): GatewayChannel[] {
   return [...channels, newChannel];
 }
+
+
+// GitHub Benchmark Model Provider Contracts (Cherry Studio / LobeChat Master-Detail Style)
+export interface ModelItem {
+  id: string;
+  name: string;
+  enabled: boolean;
+  contextLimit: number;
+  capabilities: string[];
+}
+
+export interface ModelProviderItem {
+  id: string;
+  name: string;
+  icon: string;
+  enabled: boolean;
+  protocol: 'openai' | 'anthropic' | 'ollama';
+  baseUrl: string;
+  defaultBaseUrl: string;
+  apiKey: string;
+  status: 'healthy' | 'error' | 'untested';
+  latencyMs: number;
+  docUrl?: string;
+  models: ModelItem[];
+}
+
+export const INITIAL_PROVIDERS: ModelProviderItem[] = [
+  {
+    id: 'provider-deepseek',
+    name: 'DeepSeek (深度求索)',
+    icon: '🔵',
+    enabled: true,
+    protocol: 'openai',
+    baseUrl: 'https://api.deepseek.com/v1',
+    defaultBaseUrl: 'https://api.deepseek.com/v1',
+    apiKey: 'sk-dsk984729104810284729103847',
+    status: 'healthy',
+    latencyMs: 85,
+    docUrl: 'https://platform.deepseek.com',
+    models: [
+      { id: 'deepseek-reasoner', name: 'DeepSeek-R1 (深度推理)', enabled: true, contextLimit: 64000, capabilities: ['reasoning', 'code'] },
+      { id: 'deepseek-chat', name: 'DeepSeek-V3 (主力代码)', enabled: true, contextLimit: 64000, capabilities: ['fast', 'code'] }
+    ]
+  },
+  {
+    id: 'provider-anthropic',
+    name: 'Anthropic (Claude)',
+    icon: '🟣',
+    enabled: true,
+    protocol: 'anthropic',
+    baseUrl: 'https://api.anthropic.com/v1',
+    defaultBaseUrl: 'https://api.anthropic.com/v1',
+    apiKey: 'sk-ant938471928471928471928374',
+    status: 'healthy',
+    latencyMs: 128,
+    docUrl: 'https://docs.anthropic.com',
+    models: [
+      { id: 'claude-3-7-sonnet', name: 'Claude 3.7 Sonnet (Thinking)', enabled: true, contextLimit: 200000, capabilities: ['thinking', 'code', 'vision'] },
+      { id: 'claude-3-5-sonnet', name: 'Claude 3.5 Sonnet (主力旗舰)', enabled: true, contextLimit: 200000, capabilities: ['code', 'vision'] },
+      { id: 'claude-3-5-haiku', name: 'Claude 3.5 Haiku (轻快低时延)', enabled: true, contextLimit: 200000, capabilities: ['fast', 'code'] }
+    ]
+  },
+  {
+    id: 'provider-openai',
+    name: 'OpenAI (GPT)',
+    icon: '🟢',
+    enabled: true,
+    protocol: 'openai',
+    baseUrl: 'https://api.openai.com/v1',
+    defaultBaseUrl: 'https://api.openai.com/v1',
+    apiKey: 'sk-proj-938471928471928471928374',
+    status: 'healthy',
+    latencyMs: 142,
+    docUrl: 'https://platform.openai.com',
+    models: [
+      { id: 'gpt-4o', name: 'GPT-4o (全能多模态)', enabled: true, contextLimit: 128000, capabilities: ['vision', 'code'] },
+      { id: 'o3-mini', name: 'o3-mini (深度推理)', enabled: true, contextLimit: 128000, capabilities: ['reasoning', 'code'] }
+    ]
+  },
+  {
+    id: 'provider-ollama',
+    name: '本地私有 Ollama',
+    icon: '🦙',
+    enabled: true,
+    protocol: 'ollama',
+    baseUrl: 'http://localhost:11434',
+    defaultBaseUrl: 'http://localhost:11434',
+    apiKey: '',
+    status: 'healthy',
+    latencyMs: 0,
+    docUrl: 'https://ollama.com',
+    models: [
+      { id: 'qwen2.5-coder:32b', name: 'Qwen 2.5 Coder 32B', enabled: true, contextLimit: 32000, capabilities: ['local', 'code'] },
+      { id: 'deepseek-r1:14b', name: 'DeepSeek-R1 14B', enabled: true, contextLimit: 32000, capabilities: ['local', 'reasoning'] }
+    ]
+  },
+  {
+    id: 'provider-siliconflow',
+    name: '硅基流动 (SiliconFlow)',
+    icon: '⚡',
+    enabled: false,
+    protocol: 'openai',
+    baseUrl: 'https://api.siliconflow.cn/v1',
+    defaultBaseUrl: 'https://api.siliconflow.cn/v1',
+    apiKey: '',
+    status: 'untested',
+    latencyMs: 0,
+    docUrl: 'https://siliconflow.cn',
+    models: [
+      { id: 'deepseek-ai/DeepSeek-V3', name: 'DeepSeek-V3 (云端加速)', enabled: false, contextLimit: 64000, capabilities: ['fast', 'code'] }
+    ]
+  }
+];
+
+export function toggleProviderSwitch(providers: ModelProviderItem[], providerId: string): ModelProviderItem[] {
+  return providers.map(p => p.id === providerId ? { ...p, enabled: !p.enabled } : p);
+}
+
+export function toggleProviderModelSwitch(providers: ModelProviderItem[], providerId: string, modelId: string): ModelProviderItem[] {
+  return providers.map(p => {
+    if (p.id !== providerId) return p;
+    return {
+      ...p,
+      models: p.models.map(m => m.id === modelId ? { ...m, enabled: !m.enabled } : m)
+    };
+  });
+}
+
+export function addCustomModelToProvider(providers: ModelProviderItem[], providerId: string, modelId: string): ModelProviderItem[] {
+  return providers.map(p => {
+    if (p.id !== providerId) return p;
+    const newModel: ModelItem = {
+      id: modelId.trim(),
+      name: modelId.trim(),
+      enabled: true,
+      contextLimit: 64000,
+      capabilities: ['custom', 'code']
+    };
+    return { ...p, models: [...p.models, newModel] };
+  });
+}
