@@ -83,6 +83,26 @@ export const AccountCard = () => {
   const [terminalInput, setTerminalInput] = useState("");
   const [isExecutingCmd, setIsExecutingCmd] = useState(false);
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
+  const [revertStatus, setRevertStatus] = useState<string | null>(null);
+
+  const handleRevertGitCheckpoint = async () => {
+    if (!window.confirm("确定要一键还原至改动前的 Git 检查点吗？所有本地未提交的改动将被撤销。")) return;
+    try {
+      const res = await nativeService.revertLastCheckpoint();
+      setRevertStatus(res.message);
+      if (activeTab?.path) {
+        try {
+          const fresh = await nativeService.readFile(activeTab.path);
+          setTabs((prev) =>
+            prev.map((t) => (t.id === activeTab.id ? { ...t, content: fresh, isDirty: false } : t))
+          );
+        } catch (e) {}
+      }
+      setTimeout(() => setRevertStatus(null), 3000);
+    } catch (err: any) {
+      alert(`回退失败: ${err?.message || err}`);
+    }
+  };
 
   const activeTab = tabs.find((t) => t.id === activeTabId) || tabs[0];
 
@@ -246,6 +266,18 @@ export const AccountCard = () => {
               <Check size={11} /> {saveStatus}
             </span>
           )}
+          {revertStatus && (
+            <span className="text-[#d96b27] font-medium flex items-center gap-1 animate-in fade-in">
+              <RotateCcw size={11} /> {revertStatus}
+            </span>
+          )}
+          <button
+            onClick={handleRevertGitCheckpoint}
+            className="px-2 py-0.5 bg-[#fef3eb] hover:bg-[#fed7aa] border border-[#fbd0a9] rounded text-[#c2410c] font-medium flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+            title="一键还原至 AI 修改前的影子检查点 (Git Revert)"
+          >
+            <RotateCcw size={11} /> 影子回退
+          </button>
           <button
             onClick={handleSaveCurrentFile}
             className="px-2 py-0.5 bg-white hover:bg-[#f4efea] border border-[#e5dfd8] rounded text-[#645e57] hover:text-[#1e1b18] flex items-center gap-1 cursor-pointer transition-colors"

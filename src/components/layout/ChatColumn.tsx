@@ -1460,6 +1460,7 @@ ${planMode ? `6. Plan Mode Protocol (Enabled): You MUST first output a structure
     // 自动模式：不审批直接写入并打开右栏阅览（失败时置 FAILED 可见，不吞异常）
     if (mode === "auto") {
       try {
+        await nativeService.createGitCheckpoint(toolCall.description || toolCall.path);
         const ok = await nativeService.writeFile(absolutePath, toolCall.content);
         if (!ok) throw new Error("文件写入返回失败");
         setFileChanges((prev) =>
@@ -1493,6 +1494,7 @@ ${planMode ? `6. Plan Mode Protocol (Enabled): You MUST first output a structure
     const record = fileChanges.find((r) => r.id === id);
     if (!record) return;
     try {
+      await nativeService.createGitCheckpoint(record.toolCall.description || record.toolCall.path);
       const ok = await nativeService.writeFile(record.absolutePath, record.newContent);
       if (!ok) throw new Error("文件写入返回失败");
       setFileChanges((prev) =>
@@ -2610,23 +2612,23 @@ ${planMode ? `6. Plan Mode Protocol (Enabled): You MUST first output a structure
                 <span>{reasoningEffort === "low" ? "低" : reasoningEffort === "medium" ? "中" : "高"}</span>
               </button>
 
-              {/* Plan 模式开关：开启后智能体先输出任务计划 */}
+              {/* Plan / Act 模式开关：对标 Cline / Roo-Code */}
               <button
                 type="button"
                 onClick={() => setPlanMode((prev) => !prev)}
                 title={
                   planMode
-                    ? "Plan 模式已开启：智能体先输出任务计划再执行"
-                    : "Plan 模式已关闭"
+                    ? "【Plan 模式中】：智能体专注于分析、拆解与输出计划，严格禁止直接写盘。点击切换为 Act 模式"
+                    : "【Act 模式中】：智能体可执行文件修改、调用测试与工程落地。点击切换为 Plan 模式"
                 }
-                className={`h-6.5 px-2 rounded-md text-[11px] font-semibold flex items-center gap-1 cursor-pointer border transition-colors ${
+                className={`h-6.5 px-2 rounded-md text-[11px] font-bold flex items-center gap-1 cursor-pointer border transition-colors ${
                   planMode
-                    ? "bg-[#eff6ff] text-[#1d4ed8] border-[#bfdbfe]"
-                    : "bg-[#f8fafc] text-[#64748b] border-[#e2e8f0]"
+                    ? "bg-[#eff6ff] text-[#1d4ed8] border-[#93c5fd] shadow-2xs"
+                    : "bg-[#fff7ed] text-[#ea580c] border-[#fed7aa] shadow-2xs"
                 }`}
               >
-                <ListChecks size={11} className={planMode ? "text-[#2563eb]" : "text-[#94a3b8]"} />
-                <span>Plan</span>
+                <ListChecks size={11} className={planMode ? "text-[#2563eb]" : "text-[#ea580c]"} />
+                <span>{planMode ? "📋 Plan 模式" : "⚡ Act 模式"}</span>
               </button>
 
               {/* 6. 联网检索开关 */}

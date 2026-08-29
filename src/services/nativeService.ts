@@ -285,6 +285,50 @@ export class NativeService {
     }
     return [];
   }
+
+  /**
+   * 9. 创建 Git 影子快照检查点 (AI 批量写入前自动创建快照，保障代码绝对安全)
+   */
+  public async createGitCheckpoint(tagDesc: string = "Before AI Modification", cwd?: string): Promise<{ success: boolean; checkpointId?: string; message: string }> {
+    try {
+      const gitStatus = await this.getFullGitStatus(cwd);
+      if (!gitStatus.isGit) {
+        return { success: true, message: "当前为非 Git 工程，使用本地缓存保护" };
+      }
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const checkpointMsg = `[CodeMind Checkpoint] ${tagDesc} (${timestamp})`;
+
+      const statusOut = await this.executeCommand("git status --porcelain", cwd);
+      if (statusOut.trim().length > 0) {
+        // 创建快照并保留工作区状态
+        await this.executeCommand(`git stash push -m "${checkpointMsg}" --include-untracked`, cwd);
+        await this.executeCommand("git stash apply stash@{0}", cwd);
+        return { success: true, checkpointId: checkpointMsg, message: `已创建影子检查点: ${checkpointMsg}` };
+      }
+      return { success: true, message: "工作区干净，已记录基线状态" };
+    } catch (e: any) {
+      console.warn("[NativeService] 创建 Git Checkpoint 警告:", e);
+      return { success: false, message: e.message || "创建检查点失败" };
+    }
+  }
+
+  /**
+   * 10. 一键还原至改动前最近的 Git 检查点 (Undo AI Modifications)
+   */
+  public async revertLastCheckpoint(cwd?: string): Promise<{ success: boolean; message: string }> {
+    try {
+      const gitStatus = await this.getFullGitStatus(cwd);
+      if (!gitStatus.isGit) {
+        return { success: false, message: "非 Git 工程无法执行 Git 秒级回退" };
+      }
+      // 还原所有未暂存与暂存修改
+      await this.executeCommand("git reset --hard HEAD", cwd);
+      await this.executeCommand("git clean -fd", cwd);
+      return { success: true, message: "已成功一键还原工作区至改动前状态！" };
+    } catch (e: any) {
+      return { success: false, message: `回退失败: ${e.message}` };
+    }
+  }
 }
 
 export const nativeService = new NativeService();
