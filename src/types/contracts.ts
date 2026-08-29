@@ -6,15 +6,25 @@ export interface SessionItem {
   id: string;
   tier1: SessionTier1Type;
   title: string;
-  projectPath?: string;
+  projectId?: string;
   projectName?: string;
+  projectPath?: string;
   gitBranch?: string;
   filePath?: string;
   lineRange?: [number, number];
+  tags: string[];
   messagesCount: number;
   totalTokens: number;
   createdAt: number;
   updatedAt: number;
+}
+
+export interface ProjectGroup {
+  id: string;
+  name: string;
+  path: string;
+  gitBranch: string;
+  isExpanded: boolean;
 }
 
 export interface TokenStats {
@@ -97,4 +107,21 @@ export function getWindowBreakpoint(width: number): WindowBreakpoint {
   if (width >= 1400) return 'standard';
   if (width >= 1000) return 'laptop';
   return 'split_half';
+}
+
+// Session Tree Operations
+export function addTagToSession(session: SessionItem, tag: string): SessionItem {
+  const cleanTag = tag.trim().replace(/^#/, '');
+  if (!cleanTag || session.tags.includes(cleanTag)) return session;
+  return { ...session, tags: [...session.tags, cleanTag], updatedAt: Date.now() };
+}
+
+export function removeTagFromSession(session: SessionItem, tagToRemove: string): SessionItem {
+  return { ...session, tags: session.tags.filter(t => t !== tagToRemove), updatedAt: Date.now() };
+}
+
+export function renameSession(session: SessionItem, newTitle: string): SessionItem {
+  const cleanTitle = newTitle.trim();
+  if (!cleanTitle) return session;
+  return { ...session, title: cleanTitle, updatedAt: Date.now() };
 }

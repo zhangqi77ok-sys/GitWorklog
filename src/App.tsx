@@ -5,16 +5,44 @@ import { ActivityBar } from './components/ActivityBar';
 import { LeftPanel } from './components/LeftPanel';
 import { ChatColumn } from './components/ChatColumn';
 import { EditorWorkspace } from './components/EditorWorkspace';
-import { SessionTier1Type, SessionItem, ChatMessage, TokenStats, WorkMode, PermissionPolicy } from './types/contracts';
+import {
+  SessionTier1Type,
+  SessionItem,
+  ChatMessage,
+  TokenStats,
+  WorkMode,
+  PermissionPolicy,
+  ProjectGroup,
+  addTagToSession,
+  removeTagFromSession,
+  renameSession
+} from './types/contracts';
 
 export const App: React.FC = () => {
   const [activeNav, setActiveNav] = useState('sessions');
-  const [activeTier1, setActiveTier1] = useState<SessionTier1Type>('project');
   const [currentSessionId, setCurrentSessionId] = useState('session-2');
   const [workMode, setWorkMode] = useState<WorkMode>('act');
   const [permissionPolicy, setPermissionPolicy] = useState<PermissionPolicy>('autonomous_agent');
 
-  // Token Stats mock
+  // Multi-Project Groups
+  const [projects, setProjects] = useState<ProjectGroup[]>([
+    {
+      id: 'proj-1',
+      name: 'agent-learning',
+      path: 'e:/pro/agent-learning',
+      gitBranch: 'main',
+      isExpanded: true
+    },
+    {
+      id: 'proj-2',
+      name: 'codemind-sdk',
+      path: 'e:/pro/codemind-sdk',
+      gitBranch: 'dev',
+      isExpanded: false
+    }
+  ]);
+
+  // Token Stats
   const [tokenStats, setTokenStats] = useState<TokenStats>({
     promptTokens: 2400,
     completionTokens: 600,
@@ -25,12 +53,13 @@ export const App: React.FC = () => {
     contextMaxTokens: 128000
   });
 
-  // Sessions mock
+  // Hierarchical Sessions with Tags
   const [sessions, setSessions] = useState<SessionItem[]>([
     {
       id: 'session-1',
       tier1: 'global',
       title: 'Python 3.12 模式匹配语法讨论',
+      tags: ['docs', 'refactor'],
       messagesCount: 4,
       totalTokens: 5200,
       createdAt: Date.now() - 3600000,
@@ -39,9 +68,11 @@ export const App: React.FC = () => {
     {
       id: 'session-2',
       tier1: 'project',
-      title: '重构三栏自适应流体布局',
+      projectId: 'proj-1',
       projectName: 'agent-learning',
       gitBranch: 'main',
+      title: '重构三栏自适应流体布局',
+      tags: ['feat', 'ui'],
       messagesCount: 8,
       totalTokens: 18500,
       createdAt: Date.now() - 7200000,
@@ -50,12 +81,28 @@ export const App: React.FC = () => {
     {
       id: 'session-3',
       tier1: 'file',
-      title: 'GatewayBus.ts 事件防重优化',
+      projectId: 'proj-1',
+      projectName: 'agent-learning',
       filePath: 'src/bus/GatewayBus.ts',
+      title: 'GatewayBus.ts 事件防重优化',
+      tags: ['bug'],
       messagesCount: 3,
       totalTokens: 4200,
       createdAt: Date.now() - 14400000,
       updatedAt: Date.now() - 7200000
+    },
+    {
+      id: 'session-4',
+      tier1: 'project',
+      projectId: 'proj-2',
+      projectName: 'codemind-sdk',
+      gitBranch: 'dev',
+      title: 'Python AST 语法治具规范定义',
+      tags: ['test'],
+      messagesCount: 2,
+      totalTokens: 3100,
+      createdAt: Date.now() - 28800000,
+      updatedAt: Date.now() - 14400000
     }
   ]);
 
@@ -89,6 +136,89 @@ export const App: React.FC = () => {
 
   const activeSession = sessions.find(s => s.id === currentSessionId) || sessions[0];
 
+  // Session Tree Operations
+  const handleNewGlobalSession = () => {
+    const newSession: SessionItem = {
+      id: `session-${Date.now()}`,
+      tier1: 'global',
+      title: '新的全局自由会话',
+      tags: ['docs'],
+      messagesCount: 0,
+      totalTokens: 0,
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    };
+    setSessions(prev => [newSession, ...prev]);
+    setCurrentSessionId(newSession.id);
+  };
+
+  const handleNewProjectSession = (projectId: string) => {
+    const proj = projects.find(p => p.id === projectId);
+    const newSession: SessionItem = {
+      id: `session-${Date.now()}`,
+      tier1: 'project',
+      projectId: projectId,
+      projectName: proj?.name || 'agent-learning',
+      gitBranch: proj?.gitBranch || 'main',
+      title: `新工程会话 (${proj?.name})`,
+      tags: ['feat'],
+      messagesCount: 0,
+      totalTokens: 0,
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    };
+    setSessions(prev => [newSession, ...prev]);
+    setCurrentSessionId(newSession.id);
+  };
+
+  const handleNewFileSession = (projectId: string, filePath: string) => {
+    const proj = projects.find(p => p.id === projectId);
+    const fileName = filePath.split('/').pop();
+    const newSession: SessionItem = {
+      id: `session-${Date.now()}`,
+      tier1: 'file',
+      projectId: projectId,
+      projectName: proj?.name || 'agent-learning',
+      filePath: filePath,
+      title: `${fileName} 专属会话`,
+      tags: ['refactor'],
+      messagesCount: 0,
+      totalTokens: 0,
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    };
+    setSessions(prev => [newSession, ...prev]);
+    setCurrentSessionId(newSession.id);
+  };
+
+  const handleDeleteSession = (id: string) => {
+    setSessions(prev => {
+      const remaining = prev.filter(s => s.id !== id);
+      if (currentSessionId === id && remaining.length > 0) {
+        setCurrentSessionId(remaining[0].id);
+      }
+      return remaining;
+    });
+  };
+
+  const handleRenameSession = (id: string, newTitle: string) => {
+    setSessions(prev =>
+      prev.map(s => (s.id === id ? renameSession(s, newTitle) : s))
+    );
+  };
+
+  const handleAddTag = (sessionId: string, tag: string) => {
+    setSessions(prev =>
+      prev.map(s => (s.id === sessionId ? addTagToSession(s, tag) : s))
+    );
+  };
+
+  const handleRemoveTag = (sessionId: string, tag: string) => {
+    setSessions(prev =>
+      prev.map(s => (s.id === sessionId ? removeTagFromSession(s, tag) : s))
+    );
+  };
+
   const handleSendMessage = (text: string) => {
     const newMsg: ChatMessage = {
       id: `msg-${Date.now()}`,
@@ -98,7 +228,6 @@ export const App: React.FC = () => {
     };
     setMessages(prev => [...prev, newMsg]);
 
-    // Assistant response simulation
     setTimeout(() => {
       const replyMsg: ChatMessage = {
         id: `reply-${Date.now()}`,
@@ -130,28 +259,12 @@ export const App: React.FC = () => {
     );
   };
 
-  const handleNewSession = () => {
-    const newSession: SessionItem = {
-      id: `session-${Date.now()}`,
-      tier1: activeTier1,
-      title: activeTier1 === 'global' ? '新的全局对话' : (activeTier1 === 'project' ? '新的工程任务' : '新的文件专精会话'),
-      projectName: 'agent-learning',
-      gitBranch: 'main',
-      messagesCount: 0,
-      totalTokens: 0,
-      createdAt: Date.now(),
-      updatedAt: Date.now()
-    };
-    setSessions(prev => [newSession, ...prev]);
-    setCurrentSessionId(newSession.id);
-  };
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw', overflow: 'hidden' }}>
       {/* 1. Titlebar */}
       <Titlebar
-        currentProject="agent-learning"
-        gitBranch="main"
+        currentProject={activeSession.projectName || 'agent-learning'}
+        gitBranch={activeSession.gitBranch || 'main'}
         sessionTitle={activeSession.title}
         tokenStats={tokenStats}
       />
@@ -161,15 +274,20 @@ export const App: React.FC = () => {
         {/* ActivityBar (42px) */}
         <ActivityBar activeNav={activeNav} setActiveNav={setActiveNav} />
 
-        {/* LeftPanel (240px) */}
+        {/* LeftPanel: Hierarchical Project & Session Tree */}
         <LeftPanel
-          width={240}
-          activeTier1={activeTier1}
-          setActiveTier1={setActiveTier1}
+          width={260}
+          projects={projects}
           sessions={sessions}
           currentSessionId={currentSessionId}
           onSelectSession={setCurrentSessionId}
-          onNewSession={handleNewSession}
+          onNewGlobalSession={handleNewGlobalSession}
+          onNewProjectSession={handleNewProjectSession}
+          onNewFileSession={handleNewFileSession}
+          onDeleteSession={handleDeleteSession}
+          onRenameSession={handleRenameSession}
+          onAddTag={handleAddTag}
+          onRemoveTag={handleRemoveTag}
         />
 
         {/* ChatColumn (弹性 45%) */}
