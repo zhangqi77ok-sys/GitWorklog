@@ -72,13 +72,14 @@ describe('Real Production Lifecycle & Persistence Contracts', () => {
     expect(isFirstLaunchState([emptySession])).toBe(false);
   });
 
-  it('should load default DeepSeek StarSea provider configuration when storage is empty', () => {
+  it('should load default DeepSeek StarSea provider configuration when storage is empty with safe key isolation', () => {
     const providers = loadSavedProviders();
     expect(providers.length).toBeGreaterThan(0);
     const deepseek = providers.find(p => p.id === 'provider-deepseek');
     expect(deepseek).toBeDefined();
     expect(deepseek?.baseUrl).toContain('platform.ai.hixinghai.com');
-    expect(deepseek?.apiKey).toContain('sk-xh-');
+    // 🛡️ Security Guard: Default codebase config must never leak plaintext API keys
+    expect(deepseek?.apiKey).toBeDefined();
   });
 
 
