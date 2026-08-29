@@ -47,21 +47,34 @@ def scan_directory(root_path, max_depth=2, current_depth=0):
     return items
 
 def pick_folder_native(window=None):
-    # 1. First try pywebview native folder dialog
-    if window:
-        try:
-            res = window.create_file_dialog(webview.FOLDER_DIALOG)
-            if res and len(res) > 0:
-                return res[0]
-        except Exception:
-            pass
-    # 2. Native Windows FolderBrowserDialog via PowerShell
-    ps_cmd = "[System.Reflection.Assembly]::LoadWithPartialName('System.windows.forms') | Out-Null; $f = New-Object System.Windows.Forms.FolderBrowserDialog; $f.Description = '选择要打开的工作区工程文件夹'; $f.ShowNewFolderButton = $true; if ($f.ShowDialog() -eq 'OK') { Write-Output $f.SelectedPath }"
+    # 1. Primary: In-process Tkinter folder browser (0 external process, 0 CMD console window)
     try:
-        res = subprocess.run(["powershell.exe", "-NoProfile", "-Command", ps_cmd], capture_output=True, text=True, timeout=120)
+        import tkinter as tk
+        from tkinter import filedialog
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes('-topmost', True)
+        folder = filedialog.askdirectory(title='选择要打开的工作区工程文件夹')
+        root.destroy()
+        if folder and Path(folder).exists():
+            return folder.replace('\\', '/')
+    except Exception:
+        pass
+
+    # 2. Fallback: PowerShell FolderBrowserDialog with CREATE_NO_WINDOW (strictly suppresses console window)
+    CREATE_NO_WINDOW = 0x08000000
+    ps_cmd = "[System.Reflection.Assembly]::LoadWithPartialName('System.Windows.Forms') | Out-Null; $f = New-Object System.Windows.Forms.FolderBrowserDialog; $f.Description = '选择要打开的工作区工程文件夹'; $f.ShowNewFolderButton = $true; if ($f.ShowDialog() -eq 'OK') { Write-Output $f.SelectedPath }"
+    try:
+        res = subprocess.run(
+            ["powershell.exe", "-NoProfile", "-Command", ps_cmd],
+            capture_output=True,
+            text=True,
+            timeout=120,
+            creationflags=CREATE_NO_WINDOW
+        )
         out = res.stdout.strip()
         if out and Path(out).exists():
-            return out
+            return out.replace('\\', '/')
     except Exception:
         pass
     return None

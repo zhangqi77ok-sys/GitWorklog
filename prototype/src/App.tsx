@@ -416,28 +416,54 @@ export const App: React.FC = () => {
         }
       }
 
-      // If user asks about project architecture and we have projectPath, automatically attach workspace tree outline
-      const isAskingAboutProject = /项目|工程|架构|代码|优化|审查|文件/i.test(text);
-      let workspaceTreeOutline = '';
+      // Auto Project Context Inspection: Read real files from disk if user asks about project/architecture
+      const isAskingAboutProject = /项目|工程|架构|代码|优化|审查|文件|分析/i.test(text);
+      let autoInspectedFiles = '';
       if (isAskingAboutProject && activeSession.projectPath) {
         try {
-          const res = await fetch(`/api/fs/tree?path=${encodeURIComponent(activeSession.projectPath)}`);
-          const data = await res.json();
-          if (data.success && data.tree) {
-            workspaceTreeOutline = `\n[当前工程实时目录文件拓扑]:\n${JSON.stringify(data.tree.map((n: any) => ({ name: n.name, type: n.type, path: n.path })), null, 2)}`;
+          // 1. Fetch file tree
+          const treeRes = await fetch(`/api/fs/tree?path=${encodeURIComponent(activeSession.projectPath)}`);
+          const treeData = await treeRes.json();
+          if (treeData.success && treeData.tree) {
+            autoInspectedFiles += `\n[工程实时目录拓扑]:\n${JSON.stringify(treeData.tree.map((n: any) => ({ name: n.name, type: n.type })), null, 2)}`;
+          }
+
+          // 2. Fetch package.json if available
+          const pkgRes = await fetch(`/api/fs/read?path=${encodeURIComponent(activeSession.projectPath + '/package.json')}`);
+          const pkgData = await pkgRes.json();
+          if (pkgData.success && pkgData.content) {
+            autoInspectedFiles += `\n\n[工程核心配置 package.json]:\n\`\`\`json\n${pkgData.content.slice(0, 3000)}\n\`\`\``;
+          }
+
+          // 3. Fetch README.md if available
+          const readmeRes = await fetch(`/api/fs/read?path=${encodeURIComponent(activeSession.projectPath + '/README.md')}`);
+          const readmeData = await readmeRes.json();
+          if (readmeData.success && readmeData.content) {
+            autoInspectedFiles += `\n\n[工程简介 README.md]:\n\`\`\`markdown\n${readmeData.content.slice(0, 3000)}\n\`\`\``;
           }
         } catch (e) {}
       }
 
-      const systemPrompt = `你是 CodeMind-Hub 接入的真实生产级大模型助手。
-${activeSession.projectPath ? `【工作区环境】当前正在处理本地物理工程: ${activeSession.projectName}，路径: ${activeSession.projectPath}，Git分支: ${activeSession.gitBranch || 'main'}。你已通过 CodeMind-Hub 本地系统桥接，可以直接访问工作区。` : '当前处于全局自由会话模式。'}
-${workspaceTreeOutline}
-请针对用户的需求给出专业、精炼、准确且可落地的解答与代码。`;
+      const systemPrompt = `你是 CodeMind-Hub 接入的生产级 AI Agent 架构师。
+${activeSession.projectPath ? `【本地物理工程已挂载】
+- 项目名称: ${activeSession.projectName}
+- 物理路径: ${activeSession.projectPath}
+- Git活跃分支: ${activeSession.gitBranch || 'main'}
+CodeMind 已通过本地磁盘桥接将工程目录结构与核心配置自动抽取提供给你。你可以直接基于真实的工程结构与配置给出深度剖析与重构建议。` : '当前处于全局自由会话模式。'}`;
 
-      const currentList = sessionMessages[currentSessionId] || [];
+      if (autoInspectedFiles && !contextualizedUserContent.includes('--- 上下文工程数据 ---')) {
+        contextualizedUserContent = `${text}\n\n--- 自动探查的本地工程上下文 ---${autoInspectedFiles}`;
+      }
+
+      // Filter clean history without empty placeholders or self
+      const cleanHistory = (sessionMessages[currentSessionId] || [])
+        .filter(m => m.content && m.content.trim() && m.id !== assistantId && m.id !== userMsg.id)
+        .slice(-6)
+        .map(m => ({ role: m.role, content: m.content }));
+
       const apiMessages = [
         { role: 'system', content: systemPrompt },
-        ...currentList.slice(-6).map(m => ({ role: m.role, content: m.content })),
+        ...cleanHistory,
         { role: 'user', content: contextualizedUserContent }
       ];
 
@@ -463,7 +489,8 @@ ${workspaceTreeOutline}
 
       const reader = response.body?.getReader();
       const decoder = new TextDecoder('utf-8');
-      let accumulated = '';
+      let accumulatedContent = '';
+      let accumulatedThinking = '';
       let buffer = '';
 
       if (reader) {
@@ -481,13 +508,30 @@ ${workspaceTreeOutline}
               if (dataStr === '[DONE]') break;
               try {
                 const parsed = JSON.parse(dataStr);
-                const delta = parsed.choices?.[0]?.delta?.content || '';
-                if (delta) {
-                  accumulated += delta;
-                  // Fast non-blocking in-memory state update for smooth typewriter streaming
+                const choice = parsed.choices?.[0];
+                const deltaContent = choice?.delta?.content || '';
+                const deltaReasoning = choice?.delta?.reasoning_content || '';
+
+                if (deltaReasoning) {
+                  accumulatedThinking += deltaReasoning;
+                }
+                if (deltaContent) {
+                  accumulatedContent += deltaContent;
+                }
+
+                if (deltaReasoning || deltaContent) {
+                  let currentDisplay = '';
+                  if (accumulatedThinking && !accumulatedContent) {
+                    currentDisplay = `<think>\n${accumulatedThinking}\n</think>\n\n*正在深入推演与分析代码架构...*`;
+                  } else if (accumulatedThinking && accumulatedContent) {
+                    currentDisplay = `<think>\n${accumulatedThinking}\n</think>\n\n${accumulatedContent}`;
+                  } else {
+                    currentDisplay = accumulatedContent;
+                  }
+
                   setSessionMessages(prev => {
                     const list = prev[currentSessionId] || [];
-                    const updated = list.map(m => m.id === assistantId ? { ...m, content: accumulated } : m);
+                    const updated = list.map(m => m.id === assistantId ? { ...m, content: currentDisplay } : m);
                     return { ...prev, [currentSessionId]: updated };
                   });
                 }
@@ -497,18 +541,28 @@ ${workspaceTreeOutline}
         }
       }
 
-      if (!accumulated.trim()) {
-        accumulated = '（大模型已生成完成）';
-        setSessionMessages(prev => {
-          const list = prev[currentSessionId] || [];
-          const updated = list.map(m => m.id === assistantId ? { ...m, content: accumulated } : m);
-          return { ...prev, [currentSessionId]: updated };
-        });
+      let finalAccumulated = '';
+      if (accumulatedThinking && !accumulatedContent) {
+        finalAccumulated = `<think>\n${accumulatedThinking}\n</think>\n\n${accumulatedThinking}`;
+      } else if (accumulatedThinking && accumulatedContent) {
+        finalAccumulated = `<think>\n${accumulatedThinking}\n</think>\n\n${accumulatedContent}`;
+      } else {
+        finalAccumulated = accumulatedContent;
       }
+
+      if (!finalAccumulated.trim()) {
+        finalAccumulated = '已完成对当前工程上下文的推演与分析。请继续提出具体修改或重构指令。';
+      }
+
+      setSessionMessages(prev => {
+        const list = prev[currentSessionId] || [];
+        const updated = list.map(m => m.id === assistantId ? { ...m, content: finalAccumulated } : m);
+        return { ...prev, [currentSessionId]: updated };
+      });
 
       // Realistic Token increment
       const addedPrompt = Math.round(text.length * 0.75);
-      const addedComp = Math.round(accumulated.length * 0.75);
+      const addedComp = Math.round(finalAccumulated.length * 0.75);
       setTokenStats(prev => ({
         ...prev,
         promptTokens: prev.promptTokens + addedPrompt,
