@@ -121,33 +121,12 @@ graph TB
 - **Rust 工具链**: `>= 1.78.0` (`cargo`, `rustc`)
 - **Python 环境**: `>= 3.12` (使用 `uv` 极速包管理)
 
-### 2. 克隆与依赖安装
-```bash
-# 克隆工程
-git clone https://github.com/zhangqi77ok-sys/agent-learning.git
-cd agent-learning
+### 2. 当前开发阶段 (Phase 0)
+> **当前状态**：本项目正处于**产品需求深度推演与架构设计阶段 (Clean Slate, From 0)**。所有历史代码已全量归档至远程保护分支 `backup-pre-clean-v2` 与 `backup-legacy-v0.10`，当前代码库处于**纯净规划态**，待产品需求与契约完全确认后再行从零构建。
 
-# 安装前端依赖
-npm install
-```
-
-### 3. 本地启动开发
-```bash
-# 启动前端开发调试模式
-npm run dev
-
-# 启动 Tauri 原生桌面端全量交互
-npm run tauri dev
-```
-
-### 4. 生产构建与质量保障
-```bash
-# 构建前端静态资源 (TypeScript 类型检查 + Vite 优化压缩)
-npm run build
-
-# 运行 Tauri 原生桌面端构建
-npm run tauri build
-```
+- 核心产品规范详见：[`PRODUCT_REQUIREMENTS_DOCUMENT.md`](PRODUCT_REQUIREMENTS_DOCUMENT.md)
+- 全景架构设计详见：[`ARCHITECTURE.md`](ARCHITECTURE.md)
+- 团队研发守则详见：[`AGENTS.md`](AGENTS.md) 与 [`.agents/skills/`](.agents/skills/)
 
 ---
 
