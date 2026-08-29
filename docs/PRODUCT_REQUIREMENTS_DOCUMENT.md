@@ -1178,3 +1178,14 @@ To github.com:zhangqi77ok-sys/agent-learning.git
    - 彻底修复大模型输出 `cmd1 && cmd2` 连接符在 Windows PowerShell 5.1 环境下触发 `The token '&&' is not a valid statement separator` 报错的根本原因；
    - **后端自动转义适配器 (`normalize_windows_cmd`)**：将 `&&` 自动平滑转换为 PowerShell 原生语义安全链式语句，使所有跨平台 Git 脚本与复杂命令在 Windows 下 100% 顺畅执行；
    - **Prompt 终端语法指南升级**：向大模型注入明确的 Windows 终端书写规范。
+
+### 12.25 智能文件修改折叠与工作台联动、输入输出背景统一与架构树全局搜索 (v1.4.2)
+1. **修改文件卡片默认折叠与右侧工作台联动打开 (Collapsible File Modification Card)**：
+   - 会话中大模型生成的 `write_file` 修改文件卡片**默认保持折叠**，界面简洁清爽；
+   - 卡片头部展示目标文件路径、代码行数徽标、权限状态与 `[ 展开代码 ▾ / 折叠代码 ▴ ]` 切换按钮；
+   - **点击文件路径或文件名**，系统自动联动并直接在右侧 Monaco 编辑器工作台中激活打开该文件；
+2. **输入输出卡片全局统一背景与立体视觉 (Unified Elevated Card Surface)**：
+   - 彻底解决输入框纯白而输出卡片灰黄/杂色不协调的视觉断层问题；
+   - 会话中的用户提问卡片、AI 回答卡片与底部的输入指令工作台统一采用高质感白底卡片 (`var(--bg-surface-elevated)`)，呈现和谐高级的现代化 IDE 视觉体验；
+3. **项目与会话架构树实时搜索框 (Tree Real-time Search Box)**：
+   - 在左侧“项目与会话架构树”正下方常驻高保真搜索框，支持对项目、会话标题与标签（tags）进行秒级动态模糊过滤。

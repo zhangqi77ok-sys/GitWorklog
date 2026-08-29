@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Copy, Check, Terminal, Code2, FileCode, Play, Save, CheckCircle2, AlertCircle, RefreshCw, Shield, AlertTriangle } from 'lucide-react';
+import { Copy, Check, Terminal, Code2, FileCode, Play, Save, CheckCircle2, AlertCircle, RefreshCw, Shield, AlertTriangle, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react';
 import { PermissionPolicy } from '../types/contracts';
 
 interface MarkdownCardProps {
@@ -7,6 +7,7 @@ interface MarkdownCardProps {
   isStreaming?: boolean;
   autoExecute?: boolean;
   permissionPolicy?: PermissionPolicy;
+  onOpenFile?: (filePath: string) => void;
 }
 
 interface CodeBlockCardProps {
@@ -15,6 +16,7 @@ interface CodeBlockCardProps {
   autoExecute?: boolean;
   isStreaming?: boolean;
   permissionPolicy?: PermissionPolicy;
+  onOpenFile?: (filePath: string) => void;
 }
 
 const CodeBlockCard: React.FC<CodeBlockCardProps> = ({
@@ -22,7 +24,8 @@ const CodeBlockCard: React.FC<CodeBlockCardProps> = ({
   code,
   autoExecute = false,
   isStreaming = false,
-  permissionPolicy = 'autonomous_agent'
+  permissionPolicy = 'autonomous_agent',
+  onOpenFile
 }) => {
   const [copied, setCopied] = useState(false);
   const [isExecuting, setIsExecuting] = useState(false);
@@ -30,6 +33,7 @@ const CodeBlockCard: React.FC<CodeBlockCardProps> = ({
   const [isWritingFile, setIsWritingFile] = useState(false);
   const [writeResult, setWriteResult] = useState<{ success: boolean; path?: string; size?: number; error?: string } | null>(null);
   const [hasAutoExecuted, setHasAutoExecuted] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
 
   const cleanLang = (language || '').trim();
   const isWriteFile = cleanLang.startsWith('write_file:') || cleanLang.startsWith('file:') || cleanLang.startsWith('create_file:');
@@ -128,43 +132,92 @@ const CodeBlockCard: React.FC<CodeBlockCardProps> = ({
     }
   }, [autoExecute, isStreaming, hasAutoExecuted, isWriteFile, isCommandLang, targetFilePath, code, permissionPolicy, isHighRisk]);
 
-  // 1. Specialized File Write Card
+  // 1. Specialized Collapsible File Write Card (Default Collapsed)
   if (isWriteFile && targetFilePath) {
+    const codeLines = (code || '').split('\n').length;
+
     return (
       <div style={{
-        margin: '12px 0',
+        margin: '10px 0',
         borderRadius: '8px',
         overflow: 'hidden',
         border: '1px solid var(--accent)',
         background: '#0F172A',
-        boxShadow: '0 4px 16px rgba(217, 107, 39, 0.15)'
+        boxShadow: '0 4px 16px rgba(217, 107, 39, 0.12)'
       }}>
-        {/* Header with Save Button & Policy Badge */}
+        {/* Header with Save Button, Clickable Path & Expand Toggle */}
         <div style={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          padding: '6px 12px',
-          background: 'linear-gradient(90deg, rgba(217, 107, 39, 0.2) 0%, rgba(15, 23, 42, 0.8) 100%)',
-          borderBottom: '1px solid var(--accent)',
-          fontSize: '11.5px'
+          padding: '7px 12px',
+          background: 'linear-gradient(90deg, rgba(217, 107, 39, 0.22) 0%, rgba(15, 23, 42, 0.85) 100%)',
+          borderBottom: isExpanded ? '1px solid #334155' : 'none',
+          fontSize: '11.5px',
+          gap: '8px',
+          flexWrap: 'wrap'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700, color: 'var(--accent)' }}>
-            <FileCode size={14} />
-            <span>📁 目标文件: {targetFilePath}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
+            <FileCode size={14} color="var(--accent)" style={{ flexShrink: 0 }} />
+            
+            {/* Clickable File Path to Open in Right Workspace */}
+            <div
+              onClick={() => onOpenFile?.(targetFilePath)}
+              style={{
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                color: '#F8FAFC',
+                fontWeight: 700,
+                textDecoration: 'none',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap'
+              }}
+              title="点击在右侧代码工作台打开此文件"
+            >
+              <span style={{ color: 'var(--accent)' }}>📁 {targetFilePath}</span>
+              <ExternalLink size={11} color="var(--accent)" style={{ opacity: 0.8 }} />
+              <span style={{ fontSize: '10px', color: '#94A3B8', fontWeight: 400, marginLeft: '2px' }}>
+                ({codeLines} 行)
+              </span>
+            </div>
+
             {permissionPolicy === 'strict_approval' && (
-              <span style={{ fontSize: '9.5px', padding: '1px 5px', borderRadius: '3px', background: 'rgba(100, 116, 139, 0.3)', color: '#CBD5E1' }}>
+              <span style={{ fontSize: '9.5px', padding: '1px 5px', borderRadius: '3px', background: 'rgba(100, 116, 139, 0.3)', color: '#CBD5E1', flexShrink: 0 }}>
                 🛡️ 逐次审核
               </span>
             )}
             {permissionPolicy === 'risk_adaptive' && isHighRisk && (
-              <span style={{ fontSize: '9.5px', padding: '1px 5px', borderRadius: '3px', background: 'rgba(239, 68, 68, 0.3)', color: '#FCA5A5', fontWeight: 700 }}>
-                ⚠️ 风险熔断拦截
+              <span style={{ fontSize: '9.5px', padding: '1px 5px', borderRadius: '3px', background: 'rgba(239, 68, 68, 0.3)', color: '#FCA5A5', fontWeight: 700, flexShrink: 0 }}>
+                ⚠️ 风险熔断
               </span>
             )}
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+            {/* Expand / Collapse Toggle Button */}
+            <button
+              onClick={() => setIsExpanded(!isExpanded)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '3px',
+                padding: '3px 8px',
+                borderRadius: '4px',
+                background: 'rgba(51, 65, 85, 0.6)',
+                color: '#E2E8F0',
+                border: '1px solid #475569',
+                fontSize: '11px',
+                cursor: 'pointer'
+              }}
+              title={isExpanded ? '折叠代码预览' : '展开代码预览'}
+            >
+              {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+              <span>{isExpanded ? '折叠代码' : '展开代码'}</span>
+            </button>
+
             <button
               onClick={handleCopy}
               style={{
@@ -203,7 +256,7 @@ const CodeBlockCard: React.FC<CodeBlockCardProps> = ({
               }}
             >
               {isWritingFile ? <RefreshCw size={12} className="animate-spin" /> : writeResult?.success ? <CheckCircle2 size={12} /> : <Save size={12} />}
-              <span>{isWritingFile ? '正在写盘...' : writeResult?.success ? '✓ 已写入本地' : '💾 立即写盘应用此文件'}</span>
+              <span>{isWritingFile ? '正在写盘...' : writeResult?.success ? '✓ 已写入本地' : '💾 立即写盘应用'}</span>
             </button>
           </div>
         </div>
@@ -213,7 +266,7 @@ const CodeBlockCard: React.FC<CodeBlockCardProps> = ({
           <div style={{
             padding: '6px 12px',
             background: writeResult.success ? 'rgba(22, 163, 74, 0.15)' : 'rgba(220, 38, 38, 0.15)',
-            borderBottom: '1px solid #334155',
+            borderBottom: isExpanded ? '1px solid #334155' : 'none',
             fontSize: '11px',
             color: writeResult.success ? '#4ADE80' : '#F87171',
             display: 'flex',
@@ -225,21 +278,24 @@ const CodeBlockCard: React.FC<CodeBlockCardProps> = ({
           </div>
         )}
 
-        {/* Code Content */}
-        <pre style={{
-          margin: 0,
-          padding: '12px 14px',
-          overflowX: 'auto',
-          fontSize: '12px',
-          lineHeight: 1.6,
-          fontFamily: 'Consolas, "Fira Code", Monaco, monospace',
-          color: '#F8FAFC',
-          background: '#0B1120',
-          whiteSpace: 'pre',
-          wordBreak: 'normal'
-        }}>
-          <code>{code}</code>
-        </pre>
+        {/* Code Content (Rendered only when isExpanded = true) */}
+        {isExpanded && (
+          <pre style={{
+            margin: 0,
+            padding: '12px 14px',
+            overflowX: 'auto',
+            maxHeight: '480px',
+            fontSize: '12px',
+            lineHeight: 1.6,
+            fontFamily: 'Consolas, "Fira Code", Monaco, monospace',
+            color: '#F8FAFC',
+            background: '#0B1120',
+            whiteSpace: 'pre',
+            wordBreak: 'normal'
+          }}>
+            <code>{code}</code>
+          </pre>
+        )}
       </div>
     );
   }
@@ -401,7 +457,8 @@ export const MarkdownCard: React.FC<MarkdownCardProps> = ({
   content,
   isStreaming,
   autoExecute,
-  permissionPolicy = 'autonomous_agent'
+  permissionPolicy = 'autonomous_agent',
+  onOpenFile
 }) => {
   if (!content) return null;
 
@@ -621,6 +678,7 @@ export const MarkdownCard: React.FC<MarkdownCardProps> = ({
               autoExecute={autoExecute}
               isStreaming={isStreaming}
               permissionPolicy={permissionPolicy}
+              onOpenFile={onOpenFile}
             />
           );
         }

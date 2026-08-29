@@ -120,6 +120,7 @@ interface ChatColumnProps {
   onResolveOptions: (messageId: string, selectedIds: string[], customInput?: string) => void;
   onForkMessage?: (fromMessageId: string) => void;
   onNavigateDiff?: (target: { fileId: string; filePath: string; targetLine: number }) => void;
+  onOpenFile?: (filePath: string) => void;
 }
 
 export const ChatColumn: React.FC<ChatColumnProps> = ({
@@ -146,7 +147,8 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
   onSendMessage,
   onResolveOptions,
   onForkMessage,
-  onNavigateDiff
+  onNavigateDiff,
+  onOpenFile
 }) => {
   const [inputText, setInputText] = useState('');
   // Slash Commands & Session References
@@ -859,8 +861,9 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                     <div style={{
                       padding: '12px 14px',
                       borderRadius: '8px',
-                      background: msg.role === 'user' ? 'var(--bg-surface)' : 'var(--bg-base)',
-                      border: '1px solid var(--border-subtle)',
+                      background: 'var(--bg-surface-elevated)',
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.03)',
+                      border: msg.role === 'user' ? '1px solid var(--border-strong)' : '1px solid var(--border-subtle)',
                       fontSize: '12.5px',
                       lineHeight: 1.65,
                       wordBreak: 'break-word',
@@ -873,6 +876,10 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                         isStreaming={isLastAssistant && isStreaming}
                         autoExecute={workMode === 'act'}
                         permissionPolicy={permissionPolicy}
+                        onOpenFile={(path) => {
+                          if (onOpenFile) onOpenFile(path);
+                          else if (onNavigateDiff) onNavigateDiff({ fileId: path, filePath: path, targetLine: 1 });
+                        }}
                       />
                     </div>
                   )}
@@ -1201,7 +1208,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
         padding: '12px 20px 14px 20px',
         borderTop: '1px solid var(--border-subtle)',
         position: 'relative',
-        background: 'var(--bg-surface)',
+        background: 'var(--bg-base)',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center'

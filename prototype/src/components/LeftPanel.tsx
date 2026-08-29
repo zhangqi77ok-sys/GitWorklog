@@ -6,6 +6,7 @@ import { RulesMemoryPanel } from './panels/RulesMemoryPanel';
 import { SettingsPanel } from './panels/SettingsPanel';
 import React, { useState, useRef } from 'react';
 import {
+  Search,
   ChevronDown,
   ChevronRight,
   Plus,
@@ -59,6 +60,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
 }) => {
   const [globalExpanded, setGlobalExpanded] = useState(true);
   const [projectsExpanded, setProjectsExpanded] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
   const [expandedProjects, setExpandedProjects] = useState<Record<string, boolean>>({
     'proj-1': true,
     'proj-2': true
@@ -140,7 +142,12 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
     }
   };
 
-  const globalSessions = sessions.filter(s => s.tier1 === 'global');
+  const globalSessions = sessions.filter(s => {
+    if (s.tier1 !== 'global') return false;
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    return s.title.toLowerCase().includes(q) || s.tags?.some(t => t.toLowerCase().includes(q));
+  });
 
   const currentSession = sessions.find(s => s.id === currentSessionId);
   const activeProject = projects.find(p => p.id === currentSession?.projectId) || projects[0];
@@ -267,6 +274,43 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
           <FolderPlus size={12} />
           <span>打开目录</span>
         </button>
+      </div>
+
+      {/* Search Input Box Right Under Header */}
+      <div style={{ padding: '6px 10px', borderBottom: '1px solid var(--border-subtle)' }}>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          background: 'var(--bg-surface-elevated)',
+          border: '1px solid var(--border-subtle)',
+          borderRadius: '6px',
+          padding: '4px 8px',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
+        }}>
+          <Search size={12} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+          <input
+            type="text"
+            placeholder="搜索项目、会话或标签..."
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            style={{
+              width: '100%',
+              border: 'none',
+              outline: 'none',
+              background: 'transparent',
+              fontSize: '11px',
+              color: 'var(--text-primary)'
+            }}
+          />
+          {searchQuery && (
+            <X
+              size={12}
+              style={{ color: 'var(--text-muted)', cursor: 'pointer', flexShrink: 0 }}
+              onClick={() => setSearchQuery('')}
+            />
+          )}
+        </div>
       </div>
 
       {/* Tree Content Area */}

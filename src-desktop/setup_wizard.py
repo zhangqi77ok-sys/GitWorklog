@@ -9,7 +9,7 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from pathlib import Path
 
-VERSION = "1.4.1"
+VERSION = "1.4.2"
 APP_NAME = "Tcode"
 
 def get_detected_installed_dir():
