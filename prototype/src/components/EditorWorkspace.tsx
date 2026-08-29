@@ -277,6 +277,8 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
     }
   };
 
+  if (!isOpen) return null;
+
   const currentFile = openedFiles.find(f => f.id === activeFileId);
   const codeLines = fileContent.split('\n');
 

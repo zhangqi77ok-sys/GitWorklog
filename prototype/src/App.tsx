@@ -1638,14 +1638,16 @@ Tcode 已通过宿主磁盘与终端桥接将工程提供给你。` : '当前处
             </div>
           )}
 
-          {/* Column 3: Right Monaco Code Workspace & Terminal Deck */}
-          <EditorWorkspace
-            isOpen={rightWorkspaceOpen}
-            onClose={() => setRightWorkspaceOpen(false)}
-            activeDiffTarget={activeDiffTarget}
-            activeFile={activeFile}
-            activeProject={activeSession.projectPath ? { name: activeSession.projectName || 'Default Project', path: activeSession.projectPath, gitBranch: activeSession.gitBranch || 'main' } : null}
-          />
+          {/* Column 3: Right Monaco Code Workspace & Terminal Deck (Strictly conditional in Grid) */}
+          {rightWorkspaceOpen && (
+            <EditorWorkspace
+              isOpen={rightWorkspaceOpen}
+              onClose={() => setRightWorkspaceOpen(false)}
+              activeDiffTarget={activeDiffTarget}
+              activeFile={activeFile}
+              activeProject={activeSession.projectPath ? { name: activeSession.projectName || 'Default Project', path: activeSession.projectPath, gitBranch: activeSession.gitBranch || 'main' } : null}
+            />
+          )}
         </div>
       </div>
 
