@@ -156,7 +156,9 @@ npm run tauri build
 本项目全面推行 **规范驱动开发 (SDD) + 测试驱动开发 (TDD)**，已在 [`.agents/skills/sdd-tdd-workflow/`](.agents/skills/sdd-tdd-workflow/) 安装强制工作流 Skill，并在 [`AGENTS.md`](AGENTS.md) 中全局生效：
 1. **SDD (Spec-Driven)**：编码前必须在回复中先输出接口契约（Spec Contract）与边界设计；
 2. **TDD (Test-Driven)**：遵循 **Red (编写前置失败测试) → Green (编写最简通过代码) → Refactor (双向钢人审查)** 节奏；
-3. **架构参考**：详见核心设计文档 [`ARCHITECTURE.md`](ARCHITECTURE.md)。
+3. **架构设计规范**：详见全景架构文档 [`ARCHITECTURE.md`](ARCHITECTURE.md)；
+4. **产品需求与竞品分析**：详见详细产品规约 [`PRODUCT_REQUIREMENTS_DOCUMENT.md`](PRODUCT_REQUIREMENTS_DOCUMENT.md)；
+5. **专精 Skill 矩阵**：内置 `product-manager`、`ui-ux-designer`、`frontend-architect`、`rust-core-engineer`、`python-harness-engineer`。
 
 ---
 
