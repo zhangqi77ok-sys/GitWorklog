@@ -1,9 +1,13 @@
 import { defaultSandboxGuard } from './sandboxGuard';
 import { defaultSecurityShield } from './securityShield';
+import { WorkMode } from '../types/contracts';
+import { getRuntimePolicy } from './runtimePolicy';
 
 export interface HostExecOptions {
   cwd?: string;
   sudo?: boolean;
+  mode?: WorkMode;
+  runId?: string;
 }
 
 export interface HostExecResult {
@@ -13,11 +17,12 @@ export interface HostExecResult {
   error?: string;
   exitCode: number;
   isSandboxIntercepted?: boolean;
+  isPolicyDenied?: boolean;
 }
 
 export class HostGatewayService {
   /**
-   * Universal terminal command execution with SecurityShield sanitize & SandboxGuard classification
+   * Universal terminal command execution with SecurityShield sanitize, SandboxGuard & Mode Policy Check
    */
   public async executeCommand(cmd: string, options: HostExecOptions = {}): Promise<HostExecResult> {
     const trimmed = cmd.trim();
@@ -30,7 +35,20 @@ export class HostGatewayService {
       };
     }
 
-    // 1. SandboxGuard command safety classification
+    // 1. Host-Enforced Mode Capability Verification (Plan and Creator strictly forbid business shell execution)
+    const mode = options.mode || 'act';
+    const policy = getRuntimePolicy(mode);
+    if (!policy.capabilities.runCommands) {
+      return {
+        success: false,
+        stdout: '',
+        stderr: `🚫 [HostGateway Security]: 当前处于【${policy.label}】模式，宿主策略严格禁止执行终端命令。`,
+        exitCode: 1,
+        isPolicyDenied: true
+      };
+    }
+
+    // 2. SandboxGuard command safety classification
     const safetyCheck = defaultSandboxGuard.checkCommand(trimmed);
     if (!safetyCheck.isSafe && !options.sudo) {
       return {
@@ -42,7 +60,7 @@ export class HostGatewayService {
       };
     }
 
-    // 2. Dispatch to Python Desktop Host Gateway API
+    // 3. Dispatch to Python Desktop Host Gateway API
     try {
       const res = await fetch('/api/terminal/exec', {
         method: 'POST',
@@ -75,9 +93,19 @@ export class HostGatewayService {
   }
 
   /**
-   * File write through Host Gateway with error checking
+   * File write through Host Gateway with Mode Capability & boundary check
    */
-  public async writeFile(path: string, content: string): Promise<{ success: boolean; size?: number; error?: string }> {
+  public async writeFile(path: string, content: string, options: { mode?: WorkMode } = {}): Promise<{ success: boolean; size?: number; error?: string; isPolicyDenied?: boolean }> {
+    const mode = options.mode || 'act';
+    const policy = getRuntimePolicy(mode);
+    if (!policy.capabilities.writeFiles) {
+      return {
+        success: false,
+        error: `🚫 [HostGateway Security]: 当前处于【${policy.label}】模式，宿主安全策略严禁物理写入或修改业务文件。`,
+        isPolicyDenied: true
+      };
+    }
+
     try {
       const res = await fetch('/api/fs/write', {
         method: 'POST',

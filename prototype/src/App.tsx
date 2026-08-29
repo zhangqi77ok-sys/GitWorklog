@@ -710,17 +710,17 @@ export const App: React.FC = () => {
 
   const parseActionsFromContent = parseAgentActions;
 
-  // Execute one parsed action on the host via unified HostGateway with SandboxGuard & SecurityShield.
-  const executeActionOnHost = async (action: AgentAction): Promise<ActionResult> => {
+  // Execute one parsed action on the host via unified HostGateway with Mode Policy, SandboxGuard & SecurityShield.
+  const executeActionOnHost = async (action: AgentAction, runMode: WorkMode = 'act'): Promise<ActionResult> => {
     if (action.type === 'write_file') {
-      const res = await hostGateway.writeFile(action.target, action.code);
+      const res = await hostGateway.writeFile(action.target, action.code, { mode: runMode });
       return res.success
         ? createActionResult(action, 'success', { fileSize: res.size })
         : createActionResult(action, 'failed', { error: res.error || '写入失败' });
     }
 
     const activeSession = sessions.find(s => s.id === currentSessionId) || sessions[0];
-    const execRes = await hostGateway.executeCommand(action.code, { cwd: activeSession.projectPath });
+    const execRes = await hostGateway.executeCommand(action.code, { cwd: activeSession.projectPath, mode: runMode });
     return createActionResult(action, execRes.success ? 'success' : 'failed', {
       output: execRes.stdout,
       error: execRes.stderr || execRes.error,
@@ -836,6 +836,7 @@ export const App: React.FC = () => {
     };
 
     const streamingModel = { ...currentModel };
+    const frozenRunMode = workMode; // ❄️ Freeze mode for this entire Agent Run
 
     // Keep a synchronous loop-local history; React state is display/persistence only.
     let conversationSnapshot: ChatMessage[] = [...(sessionMessages[currentSessionId] || []), userMsg];
@@ -1143,7 +1144,7 @@ Tcode 已通过宿主磁盘与终端桥接将工程提供给你。` : '当前处
           }
         }
 
-        const actions = workMode === 'act' ? parseActionsFromContent(finalContent) : [];
+        const actions = (frozenRunMode === 'act' || frozenRunMode === 'minimal') ? parseActionsFromContent(finalContent) : [];
 
         // Record Step Tag
         const currentPhase: InternalStepTag['phase'] = actions.some(a => a.type === 'write_file')
@@ -1242,7 +1243,7 @@ Tcode 已通过宿主磁盘与终端桥接将工程提供给你。` : '当前处
 
           if (approvedIds.has(action.id)) {
             publishActionResult(createActionResult(action, 'executing'));
-            result = await executeActionOnHost(action);
+            result = await executeActionOnHost(action, frozenRunMode);
           } else {
             result = createActionResult(action, 'rejected');
           }

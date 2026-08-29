@@ -1902,57 +1902,123 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                   <ChevronDown size={10} />
                 </button>
 
-                {/* Mode Dropdown Popover (DeepSeek Harness 4 Modes Matrix) */}
+                {/* Production-Grade Mode Dropdown Popover (Upward Floating without covering input box) */}
                 {showModeMenu && (
                   <div style={{
                     position: 'absolute',
-                    bottom: '34px',
+                    bottom: '38px',
                     left: '0',
-                    width: 'min(280px, calc(100vw - 48px))',
+                    width: 'min(380px, calc(100vw - 48px))',
                     maxWidth: 'calc(100vw - 48px)',
-                    maxHeight: 'min(360px, 60vh)',
+                    maxHeight: 'min(440px, 65vh)',
                     overflowY: 'auto',
                     background: 'var(--bg-surface-elevated)',
                     border: '1px solid var(--border-strong)',
                     borderRadius: '8px',
-                    boxShadow: '0 12px 32px rgba(0,0,0,0.22)',
-                    padding: '6px',
-                    zIndex: 200
+                    boxShadow: '0 12px 36px rgba(0,0,0,0.28)',
+                    padding: '8px',
+                    zIndex: 9999
                   }}>
-                    <div style={{ fontSize: '10px', color: 'var(--text-muted)', padding: '2px 8px 6px', fontWeight: 600, borderBottom: '1px solid var(--border-subtle)', marginBottom: '4px' }}>
-                      DeepSeek Harness 运行时模态矩阵 (Runtime Modes)
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '2px 4px 6px',
+                      borderBottom: '1px solid var(--border-subtle)',
+                      marginBottom: '6px'
+                    }}>
+                      <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                        运行时模态策略 (Runtime Policy)
+                      </span>
+                      <span style={{ fontSize: '9.5px', color: 'var(--text-muted)' }}>
+                        宿主级安全策略管控
+                      </span>
                     </div>
 
                     {[
-                      { id: 'act', name: '⚡ Act 落地执行', color: 'var(--accent)', desc: '全功能工具链 + AST 校验 + 代码落盘与测试自纠', tag: '生产落地' },
-                      { id: 'plan', name: '📐 Plan 架构推演', color: '#9333EA', desc: '只读探索 + 任务依赖拓扑生成，严禁越权写盘', tag: '只读设计' },
-                      { id: 'minimal', name: '🍃 Minimal 极简低噪', color: '#10B981', desc: '过滤 80% 冗余转轮与废话，立省 75% Token 成本', tag: '极限低噪' },
-                      { id: 'creator', name: '🛠️ Creator 技能造物', color: '#2563EB', desc: '用于现场调试 Prompt、编写 Rule 与测试 MCP 插件', tag: '生态开发' }
-                    ].map(modeItem => (
-                      <div
-                        key={modeItem.id}
-                        onClick={() => { setWorkMode(modeItem.id as WorkMode); setShowModeMenu(false); }}
-                        style={{
-                          padding: '6px 8px',
-                          borderRadius: '4px',
-                          background: workMode === modeItem.id ? 'var(--accent-subtle)' : 'transparent',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'flex-start',
-                          gap: '6px',
-                          marginBottom: '2px'
-                        }}
-                      >
-                        <div style={{ flex: 1 }}>
+                      {
+                        id: 'act',
+                        name: '⚡ Act 落地执行',
+                        badge: '生产可用',
+                        color: 'var(--accent)',
+                        desc: '允许修改代码与执行验证，高危破坏性操作受宿主强制拦截。',
+                        allowed: '读写代码、执行构建、运行测试自愈',
+                        forbidden: '高危破坏性系统指令'
+                      },
+                      {
+                        id: 'plan',
+                        name: '📐 Plan 架构推演',
+                        badge: '生产可用',
+                        color: '#9333EA',
+                        desc: '只读探索工程依赖并生成 TaskPlan 计划，严禁写盘与命令。',
+                        allowed: '读取工程、符号搜索、AST 分析、生成计划',
+                        forbidden: '写盘与执行终端命令 (宿主物理拦截)'
+                      },
+                      {
+                        id: 'minimal',
+                        name: '🍃 Minimal 极简低噪',
+                        badge: '实验预览',
+                        color: '#10B981',
+                        desc: '聚焦目标文件，大幅降低中间冗余转轮与输出噪声，仍执行必要验证。',
+                        allowed: '目标文件修改、相关测试验证',
+                        forbidden: '全量工程盲目扫描'
+                      },
+                      {
+                        id: 'creator',
+                        name: '🛠️ Creator 实验室',
+                        badge: '实验预览',
+                        color: '#2563EB',
+                        desc: '用于独立调试 Prompt、编写 Rule 与测试 MCP，与业务工程物理隔离。',
+                        allowed: 'Prompt / Rule 调试、写入 .codemind/lab',
+                        forbidden: '直接修改正式业务代码'
+                      }
+                    ].map(modeItem => {
+                      const isSelected = workMode === modeItem.id;
+                      return (
+                        <div
+                          key={modeItem.id}
+                          onClick={() => { setWorkMode(modeItem.id as WorkMode); setShowModeMenu(false); }}
+                          style={{
+                            padding: '8px 10px',
+                            borderRadius: '6px',
+                            background: isSelected ? 'var(--accent-subtle)' : 'var(--bg-surface)',
+                            border: isSelected ? '1px solid var(--accent)' : '1px solid var(--border-subtle)',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '4px',
+                            marginBottom: '6px',
+                            transition: 'all 0.12s ease'
+                          }}
+                          onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = 'var(--bg-surface-elevated)'; }}
+                          onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = 'var(--bg-surface)'; }}
+                        >
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <span style={{ fontWeight: 600, fontSize: '11px', color: modeItem.color }}>{modeItem.name}</span>
-                            <span style={{ fontSize: '9px', padding: '1px 4px', borderRadius: '3px', background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', color: 'var(--text-muted)' }}>{modeItem.tag}</span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ fontWeight: 700, fontSize: '11.5px', color: modeItem.color }}>{modeItem.name}</span>
+                              <span style={{
+                                fontSize: '9px',
+                                padding: '1px 5px',
+                                borderRadius: '3px',
+                                background: isSelected ? 'var(--accent)' : 'rgba(0,0,0,0.06)',
+                                color: isSelected ? '#FFF' : 'var(--text-muted)',
+                                fontWeight: 600
+                              }}>
+                                {modeItem.badge}
+                              </span>
+                            </div>
+                            {isSelected && <Check size={13} color="var(--accent)" />}
                           </div>
-                          <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '2px' }}>{modeItem.desc}</div>
+                          <div style={{ fontSize: '10.5px', color: 'var(--text-secondary)', lineHeight: '1.4' }}>
+                            {modeItem.desc}
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '9.5px', marginTop: '2px', color: 'var(--text-muted)' }}>
+                            <div><span style={{ color: '#16A34A', fontWeight: 600 }}>✓ 允许:</span> {modeItem.allowed}</div>
+                            <div><span style={{ color: '#DC2626', fontWeight: 600 }}>✕ 禁止:</span> {modeItem.forbidden}</div>
+                          </div>
                         </div>
-                        {workMode === modeItem.id && <Check size={12} color="var(--accent)" style={{ marginTop: '2px' }} />}
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
