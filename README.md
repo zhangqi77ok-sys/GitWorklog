@@ -1,1 +1,1 @@
-# CodeMind-Hub`n`n当前阶段：**Phase 0**`n`n## 仓库结构`n- docs/ (Phase 0)`n- prototype/ (Phase 0)`n- src-tauri/ (Phase 1 Reserved)`n- src-desktop/ (Phase 1 Reserved)`n- release/ (Phase 1 Reserved)`n- scripts/`n- AGENTS.md (SSOT)`n- README.md
+﻿# CodeMind-Hub`n`n当前阶段：**Phase 0**`n`n## 仓库结构`n- docs/ (Phase 0)`n- prototype/ (Phase 0)`n- src-tauri/ (Phase 1 Reserved)`n- src-desktop/ (Phase 1 Reserved)`n- release/ (Phase 1 Reserved)`n- scripts/`n- AGENTS.md (SSOT)`n- README.md
