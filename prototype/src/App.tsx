@@ -1,4 +1,5 @@
 import { SettingsModal } from './components/SettingsModal';
+import { TokenAnalyticsModal } from './components/TokenAnalyticsModal';
 import React, { useState } from 'react';
 import './styles/theme.css';
 import { Titlebar } from './components/Titlebar';
@@ -26,6 +27,7 @@ import {
 
 export const App: React.FC = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isTokenAnalyticsOpen, setIsTokenAnalyticsOpen] = useState(false);
   const [accentHex, setAccentHex] = useState('#D96B27');
 
   const handleSelectAccentHex = (hex: string) => {
@@ -340,6 +342,7 @@ export const App: React.FC = () => {
         gitBranch={activeSession.gitBranch || 'main'}
         sessionTitle={activeSession.title}
         tokenStats={tokenStats}
+        onOpenTokenAnalytics={() => setIsTokenAnalyticsOpen(true)}
       />
 
       {/* 2. Main Workspace Body */}
@@ -393,6 +396,13 @@ export const App: React.FC = () => {
           <EditorWorkspace onCloseWorkspace={() => setRightWorkspaceOpen(false)} />
         )}
       </div>
+
+      {/* Token Financial & ROI Analytics Modal */}
+      <TokenAnalyticsModal
+        isOpen={isTokenAnalyticsOpen}
+        onClose={() => setIsTokenAnalyticsOpen(false)}
+        stats={tokenStats}
+      />
 
       {/* Global Settings & Preferences Modal Dialog */}
       <SettingsModal

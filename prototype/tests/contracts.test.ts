@@ -50,7 +50,14 @@ import {
   WORK_MODE_CONFIGS,
   forkSessionFromMessage,
   filterCompilerNoise,
-  ChatMessage
+  ChatMessage,
+  searchMentionItems,
+  acceptChangeset,
+  rejectChangeset,
+  togglePinnedFile,
+  calculateTokenRoi,
+  INITIAL_CHANGESET,
+  PinnedFileItem
 } from '../src/types/contracts';
 
 describe('SDD Contract - Token Telemetry & Gauge Algorithm', () => {
@@ -414,5 +421,62 @@ describe('SDD Contract - DeepSeek Harness Architecture Integration', () => {
     expect(suppressedLinesCount).toBe(4);
     expect(cleanedLogs).toContain('✓ built in 1.2s');
     expect(cleanedLogs).toContain('ERROR: Type error in contracts.ts:42');
+  });
+});
+
+
+describe('SDD Contract - DX & PM Power Features (@Mentions, Changeset, Pinned, ROI)', () => {
+  it('should fuzzy search @ mention items across files, AST symbols and git diff', () => {
+    const all = searchMentionItems('');
+    expect(all.length).toBeGreaterThan(3);
+
+    const fileResults = searchMentionItems('contracts');
+    expect(fileResults.length).toBeGreaterThan(0);
+    expect(fileResults[0].type).toBe('file');
+
+    const symbolResults = searchMentionItems('GatewayBus');
+    expect(symbolResults.length).toBe(1);
+    expect(symbolResults[0].type).toBe('symbol');
+
+    const diffResults = searchMentionItems('git-diff');
+    expect(diffResults[0].type).toBe('git-diff');
+  });
+
+  it('should accept and reject changeset cleanly', () => {
+    const cs = { ...INITIAL_CHANGESET };
+    expect(cs.status).toBe('pending');
+
+    const accepted = acceptChangeset(cs);
+    expect(accepted.status).toBe('accepted');
+
+    const rejected = rejectChangeset(cs);
+    expect(rejected.status).toBe('rejected');
+  });
+
+  it('should toggle pinned context files seamlessly', () => {
+    const initial: PinnedFileItem[] = [];
+    const pinned = togglePinnedFile(initial, { path: 'src/types/contracts.ts', name: 'contracts.ts' });
+    expect(pinned.length).toBe(1);
+    expect(pinned[0].name).toBe('contracts.ts');
+
+    const unpinned = togglePinnedFile(pinned, { path: 'src/types/contracts.ts', name: 'contracts.ts' });
+    expect(unpinned.length).toBe(0);
+  });
+
+  it('should calculate Token ROI and KV Cache savings accurately', () => {
+    const mockStats: TokenStats = {
+      promptTokens: 2400,
+      completionTokens: 600,
+      cacheHitTokens: 18000,
+      cacheWriteTokens: 0,
+      estimatedCostUsd: 0.038,
+      contextCurrentTokens: 21000,
+      contextMaxTokens: 128000
+    };
+
+    const roi = calculateTokenRoi(mockStats);
+    expect(roi.cacheHitRatePercent).toBe(85.7);
+    expect(roi.savedCostUsd).toBeGreaterThan(0.04);
+    expect(roi.linesGeneratedApprox).toBe(50);
   });
 });

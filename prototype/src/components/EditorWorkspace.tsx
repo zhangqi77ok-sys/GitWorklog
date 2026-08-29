@@ -23,6 +23,11 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ onCloseWorkspa
   const [terminalOpen, setTerminalOpen] = useState(true);
   const [openedFiles, setOpenedFiles] = useState<OpenedEditorFile[]>(INITIAL_OPENED_FILES);
   const [activeFileId, setActiveFileId] = useState<string>('file-contracts');
+  const [showInlineEdit, setShowInlineEdit] = useState(false);
+  const [inlineInput, setInlineInput] = useState('');
+  const [inlineDiffAccepted, setInlineDiffAccepted] = useState(false);
+  const [inlineToast, setInlineToast] = useState<string | null>(null);
+
 
 
   // Multi-terminal tabs
@@ -174,6 +179,28 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ onCloseWorkspa
           >
             <SplitSquareVertical size={12} />
             <span>◫ 分屏</span>
+          </button>
+
+          {/* Inline Edit Ctrl+K Trigger */}
+          <button
+            onClick={() => setShowInlineEdit(!showInlineEdit)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              padding: '2px 7px',
+              borderRadius: '4px',
+              background: showInlineEdit ? 'rgba(147, 51, 234, 0.15)' : 'var(--bg-surface)',
+              color: showInlineEdit ? '#9333EA' : 'var(--text-secondary)',
+              border: showInlineEdit ? '1px solid #9333EA' : '1px solid var(--border-subtle)',
+              fontSize: '11px',
+              fontWeight: 600,
+              cursor: 'pointer'
+            }}
+            title="对当前选中代码进行行内重构 (Ctrl+K)"
+          >
+            <Sparkles size={11} color={showInlineEdit ? '#9333EA' : 'var(--accent)'} />
+            <span>⚡ 行内重构 (Ctrl+K)</span>
           </button>
 
           <button

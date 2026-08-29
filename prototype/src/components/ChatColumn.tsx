@@ -18,7 +18,13 @@ import {
   FileCode,
   GitBranch,
   Leaf,
-  Wrench
+  Wrench,
+  AtSign,
+  Pin,
+  FolderGit2,
+  Terminal,
+  CheckCheck,
+  Undo2
 } from 'lucide-react';
 import {
   SessionItem,
@@ -32,7 +38,16 @@ import {
   WORK_MODE_CONFIGS,
   PermissionPolicy,
   AIModelOption,
-  AVAILABLE_MODELS
+  AVAILABLE_MODELS,
+  MentionContextItem,
+  DEFAULT_MENTION_ITEMS,
+  searchMentionItems,
+  ChangesetReviewPayload,
+  INITIAL_CHANGESET,
+  acceptChangeset,
+  rejectChangeset,
+  PinnedFileItem,
+  togglePinnedFile
 } from '../types/contracts';
 import { OptionsCard } from './OptionsCard';
 
@@ -75,6 +90,17 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
   const [isInputFocused, setIsInputFocused] = useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const activeRules = getActiveRules(INITIAL_RULES);
+
+  // DX & PM Power States: Mentions, Changeset, Pinned Files
+  const [showMentionMenu, setShowMentionMenu] = useState(false);
+  const [mentionQuery, setMentionQuery] = useState('');
+  const [selectedMentions, setSelectedMentions] = useState<MentionContextItem[]>([]);
+  const [pinnedFiles, setPinnedFiles] = useState<PinnedFileItem[]>([
+    { id: 'pin-1', path: 'src/types/contracts.ts', name: 'contracts.ts', size: 38400 }
+  ]);
+  const [changeset, setChangeset] = useState<ChangesetReviewPayload>(INITIAL_CHANGESET);
+  const [changesetToast, setChangesetToast] = useState<string | null>(null);
+
 
   const handlePaste = (e: React.ClipboardEvent) => {
     if (e.clipboardData.files && e.clipboardData.files.length > 0) {
@@ -350,6 +376,130 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                 payload={msg.optionsPayload}
                 onConfirm={(selectedIds, customInput) => onResolveOptions(msg.id, selectedIds, customInput)}
               />
+            )}
+
+            {/* Changeset Review Card (for latest assistant response) */}
+            {msg.role === 'assistant' && changeset && (
+              <div style={{
+                marginTop: '10px',
+                borderRadius: '6px',
+                border: changeset.status === 'accepted' ? '1px solid #16A34A' : changeset.status === 'rejected' ? '1px solid #DC2626' : '1px solid var(--accent)',
+                background: 'var(--bg-surface)',
+                overflow: 'hidden'
+              }}>
+                {/* Changeset Header */}
+                <div style={{
+                  padding: '8px 12px',
+                  background: changeset.status === 'accepted' ? 'rgba(22, 163, 74, 0.08)' : changeset.status === 'rejected' ? 'rgba(220, 38, 38, 0.08)' : 'var(--accent-subtle)',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <FolderGit2 size={13} color="var(--accent)" />
+                    <span style={{ fontSize: '11px', fontWeight: 700 }}>
+                      📦 多文件变更集审阅 ({changeset.files.length} 个文件)
+                    </span>
+                    <span style={{ fontSize: '10px', color: '#16A34A', fontWeight: 600 }}>+{changeset.totalAdditions}</span>
+                    <span style={{ fontSize: '10px', color: '#DC2626', fontWeight: 600 }}>-{changeset.totalDeletions}</span>
+                    <span style={{ fontSize: '9px', padding: '1px 5px', borderRadius: '3px', background: '#16A34A', color: '#FFF', fontWeight: 600 }}>
+                      ✓ AST 校验通过
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    {changeset.status === 'pending' ? (
+                      <>
+                        <button
+                          onClick={() => {
+                            setChangeset(acceptChangeset(changeset));
+                            setChangesetToast('✓ 已成功接受并合并全部变更');
+                            setTimeout(() => setChangesetToast(null), 3000);
+                          }}
+                          style={{
+                            padding: '3px 8px',
+                            borderRadius: '3px',
+                            background: '#16A34A',
+                            border: 'none',
+                            color: '#FFF',
+                            fontSize: '10px',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '3px'
+                          }}
+                        >
+                          <CheckCheck size={11} />
+                          <span>全部接受</span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            setChangeset(rejectChangeset(changeset));
+                            setChangesetToast('↩️ 已通过 Git 影子快照回滚全部变更');
+                            setTimeout(() => setChangesetToast(null), 3000);
+                          }}
+                          style={{
+                            padding: '3px 8px',
+                            borderRadius: '3px',
+                            background: 'var(--bg-base)',
+                            border: '1px solid var(--border-subtle)',
+                            color: '#DC2626',
+                            fontSize: '10px',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '3px'
+                          }}
+                        >
+                          <Undo2 size={11} />
+                          <span>一键回滚</span>
+                        </button>
+                      </>
+                    ) : (
+                      <span style={{
+                        fontSize: '10px',
+                        fontWeight: 700,
+                        color: changeset.status === 'accepted' ? '#16A34A' : '#DC2626'
+                      }}>
+                        {changeset.status === 'accepted' ? '● 已全量接受' : '○ 已全量回滚'}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Changed Files List */}
+                <div style={{ padding: '6px 12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  {changeset.files.map(f => (
+                    <div
+                      key={f.path}
+                      onClick={() => onToggleWorkspace()}
+                      style={{
+                        padding: '4px 8px',
+                        borderRadius: '4px',
+                        background: 'var(--bg-base)',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        fontSize: '10.5px',
+                        cursor: 'pointer'
+                      }}
+                      title="点击在右侧工作台开启对比"
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <FileCode size={11} color="var(--accent)" />
+                        <span style={{ fontWeight: 600, fontFamily: 'var(--font-mono)' }}>{f.path}</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ color: '#16A34A', fontWeight: 600 }}>+{f.additions}</span>
+                        <span style={{ color: '#DC2626', fontWeight: 600 }}>-{f.deletions}</span>
+                        <span style={{ color: 'var(--text-muted)', fontSize: '9px' }}>查看 Diff ➔</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             )}
           </div>
         ))}
@@ -640,6 +790,90 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                         </div>
                       );
                     })}
+                  </div>
+                )}
+              </div>
+
+              {/* @ Mention Popover Trigger Button */}
+              <div style={{ position: 'relative' }}>
+                <button
+                  onClick={() => {
+                    setShowMentionMenu(!showMentionMenu);
+                    setShowModeMenu(false);
+                    setShowModelMenu(false);
+                    setShowRulesPopover(false);
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '3px',
+                    padding: '2px 8px',
+                    borderRadius: '4px',
+                    background: showMentionMenu ? 'rgba(37, 99, 235, 0.12)' : 'var(--bg-base)',
+                    border: showMentionMenu ? '1px solid #2563EB' : '1px solid var(--border-subtle)',
+                    color: showMentionMenu ? '#2563EB' : 'var(--text-secondary)',
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    cursor: 'pointer'
+                  }}
+                  title="@ 符号即时索引文件、AST 符号与 Git Diff"
+                >
+                  <AtSign size={11} />
+                  <span>@引用</span>
+                </button>
+
+                {/* @ Mention Floating Dropdown */}
+                {showMentionMenu && (
+                  <div style={{
+                    position: 'absolute',
+                    bottom: '30px',
+                    left: '0',
+                    width: '320px',
+                    background: 'var(--bg-surface-elevated)',
+                    border: '1px solid var(--border-strong)',
+                    borderRadius: '6px',
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
+                    padding: '6px',
+                    zIndex: 100
+                  }}>
+                    <div style={{ fontSize: '10px', color: 'var(--text-muted)', padding: '2px 8px 6px', fontWeight: 600, borderBottom: '1px solid var(--border-subtle)' }}>
+                      @ 即时上下文引用 (文件 / AST 符号 / Git Diff / 终端)
+                    </div>
+                    <div style={{ maxHeight: '200px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '2px', marginTop: '4px' }}>
+                      {searchMentionItems(mentionQuery).map(item => (
+                        <div
+                          key={item.id}
+                          onClick={() => {
+                            if (!selectedMentions.some(m => m.id === item.id)) {
+                              setSelectedMentions(prev => [...prev, item]);
+                            }
+                            setShowMentionMenu(false);
+                          }}
+                          style={{
+                            padding: '5px 8px',
+                            borderRadius: '4px',
+                            background: 'transparent',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            fontSize: '11px'
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            {item.type === 'file' && <FileCode size={12} color="var(--accent)" />}
+                            {item.type === 'symbol' && <Sparkles size={12} color="#9333EA" />}
+                            {item.type === 'git-diff' && <FolderGit2 size={12} color="#10B981" />}
+                            {item.type === 'terminal' && <Terminal size={12} color="#2563EB" />}
+                            <div>
+                              <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{item.name}</div>
+                              <div style={{ fontSize: '9.5px', color: 'var(--text-muted)' }}>{item.detail}</div>
+                            </div>
+                          </div>
+                          <span style={{ fontSize: '9px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>{item.type}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>

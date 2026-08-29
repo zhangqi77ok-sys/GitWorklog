@@ -1303,3 +1303,134 @@ export function filterCompilerNoise(rawLogs: string[]): {
     suppressedLinesCount: suppressed
   };
 }
+
+
+// ============================================================================
+// 11. DX & PM POWER FEATURES CONTRACTS (@Mentions, Changeset, Pinned, ROI)
+// ============================================================================
+
+export interface MentionContextItem {
+  id: string;
+  type: 'file' | 'symbol' | 'git-diff' | 'terminal';
+  name: string;
+  path?: string;
+  detail: string;
+  snippet?: string;
+}
+
+export const DEFAULT_MENTION_ITEMS: MentionContextItem[] = [
+  { id: 'm-file-contracts', type: 'file', name: 'contracts.ts', path: 'src/types/contracts.ts', detail: '核心数据契约与接口' },
+  { id: 'm-file-options', type: 'file', name: 'OptionsCard.tsx', path: 'src/components/OptionsCard.tsx', detail: '人机动态决策卡片组件' },
+  { id: 'm-file-chat', type: 'file', name: 'ChatColumn.tsx', path: 'src/components/ChatColumn.tsx', detail: '一体化悬浮命令台与消息流' },
+  { id: 'm-sym-bus', type: 'symbol', name: 'GatewayBus', path: 'src/types/contracts.ts', detail: 'AST 导出的多厂商模型网关总线' },
+  { id: 'm-sym-harness', type: 'symbol', name: 'forkSessionFromMessage', path: 'src/types/contracts.ts', detail: 'AST 导出的会话时光机分叉函数' },
+  { id: 'm-git-diff', type: 'git-diff', name: '@git-diff (工作区未暂存变更)', detail: '自动提取当前 Git 工作区所有新增与修改行' },
+  { id: 'm-terminal', type: 'terminal', name: '@terminal (终端最新日志与报错)', detail: '抓取集成终端最近 50 行输出与错误堆栈' }
+];
+
+export function searchMentionItems(
+  query: string,
+  items: MentionContextItem[] = DEFAULT_MENTION_ITEMS
+): MentionContextItem[] {
+  const q = query.trim().toLowerCase().replace(/^@/, '');
+  if (!q) return items;
+  return items.filter(item =>
+    item.name.toLowerCase().includes(q) ||
+    (item.path && item.path.toLowerCase().includes(q)) ||
+    item.detail.toLowerCase().includes(q)
+  );
+}
+
+export interface ChangesetFileItem {
+  path: string;
+  name: string;
+  additions: number;
+  deletions: number;
+  status: 'modified' | 'added' | 'deleted';
+  astVerified: boolean;
+}
+
+export interface ChangesetReviewPayload {
+  id: string;
+  taskId: string;
+  description: string;
+  totalAdditions: number;
+  totalDeletions: number;
+  files: ChangesetFileItem[];
+  status: 'pending' | 'accepted' | 'rejected';
+  createdAt: number;
+}
+
+export const INITIAL_CHANGESET: ChangesetReviewPayload = {
+  id: 'cs-001',
+  taskId: 'task-refactor-store',
+  description: '重构状态管理层并接入 AST 语法校验与 TDD 测试',
+  totalAdditions: 45,
+  totalDeletions: 12,
+  status: 'pending',
+  createdAt: Date.now() - 60000,
+  files: [
+    { path: 'src/types/contracts.ts', name: 'contracts.ts', additions: 28, deletions: 4, status: 'modified', astVerified: true },
+    { path: 'src/components/OptionsCard.tsx', name: 'OptionsCard.tsx', additions: 12, deletions: 8, status: 'modified', astVerified: true },
+    { path: 'tests/contracts.test.ts', name: 'contracts.test.ts', additions: 5, deletions: 0, status: 'added', astVerified: true }
+  ]
+};
+
+export function acceptChangeset(payload: ChangesetReviewPayload): ChangesetReviewPayload {
+  return { ...payload, status: 'accepted' };
+}
+
+export function rejectChangeset(payload: ChangesetReviewPayload): ChangesetReviewPayload {
+  return { ...payload, status: 'rejected' };
+}
+
+export interface PinnedFileItem {
+  id: string;
+  path: string;
+  name: string;
+  size: number;
+}
+
+export function togglePinnedFile(
+  pinnedList: PinnedFileItem[],
+  file: { path: string; name: string; size?: number }
+): PinnedFileItem[] {
+  const exists = pinnedList.some(f => f.path === file.path);
+  if (exists) {
+    return pinnedList.filter(f => f.path !== file.path);
+  }
+  const newItem: PinnedFileItem = {
+    id: `pin-${Date.now()}`,
+    path: file.path,
+    name: file.name,
+    size: file.size || 1024
+  };
+  return [...pinnedList, newItem];
+}
+
+export interface TokenRoiStats {
+  promptTokens: number;
+  completionTokens: number;
+  cacheHitTokens: number;
+  cacheHitRatePercent: number;
+  estimatedCostUsd: number;
+  savedCostUsd: number;
+  linesGeneratedApprox: number;
+}
+
+export function calculateTokenRoi(stats: TokenStats): TokenRoiStats {
+  const totalTokens = stats.promptTokens + stats.completionTokens + stats.cacheHitTokens;
+  const cacheHitRate = totalTokens > 0 ? (stats.cacheHitTokens / totalTokens) * 100 : 0;
+  const savedCost = (stats.cacheHitTokens / 1000000) * 2.5; // ~$2.5 per 1M tokens saved
+  const linesGenerated = Math.round(stats.completionTokens / 12);
+
+  return {
+    promptTokens: stats.promptTokens,
+    completionTokens: stats.completionTokens,
+    cacheHitTokens: stats.cacheHitTokens,
+    cacheHitRatePercent: Math.round(cacheHitRate * 10) / 10,
+    estimatedCostUsd: stats.estimatedCostUsd,
+    savedCostUsd: Math.round(savedCost * 1000) / 1000,
+    linesGeneratedApprox: linesGenerated
+  };
+}

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Layers, ChevronDown, ShieldCheck, Zap, X, Minus, Square, Info } from 'lucide-react';
+import { Layers, ChevronDown, ShieldCheck, Zap, X, Minus, Square, Info, TrendingUp } from 'lucide-react';
 import { TokenStats, calculateTokenSavingsPercent, getContextGaugeLevel } from '../types/contracts';
 
 interface TitlebarProps {
@@ -7,13 +7,15 @@ interface TitlebarProps {
   gitBranch: string;
   sessionTitle: string;
   tokenStats: TokenStats;
+  onOpenTokenAnalytics?: () => void;
 }
 
 export const Titlebar: React.FC<TitlebarProps> = ({
   currentProject,
   gitBranch,
   sessionTitle,
-  tokenStats
+  tokenStats,
+  onOpenTokenAnalytics
 }) => {
   const [showTokenPopover, setShowTokenPopover] = useState(false);
   const savings = calculateTokenSavingsPercent(tokenStats);
@@ -162,6 +164,31 @@ export const Titlebar: React.FC<TitlebarProps> = ({
                     background: gaugeColors[gaugeLevel]
                   }} />
                 </div>
+                <button
+                  onClick={() => {
+                    setShowTokenPopover(false);
+                    if (onOpenTokenAnalytics) onOpenTokenAnalytics();
+                  }}
+                  style={{
+                    marginTop: '8px',
+                    width: '100%',
+                    padding: '5px 8px',
+                    borderRadius: '4px',
+                    background: 'var(--accent)',
+                    border: 'none',
+                    color: '#FFF',
+                    fontSize: '10.5px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '4px'
+                  }}
+                >
+                  <TrendingUp size={12} />
+                  <span>打开完整 Token 财务与 ROI 看板</span>
+                </button>
               </div>
             </div>
           )}
