@@ -211,12 +211,6 @@ export const Titlebar: React.FC<TitlebarProps> = ({
           )}
         </div>
 
-        {/* Window Handle Buttons */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-muted)' }}>
-          <Minus size={13} style={{ cursor: 'pointer' }} />
-          <Square size={11} style={{ cursor: 'pointer' }} />
-          <X size={13} style={{ cursor: 'pointer' }} />
-        </div>
       </div>
     </header>
   );

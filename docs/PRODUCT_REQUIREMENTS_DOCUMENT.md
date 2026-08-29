@@ -929,3 +929,23 @@ To github.com:zhangqi77ok-sys/agent-learning.git
 ### 4.48.2 安全签名与增量热更新
 - **代码签名**：Windows 采用 EV 证书签名，macOS 采用 Apple Developer ID 签名并完成 Apple 公证 (Notarization)；
 - **增量热更新 (Tauri Updater)**：采用 Ed25519 签名公钥校验，静默下载差分补丁，应用重启后毫秒级就绪。
+
+
+---
+
+## 4.49 生产级零状态开箱体验与真实数据生命周期规约 (Zero-State Onboarding & Real Data Lifecycle)
+
+### 4.49.1 零数据开箱体验原则
+1. **严禁硬编码 Mock Demo 数据**：
+   - 用户首次安装启动时，绝不允许出现预设的假会话（如“Python 3.12 讨论”）、假代码变更集（Changeset）或虚假的后台执行中 Swarm 任务；
+2. **专业 Onboarding 引导面板**：
+   - 当会话消息为空时，中央区域展示优雅的 **“🚀 CodeMind-Hub 智能工作台” 欢迎卡片**，提供：
+     - `[ 📂 打开本地工程目录 / 仓库 (Ctrl+O) ]`；
+     - `[ 💬 创建空白自由会话 (Ctrl+N) ]`；
+     - `[ ⚙️ 快速配置模型 API Key 与端点 (Ctrl+,) ]`；
+   - 提供开箱即用的快捷指令提示（如代码审查、生成单测、架构分析）；
+3. **真实流式对话与代码生成闭环**：
+   - 用户输入提问时，实时调用已配置的 API Key 与 BaseURL（如星海平台 `deepseek-v4-flash` / 本地 Ollama），实现真正的流式生成。
+
+### 4.49.2 桌面原生顶栏融合规约
+- 桌面客户端消除操作系统原生标题栏与应用内部窗体控制按钮的重叠冲突，提供统一单层沉浸式视觉体验。

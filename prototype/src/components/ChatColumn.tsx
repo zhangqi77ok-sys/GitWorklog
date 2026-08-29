@@ -118,10 +118,10 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
   const [pinnedFiles, setPinnedFiles] = useState<PinnedFileItem[]>([
     { id: 'pin-1', path: 'src/types/contracts.ts', name: 'contracts.ts', size: 38400 }
   ]);
-  const [changeset, setChangeset] = useState<ChangesetReviewPayload>(INITIAL_CHANGESET);
+  const [changeset, setChangeset] = useState<ChangesetReviewPayload | null>(null);
   const [changesetToast, setChangesetToast] = useState<string | null>(null);
   const [pipelineMode, setPipelineMode] = useState<'harness' | 'swarm'>('swarm');
-  const [isForkedSession, setIsForkedSession] = useState<boolean>(true);
+  const [isForkedSession, setIsForkedSession] = useState<boolean>(false);
   const [swarmStages, setSwarmStages] = useState<SwarmPipelineStage[]>(INITIAL_SWARM_STAGES);
   const [isCommitModalOpen, setIsCommitModalOpen] = useState<boolean>(false);
   const [isPrModalOpen, setIsPrModalOpen] = useState<boolean>(false);
@@ -261,17 +261,25 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
           {pipelineMode === 'swarm' ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
               <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--accent)' }}>🐝 Swarm 协同:</span>
-              <span style={{ padding: '1px 5px', borderRadius: '3px', background: 'rgba(22, 163, 74, 0.1)', color: '#16A34A', fontSize: '9.5px', fontWeight: 600 }}>
-                🧭 R1 ✓
-              </span>
-              <span style={{ color: 'var(--text-muted)', fontSize: '9px' }}>➔</span>
-              <span style={{ padding: '1px 5px', borderRadius: '3px', background: 'rgba(217, 107, 39, 0.15)', border: '1px solid var(--accent)', color: 'var(--accent)', fontSize: '9.5px', fontWeight: 700 }}>
-                ⚡ Sonnet (50%)
-              </span>
-              <span style={{ color: 'var(--text-muted)', fontSize: '9px' }}>➔</span>
-              <span style={{ padding: '1px 5px', borderRadius: '3px', background: 'var(--bg-base)', color: 'var(--text-muted)', fontSize: '9.5px' }}>
-                🧪 GLM
-              </span>
+              {messages.length > 0 ? (
+                <>
+                  <span style={{ padding: '1px 5px', borderRadius: '3px', background: 'rgba(22, 163, 74, 0.1)', color: '#16A34A', fontSize: '9.5px', fontWeight: 600 }}>
+                    🧭 R1 ✓
+                  </span>
+                  <span style={{ color: 'var(--text-muted)', fontSize: '9px' }}>➔</span>
+                  <span style={{ padding: '1px 5px', borderRadius: '3px', background: 'rgba(217, 107, 39, 0.15)', border: '1px solid var(--accent)', color: 'var(--accent)', fontSize: '9.5px', fontWeight: 700 }}>
+                    ⚡ Sonnet (50%)
+                  </span>
+                  <span style={{ color: 'var(--text-muted)', fontSize: '9px' }}>➔</span>
+                  <span style={{ padding: '1px 5px', borderRadius: '3px', background: 'var(--bg-base)', color: 'var(--text-muted)', fontSize: '9.5px' }}>
+                    🧪 GLM
+                  </span>
+                </>
+              ) : (
+                <span style={{ padding: '1px 6px', borderRadius: '3px', background: 'rgba(22, 163, 74, 0.08)', color: '#16A34A', fontSize: '9.5px', fontWeight: 600 }}>
+                  ● 待命中 (就绪)
+                </span>
+              )}
             </div>
           ) : (
             <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', color: 'var(--text-muted)' }}>
@@ -371,60 +379,153 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
         </div>
       </div>
 
-      {/* Task Plan Breathing Capsule */}
-      <div style={{
-        borderBottom: '1px solid var(--border-subtle)',
-        background: 'var(--bg-surface)',
-        transition: 'all 0.2s ease'
-      }}>
-        <div
-          onClick={() => setPlanExpanded(!planExpanded)}
-          style={{
-            padding: '6px 12px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            fontSize: '11px',
-            cursor: 'pointer',
-            fontWeight: 600
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{
-              width: '8px',
-              height: '8px',
-              borderRadius: '50%',
-              background: 'var(--accent)'
-            }} />
-            <span>📋 2/4 正在执行: 编写 Store 契约与前置测试 (50%)</span>
+      {/* Task Plan Breathing Capsule (Only shown when there are active messages/task) */}
+      {messages.length > 0 && (
+        <div style={{
+          borderBottom: '1px solid var(--border-subtle)',
+          background: 'var(--bg-surface)',
+          transition: 'all 0.2s ease'
+        }}>
+          <div
+            onClick={() => setPlanExpanded(!planExpanded)}
+            style={{
+              padding: '6px 12px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              fontSize: '11px',
+              cursor: 'pointer',
+              fontWeight: 600
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{
+                width: '8px',
+                height: '8px',
+                borderRadius: '50%',
+                background: 'var(--accent)'
+              }} />
+              <span>📋 任务执行进度: 正在分析与生成代码</span>
+            </div>
+            {planExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
           </div>
-          {planExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-        </div>
 
-        {planExpanded && (
-          <div style={{ padding: '6px 12px 10px', fontSize: '11px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#16A34A' }}>
-              <CheckCircle size={13} />
-              <span style={{ textDecoration: 'line-through' }}>1. 扫描项目 AST 符号依赖关系并生成雷达</span>
+          {planExpanded && (
+            <div style={{ padding: '6px 12px 10px', fontSize: '11px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#16A34A' }}>
+                <CheckCircle size={13} />
+                <span>1. 扫描工作区 AST 依赖与工程规则</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--accent)', fontWeight: 600 }}>
+                <Clock size={13} />
+                <span>2. 实时调用大模型生成架构方案</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-muted)' }}>
+                <span style={{ width: '13px', textAlign: 'center' }}>○</span>
+                <span>3. 校验 AST 语法并打上安全影子快照</span>
+              </div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--accent)', fontWeight: 600 }}>
-              <Clock size={13} />
-              <span>2. 编写 Store 契约与前置失败测试 (Red Testing)</span>
+          )}
+        </div>
+      )}
+
+      {/* Messages Stream Area */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column' }}>
+        {/* Real Product Onboarding / Zero-State Welcome Screen */}
+        {messages.length === 0 && (
+          <div style={{
+            margin: 'auto',
+            maxWidth: '680px',
+            width: '100%',
+            padding: '24px',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            textAlign: 'center'
+          }}>
+            <div style={{
+              width: '52px',
+              height: '52px',
+              borderRadius: '14px',
+              background: 'rgba(217, 107, 39, 0.1)',
+              border: '1px solid rgba(217, 107, 39, 0.3)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginBottom: '16px'
+            }}>
+              <Sparkles size={26} color="var(--accent)" />
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-muted)' }}>
-              <span style={{ width: '13px', textAlign: 'center' }}>○</span>
-              <span>3. 生成原子级 Unified Patch 并执行落盘</span>
+
+            <h2 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '8px' }}>
+              欢迎使用 CodeMind-Hub
+            </h2>
+            <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '28px', lineHeight: 1.6, maxWidth: '520px' }}>
+              生产级 Agentic AI 智能编码工作台 · 支持 Monaco 画布、AST 依赖拓扑感知与实时流式大模型生成
+            </p>
+
+            {/* Quick Prompt Cards Grid */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
+              gap: '12px',
+              width: '100%',
+              marginBottom: '24px'
+            }}>
+              {[
+                {
+                  title: '⚡ 审查工程代码架构',
+                  desc: '基于 AST 语法树扫描潜在缺陷、类型违规与冗余依赖',
+                  prompt: '请全面审查当前工程的代码架构，指出潜在的坏味道与重构建议。'
+                },
+                {
+                  title: '🧪 编写高覆盖率单测',
+                  desc: '遵循 SDD-TDD 规范，为核心契约生成自动化单元测试',
+                  prompt: '请为当前核心业务逻辑编写高覆盖率的自动化单测，确保测试先行。'
+                },
+                {
+                  title: '📐 设计模块重构方案',
+                  desc: '推演依赖变更影响面（Blast Radius）并输出详细方案',
+                  prompt: '我想优化当前模块的设计模式与状态流转，请先输出只读设计方案。'
+                },
+                {
+                  title: '🛡️ 敏感凭据离线脱敏',
+                  desc: '离线扫描 API Key、数据库连接密码与私钥，保障数据安全',
+                  prompt: '请执行离线安全扫描，检测并脱敏工程中的敏感信息与连接凭据。'
+                }
+              ].map((card, idx) => (
+                <div
+                  key={idx}
+                  onClick={() => setInputText(card.prompt)}
+                  style={{
+                    padding: '14px',
+                    borderRadius: '8px',
+                    background: 'var(--bg-surface)',
+                    border: '1px solid var(--border-subtle)',
+                    textAlign: 'left',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease'
+                  }}
+                  className="hover:border-orange-500 hover:shadow-sm"
+                >
+                  <div style={{ fontSize: '12.5px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>
+                    {card.title}
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: 1.4 }}>
+                    {card.desc}
+                  </div>
+                </div>
+              ))}
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-muted)' }}>
-              <span style={{ width: '13px', textAlign: 'center' }}>○</span>
-              <span>4. 执行全套测试治具验证 (Green Passed)</span>
+
+            <div style={{ fontSize: '11.5px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <span>💡 当前已就绪模型: <strong style={{ color: 'var(--accent)' }}>{currentModel.name}</strong></span>
+              <span>·</span>
+              <span>输入需求按 <strong style={{ color: 'var(--text-primary)' }}>Enter</strong> 直接开始真实编码</span>
             </div>
           </div>
         )}
-      </div>
 
-      {/* Messages Stream Area */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '12px' }}>
         {messages.map(msg => (
           <div key={msg.id} style={{ marginBottom: '14px' }}>
             <div style={{
@@ -750,7 +851,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
           position: 'relative'
         }}>
           {/* Self-Learning Lessons Pill & Confirmation Card */}
-          {!experienceLearned && !showLessonConfirm && (
+          {messages.length > 0 && !experienceLearned && !showLessonConfirm && (
             <div style={{
               position: 'absolute',
               top: '-28px',

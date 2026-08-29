@@ -146,91 +146,22 @@ export const App: React.FC = () => {
     contextMaxTokens: 128000
   });
 
-  // Hierarchical Sessions with Tags
+  // Hierarchical Sessions (Clean initial state)
   const [sessions, setSessions] = useState<SessionItem[]>([
     {
       id: 'session-1',
       tier1: 'global',
-      title: 'Python 3.12 模式匹配语法讨论',
-      tags: ['docs', 'refactor'],
-      messagesCount: 4,
-      totalTokens: 5200,
-      createdAt: Date.now() - 3600000,
-      updatedAt: Date.now() - 1800000
-    },
-    {
-      id: 'session-2',
-      tier1: 'project',
-      projectId: 'proj-1',
-      projectName: 'agent-learning',
-      gitBranch: 'main',
-      title: '重构三栏自适应流体布局',
-      tags: ['feat', 'ui'],
-      messagesCount: 8,
-      totalTokens: 18500,
-      createdAt: Date.now() - 7200000,
+      title: '新的自由会话',
+      tags: ['new'],
+      messagesCount: 0,
+      totalTokens: 0,
+      createdAt: Date.now(),
       updatedAt: Date.now()
-    },
-    {
-      id: 'session-3',
-      tier1: 'project',
-      projectId: 'proj-1',
-      projectName: 'agent-learning',
-      gitBranch: 'main',
-      title: 'GatewayBus.ts 事件防重与重试',
-      tags: ['bug'],
-      messagesCount: 3,
-      totalTokens: 4200,
-      createdAt: Date.now() - 14400000,
-      updatedAt: Date.now() - 7200000
-    },
-    {
-      id: 'session-4',
-      tier1: 'project',
-      projectId: 'proj-2',
-      projectName: 'codemind-sdk',
-      gitBranch: 'dev',
-      title: 'Python AST 语法治具规范定义',
-      tags: ['test'],
-      messagesCount: 2,
-      totalTokens: 3100,
-      createdAt: Date.now() - 28800000,
-      updatedAt: Date.now() - 14400000
     }
   ]);
 
-  // Messages mock
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: 'msg-1',
-      role: 'user',
-      content: '请帮我完成状态管理重构，并为 OptionsCard 增加自定义输入支持。',
-      timestamp: Date.now() - 300000
-    },
-    {
-      id: 'msg-2',
-      role: 'assistant',
-      content: `<think>
-1. 扫描工作区项目 AST 符号依赖关系，确定涉及 SessionItem 与 OptionsCard 数据流。
-2. 评估两种扩展路径：A 方案为纯契约解耦，B 方案为集中式 Store 状态总线。
-3. 推荐 B 方案以获得全局一致性并兼容未来多 Agent 协同。
-</think>
-已针对项目 AST 完成扫描。检测到组件状态扩展需求，有多种架构路径可供选择：`,
-      timestamp: Date.now() - 240000,
-      auditTag: '🤖 自动决策通过 · 已存快照',
-      optionsPayload: {
-        id: 'opt-1',
-        question: '检测到组件状态扩展需求，请选择架构路径：',
-        single_select: true,
-        status: 'pending',
-        allow_custom_input: true,
-        options: [
-          { id: 'extend', label: '扩展现有全局 Store (Recommended)', description: '单例状态源，无额外模板代码', isRecommended: true },
-          { id: 'slice', label: '新建独立子模块 Slice', description: '严格模块隔离，适合大型复杂功能' }
-        ]
-      }
-    }
-  ]);
+  // Messages (Clean empty on initial launch)
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
 
   const activeSession = sessions.find(s => s.id === currentSessionId) || sessions[0];
 

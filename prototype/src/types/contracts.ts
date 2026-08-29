@@ -2511,3 +2511,28 @@ export function resolveDesktopPlatformConfig(platform: DesktopPlatformType, arch
     isSandboxed: true
   };
 }
+
+
+// ============================================================================
+// 24. ZERO-STATE ONBOARDING & REAL DATA CONTRACTS
+// ============================================================================
+
+export function createEmptySession(title: string = '新的自由会话', projectId?: string, projectName?: string): SessionItem {
+  return {
+    id: `session-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+    tier1: projectId ? 'project' : 'global',
+    projectId,
+    projectName,
+    gitBranch: projectId ? 'main' : undefined,
+    title,
+    tags: ['new'],
+    messagesCount: 0,
+    totalTokens: 0,
+    createdAt: Date.now(),
+    updatedAt: Date.now()
+  };
+}
+
+export function isFirstLaunchState(sessions: SessionItem[]): boolean {
+  return sessions.length === 0 || (sessions.length === 1 && sessions[0].messagesCount === 0);
+}
