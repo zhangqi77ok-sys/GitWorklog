@@ -95,6 +95,110 @@ export interface ChatMessageTokens {
   totalTokens: number;
 }
 
+export interface AgentSkillItem {
+  id: string;
+  name: string;
+  category: 'code' | 'test' | 'security' | 'docs' | 'perf' | 'git' | 'database' | 'mcp';
+  icon: string;
+  description: string;
+  promptInstruction: string;
+  enabled: boolean;
+  isCustom?: boolean;
+}
+
+export const INITIAL_AGENT_SKILLS: AgentSkillItem[] = [
+  {
+    id: 'skill-refactor',
+    name: '代码架构重构专家',
+    category: 'code',
+    icon: '⚡',
+    description: '识别代码坏味道、消除循环依赖、重构冗长函数与提取复用积木组件',
+    promptInstruction: '你作为代码架构与重构专家，请针对目标代码进行严格的架构坏味道分析，识别圈复杂度过高与高耦合区域，并给出模块化、单一职责的重构方案与单元测试保障。',
+    enabled: true
+  },
+  {
+    id: 'skill-unit-test',
+    name: '单元测试生成器',
+    category: 'test',
+    icon: '🧪',
+    description: '深入分析边界条件、异常分支并生成高质量 Vitest / Pytest 单元测试',
+    promptInstruction: '你作为严谨的自动化测试专家，请为代码补充完整的单元测试用例，覆盖正常流、边界边界值、空异常与错误拦截，确保断言精确且测试独立。',
+    enabled: true
+  },
+  {
+    id: 'skill-security-audit',
+    name: '安全漏洞与敏感信息审计',
+    category: 'security',
+    icon: '🔍',
+    description: '全面检测硬编码密钥、SQL注入、XSS跨站脚本、反序列化与鉴权缺陷',
+    promptInstruction: '你作为企业级安全审计专家，请全面审查代码中的潜在安全隐患，包括凭据泄露风险、OWASP Top 10 漏洞、不安全系统调用并提供修复补丁。',
+    enabled: true
+  },
+  {
+    id: 'skill-api-docs',
+    name: 'API 与架构文档自动化',
+    category: 'docs',
+    icon: '📝',
+    description: '解析 AST 与接口类型，自动生成标准化 Markdown / OpenAPI 接口规范文档',
+    promptInstruction: '你作为资深技术文档专家，请基于代码中的类型与实现，生成结构严谨、包含请求响应示例与边界说明的生产级 API 与系统架构文档。',
+    enabled: true
+  },
+  {
+    id: 'skill-performance',
+    name: '性能剖析与瓶颈调优',
+    category: 'perf',
+    icon: '🚀',
+    description: '分析前端重渲染、内存泄漏、后端算法时间复杂度与 IO 吞吐瓶颈',
+    promptInstruction: '你作为性能优化与性能剖析专家，请分析代码中的性能瓶颈（如不必要渲染、O(N^2) 嵌套循环、内存泄漏），并给出极致优化的修改方案。',
+    enabled: true
+  },
+  {
+    id: 'skill-db-migration',
+    name: '数据库变更与索引专家',
+    category: 'database',
+    icon: '🗄️',
+    description: '设计无锁 DDL 迁移脚本、SQL 查询计划 EXPLAIN 分析与联合索引调优',
+    promptInstruction: '你作为高并发数据库架构师，请评估数据库变更方案，编写支持向后兼容且带安全回滚机制的 DDL/DML 脚本，并针对慢查询优化索引。',
+    enabled: true
+  },
+  {
+    id: 'skill-git-pr',
+    name: 'Git 语义提交与 PR 专家',
+    category: 'git',
+    icon: '🛠️',
+    description: '自动分析变更集并生成 Conventional Commits 语义化提交与 PR 摘要',
+    promptInstruction: '你作为开源工程规范专家，请分析当前变更内容，生成符合 Conventional Commits 规范的语义化 Commit 信息与详尽的 Pull Request 描述。',
+    enabled: true
+  },
+  {
+    id: 'skill-mcp-tool',
+    name: 'MCP 工具调度助手',
+    category: 'mcp',
+    icon: '🔌',
+    description: '智能解析并组装 Model Context Protocol 工具调用链与上下文资源',
+    promptInstruction: '你作为 MCP (Model Context Protocol) 调度助手，请优先将任务拆解为标准 MCP Tool 调用，并验证各工具链参数与返回数据。',
+    enabled: true
+  }
+];
+
+export function loadSavedSkills(): AgentSkillItem[] {
+  try {
+    const saved = localStorage.getItem('codemind_agent_skills');
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch (e) {}
+  return INITIAL_AGENT_SKILLS;
+}
+
+export function saveSkillsToStorage(skills: AgentSkillItem[]): void {
+  try {
+    localStorage.setItem('codemind_agent_skills', JSON.stringify(skills));
+    saveToDiskStorageAsync('codemind_agent_skills', skills);
+  } catch (e) {}
+}
+
 export interface QueuedPromptItem {
   id: string;
   text: string;

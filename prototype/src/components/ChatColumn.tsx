@@ -43,6 +43,9 @@ import {
 } from 'lucide-react';
 import {
   SessionItem,
+  AgentSkillItem,
+  INITIAL_AGENT_SKILLS,
+  loadSavedSkills,
   MODEL_ROUTING_STRATEGIES,
   ModelRoutingStrategy,
   RoutingStrategyId,
@@ -152,37 +155,17 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
   const activeRules = getActiveRules(INITIAL_RULES);
 
   // DX & PM Power States: Mentions, Changeset, Pinned Files
-  const [showMentionMenu, setShowMentionMenu] = useState(false);
-  const [mentionQuery, setMentionQuery] = useState('');
-  const [selectedMentions, setSelectedMentions] = useState<MentionContextItem[]>([]);
-  // Real Workspace Mentions State
-  const [workspaceMentionItems, setWorkspaceMentionItems] = useState<MentionContextItem[]>([]);
+  const [showSkillMenu, setShowSkillMenu] = useState(false);
+  const [skillQuery, setSkillQuery] = useState('');
+  const [activeSkillCategory, setActiveSkillCategory] = useState<string>('all');
+  const [agentSkills, setAgentSkills] = useState<AgentSkillItem[]>(loadSavedSkills());
+  const [selectedSkills, setSelectedSkills] = useState<AgentSkillItem[]>([]);
   const [availableModelList, setAvailableModelList] = useState<AIModelOption[]>(getAllAvailableModels());
   const [activeProviderTab, setActiveProviderTab] = useState<string>('opencode');
   const [modelSearchQuery, setModelSearchQuery] = useState('');
   const [isSyncingModels, setIsSyncingModels] = useState(false);
 
-  React.useEffect(() => {
-    let isMounted = true;
-    const loadMentions = async () => {
-      const projPath = session?.projectPath;
-      if (!projPath) return;
-      try {
-        const res = await fetch(`/api/fs/tree?path=${encodeURIComponent(projPath)}`);
-        const data = await res.json();
-        if (isMounted && data.success && Array.isArray(data.tree)) {
-          const files = flattenFileTreeToMentions(data.tree);
-          const specials: MentionContextItem[] = [
-            { id: 'm-workspace-tree', type: 'file', name: '@工程目录全貌', path: projPath, detail: '扫描并向 Agent 注入完整工程目录结构与依赖拓扑' },
-            { id: 'm-git-diff', type: 'git-diff', name: '@git-diff', detail: '注入当前 Git 未暂存代码变更' }
-          ];
-          setWorkspaceMentionItems([...specials, ...files]);
-        }
-      } catch (e) {}
-    };
-    loadMentions();
-    return () => { isMounted = false; };
-  }, [session?.projectPath]);
+
 
   const handleSyncOnlineModels = async () => {
     setIsSyncingModels(true);
@@ -308,9 +291,11 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
 
   const handleSend = () => {
     if (!inputText.trim()) return;
-    onSendMessage(inputText, selectedMentions);
+    const skillContext = selectedSkills.map(s => `[已激活技能 @${s.name}]: ${s.promptInstruction}`).join('\n');
+    const fullPrompt = skillContext ? `${skillContext}\n\n${inputText}` : inputText;
+    onSendMessage(fullPrompt);
     setInputText('');
-    setSelectedMentions([]);
+    setSelectedSkills([]);
   };
 
   return (
@@ -669,83 +654,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                 </span>
               )}
 
-              {/* Action Buttons: Copy, Share, Fork */}
-              <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <button
-                  onClick={() => {
-                    navigator.clipboard.writeText(msg.content);
-                    setCopiedMsgId(msg.id);
-                    setTimeout(() => setCopiedMsgId(null), 2000);
-                  }}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '3px',
-                    padding: '2px 6px',
-                    borderRadius: '3px',
-                    background: 'var(--bg-base)',
-                    border: '1px solid var(--border-subtle)',
-                    color: copiedMsgId === msg.id ? '#16A34A' : 'var(--text-muted)',
-                    fontSize: '10px',
-                    cursor: 'pointer'
-                  }}
-                  title="复制回答文本到剪贴板"
-                >
-                  {copiedMsgId === msg.id ? <Check size={10} color="#16A34A" /> : <Copy size={10} />}
-                  <span>{copiedMsgId === msg.id ? '已复制' : '复制'}</span>
-                </button>
 
-                <button
-                  onClick={() => {
-                    const blob = new Blob([msg.content], { type: 'text/markdown;charset=utf-8;' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `codemind-${msg.id}.md`;
-                    a.click();
-                    URL.revokeObjectURL(url);
-                  }}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '3px',
-                    padding: '2px 6px',
-                    borderRadius: '3px',
-                    background: 'var(--bg-base)',
-                    border: '1px solid var(--border-subtle)',
-                    color: 'var(--text-muted)',
-                    fontSize: '10px',
-                    cursor: 'pointer'
-                  }}
-                  title="导出为 Markdown 文件"
-                >
-                  <Share2 size={10} />
-                  <span>导出</span>
-                </button>
-
-                {msg.role === 'assistant' && onForkMessage && (
-                  <button
-                    onClick={() => onForkMessage(msg.id)}
-                    title="Harness 事件溯源: 从该思考节点分叉出独立会话分支"
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '3px',
-                      padding: '2px 7px',
-                      borderRadius: '3px',
-                      background: 'var(--bg-base)',
-                      border: '1px solid var(--border-subtle)',
-                      color: 'var(--text-secondary)',
-                      fontSize: '10px',
-                      fontWeight: 600,
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <GitBranch size={10} color="var(--accent)" />
-                    <span>分叉分支</span>
-                  </button>
-                )}
-              </div>
             </div>
 
             {/* Message Body with Tag Folding, ThinkingBlock & Tool Calls */}
@@ -833,6 +742,93 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                       />
                     </div>
                   )}
+
+                  {/* Bottom-Left Message Action Toolbar: Copy, Export, Fork */}
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    marginTop: '2px',
+                    alignSelf: 'flex-start'
+                  }}>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(msg.content);
+                        setCopiedMsgId(msg.id);
+                        setTimeout(() => setCopiedMsgId(null), 2000);
+                      }}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '3px',
+                        padding: '3px 8px',
+                        borderRadius: '4px',
+                        background: 'var(--bg-surface)',
+                        border: '1px solid var(--border-subtle)',
+                        color: copiedMsgId === msg.id ? '#16A34A' : 'var(--text-muted)',
+                        fontSize: '10.5px',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease'
+                      }}
+                      title="复制回答内容"
+                    >
+                      {copiedMsgId === msg.id ? <Check size={11} color="#16A34A" /> : <Copy size={11} />}
+                      <span>{copiedMsgId === msg.id ? '已复制' : '复制'}</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        const blob = new Blob([msg.content], { type: 'text/markdown;charset=utf-8;' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `codemind-${msg.id}.md`;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                      }}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '3px',
+                        padding: '3px 8px',
+                        borderRadius: '4px',
+                        background: 'var(--bg-surface)',
+                        border: '1px solid var(--border-subtle)',
+                        color: 'var(--text-muted)',
+                        fontSize: '10.5px',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease'
+                      }}
+                      title="导出为 Markdown 文件"
+                    >
+                      <Share2 size={11} />
+                      <span>导出</span>
+                    </button>
+
+                    {msg.role === 'assistant' && onForkMessage && (
+                      <button
+                        onClick={() => onForkMessage(msg.id)}
+                        title="从该回答节点分叉出独立会话分支"
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '3px',
+                          padding: '3px 8px',
+                          borderRadius: '4px',
+                          background: 'var(--bg-surface)',
+                          border: '1px solid var(--border-subtle)',
+                          color: 'var(--accent)',
+                          fontSize: '10.5px',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        <GitBranch size={11} color="var(--accent)" />
+                        <span>分叉分支</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
               );
             })()}
@@ -1218,43 +1214,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
             </div>
           )}
 
-          {/* Active @ Mention Context Badges */}
-          {selectedMentions.length > 0 && (
-            <div style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: '6px',
-              padding: '6px 12px 2px 12px',
-              background: 'rgba(37, 99, 235, 0.04)',
-              borderBottom: '1px solid var(--border-subtle)'
-            }}>
-              {selectedMentions.map(m => (
-                <div
-                  key={m.id}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    padding: '2px 8px',
-                    borderRadius: '12px',
-                    background: 'var(--bg-surface-elevated)',
-                    border: '1px solid #2563EB',
-                    color: '#2563EB',
-                    fontSize: '10.5px',
-                    fontWeight: 600
-                  }}
-                >
-                  <AtSign size={11} />
-                  <span>{m.name}</span>
-                  <X
-                    size={11}
-                    style={{ cursor: 'pointer', marginLeft: '2px' }}
-                    onClick={() => setSelectedMentions(prev => prev.filter(item => item.id !== m.id))}
-                  />
-                </div>
-              ))}
-            </div>
-          )}
+
 
           {/* 2. BORDERLESS AUTO-EXPANDING TEXTAREA */}
           <textarea
@@ -1406,7 +1366,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                   onClick={() => {
                     setShowModelMenu(!showModelMenu);
                     setShowModeMenu(false);
-                    setShowMentionMenu(false);
+                    setShowSkillMenu(false);
                     setShowRulesPopover(false);
                   }}
                   style={{
@@ -1721,11 +1681,11 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                 )}
               </div>
 
-              {/* @ Mention Popover Trigger Button */}
+              {/* @ Agent Skills Reference Trigger Button */}
               <div style={{ position: 'relative' }}>
                 <button
                   onClick={() => {
-                    setShowMentionMenu(!showMentionMenu);
+                    setShowSkillMenu(!showSkillMenu);
                     setShowModeMenu(false);
                     setShowModelMenu(false);
                     setShowRulesPopover(false);
@@ -1733,93 +1693,119 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                   style={{
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '3px',
-                    padding: '2px 8px',
+                    gap: '4px',
+                    padding: '3px 8px',
                     borderRadius: '4px',
-                    background: showMentionMenu ? 'rgba(37, 99, 235, 0.12)' : 'var(--bg-base)',
-                    border: showMentionMenu ? '1px solid #2563EB' : '1px solid var(--border-subtle)',
-                    color: showMentionMenu ? '#2563EB' : 'var(--text-secondary)',
+                    background: selectedSkills.length > 0 ? 'var(--accent-subtle)' : 'var(--bg-base)',
+                    border: selectedSkills.length > 0 ? '1px solid var(--accent)' : '1px solid var(--border-subtle)',
                     fontSize: '11px',
-                    fontWeight: 600,
-                    cursor: 'pointer'
+                    cursor: 'pointer',
+                    color: selectedSkills.length > 0 ? 'var(--accent)' : 'var(--text-secondary)'
                   }}
-                  title="@ 符号即时索引文件、AST 符号与 Git Diff"
+                  title="引用应用配置的 Agent 专精能力与技能 (Skills)"
                 >
-                  <AtSign size={11} />
-                  <span>@引用</span>
+                  <Sparkles size={12} color="var(--accent)" />
+                  <span>{selectedSkills.length > 0 ? `已激活 ${selectedSkills.length} 个技能` : '@ 技能引用'}</span>
                 </button>
 
-                {/* @ Mention Floating Dropdown */}
-                {showMentionMenu && (
+                {showSkillMenu && (
                   <div style={{
                     position: 'absolute',
-                    bottom: '30px',
-                    left: '0',
-                    width: '320px',
+                    bottom: '36px',
+                    left: 0,
+                    width: '460px',
+                    maxHeight: '360px',
                     background: 'var(--bg-surface-elevated)',
                     border: '1px solid var(--border-strong)',
-                    borderRadius: '6px',
-                    boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
-                    padding: '6px',
-                    zIndex: 100
+                    borderRadius: '8px',
+                    boxShadow: '0 12px 32px rgba(0,0,0,0.24)',
+                    padding: '8px',
+                    zIndex: 150,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    overflow: 'hidden'
                   }}>
-                    <div style={{ fontSize: '10px', color: 'var(--text-muted)', padding: '2px 8px 6px', fontWeight: 600, borderBottom: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span>@ 即时上下文引用 (工程文件/目录/Git)</span>
-                      <span style={{ color: 'var(--accent)' }}>{workspaceMentionItems.length > 0 ? `${workspaceMentionItems.length} 个文件` : '默认预置'}</span>
+                    {/* Header */}
+                    <div style={{ fontSize: '10.5px', color: 'var(--text-muted)', padding: '2px 6px 6px', fontWeight: 700, borderBottom: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <Sparkles size={12} color="var(--accent)" />
+                        <span style={{ color: 'var(--text-strong)' }}>Agent 专精能力与技能库 (Skills)</span>
+                      </div>
+                      <span style={{ color: 'var(--accent)', fontWeight: 600 }}>{agentSkills.length} 个可用技能</span>
                     </div>
-                    <div style={{ padding: '4px 6px' }}>
-                      <input
-                        type="text"
-                        placeholder="搜索文件或符号 (例如 package.json, contracts...)"
-                        value={mentionQuery}
-                        onChange={e => setMentionQuery(e.target.value)}
-                        autoFocus
-                        style={{
-                          width: '100%',
-                          padding: '4px 8px',
-                          fontSize: '11px',
-                          borderRadius: '4px',
-                          border: '1px solid var(--border-strong)',
-                          background: 'var(--bg-base)',
-                          color: 'var(--text-primary)',
-                          outline: 'none'
-                        }}
-                      />
-                    </div>
-                    <div style={{ maxHeight: '200px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '2px', marginTop: '4px' }}>
-                      {(workspaceMentionItems.length > 0 ? workspaceMentionItems.filter(i => !mentionQuery || i.name.toLowerCase().includes(mentionQuery.toLowerCase()) || (i.path && i.path.toLowerCase().includes(mentionQuery.toLowerCase()))) : searchMentionItems(mentionQuery)).slice(0, 15).map(item => (
-                        <div
-                          key={item.id}
-                          onClick={() => {
-                            if (!selectedMentions.some(m => m.id === item.id)) {
-                              setSelectedMentions(prev => [...prev, item]);
-                            }
-                            setShowMentionMenu(false);
-                          }}
+
+                    {/* Search Input */}
+                    <div style={{ padding: '6px 2px 4px' }}>
+                      <div style={{ position: 'relative' }}>
+                        <Search size={12} style={{ position: 'absolute', left: '8px', top: '7px', color: 'var(--text-muted)' }} />
+                        <input
+                          type="text"
+                          placeholder="搜索专精技能 (如: 架构重构, 单测生成, 安全审计, 性能调优)..."
+                          value={skillQuery}
+                          onChange={e => setSkillQuery(e.target.value)}
+                          autoFocus
                           style={{
-                            padding: '5px 8px',
+                            width: '100%',
+                            padding: '4px 8px 4px 26px',
+                            fontSize: '11px',
                             borderRadius: '4px',
-                            background: 'transparent',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            fontSize: '11px'
+                            border: '1px solid var(--border-subtle)',
+                            background: 'var(--bg-base)',
+                            color: 'var(--text-primary)',
+                            outline: 'none'
                           }}
-                        >
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            {item.type === 'file' && <FileCode size={12} color="var(--accent)" />}
-                            {item.type === 'symbol' && <Sparkles size={12} color="#9333EA" />}
-                            {item.type === 'git-diff' && <FolderGit2 size={12} color="#10B981" />}
-                            {item.type === 'terminal' && <Terminal size={12} color="#2563EB" />}
-                            <div>
-                              <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{item.name}</div>
-                              <div style={{ fontSize: '9.5px', color: 'var(--text-muted)' }}>{item.detail}</div>
+                        />
+                      </div>
+                    </div>
+
+                    {/* Skill List */}
+                    <div style={{ flex: 1, maxHeight: '240px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '4px' }}>
+                      {agentSkills
+                        .filter(s => !skillQuery || s.name.toLowerCase().includes(skillQuery.toLowerCase()) || s.description.toLowerCase().includes(skillQuery.toLowerCase()))
+                        .map(skill => {
+                          const isSelected = selectedSkills.some(s => s.id === skill.id);
+                          return (
+                            <div
+                              key={skill.id}
+                              onClick={() => {
+                                if (isSelected) {
+                                  setSelectedSkills(prev => prev.filter(s => s.id !== skill.id));
+                                } else {
+                                  setSelectedSkills(prev => [...prev, skill]);
+                                }
+                              }}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                padding: '6px 10px',
+                                borderRadius: '6px',
+                                background: isSelected ? 'var(--accent-subtle)' : 'var(--bg-surface)',
+                                border: isSelected ? '1px solid var(--accent)' : '1px solid var(--border-subtle)',
+                                cursor: 'pointer',
+                                transition: 'all 0.12s ease'
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
+                                <span style={{ fontSize: '15px' }}>{skill.icon}</span>
+                                <div>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <span style={{ fontWeight: 700, fontSize: '11.5px', color: isSelected ? 'var(--accent)' : 'var(--text-strong)' }}>
+                                      @{skill.name}
+                                    </span>
+                                    <span style={{ fontSize: '9px', padding: '0 4px', borderRadius: '3px', background: 'rgba(0,0,0,0.06)', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                                      {skill.category}
+                                    </span>
+                                  </div>
+                                  <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                                    {skill.description}
+                                  </div>
+                                </div>
+                              </div>
+                              {isSelected && <Check size={14} color="var(--accent)" />}
                             </div>
-                          </div>
-                          <span style={{ fontSize: '9px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>{item.type}</span>
-                        </div>
-                      ))}
+                          );
+                        })}
                     </div>
                   </div>
                 )}

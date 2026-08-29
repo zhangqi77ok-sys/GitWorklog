@@ -996,3 +996,22 @@ To github.com:zhangqi77ok-sys/agent-learning.git
 2. **第二层：物理磁盘 JSON 存储引擎 (`/api/storage`)**：
    - 会话索引 (`codemind_sessions.json`)、对话消息记录 (`codemind_session_messages.json`)、工作区工程 (`codemind_projects.json`) 实时物理落盘到 `%LOCALAPPDATA%\CodeMind-Hub\storage\`；
    - 每次程序启动或版本覆盖升级时，自动从物理磁盘热恢复全量数据，彻底解决跨版本历史记录丢失问题。
+
+### 12.6 问答卡片左下角操作栏 (Bottom-Left Action Toolbar)
+1. **人体工程学重构**：将原先位于消息右上角散落的 `[ 📋 复制 ]`、`[ 🔗 导出 ]`、`[ 🔀 分叉分支 ]` 统一迁移至**消息内容卡片的左下角**；
+2. **紧凑交互体验**：提供 `3px 8px` 圆角胶囊按钮与即时复制成功反馈（`✓ 已复制` 高亮）。
+
+### 12.7 Agent 专精能力与技能引用体系 (`@ 技能引用` / Skills Registry)
+1. **技能与文件职责严格解耦**：
+   - 📎 **附件按钮**：专用于上传和注入本地工程文件、截图与 Diff；
+   - ✨ **`@ 技能引用` 按钮**：专用于向 Agent 注入配置好的**专精能力与技能工具包 (Agent Skills)**。
+2. **预置八大高阶开发技能 (INITIAL_AGENT_SKILLS)**：
+   - ⚡ `@代码架构重构专家`：识别坏味道、消除循环依赖、重构函数；
+   - 🧪 `@单元测试生成器`：深入边界值与异常分支生成 Vitest/Pytest；
+   - 🔍 `@安全漏洞与敏感信息审计`：静态扫描密钥泄露、SQL 注入与 OWASP 漏洞；
+   - 📝 `@API与架构文档自动化`：解析 AST 生成标准化 OpenAPI / Markdown 文档；
+   - 🚀 `@性能剖析与瓶颈调优`：剖析前端重渲染、内存泄漏与算法复杂度；
+   - 🗄️ `@数据库变更与索引专家`：设计无锁 DDL、执行计划 EXPLAIN 分析；
+   - 🛠️ `@Git语义提交与PR专家`：生成 Conventional Commits 与 PR 说明；
+   - 🔌 `@MCP工具调度助手`：标准 Model Context Protocol 工具调用链组装。
+3. **技能注入流水线**：选中技能后生成醒目胶囊标签，提问时自动将各技能专精 Prompt 注入大模型上下文，驱动 Agent 以专家身份执行任务。
