@@ -50,6 +50,15 @@
    - **L0 恒定核心层**：项目根规则与 Spec 契约永远保真；
    - **L1 浓缩事实层**：历史对话滚动浓缩为条目化决策事实（Facts）；
    - **L2 活跃滚动层**：仅最后 2 轮保持原始明细，杜绝长会话 Token 爆炸与失忆。
+6. **会话级全链路 Token 实时计量与成本看板 (Session Token & Cost Telemetry HUD)**：
+   - **多维实时统计**：单轮与全会话累积跟踪 `Prompt Tokens` (输入)、`Completion Tokens` (输出)、`Cache Read/Write Tokens` (KV 缓存命中) 及预估花费 ($ / ¥)；
+   - **标题栏常驻微型监控胶囊**：在顶部标题栏右侧常驻显示：
+     `[ 📊 14.8k tokens · KV Cache 89.2% · 预估 $0.024 ]`；
+   - **上下文窗口安全水位计 (Context Window Gauge)**：
+     直观展示当前上下文占用率（如 42k / 128k = 32.8%），通过绿/黄/红三色水位预警，防止在毫无察觉时触发上下文溢出；
+   - **会话历史树副标题标注**：在左侧会话列表每一项下小字注明已耗用总量（例如：`feat(auth) · 12 msgs · 18.5k tokens`），使成本完全可视化；
+   - **单任务完结审计卡片**：每轮 Plan/Act 任务执行完毕后，总结卡片底部附带本次微型账单（耗时、Token、缓存节省量）。
+
 
 ### 1.4 安全系统底座 (Security & Reversible Substrate)
 - **Git 影子快照与秒级回退**：任何文件写入与高危指令前自动打快照（`[CodeMind Checkpoint]`），界面提供常驻 **`↩️ 影子回退`** 按钮，点击秒级 `git reset --hard`；
@@ -147,6 +156,7 @@
 | **P0 (Must-Have)** | **GatewayBus 核心总线** | 支持多渠道（OpenCode、Claude、Codex、百炼、Ollama）秒级热切换与子线注册 |
 | **P0 (Must-Have)** | **安全底座 (Git 影子快照)** | 写入操作前无条件快照，界面常驻一键秒级影子回退 (`git reset --hard`) |
 | **P0 (Must-Have)** | **极致省 Token 引擎** | 确定性 KV Cache 前缀冻结、AST 骨架裁剪 (省90%)、原子精准 Diff Patch |
+| **P0 (Must-Have)** | **会话 Token 实时计量看板** | 标题栏与会话树常驻展示总消耗 Token、KV Cache 命中率、水位计与成本估算 |
 | **P0 (Must-Have)** | **Plan/Act 双模式切换** | 输入框上方一键切换：Plan 模式只分析不写盘，Act 模式可落地执行 |
 | **P0 (Must-Have)** | **人机动态选择卡片 (OptionsCard)** | 遇到分叉主动挂起，支持单选/多选/自定义输入补充并即时唤醒 |
 | **P0 (Must-Have)** | **双轨权限治理 (PermissionPolicy)** | 支持“逐次人工审核”与“智能自主决策”一键切换，自带影子快照兜底 |

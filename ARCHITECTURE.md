@@ -34,6 +34,7 @@ graph TB
         subgraph Extensions ["扩展支持"]
             McpSubline["McpSubline (Model Context Protocol)"]
             AuditSubline["AuditLogSubline (Token 计量与耗时审计)"]
+            TokenMeterHUD["TokenMeterHUD (会话总消耗/KV命中率/窗口水位计/成本估算)"]
         end
     end
 
