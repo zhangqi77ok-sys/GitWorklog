@@ -3,6 +3,8 @@ import { MarkdownCard } from './MarkdownCard';
 import {
   Send,
   Loader2,
+  Search,
+  RefreshCw,
   Coins,
   Copy,
   Share2,
@@ -137,6 +139,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
   // Real Workspace Mentions State
   const [workspaceMentionItems, setWorkspaceMentionItems] = useState<MentionContextItem[]>([]);
   const [availableModelList, setAvailableModelList] = useState<AIModelOption[]>(getAllAvailableModels());
+  const [activeProviderTab, setActiveProviderTab] = useState<string>('opencode');
   const [modelSearchQuery, setModelSearchQuery] = useState('');
   const [isSyncingModels, setIsSyncingModels] = useState(false);
 
@@ -1432,141 +1435,268 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                 {showModelMenu && (
                   <div style={{
                     position: 'absolute',
-                    bottom: '30px',
+                    bottom: '36px',
                     left: 0,
-                    width: '300px',
+                    width: '560px',
+                    height: '380px',
                     background: 'var(--bg-surface-elevated)',
                     border: '1px solid var(--border-strong)',
-                    borderRadius: '6px',
-                    boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
-                    padding: '8px',
-                    zIndex: 100,
+                    borderRadius: '8px',
+                    boxShadow: '0 12px 36px rgba(0,0,0,0.28)',
+                    zIndex: 150,
                     display: 'flex',
                     flexDirection: 'column',
-                    gap: '4px',
-                    maxHeight: '380px',
-                    overflowY: 'auto'
+                    overflow: 'hidden'
                   }}>
-                    {/* Section 1: Direct Model Selection */}
-                    <div style={{ fontSize: '10px', color: 'var(--text-muted)', padding: '2px 6px', fontWeight: 700, borderBottom: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span>🌟 选择指定大模型 ({availableModelList.length} 个可用)</span>
+                    {/* Top Bar: Search Input & Sync Action */}
+                    <div style={{
+                      padding: '8px 12px',
+                      background: 'var(--bg-surface)',
+                      borderBottom: '1px solid var(--border-subtle)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px'
+                    }}>
+                      <div style={{ position: 'relative', flex: 1 }}>
+                        <Search size={13} style={{ position: 'absolute', left: '8px', top: '7px', color: 'var(--text-muted)' }} />
+                        <input
+                          type="text"
+                          placeholder="过滤模型名称、厂商或 ID (例如: mimo, sonnet, r1)..."
+                          value={modelSearchQuery}
+                          onChange={e => setModelSearchQuery(e.target.value)}
+                          style={{
+                            width: '100%',
+                            padding: '4px 8px 4px 26px',
+                            fontSize: '11px',
+                            borderRadius: '4px',
+                            border: '1px solid var(--border-subtle)',
+                            background: 'var(--bg-base)',
+                            color: 'var(--text-primary)',
+                            outline: 'none'
+                          }}
+                          autoFocus
+                        />
+                      </div>
                       <button
                         onClick={e => { e.stopPropagation(); handleSyncOnlineModels(); }}
                         style={{
-                          padding: '1px 6px',
-                          borderRadius: '3px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          padding: '4px 8px',
+                          borderRadius: '4px',
                           background: 'var(--accent)',
                           color: '#FFF',
                           border: 'none',
-                          fontSize: '9.5px',
+                          fontSize: '10.5px',
                           fontWeight: 600,
-                          cursor: 'pointer'
+                          cursor: 'pointer',
+                          whiteSpace: 'nowrap'
                         }}
-                        title="立即从网关实时拉取所有 47+ 个在线模型"
+                        title="立即从网关实时拉取所有在线模型"
                       >
-                        {isSyncingModels ? '同步中...' : '🔄 同步网关模型'}
+                        <RefreshCw size={11} className={isSyncingModels ? 'animate-spin' : ''} />
+                        <span>{isSyncingModels ? '同步中...' : '同步网关'}</span>
                       </button>
                     </div>
 
-                    <div style={{ padding: '2px 4px 4px' }}>
-                      <input
-                        type="text"
-                        placeholder="过滤模型名称或 ID..."
-                        value={modelSearchQuery}
-                        onChange={e => setModelSearchQuery(e.target.value)}
-                        style={{
-                          width: '100%',
-                          padding: '3px 6px',
-                          fontSize: '10.5px',
-                          borderRadius: '3px',
-                          border: '1px solid var(--border-subtle)',
-                          background: 'var(--bg-base)',
-                          color: 'var(--text-primary)',
-                          outline: 'none'
-                        }}
-                      />
-                    </div>
-
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', maxHeight: '220px', overflowY: 'auto' }}>
-                      {availableModelList
-                        .filter(m => !modelSearchQuery || m.name.toLowerCase().includes(modelSearchQuery.toLowerCase()) || m.id.toLowerCase().includes(modelSearchQuery.toLowerCase()))
-                        .map(m => {
-                        const isSelected = !isAutoRouting && currentModel.id === m.id;
-                        return (
-                          <div
-                            key={m.id}
-                            onClick={() => {
-                              onSelectModel(m);
-                              setIsAutoRouting(false);
-                              setShowModelMenu(false);
-                            }}
-                            style={{
-                              padding: '5px 8px',
-                              borderRadius: '4px',
-                              background: isSelected ? 'var(--accent-subtle)' : 'transparent',
-                              border: isSelected ? '1px solid rgba(217, 107, 39, 0.3)' : '1px solid transparent',
-                              cursor: 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'space-between',
-                              fontSize: '11px'
-                            }}
-                          >
-                            <div>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                <span style={{ fontWeight: 600, color: isSelected ? 'var(--accent)' : 'var(--text-primary)' }}>{m.name}</span>
-                                {m.badge && (
-                                  <span style={{ fontSize: '9px', padding: '0 3px', borderRadius: '3px', background: 'rgba(0,0,0,0.05)', color: 'var(--text-muted)' }}>
-                                    {m.badge}
-                                  </span>
-                                )}
+                    {/* Master-Detail Body: Left (Providers) + Right (Models) */}
+                    <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+                      {/* Left Column: Model Providers (模型厂商) */}
+                      <div style={{
+                        width: '170px',
+                        background: 'var(--bg-surface)',
+                        borderRight: '1px solid var(--border-subtle)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        overflowY: 'auto',
+                        padding: '4px'
+                      }}>
+                        <div style={{ fontSize: '10px', color: 'var(--text-muted)', padding: '4px 6px', fontWeight: 700 }}>
+                          模型服务商 / 厂商
+                        </div>
+                        {[
+                          { id: 'opencode', name: 'OpenCode (Zen 官方)', icon: '⚡', count: availableModelList.filter(m => m.id.includes('mimo') || m.id.includes('nemotron') || m.id.includes('hy3') || m.id.includes('ling') || m.name.includes('OpenCode')).length || 7 },
+                          { id: 'deepseek', name: 'DeepSeek / 星海', icon: '🔵', count: availableModelList.filter(m => m.provider === 'DeepSeek' && !m.name.includes('OpenCode')).length || 4 },
+                          { id: 'anthropic', name: 'Anthropic (Claude)', icon: '🟣', count: availableModelList.filter(m => m.provider === 'Anthropic' || m.id.includes('claude')).length || 3 },
+                          { id: 'openai', name: 'OpenAI (GPT 系列)', icon: '🟢', count: availableModelList.filter(m => m.provider === 'OpenAI' || m.id.includes('gpt')).length || 4 },
+                          { id: 'local', name: '本地 Ollama (离线)', icon: '💻', count: 1 },
+                          { id: 'auto-router', name: '智能自适应路由', icon: '🧠', count: 4 }
+                        ].map(prov => {
+                          const isActive = activeProviderTab === prov.id;
+                          return (
+                            <div
+                              key={prov.id}
+                              onClick={() => setActiveProviderTab(prov.id)}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                padding: '6px 8px',
+                                borderRadius: '4px',
+                                margin: '1px 0',
+                                cursor: 'pointer',
+                                background: isActive ? 'var(--accent-subtle)' : 'transparent',
+                                borderLeft: isActive ? '3px solid var(--accent)' : '3px solid transparent',
+                                fontSize: '11px',
+                                fontWeight: isActive ? 700 : 500,
+                                color: isActive ? 'var(--accent)' : 'var(--text-primary)'
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '5px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                <span>{prov.icon}</span>
+                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{prov.name}</span>
                               </div>
-                              <div style={{ fontSize: '9.5px', color: 'var(--text-muted)', marginTop: '1px' }}>
-                                {m.provider} · {Math.round(m.contextLimit / 1000)}k · {m.description}
-                              </div>
+                              <span style={{
+                                fontSize: '9px',
+                                padding: '1px 4px',
+                                borderRadius: '8px',
+                                background: isActive ? 'var(--accent)' : 'var(--border-subtle)',
+                                color: isActive ? '#FFF' : 'var(--text-muted)'
+                              }}>
+                                {prov.count}
+                              </span>
                             </div>
-                            {isSelected && <Check size={12} color="var(--accent)" />}
-                          </div>
-                        );
-                      })}
-                    </div>
+                          );
+                        })}
+                      </div>
 
-                    {/* Section 2: Intent-Driven Auto Router */}
-                    <div style={{ fontSize: '10px', color: 'var(--text-muted)', padding: '6px 6px 2px', fontWeight: 700, borderTop: '1px solid var(--border-subtle)', marginTop: '4px' }}>
-                      🧠 意图驱动智能自适应调度
-                    </div>
-
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                      {MODEL_ROUTING_STRATEGIES.map(st => {
-                        const isSelected = isAutoRouting && routingStrategy === st.id;
-                        return (
-                          <div
-                            key={st.id}
-                            onClick={() => {
-                              setRoutingStrategy(st.id);
-                              setIsAutoRouting(true);
-                              setShowModelMenu(false);
-                            }}
-                            style={{
-                              padding: '5px 8px',
-                              borderRadius: '4px',
-                              background: isSelected ? 'var(--accent-subtle)' : 'transparent',
-                              border: isSelected ? '1px solid rgba(217, 107, 39, 0.3)' : '1px solid transparent',
-                              cursor: 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'space-between',
-                              fontSize: '11px'
-                            }}
-                          >
-                            <div>
-                              <div style={{ fontWeight: 600, color: isSelected ? 'var(--accent)' : 'var(--text-primary)' }}>{st.name}</div>
-                              <div style={{ fontSize: '9.5px', color: 'var(--text-muted)' }}>{st.desc}</div>
+                      {/* Right Column: Model List for Selected Provider */}
+                      <div style={{ flex: 1, overflowY: 'auto', padding: '8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        {activeProviderTab === 'auto-router' ? (
+                          <>
+                            <div style={{ fontSize: '10.5px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '4px' }}>
+                              🧠 意图驱动智能自适应调度模式
                             </div>
-                            {isSelected && <Check size={12} color="var(--accent)" />}
-                          </div>
-                        );
-                      })}
+                            {MODEL_ROUTING_STRATEGIES.map(st => {
+                              const isSelected = isAutoRouting && routingStrategy === st.id;
+                              return (
+                                <div
+                                  key={st.id}
+                                  onClick={() => {
+                                    setRoutingStrategy(st.id);
+                                    setIsAutoRouting(true);
+                                    setShowModelMenu(false);
+                                  }}
+                                  style={{
+                                    padding: '7px 10px',
+                                    borderRadius: '6px',
+                                    background: isSelected ? 'var(--accent-subtle)' : 'var(--bg-surface)',
+                                    border: isSelected ? '1px solid var(--accent)' : '1px solid var(--border-subtle)',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    transition: 'all 0.15s ease'
+                                  }}
+                                >
+                                  <div>
+                                    <div style={{ fontWeight: 700, fontSize: '11.5px', color: isSelected ? 'var(--accent)' : 'var(--text-strong)' }}>
+                                      {st.name}
+                                    </div>
+                                    <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                                      {st.desc}
+                                    </div>
+                                  </div>
+                                  {isSelected && <Check size={14} color="var(--accent)" />}
+                                </div>
+                              );
+                            })}
+                          </>
+                        ) : (
+                          <>
+                            <div style={{ fontSize: '10.5px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '4px', display: 'flex', justifyContent: 'space-between' }}>
+                              <span>
+                                {activeProviderTab === 'opencode' && '⚡ OpenCode Zen 官方网关模型'}
+                                {activeProviderTab === 'deepseek' && '🔵 DeepSeek / 星海网关模型'}
+                                {activeProviderTab === 'anthropic' && '🟣 Anthropic Claude 系列模型'}
+                                {activeProviderTab === 'openai' && '🟢 OpenAI GPT 系列模型'}
+                                {activeProviderTab === 'local' && '💻 本地 Ollama 离线模型'}
+                              </span>
+                              <span>共 {
+                                availableModelList.filter(m => {
+                                  if (modelSearchQuery) {
+                                    return m.name.toLowerCase().includes(modelSearchQuery.toLowerCase()) || m.id.toLowerCase().includes(modelSearchQuery.toLowerCase());
+                                  }
+                                  if (activeProviderTab === 'opencode') return m.id.includes('mimo') || m.id.includes('nemotron') || m.id.includes('hy3') || m.id.includes('ling') || m.name.includes('OpenCode') || m.description?.includes('OpenCode');
+                                  if (activeProviderTab === 'deepseek') return m.provider === 'DeepSeek' && !m.name.includes('OpenCode') && !m.description?.includes('OpenCode');
+                                  if (activeProviderTab === 'anthropic') return m.provider === 'Anthropic' || m.id.includes('claude');
+                                  if (activeProviderTab === 'openai') return m.provider === 'OpenAI' || m.id.includes('gpt');
+                                  if (activeProviderTab === 'local') return m.provider === 'Local' || m.id.includes('ollama');
+                                  return true;
+                                }).length
+                              } 个</span>
+                            </div>
+
+                            {availableModelList
+                              .filter(m => {
+                                if (modelSearchQuery) {
+                                  return m.name.toLowerCase().includes(modelSearchQuery.toLowerCase()) || m.id.toLowerCase().includes(modelSearchQuery.toLowerCase());
+                                }
+                                if (activeProviderTab === 'opencode') return m.id.includes('mimo') || m.id.includes('nemotron') || m.id.includes('hy3') || m.id.includes('ling') || m.name.includes('OpenCode') || m.description?.includes('OpenCode');
+                                if (activeProviderTab === 'deepseek') return m.provider === 'DeepSeek' && !m.name.includes('OpenCode') && !m.description?.includes('OpenCode');
+                                if (activeProviderTab === 'anthropic') return m.provider === 'Anthropic' || m.id.includes('claude');
+                                if (activeProviderTab === 'openai') return m.provider === 'OpenAI' || m.id.includes('gpt');
+                                if (activeProviderTab === 'local') return m.provider === 'Local' || m.id.includes('ollama');
+                                return true;
+                              })
+                              .map(m => {
+                                const isSelected = !isAutoRouting && currentModel.id === m.id;
+                                return (
+                                  <div
+                                    key={m.id}
+                                    onClick={() => {
+                                      onSelectModel(m);
+                                      setIsAutoRouting(false);
+                                      setShowModelMenu(false);
+                                    }}
+                                    style={{
+                                      padding: '7px 10px',
+                                      borderRadius: '6px',
+                                      background: isSelected ? 'var(--accent-subtle)' : 'var(--bg-surface)',
+                                      border: isSelected ? '1px solid var(--accent)' : '1px solid var(--border-subtle)',
+                                      cursor: 'pointer',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'space-between',
+                                      transition: 'all 0.12s ease'
+                                    }}
+                                    onMouseEnter={e => {
+                                      if (!isSelected) e.currentTarget.style.background = 'var(--bg-surface-elevated)';
+                                    }}
+                                    onMouseLeave={e => {
+                                      if (!isSelected) e.currentTarget.style.background = 'var(--bg-surface)';
+                                    }}
+                                  >
+                                    <div style={{ flex: 1, paddingRight: '6px' }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                        <span style={{ fontWeight: 700, fontSize: '11.5px', color: isSelected ? 'var(--accent)' : 'var(--text-strong)' }}>
+                                          {m.name}
+                                        </span>
+                                        {m.badge && (
+                                          <span style={{
+                                            fontSize: '9px',
+                                            padding: '1px 5px',
+                                            borderRadius: '3px',
+                                            background: isSelected ? 'var(--accent)' : 'rgba(234, 88, 12, 0.1)',
+                                            color: isSelected ? '#FFF' : '#EA580C',
+                                            fontWeight: 600
+                                          }}>
+                                            {m.badge}
+                                          </span>
+                                        )}
+                                      </div>
+                                      <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                                        {m.id} · {Math.round((m.contextLimit || 128000) / 1000)}k 上下文 · {m.description || '真实网关大模型'}
+                                      </div>
+                                    </div>
+                                    {isSelected && <Check size={14} color="var(--accent)" />}
+                                  </div>
+                                );
+                              })}
+                          </>
+                        )}
+                      </div>
                     </div>
                   </div>
                 )}

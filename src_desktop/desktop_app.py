@@ -11,6 +11,12 @@ import socketserver
 import threading
 from pathlib import Path
 
+def get_storage_dir():
+    appdata = os.environ.get('LOCALAPPDATA', os.path.expanduser('~'))
+    base = Path(appdata) / 'CodeMind-Hub' / 'storage'
+    base.mkdir(parents=True, exist_ok=True)
+    return base
+
 def get_dist_path():
     if hasattr(sys, '_MEIPASS'):
         return Path(sys._MEIPASS) / 'dist'
@@ -244,6 +250,36 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
                 self.wfile.write(json.dumps({'error': str(e)}).encode('utf-8'))
             return
 
+        # 5. Persistent Local Storage Read from Disk (Never lost on upgrade)
+        if parsed.path == '/api/storage':
+            qs = urllib.parse.parse_qs(parsed.query)
+            key = qs.get('key', [None])[0]
+            if not key:
+                self.send_response(400)
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(b'{"error": "Missing storage key"}')
+                return
+            target_file = get_storage_dir() / f"{key}.json"
+            if target_file.exists():
+                try:
+                    data = json.loads(target_file.read_text(encoding='utf-8'))
+                    self.send_response(200)
+                    self.send_header('Access-Control-Allow-Origin', '*')
+                    self.send_header('Content-Type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps({'success': True, 'key': key, 'data': data}).encode('utf-8'))
+                    return
+                except Exception as e:
+                    pass
+            self.send_response(200)
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({'success': False, 'key': key, 'data': None}).encode('utf-8'))
+            return
+
         # 4. Proxy GET Requests (e.g. for /models)
         if self.path.startswith('/api/proxy'):
             target_url = self.headers.get('x-target-url')
@@ -308,6 +344,31 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_header('Content-Type', 'application/json')
                 self.end_headers()
                 self.wfile.write(json.dumps({'success': True, 'path': file_path, 'size': len(content)}).encode('utf-8'))
+            except Exception as e:
+                self.send_response(500)
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'error': str(e)}).encode('utf-8'))
+            return
+
+        # 3. Persistent Local Storage Write to Disk (Never lost on upgrade)
+        if self.path == '/api/storage':
+            length = int(self.headers.get('Content-Length', 0))
+            body = self.rfile.read(length)
+            try:
+                payload = json.loads(body.decode('utf-8'))
+                key = payload.get('key')
+                data = payload.get('data')
+                if not key:
+                    raise Exception('Missing key in storage write')
+                target_file = get_storage_dir() / f"{key}.json"
+                target_file.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding='utf-8')
+                self.send_response(200)
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'success': True, 'key': key}).encode('utf-8'))
             except Exception as e:
                 self.send_response(500)
                 self.send_header('Access-Control-Allow-Origin', '*')
@@ -404,4 +465,7 @@ if __name__ == '__main__':
         text_select=True,
         zoomable=True
     )
-    webview.start(debug=False)
+    appdata = os.environ.get('LOCALAPPDATA', os.path.expanduser('~'))
+    webview_data = os.path.join(appdata, 'CodeMind-Hub', 'webview_profile')
+    os.makedirs(webview_data, exist_ok=True)
+    webview.start(debug=False, storage_path=webview_data, private_mode=False)

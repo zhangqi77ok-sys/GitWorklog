@@ -2772,6 +2772,33 @@ export function isFirstLaunchState(sessions: SessionItem[]): boolean {
   return sessions.length === 0 || (sessions.length === 1 && sessions[0].messagesCount === 0);
 }
 
+export async function saveToDiskStorageAsync(key: string, data: any): Promise<void> {
+  try {
+    const isDesktop = typeof window !== 'undefined' && (window.location.protocol === 'http:' || window.location.protocol === 'https:');
+    if (isDesktop) {
+      await fetch('/api/storage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key, data })
+      });
+    }
+  } catch (e) {}
+}
+
+export async function loadFromDiskStorageAsync(key: string): Promise<any> {
+  try {
+    const isDesktop = typeof window !== 'undefined' && (window.location.protocol === 'http:' || window.location.protocol === 'https:');
+    if (isDesktop) {
+      const res = await fetch(`/api/storage?key=${encodeURIComponent(key)}`);
+      const json = await res.json();
+      if (json.success && json.data !== null && json.data !== undefined) {
+        return json.data;
+      }
+    }
+  } catch (e) {}
+  return null;
+}
+
 export const STORAGE_KEYS = {
   PROVIDERS: 'codemind_providers',
   CURRENT_MODEL: 'codemind_current_model',
@@ -2807,6 +2834,7 @@ export function loadSavedSessions(): SessionItem[] {
 export function saveSessionsToStorage(sessions: SessionItem[]): void {
   try {
     localStorage.setItem(STORAGE_KEYS.SESSIONS, JSON.stringify(sessions));
+    saveToDiskStorageAsync(STORAGE_KEYS.SESSIONS, sessions);
   } catch (e) {}
 }
 
@@ -2842,6 +2870,7 @@ export function loadSavedSessionMessages(): Record<string, ChatMessage[]> {
 export function saveSessionMessagesToStorage(messagesMap: Record<string, ChatMessage[]>): void {
   try {
     localStorage.setItem(STORAGE_KEYS.SESSION_MESSAGES, JSON.stringify(messagesMap));
+    saveToDiskStorageAsync(STORAGE_KEYS.SESSION_MESSAGES, messagesMap);
   } catch (e) {}
 }
 
@@ -2867,6 +2896,7 @@ export function loadSavedProviders(): ModelProviderItem[] {
 export function saveProvidersToStorage(providers: ModelProviderItem[]): void {
   try {
     localStorage.setItem(STORAGE_KEYS.PROVIDERS, JSON.stringify(providers));
+    saveToDiskStorageAsync(STORAGE_KEYS.PROVIDERS, providers);
   } catch (e) {}
 }
 
@@ -2886,6 +2916,7 @@ export function loadSavedProjects(): ProjectGroup[] {
 export function saveProjectsToStorage(projects: ProjectGroup[]): void {
   try {
     localStorage.setItem(STORAGE_KEYS.PROJECTS, JSON.stringify(projects));
+    saveToDiskStorageAsync(STORAGE_KEYS.PROJECTS, projects);
   } catch (e) {}
 }
 
