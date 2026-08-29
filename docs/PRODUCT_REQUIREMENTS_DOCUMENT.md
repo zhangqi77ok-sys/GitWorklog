@@ -1114,3 +1114,12 @@ To github.com:zhangqi77ok-sys/agent-learning.git
 2. **大模型流式输出与模型热切解耦机制 (Streaming Immunity to Model Switching)**：
    - 当正在生成流式回答时，系统在发起请求时锁定当前请求的 `streamingModel` 快照；
    - 开发者在对话框底部随时切换大模型（如从 DeepSeek 切换至 Claude 3.7 或 MiMo），不会打断、污染或重置正在输出的回答，新模型设置无缝作用于下一轮提问。
+
+### 12.17 自主智能体工具调用协议与本地文件写盘/终端命令一键执行引擎
+1. **智能体操作协议注入 (Tool Action Protocol Injection)**：
+   - 解决大模型默认处于“纯问答模式”无法自主落地修改文件的核心痛点；
+   - 在 System Prompt 中为大模型注入明确的 `write_file:path` 写盘协议与 `run_command` 终端执行协议；
+   - 严禁大模型要求用户手动复制运行，而是主动输出标准动作代码块。
+2. **消息流动作执行器与一键写盘/执行工作台 (Action Execution Card)**：
+   - **`write_file:path` 专用文件写入卡片**：直接展示目标文件路径与代码，提供 **`[ 💾 立即写盘应用此文件 ]`** 按钮，点击直接调用 `/api/fs/write` 持久化至本地磁盘；
+   - **`run_command` 终端命令执行卡片**：提供 **`[ ▶️ 立即在宿主终端执行 ]`** 按钮，点击直接调用 `/api/terminal/exec` 在本地 PowerShell 执行并实时内嵌回显 stdout/stderr。

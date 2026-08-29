@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Copy, Check, Terminal, Code2, FileCode, CheckCircle2, ChevronRight } from 'lucide-react';
+import { Copy, Check, Terminal, Code2, FileCode, Play, Save, CheckCircle2, AlertCircle, RefreshCw } from 'lucide-react';
 
 interface MarkdownCardProps {
   content: string;
@@ -13,6 +13,16 @@ interface CodeBlockCardProps {
 
 const CodeBlockCard: React.FC<CodeBlockCardProps> = ({ language, code }) => {
   const [copied, setCopied] = useState(false);
+  const [isExecuting, setIsExecuting] = useState(false);
+  const [execResult, setExecResult] = useState<{ success: boolean; stdout?: string; stderr?: string; exitCode?: number; error?: string } | null>(null);
+  const [isWritingFile, setIsWritingFile] = useState(false);
+  const [writeResult, setWriteResult] = useState<{ success: boolean; path?: string; size?: number; error?: string } | null>(null);
+
+  const cleanLang = (language || '').trim();
+  const isWriteFile = cleanLang.startsWith('write_file:') || cleanLang.startsWith('file:') || cleanLang.startsWith('create_file:');
+  const targetFilePath = isWriteFile ? cleanLang.replace(/^(write_file:|file:|create_file:)/, '').trim() : '';
+
+  const isCommandLang = ['run_command', 'bash', 'sh', 'powershell', 'pwsh', 'cmd', 'shell', 'zsh', 'terminal'].includes(cleanLang.toLowerCase()) || code.startsWith('git ') || code.startsWith('npm ') || code.startsWith('python ') || code.startsWith('cargo ') || code.startsWith('New-Item') || code.startsWith('Set-Content');
 
   const handleCopy = () => {
     navigator.clipboard.writeText(code);
@@ -20,14 +30,167 @@ const CodeBlockCard: React.FC<CodeBlockCardProps> = ({ language, code }) => {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const getLangIcon = (lang: string) => {
-    const l = lang.toLowerCase();
-    if (['bash', 'sh', 'cmd', 'powershell', 'shell', 'zsh'].includes(l)) {
-      return <Terminal size={13} color="#38BDF8" />;
+  // Real 1-Click File Write to Host Disk via /api/fs/write
+  const handleWriteFileToDisk = async () => {
+    if (!targetFilePath || isWritingFile) return;
+    setIsWritingFile(true);
+    setWriteResult(null);
+
+    try {
+      const res = await fetch('/api/fs/write', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          path: targetFilePath,
+          content: code
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setWriteResult({ success: true, path: data.path, size: data.size });
+      } else {
+        setWriteResult({ success: false, error: data.error || '写入失败' });
+      }
+    } catch (e: any) {
+      setWriteResult({ success: false, error: e.message || '网络连接异常' });
+    } finally {
+      setIsWritingFile(false);
     }
-    return <Code2 size={13} color="#F59E0B" />;
   };
 
+  // Real 1-Click Terminal Command Execution on Host via /api/terminal/exec
+  const handleRunCommand = async () => {
+    if (isExecuting) return;
+    setIsExecuting(true);
+    setExecResult(null);
+
+    try {
+      const res = await fetch('/api/terminal/exec', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          command: code
+        })
+      });
+      const data = await res.json();
+      setExecResult(data);
+    } catch (e: any) {
+      setExecResult({
+        success: false,
+        error: e.message || '无法连接宿主执行引擎'
+      });
+    } finally {
+      setIsExecuting(false);
+    }
+  };
+
+  // 1. Specialized File Write Card
+  if (isWriteFile && targetFilePath) {
+    return (
+      <div style={{
+        margin: '12px 0',
+        borderRadius: '8px',
+        overflow: 'hidden',
+        border: '1px solid var(--accent)',
+        background: '#0F172A',
+        boxShadow: '0 4px 16px rgba(217, 107, 39, 0.15)'
+      }}>
+        {/* Header with Save Button */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '6px 12px',
+          background: 'linear-gradient(90deg, rgba(217, 107, 39, 0.2) 0%, rgba(15, 23, 42, 0.8) 100%)',
+          borderBottom: '1px solid var(--accent)',
+          fontSize: '11.5px'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700, color: 'var(--accent)' }}>
+            <FileCode size={14} />
+            <span>📁 目标文件: {targetFilePath}</span>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <button
+              onClick={handleCopy}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                padding: '3px 8px',
+                borderRadius: '4px',
+                background: copied ? '#15803D' : '#334155',
+                color: copied ? '#DCFCE7' : '#F1F5F9',
+                border: 'none',
+                fontSize: '11px',
+                cursor: 'pointer'
+              }}
+            >
+              {copied ? <Check size={12} /> : <Copy size={12} />}
+              <span>{copied ? '已复制' : '复制'}</span>
+            </button>
+
+            <button
+              onClick={handleWriteFileToDisk}
+              disabled={isWritingFile}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                padding: '3px 10px',
+                borderRadius: '4px',
+                background: writeResult?.success ? '#16A34A' : 'var(--accent)',
+                color: '#FFF',
+                border: 'none',
+                fontSize: '11px',
+                fontWeight: 700,
+                cursor: isWritingFile ? 'default' : 'pointer',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.2)'
+              }}
+            >
+              {isWritingFile ? <RefreshCw size={12} className="animate-spin" /> : writeResult?.success ? <CheckCircle2 size={12} /> : <Save size={12} />}
+              <span>{isWritingFile ? '正在写盘...' : writeResult?.success ? '✓ 已写入本地' : '💾 立即写盘应用此文件'}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Status Notification */}
+        {writeResult && (
+          <div style={{
+            padding: '6px 12px',
+            background: writeResult.success ? 'rgba(22, 163, 74, 0.15)' : 'rgba(220, 38, 38, 0.15)',
+            borderBottom: '1px solid #334155',
+            fontSize: '11px',
+            color: writeResult.success ? '#4ADE80' : '#F87171',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px'
+          }}>
+            {writeResult.success ? <CheckCircle2 size={13} /> : <AlertCircle size={13} />}
+            <span>{writeResult.success ? `✨ 成功将代码落地写入至: ${writeResult.path} (${writeResult.size} 字节)` : `❌ 写入失败: ${writeResult.error}`}</span>
+          </div>
+        )}
+
+        {/* Code Content */}
+        <pre style={{
+          margin: 0,
+          padding: '12px 14px',
+          overflowX: 'auto',
+          fontSize: '12px',
+          lineHeight: 1.6,
+          fontFamily: 'Consolas, "Fira Code", Monaco, monospace',
+          color: '#F8FAFC',
+          background: '#0B1120',
+          whiteSpace: 'pre',
+          wordBreak: 'normal'
+        }}>
+          <code>{code}</code>
+        </pre>
+      </div>
+    );
+  }
+
+  // 2. Standard or Command Code Card with 1-Click Run in Terminal
   return (
     <div style={{
       margin: '12px 0',
@@ -37,7 +200,7 @@ const CodeBlockCard: React.FC<CodeBlockCardProps> = ({ language, code }) => {
       background: '#0F172A',
       boxShadow: '0 4px 14px rgba(0, 0, 0, 0.25)'
     }}>
-      {/* Code Card Header */}
+      {/* Header */}
       <div style={{
         display: 'flex',
         alignItems: 'center',
@@ -49,31 +212,59 @@ const CodeBlockCard: React.FC<CodeBlockCardProps> = ({ language, code }) => {
         color: '#94A3B8'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600 }}>
-          {getLangIcon(language)}
+          {isCommandLang ? <Terminal size={13} color="#38BDF8" /> : <Code2 size={13} color="#F59E0B" />}
           <span style={{ textTransform: 'uppercase', letterSpacing: '0.5px', color: '#E2E8F0' }}>
-            {language || 'PLAINTEXT'}
+            {cleanLang || (isCommandLang ? 'POWERSHELL' : 'PLAINTEXT')}
           </span>
         </div>
-        <button
-          onClick={handleCopy}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '4px',
-            padding: '3px 8px',
-            borderRadius: '4px',
-            background: copied ? '#15803D' : '#334155',
-            color: copied ? '#DCFCE7' : '#F1F5F9',
-            border: 'none',
-            fontSize: '11px',
-            cursor: 'pointer',
-            transition: 'all 0.15s ease'
-          }}
-          title="复制代码内容"
-        >
-          {copied ? <Check size={12} /> : <Copy size={12} />}
-          <span>{copied ? '已复制' : '复制代码'}</span>
-        </button>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <button
+            onClick={handleCopy}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              padding: '3px 8px',
+              borderRadius: '4px',
+              background: copied ? '#15803D' : '#334155',
+              color: copied ? '#DCFCE7' : '#F1F5F9',
+              border: 'none',
+              fontSize: '11px',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease'
+            }}
+            title="复制代码内容"
+          >
+            {copied ? <Check size={12} /> : <Copy size={12} />}
+            <span>{copied ? '已复制' : '复制'}</span>
+          </button>
+
+          {isCommandLang && (
+            <button
+              onClick={handleRunCommand}
+              disabled={isExecuting}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                padding: '3px 10px',
+                borderRadius: '4px',
+                background: execResult?.success ? '#16A34A' : '#0284C7',
+                color: '#FFF',
+                border: 'none',
+                fontSize: '11px',
+                fontWeight: 700,
+                cursor: isExecuting ? 'default' : 'pointer',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.2)'
+              }}
+              title="直接在宿主系统 PowerShell 终端执行此脚本"
+            >
+              {isExecuting ? <RefreshCw size={12} className="animate-spin" /> : <Play size={12} />}
+              <span>{isExecuting ? '执行中...' : execResult?.success ? '✓ 重新执行' : '▶️ 立即在宿主终端执行'}</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Code Body */}
@@ -91,6 +282,53 @@ const CodeBlockCard: React.FC<CodeBlockCardProps> = ({ language, code }) => {
       }}>
         <code>{code}</code>
       </pre>
+
+      {/* Inline Execution Output Log */}
+      {execResult && (
+        <div style={{
+          borderTop: '1px solid #334155',
+          background: '#030712',
+          padding: '8px 12px',
+          fontSize: '11px',
+          fontFamily: 'Consolas, Monaco, monospace',
+          color: '#E5E7EB'
+        }}>
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: '4px',
+            color: execResult.success ? '#4ADE80' : '#F87171',
+            fontWeight: 700
+          }}>
+            <span>{execResult.success ? `✓ 执行完成 (Exit Code: ${execResult.exitCode ?? 0})` : `❌ 执行失败 (Exit Code: ${execResult.exitCode ?? 1})`}</span>
+            <button
+              onClick={() => setExecResult(null)}
+              style={{ background: 'transparent', border: 'none', color: '#9CA3AF', cursor: 'pointer', fontSize: '10px' }}
+            >
+              关闭输出
+            </button>
+          </div>
+
+          {execResult.stdout && (
+            <div style={{ color: '#A7F3D0', whiteSpace: 'pre-wrap', maxHeight: '180px', overflowY: 'auto' }}>
+              {execResult.stdout}
+            </div>
+          )}
+
+          {execResult.stderr && (
+            <div style={{ color: '#FCA5A5', whiteSpace: 'pre-wrap', maxHeight: '120px', overflowY: 'auto', marginTop: '4px' }}>
+              {execResult.stderr}
+            </div>
+          )}
+
+          {execResult.error && (
+            <div style={{ color: '#F87171', marginTop: '4px' }}>
+              {execResult.error}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };
@@ -216,195 +454,100 @@ export const MarkdownCard: React.FC<MarkdownCardProps> = ({ content, isStreaming
     const textLines = textBlock.split('\n');
     const elements: React.ReactNode[] = [];
     let listBuffer: { type: 'ul' | 'ol'; items: string[] } | null = null;
-    let tableBuffer: string[] = [];
 
     const flushList = () => {
-      if (listBuffer) {
+      if (!listBuffer) return;
+      if (listBuffer.type === 'ul') {
         elements.push(
-          <div key={`list-${elements.length}`} style={{ margin: '8px 0', paddingLeft: '8px' }}>
-            {listBuffer.items.map((item, idx) => (
-              <div key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', margin: '4px 0' }}>
-                <span style={{ color: 'var(--accent)', fontWeight: 700, lineHeight: 1.6 }}>•</span>
-                <span style={{ flex: 1, lineHeight: 1.6 }}>{renderInlineText(item)}</span>
-              </div>
+          <ul key={`list-${elements.length}`} style={{ margin: '6px 0', paddingLeft: '20px', lineHeight: '1.6' }}>
+            {listBuffer.items.map((it, idx) => (
+              <li key={idx} style={{ margin: '3px 0' }}>{renderInlineText(it)}</li>
             ))}
-          </div>
+          </ul>
         );
-        listBuffer = null;
-      }
-    };
-
-    const flushTable = () => {
-      if (tableBuffer.length >= 2) {
-        const headerRow = tableBuffer[0].split('|').map(s => s.trim()).filter(Boolean);
-        const bodyRows = tableBuffer.slice(2).map(row => row.split('|').map(s => s.trim()).filter(Boolean));
-
+      } else {
         elements.push(
-          <div key={`table-${elements.length}`} style={{
-            margin: '12px 0',
-            overflowX: 'auto',
-            borderRadius: '6px',
-            border: '1px solid var(--border-subtle)',
-            background: 'var(--bg-surface)'
-          }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11.5px' }}>
-              <thead>
-                <tr style={{ background: 'var(--bg-surface-elevated)', borderBottom: '1px solid var(--border-strong)' }}>
-                  {headerRow.map((h, idx) => (
-                    <th key={idx} style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 700, color: 'var(--text-strong)' }}>
-                      {renderInlineText(h)}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {bodyRows.map((row, rIdx) => (
-                  <tr key={rIdx} style={{ borderBottom: '1px solid var(--border-subtle)', background: rIdx % 2 === 0 ? 'transparent' : 'rgba(0,0,0,0.02)' }}>
-                    {row.map((cell, cIdx) => (
-                      <td key={cIdx} style={{ padding: '6px 12px', color: 'var(--text-main)' }}>
-                        {renderInlineText(cell)}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <ol key={`list-${elements.length}`} style={{ margin: '6px 0', paddingLeft: '20px', lineHeight: '1.6' }}>
+            {listBuffer.items.map((it, idx) => (
+              <li key={idx} style={{ margin: '3px 0' }}>{renderInlineText(it)}</li>
+            ))}
+          </ol>
         );
-        tableBuffer = [];
       }
+      listBuffer = null;
     };
 
     for (let i = 0; i < textLines.length; i++) {
-      const rawLine = textLines[i];
-      const line = rawLine.trim();
+      const line = textLines[i];
+      const trimmed = line.trim();
 
-      // Check Table row
-      if (line.startsWith('|') && line.endsWith('|')) {
+      if (!trimmed) {
         flushList();
-        tableBuffer.push(line);
         continue;
-      } else if (tableBuffer.length > 0) {
-        flushTable();
       }
 
-      // Check Headings
-      if (line.startsWith('# ')) {
+      // Headers
+      if (trimmed.startsWith('### ')) {
         flushList();
         elements.push(
-          <div key={i} style={{
-            fontSize: '16px',
-            fontWeight: 800,
-            color: 'var(--text-strong)',
-            margin: '16px 0 8px 0',
-            paddingBottom: '6px',
-            borderBottom: '2px solid var(--border-subtle)'
-          }}>
-            {renderInlineText(line.slice(2))}
-          </div>
+          <h3 key={i} style={{ fontSize: '13px', fontWeight: 700, margin: '10px 0 4px 0', color: 'var(--text-strong)' }}>
+            {renderInlineText(trimmed.slice(4))}
+          </h3>
         );
-      } else if (line.startsWith('## ')) {
+      } else if (trimmed.startsWith('## ')) {
         flushList();
         elements.push(
-          <div key={i} style={{
-            fontSize: '14px',
-            fontWeight: 700,
-            color: 'var(--text-strong)',
-            margin: '14px 0 6px 0',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px'
-          }}>
-            <span style={{ width: '4px', height: '14px', background: 'var(--accent)', borderRadius: '2px' }} />
-            <span>{renderInlineText(line.slice(3))}</span>
-          </div>
+          <h2 key={i} style={{ fontSize: '14px', fontWeight: 700, margin: '12px 0 6px 0', color: 'var(--text-strong)' }}>
+            {renderInlineText(trimmed.slice(3))}
+          </h2>
         );
-      } else if (line.startsWith('### ')) {
+      } else if (trimmed.startsWith('# ')) {
         flushList();
         elements.push(
-          <div key={i} style={{
-            fontSize: '13px',
-            fontWeight: 700,
-            color: 'var(--text-strong)',
-            margin: '12px 0 4px 0',
-            paddingLeft: '6px',
-            borderLeft: '3px solid var(--accent)'
-          }}>
-            {renderInlineText(line.slice(4))}
-          </div>
+          <h1 key={i} style={{ fontSize: '15px', fontWeight: 800, margin: '14px 0 6px 0', color: 'var(--text-strong)' }}>
+            {renderInlineText(trimmed.slice(2))}
+          </h1>
         );
-      } else if (line.startsWith('#### ')) {
+      }
+      // Unordered list
+      else if (trimmed.startsWith('- ') || trimmed.startsWith('* ') || trimmed.startsWith('● ')) {
+        if (!listBuffer || listBuffer.type !== 'ul') {
+          flushList();
+          listBuffer = { type: 'ul', items: [] };
+        }
+        listBuffer.items.push(trimmed.replace(/^[-*●]\s+/, ''));
+      }
+      // Ordered list
+      else if (/^\d+\.\s+/.test(trimmed)) {
+        if (!listBuffer || listBuffer.type !== 'ol') {
+          flushList();
+          listBuffer = { type: 'ol', items: [] };
+        }
+        listBuffer.items.push(trimmed.replace(/^\d+\.\s+/, ''));
+      }
+      // Normal paragraph
+      else {
         flushList();
         elements.push(
-          <div key={i} style={{
-            fontSize: '12px',
-            fontWeight: 700,
-            color: 'var(--text-muted)',
-            margin: '10px 0 4px 0'
-          }}>
-            {renderInlineText(line.slice(5))}
-          </div>
-        );
-      } else if (line.startsWith('> ')) {
-        flushList();
-        elements.push(
-          <div key={i} style={{
-            margin: '8px 0',
-            padding: '8px 12px',
-            borderRadius: '4px',
-            background: 'var(--bg-surface-elevated)',
-            borderLeft: '3px solid var(--accent)',
-            fontSize: '11.5px',
-            color: 'var(--text-muted)',
-            fontStyle: 'italic'
-          }}>
-            {renderInlineText(line.slice(2))}
-          </div>
-        );
-      } else if (line.startsWith('- ') || line.startsWith('* ')) {
-        if (!listBuffer) listBuffer = { type: 'ul', items: [] };
-        listBuffer.items.push(line.slice(2));
-      } else if (/^\d+\.\s/.test(line)) {
-        if (!listBuffer) listBuffer = { type: 'ol', items: [] };
-        listBuffer.items.push(line.replace(/^\d+\.\s/, ''));
-      } else if (line.length === 0) {
-        flushList();
-        elements.push(<div key={i} style={{ height: '6px' }} />);
-      } else {
-        flushList();
-        elements.push(
-          <div key={i} style={{ margin: '4px 0', lineHeight: 1.65 }}>
-            {renderInlineText(rawLine)}
-          </div>
+          <p key={i} style={{ margin: '4px 0', lineHeight: '1.6' }}>
+            {renderInlineText(line)}
+          </p>
         );
       }
     }
-
     flushList();
-    flushTable();
 
-    return <div key={blockKey}>{elements}</div>;
+    return <div key={`text-block-${blockKey}`}>{elements}</div>;
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-      {blocks.map((block, idx) => {
-        if (block.type === 'code') {
-          return <CodeBlockCard key={idx} language={block.language || ''} code={block.content} />;
+    <div style={{ fontSize: '12px', lineHeight: 1.6, color: 'var(--text-primary)' }}>
+      {blocks.map((b, idx) => {
+        if (b.type === 'code') {
+          return <CodeBlockCard key={idx} language={b.language || ''} code={b.content} />;
         }
-        return renderTextParagraphs(block.content, idx);
+        return renderTextParagraphs(b.content, idx);
       })}
-      {isStreaming && (
-        <span style={{
-          display: 'inline-block',
-          width: '6px',
-          height: '14px',
-          background: 'var(--accent)',
-          marginLeft: '4px',
-          verticalAlign: 'middle',
-          animation: 'pulse 1s infinite'
-        }} />
-      )}
     </div>
   );
 };
