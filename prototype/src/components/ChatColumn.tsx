@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { MarkdownCard } from './MarkdownCard';
 import {
   Send,
   Loader2,
@@ -790,32 +791,24 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                     </div>
                   )}
 
-                  {/* Clean Content Text */}
+                  {/* Cardified Markdown Content Text */}
                   {(parsed.cleanContent || (!parsed.thinkingText && parsed.toolCalls.length === 0)) && (
                     <div style={{
-                      padding: '10px 12px',
-                      borderRadius: '6px',
+                      padding: '12px 14px',
+                      borderRadius: '8px',
                       background: msg.role === 'user' ? 'var(--bg-surface)' : 'var(--bg-base)',
                       border: '1px solid var(--border-subtle)',
-                      fontSize: '12px',
-                      lineHeight: 1.6,
-                      whiteSpace: 'pre-wrap',
+                      fontSize: '12.5px',
+                      lineHeight: 1.65,
                       wordBreak: 'break-word',
                       userSelect: 'text',
                       WebkitUserSelect: 'text',
                       cursor: 'text'
                     }}>
-                      {parsed.cleanContent || (isLastAssistant ? '正在推演并分析工程结构...' : msg.content)}
-                      {isLastAssistant && (
-                        <span style={{
-                          display: 'inline-block',
-                          width: '6px',
-                          height: '14px',
-                          background: 'var(--accent)',
-                          marginLeft: '3px',
-                          verticalAlign: 'middle'
-                        }} />
-                      )}
+                      <MarkdownCard
+                        content={parsed.cleanContent || (isLastAssistant ? '正在推演并分析工程结构...' : msg.content)}
+                        isStreaming={isLastAssistant && isStreaming}
+                      />
                     </div>
                   )}
                 </div>
