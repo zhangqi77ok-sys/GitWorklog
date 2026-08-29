@@ -212,8 +212,24 @@ export const TestExplorer: React.FC<TestExplorerProps> = ({
       {/* 3. Test Cases List */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
         {filteredTests.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--text-muted)' }}>
-            没有匹配的测试用例
+          <div style={{
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '32px 16px',
+            color: 'var(--text-muted)',
+            gap: '8px',
+            textAlign: 'center'
+          }}>
+            <div style={{ fontSize: '24px' }}>🧪</div>
+            <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '12px' }}>
+              尚未执行自动化测试
+            </div>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', maxWidth: '280px', lineHeight: '1.5' }}>
+              点击右上角「运行全部测试」或终端执行测试命令，实时提取并追踪用例通过与失败状态。
+            </div>
           </div>
         ) : (
           filteredTests.map(tc => {
