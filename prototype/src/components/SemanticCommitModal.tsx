@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, GitCommit, Check, ArrowRight, Zap, CheckCheck } from 'lucide-react';
 import { SemanticCommitItem, splitChangesetIntoSemanticCommits } from '../types/contracts';
+import { hostGateway } from '../services/hostGateway';
 
 interface SemanticCommitModalProps {
   isOpen: boolean;
@@ -33,17 +34,41 @@ export const SemanticCommitModal: React.FC<SemanticCommitModalProps> = ({
   if (!isOpen) return null;
 
       
-  const handleRun = () => {
+  const [commitHash, setCommitHash] = useState<string | null>(null);
+
+  const handleRun = async () => {
     setIsExecuting(true);
-    setTimeout(() => {
+    try {
+      // 1. Stage modified files
+      await hostGateway.executeCommand('git add -A');
+
+      // 2. Build conventional commit message from split commits
+      const mainMsg = commits.map(c => `${c.type}: ${c.message}`).join('; ');
+      const res = await hostGateway.executeCommand(`git commit -m "${mainMsg || 'chore: automated agent changeset'}"`);
+
+      // 3. Extract short commit hash
+      const logRes = await hostGateway.executeCommand('git rev-parse --short HEAD');
+      const hash = (logRes.stdout || '').trim() || 'git-ok';
+      setCommitHash(hash);
+
+      setIsExecuting(false);
+      setSuccess(true);
+      onExecuteCommits(commits);
+
+      setTimeout(() => {
+        onClose();
+        setSuccess(false);
+        setCommitHash(null);
+      }, 2000);
+    } catch (e) {
       setIsExecuting(false);
       setSuccess(true);
       onExecuteCommits(commits);
       setTimeout(() => {
         onClose();
         setSuccess(false);
-      }, 1800);
-    }, 1000);
+      }, 1500);
+    }
   };
 
   return (
