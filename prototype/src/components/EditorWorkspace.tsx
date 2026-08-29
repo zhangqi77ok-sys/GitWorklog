@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { PreFlightCiDrawer } from './PreFlightCiDrawer';
+import { ArchitectureGraphView } from './ArchitectureGraphView';
+import { Network } from 'lucide-react';
 import {
   X,
   FileCode,
@@ -45,6 +47,7 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
 
   const [openedFiles, setOpenedFiles] = useState<OpenedEditorFile[]>(INITIAL_OPENED_FILES);
   const [activeFileId, setActiveFileId] = useState<string>('file-contracts');
+  const [workspaceViewMode, setWorkspaceViewMode] = useState<'code' | 'graph'>('code');
   const [showInlineEdit, setShowInlineEdit] = useState(false);
   const [inlineInput, setInlineInput] = useState('');
   const [inlineToast, setInlineToast] = useState<string | null>(null);
@@ -195,6 +198,27 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
               </div>
             );
           })}
+          {/* Architecture Topology Graph Tab */}
+          <div
+            onClick={() => setWorkspaceViewMode(workspaceViewMode === 'graph' ? 'code' : 'graph')}
+            style={{
+              padding: '5px 10px',
+              borderRadius: '4px 4px 0 0',
+              background: workspaceViewMode === 'graph' ? 'var(--bg-base)' : 'transparent',
+              border: workspaceViewMode === 'graph' ? '1px solid var(--border-subtle)' : '1px solid transparent',
+              borderBottom: 'none',
+              fontSize: '11px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              cursor: 'pointer',
+              fontWeight: workspaceViewMode === 'graph' ? 700 : 500,
+              color: workspaceViewMode === 'graph' ? 'var(--accent)' : 'var(--text-secondary)'
+            }}
+          >
+            <Network size={12} color={workspaceViewMode === 'graph' ? 'var(--accent)' : 'var(--text-muted)'} />
+            <span>🕸️ 架构拓扑</span>
+          </div>
         </div>
 
         {/* Compact Icon-Only Action Group with Rich Hover Tooltips */}
@@ -344,7 +368,12 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
         </div>
       </div>
 
-      {/* 2. SPLIT BODY: RESIZABLE EDITOR (TOP) + TERMINAL (BOTTOM) */}
+      {/* 2. SPLIT BODY: RESIZABLE EDITOR (TOP) + TERMINAL (BOTTOM) OR GRAPH */}
+      {workspaceViewMode === 'graph' ? (
+        <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+          <ArchitectureGraphView />
+        </div>
+      ) : (
       <div id="workbench-split-container" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
         {/* TOP: CODE EDITOR AREA (Dynamic Height) */}
         <div style={{
@@ -814,6 +843,7 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
           </form>
         </div>
       </div>
+      )}
       <PreFlightCiDrawer
         isOpen={isCiDrawerOpen}
         onClose={() => setIsCiDrawerOpen(false)}

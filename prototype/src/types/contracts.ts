@@ -1947,3 +1947,164 @@ export const MOCK_RULES_MEMORY: RulesMemoryItem[] = [
     enabled: true
   }
 ];
+
+
+// ============================================================================
+// 17. AUTO MODEL ROUTER, TRAJECTORY TIME TRAVEL & TOPOLOGY GRAPH CONTRACTS
+// ============================================================================
+
+export type RoutingStrategyId = 'auto' | 'max_reasoning' | 'lightning_fast' | 'cost_saver';
+
+export interface ModelRoutingStrategy {
+  id: RoutingStrategyId;
+  name: string;
+  desc: string;
+  icon: string;
+  defaultModelId: string;
+}
+
+export const MODEL_ROUTING_STRATEGIES: ModelRoutingStrategy[] = [
+  {
+    id: 'auto',
+    name: '自适应智能',
+    desc: '按 Prompt 意图毫秒级自动调度最佳模型',
+    icon: 'Sparkles',
+    defaultModelId: 'claude-3-5-sonnet'
+  },
+  {
+    id: 'max_reasoning',
+    name: '最强深度推理',
+    desc: '强制调度 DeepSeek-R1 / o3 深度思考',
+    icon: 'Cpu',
+    defaultModelId: 'deepseek-r1'
+  },
+  {
+    id: 'lightning_fast',
+    name: '极致极速',
+    desc: '强制调度 Flash / Qwen 极速生成',
+    icon: 'Zap',
+    defaultModelId: 'gemini-1-5-flash'
+  },
+  {
+    id: 'cost_saver',
+    name: '成本优先',
+    desc: '采用高性价比经济型模型',
+    icon: 'Coins',
+    defaultModelId: 'qwen-2-5-coder'
+  }
+];
+
+export function resolveOptimalModel(prompt: string, strategy: RoutingStrategyId): { modelId: string; modelName: string; reason: string } {
+  if (strategy === 'max_reasoning') {
+    return { modelId: 'deepseek-r1', modelName: 'DeepSeek-R1', reason: '策略已锁定: 强制开启满血深度思维链推演' };
+  }
+  if (strategy === 'lightning_fast') {
+    return { modelId: 'gemini-1-5-flash', modelName: 'Gemini 1.5 Flash', reason: '策略已锁定: 毫秒级极速流式响应' };
+  }
+  if (strategy === 'cost_saver') {
+    return { modelId: 'qwen-2-5-coder', modelName: 'Qwen 2.5 Coder', reason: '策略已锁定: 极致性价比经济型调度' };
+  }
+
+  // Auto Adaptive Intent Routing
+  const lower = prompt.toLowerCase();
+  if (lower.includes('架构') || lower.includes('重构') || lower.includes('推演') || lower.includes('设计')) {
+    return { modelId: 'deepseek-r1', modelName: 'DeepSeek-R1', reason: '检测到架构推演意图 ➔ 自动调度 R1 深度思考' };
+  }
+  if (lower.includes('测试') || lower.includes('test') || lower.includes('vitest') || lower.includes('lint')) {
+    return { modelId: 'qwen-2-5-coder', modelName: 'Qwen 2.5 Coder', reason: '检测到测试编写意图 ➔ 自动调度 Qwen 极速校验' };
+  }
+  return { modelId: 'claude-3-5-sonnet', modelName: 'Claude 3.5 Sonnet', reason: '检测到复杂代码落地意图 ➔ 自动调度 Sonnet 精准实现' };
+}
+
+export interface TrajectoryStepSnapshot {
+  stepIndex: number;
+  totalSteps: number;
+  title: string;
+  status: 'completed' | 'in_progress' | 'pending';
+  timestamp: string;
+  summary: string;
+  snapshotFileCount: number;
+}
+
+export const MOCK_TRAJECTORY_STEPS: TrajectoryStepSnapshot[] = [
+  {
+    stepIndex: 1,
+    totalSteps: 4,
+    title: 'AST 语法扫描与依赖分析',
+    status: 'completed',
+    timestamp: '15:10:02',
+    summary: '扫描完成，识别 Store 状态拓展需求与 3 处 Monorepo 引用点',
+    snapshotFileCount: 2
+  },
+  {
+    stepIndex: 2,
+    totalSteps: 4,
+    title: '编写 Store 契约与前置测试',
+    status: 'in_progress',
+    timestamp: '15:10:48',
+    summary: '已生成 contracts.ts 并在等待人机协同架构分支确认',
+    snapshotFileCount: 3
+  },
+  {
+    stepIndex: 3,
+    totalSteps: 4,
+    title: '组件状态迁移与 UI 渲染',
+    status: 'pending',
+    timestamp: '--:--',
+    summary: '待确认后将 Store 注入 OptionsCard.tsx 与 App.tsx',
+    snapshotFileCount: 0
+  },
+  {
+    stepIndex: 4,
+    totalSteps: 4,
+    title: '本地 CI 门禁与 PR 交付',
+    status: 'pending',
+    timestamp: '--:--',
+    summary: '自动化类型验证与覆盖率门禁，一键创建 PR',
+    snapshotFileCount: 0
+  }
+];
+
+export interface ArchitectureTopologyNode {
+  id: string;
+  name: string;
+  type: 'package' | 'service' | 'module' | 'database';
+  status: 'healthy' | 'impacted' | 'modified';
+  dependencies: string[];
+  impactCount?: number;
+}
+
+export const MOCK_TOPOLOGY_NODES: ArchitectureTopologyNode[] = [
+  {
+    id: 'pkg-core',
+    name: '@codemind/core',
+    type: 'package',
+    status: 'modified',
+    dependencies: [],
+    impactCount: 0
+  },
+  {
+    id: 'pkg-web',
+    name: '@codemind/web (UI)',
+    type: 'package',
+    status: 'impacted',
+    dependencies: ['pkg-core'],
+    impactCount: 3
+  },
+  {
+    id: 'pkg-api',
+    name: '@codemind/api (Gateway)',
+    type: 'service',
+    status: 'healthy',
+    dependencies: ['pkg-core'],
+    impactCount: 0
+  },
+  {
+    id: 'mod-store',
+    name: 'src/types/contracts.ts',
+    type: 'module',
+    status: 'modified',
+    dependencies: ['pkg-core'],
+    impactCount: 0
+  }
+];

@@ -77,7 +77,11 @@ import {
   clampChangesetHeight,
   WORKBENCH_ICON_ACTIONS,
   generatePullRequestDraft,
-  MOCK_RULES_MEMORY
+  MOCK_RULES_MEMORY,
+  MODEL_ROUTING_STRATEGIES,
+  resolveOptimalModel,
+  MOCK_TRAJECTORY_STEPS,
+  MOCK_TOPOLOGY_NODES
 } from '../src/types/contracts';
 
 describe('SDD Contract - Token Telemetry & Gauge Algorithm', () => {
@@ -674,5 +678,32 @@ describe('SDD Contract - Pull Request Draft & Rules Cockpit', () => {
     expect(MOCK_RULES_MEMORY.length).toBeGreaterThanOrEqual(4);
     const ironLaw = MOCK_RULES_MEMORY.find(r => r.category === 'iron_law');
     expect(ironLaw?.title).toContain('三大铁律');
+  });
+});
+
+
+describe('SDD Contract - 3 Production Pillars (Router, Trajectory, Graph)', () => {
+  it('should auto-resolve optimal model based on prompt keywords and strategy', () => {
+    const resArch = resolveOptimalModel('请帮我做架构重构推演', 'auto');
+    expect(resArch.modelName).toBe('DeepSeek-R1');
+
+    const resTest = resolveOptimalModel('运行 vitest 编写测试', 'auto');
+    expect(resTest.modelName).toBe('Qwen 2.5 Coder');
+
+    const resForced = resolveOptimalModel('任何输入', 'max_reasoning');
+    expect(resForced.modelName).toBe('DeepSeek-R1');
+  });
+
+  it('should validate mock trajectory steps sequence', () => {
+    expect(MOCK_TRAJECTORY_STEPS.length).toBe(4);
+    expect(MOCK_TRAJECTORY_STEPS[0].status).toBe('completed');
+    expect(MOCK_TRAJECTORY_STEPS[1].status).toBe('in_progress');
+  });
+
+  it('should validate topology graph nodes and impact status', () => {
+    expect(MOCK_TOPOLOGY_NODES.length).toBe(4);
+    const webNode = MOCK_TOPOLOGY_NODES.find(n => n.id === 'pkg-web');
+    expect(webNode?.status).toBe('impacted');
+    expect(webNode?.impactCount).toBe(3);
   });
 });
