@@ -1065,3 +1065,14 @@ To github.com:zhangqi77ok-sys/agent-learning.git
 2. **全局弹窗通用 ESC 按键关闭与显式关闭按钮规范**：
    - 全系统所有模态弹窗与抽屉（包括设置中心 `SettingsModal`、Token分析 `TokenAnalyticsModal`、分享卡片 `ShareCardModal`、运行日志 `LiveLogsModal`、全局指令面板 `CommandPaletteModal`、语义提交 `SemanticCommitModal`、Pull Request `PullRequestModal`、影子时光机 `TrajectorySnapshotModal`、CI预检 `PreFlightCiDrawer` 及目录选择器）统一支持按下键盘 `Escape` 键即刻平滑关闭；
    - 每个弹窗均配备右上角显式 `[ ✕ ]` 关闭按钮与底部 `[ 完成并关闭 ]` 操作按钮，确保人机交互标准严谨统一。
+
+### 12.12 产品全面更名为 Tcode 及用户身份动态呈现与 Skill 真实导入打通
+1. **产品更名与品牌升级 (Tcode)**：
+   - 软件正式命名为 **Tcode** (AI Agentic Desktop IDE)；
+   - 顶栏 Logo 改为 `[T Tcode]`，安装包与运行进程全面对齐为 `Tcode`；
+   - 智能体消息流发言者统一展示为 `Tcode 智能体`。
+2. **开发者身份全链路实时响应**：
+   - 设置中心设置并保存昵称（如 `张工`）后，立即广播 `codemind_profile_updated` 事件；
+   - 消息流中所有用户发言卡片实时呈现为 `张工 (You)`，彻底告别硬编码。
+3. **Skill 技能管理真实导入彻底闭环**：
+   - 设置面板中 `[+ 导入 Skill]` 按钮真实打通导入模态窗，支持 URL 远程解析、ZIP/JSON 压缩包解压导入与自定义表单新建，导入后即刻沉淀至本地磁盘并立即可用。

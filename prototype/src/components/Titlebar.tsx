@@ -66,7 +66,7 @@ export const Titlebar: React.FC<TitlebarProps> = ({
         }}>
           C
         </div>
-        <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>CodeMind-Hub</span>
+        <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Tcode</span>
         {currentProject ? (
           <>
             <span style={{ color: 'var(--text-muted)' }}>›</span>

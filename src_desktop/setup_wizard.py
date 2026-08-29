@@ -9,23 +9,23 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from pathlib import Path
 
-VERSION = "1.2.8"
-APP_NAME = "CodeMind-Hub"
+VERSION = "1.2.9"
+APP_NAME = "Tcode"
 
 def get_detected_installed_dir():
-    # 1. Check Windows Registry HKCU\Software\CodeMind-Hub\InstallPath
+    # 1. Check Windows Registry HKCU\Software\Tcode\InstallPath
     try:
         import winreg
-        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\CodeMind-Hub") as key:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Tcode") as key:
             val, _ = winreg.QueryValueEx(key, "InstallPath")
             if val and os.path.exists(val):
                 return val
     except Exception:
         pass
 
-    # 2. Check %LOCALAPPDATA%\CodeMind-Hub\install_info.json
+    # 2. Check %LOCALAPPDATA%\Tcode\install_info.json
     local_app_data = os.environ.get("LOCALAPPDATA", os.path.expanduser("~"))
-    info_file = os.path.join(local_app_data, "CodeMind-Hub", "install_info.json")
+    info_file = os.path.join(local_app_data, "Tcode", "install_info.json")
     if os.path.exists(info_file):
         try:
             with open(info_file, "r", encoding="utf-8") as f:
@@ -36,9 +36,9 @@ def get_detected_installed_dir():
         except Exception:
             pass
 
-    # 3. Check common paths (e.g. D:\CodeMind-Hub)
-    for cand in [r"D:\CodeMind-Hub", os.path.join(local_app_data, "Programs", APP_NAME)]:
-        if os.path.exists(os.path.join(cand, "CodeMind-Hub.exe")):
+    # 3. Check common paths (e.g. D:\Tcode)
+    for cand in [r"D:\Tcode", os.path.join(local_app_data, "Programs", APP_NAME)]:
+        if os.path.exists(os.path.join(cand, "Tcode.exe")):
             return cand
 
     return os.path.join(local_app_data, "Programs", APP_NAME)
@@ -47,7 +47,7 @@ def save_installed_dir(target_dir):
     # Save to Registry
     try:
         import winreg
-        key = winreg.CreateKey(winreg.HKEY_CURRENT_USER, r"Software\CodeMind-Hub")
+        key = winreg.CreateKey(winreg.HKEY_CURRENT_USER, r"Software\Tcode")
         winreg.SetValueEx(key, "InstallPath", 0, winreg.REG_SZ, target_dir)
         winreg.SetValueEx(key, "Version", 0, winreg.REG_SZ, VERSION)
         winreg.CloseKey(key)
@@ -57,7 +57,7 @@ def save_installed_dir(target_dir):
     # Save to json file
     try:
         local_app_data = os.environ.get("LOCALAPPDATA", os.path.expanduser("~"))
-        conf_dir = os.path.join(local_app_data, "CodeMind-Hub")
+        conf_dir = os.path.join(local_app_data, "Tcode")
         os.makedirs(conf_dir, exist_ok=True)
         with open(os.path.join(conf_dir, "install_info.json"), "w", encoding="utf-8") as f:
             json.dump({"install_path": target_dir, "version": VERSION, "timestamp": time.time()}, f)
@@ -66,20 +66,20 @@ def save_installed_dir(target_dir):
 
 def close_running_instances():
     CREATE_NO_WINDOW = 0x08000000
-    # Terminate running CodeMind-Hub.exe instances
+    # Terminate running Tcode.exe instances
     try:
-        res = subprocess.run(["tasklist", "/FI", "IMAGENAME eq CodeMind-Hub.exe"], capture_output=True, text=True, creationflags=CREATE_NO_WINDOW)
-        if "CodeMind-Hub.exe" in res.stdout:
-            subprocess.run(["taskkill", "/F", "/IM", "CodeMind-Hub.exe", "/T"], capture_output=True, creationflags=CREATE_NO_WINDOW)
+        res = subprocess.run(["tasklist", "/FI", "IMAGENAME eq Tcode.exe"], capture_output=True, text=True, creationflags=CREATE_NO_WINDOW)
+        if "Tcode.exe" in res.stdout:
+            subprocess.run(["taskkill", "/F", "/IM", "Tcode.exe", "/T"], capture_output=True, creationflags=CREATE_NO_WINDOW)
             time.sleep(1.2)
     except Exception:
         pass
 
-    # Terminate running CodeMind-Core.exe instances
+    # Terminate running Tcode-Core.exe instances
     try:
-        res2 = subprocess.run(["tasklist", "/FI", "IMAGENAME eq CodeMind-Core.exe"], capture_output=True, text=True, creationflags=CREATE_NO_WINDOW)
-        if "CodeMind-Core.exe" in res2.stdout:
-            subprocess.run(["taskkill", "/F", "/IM", "CodeMind-Core.exe", "/T"], capture_output=True, creationflags=CREATE_NO_WINDOW)
+        res2 = subprocess.run(["tasklist", "/FI", "IMAGENAME eq Tcode-Core.exe"], capture_output=True, text=True, creationflags=CREATE_NO_WINDOW)
+        if "Tcode-Core.exe" in res2.stdout:
+            subprocess.run(["taskkill", "/F", "/IM", "Tcode-Core.exe", "/T"], capture_output=True, creationflags=CREATE_NO_WINDOW)
             time.sleep(1.0)
     except Exception:
         pass
@@ -89,7 +89,7 @@ def get_bundle_dir():
         return sys._MEIPASS
     return os.path.dirname(os.path.abspath(__file__))
 
-def create_windows_shortcut(target_path, shortcut_path, description="CodeMind-Hub Enterprise AI Agentic IDE"):
+def create_windows_shortcut(target_path, shortcut_path, description="Tcode Enterprise AI Agentic IDE"):
     ps_cmd = f"""
     $WshShell = New-Object -comObject WScript.Shell
     $Shortcut = $WshShell.CreateShortcut('{shortcut_path}')
@@ -123,7 +123,7 @@ class SetupWizard(tk.Tk):
         
         self.current_step = 0
         self.detected_dir = get_detected_installed_dir()
-        self.is_upgrade = os.path.exists(os.path.join(self.detected_dir, "CodeMind-Hub.exe"))
+        self.is_upgrade = os.path.exists(os.path.join(self.detected_dir, "Tcode.exe"))
         self.install_dir = tk.StringVar(value=self.detected_dir)
         self.create_desktop_shortcut = tk.BooleanVar(value=True)
         self.create_start_menu_shortcut = tk.BooleanVar(value=True)
@@ -271,8 +271,8 @@ class SetupWizard(tk.Tk):
             self.update_idletasks()
             
             bundle_dir = get_bundle_dir()
-            payload_src = os.path.join(bundle_dir, "payload", "CodeMind-Core.exe")
-            target_exe = os.path.join(target_dir, "CodeMind-Hub.exe")
+            payload_src = os.path.join(bundle_dir, "payload", "Tcode-Core.exe")
+            target_exe = os.path.join(target_dir, "Tcode.exe")
             
             # Copy executable
             shutil.copyfile(payload_src, target_exe)
@@ -300,7 +300,7 @@ class SetupWizard(tk.Tk):
             # Create uninstaller script
             uninstaller_bat = os.path.join(target_dir, "Uninstall.bat")
             with open(uninstaller_bat, "w", encoding="gbk") as f:
-                f.write(f'@echo off\necho 正在卸载 {APP_NAME}...\ntimeout /t 1 > nul\ntaskkill /f /im CodeMind-Hub.exe > nul 2>&1\nrd /s /q "%~dp0"\necho 卸载完成。\npause\n')
+                f.write(f'@echo off\necho 正在卸载 {APP_NAME}...\ntimeout /t 1 > nul\ntaskkill /f /im Tcode.exe > nul 2>&1\nrd /s /q "%~dp0"\necho 卸载完成。\npause\n')
                 
             self.progress['value'] = 100
             self.status_label.config(text="安装完成！")
@@ -328,12 +328,12 @@ class SetupWizard(tk.Tk):
         body = tk.Label(self.content_frame, text=desc, font=("Segoe UI", 10), justify="left", bg="#F8FAFC", fg="#334155")
         body.pack(anchor="w", pady=6)
         
-        chk = tk.Checkbutton(self.content_frame, text="立即启动 CodeMind-Hub", variable=self.launch_after_install, font=("Segoe UI", 10, "bold"), bg="#F8FAFC", activebackground="#F8FAFC")
+        chk = tk.Checkbutton(self.content_frame, text="立即启动 Tcode", variable=self.launch_after_install, font=("Segoe UI", 10, "bold"), bg="#F8FAFC", activebackground="#F8FAFC")
         chk.pack(anchor="w", pady=16)
 
     def finish_all(self):
         if self.launch_after_install.get():
-            target_exe = os.path.join(self.install_dir.get(), "CodeMind-Hub.exe")
+            target_exe = os.path.join(self.install_dir.get(), "Tcode.exe")
             if os.path.exists(target_exe):
                 subprocess.Popen([target_exe])
         self.destroy()

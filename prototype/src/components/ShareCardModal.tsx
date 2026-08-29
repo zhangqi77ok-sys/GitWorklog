@@ -29,14 +29,14 @@ export const ShareCardModal: React.FC<ShareCardModalProps> = ({
   });
 
   const handleCopyCardText = async () => {
-    const text = `【CodeMind-Hub AI 协作卡片】\n会话: ${session.title}\n工程: ${session.projectName || '主工程'}\n时间: ${cardDate}\n\n--- 问答内容 ---\n${message.content}\n\n— 来自 CodeMind-Hub 金融级 AI 桌面 IDE`;
+    const text = `【Tcode AI 协作卡片】\n会话: ${session.title}\n工程: ${session.projectName || '主工程'}\n时间: ${cardDate}\n\n--- 问答内容 ---\n${message.content}\n\n— 来自 Tcode 金融级 AI 桌面 IDE`;
     await navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
   };
 
   const handleExportMarkdown = () => {
-    const mdContent = `# CodeMind-Hub 对话记录\n\n**工程**: ${session.projectName || '主工程'} (${session.gitBranch || 'main'})  \n**会话**: ${session.title}  \n**时间**: ${cardDate}  \n**模型审计**: ${message.auditTag || 'CodeMind AI Engine'}  \n\n---\n\n${message.content}\n`;
+    const mdContent = `# Tcode 对话记录\n\n**工程**: ${session.projectName || '主工程'} (${session.gitBranch || 'main'})  \n**会话**: ${session.title}  \n**时间**: ${cardDate}  \n**模型审计**: ${message.auditTag || 'Tcode AI Engine'}  \n\n---\n\n${message.content}\n`;
     const blob = new Blob([mdContent], { type: 'text/markdown;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -142,7 +142,7 @@ export const ShareCardModal: React.FC<ShareCardModalProps> = ({
                 </div>
                 <div>
                   <div style={{ fontWeight: 700, fontSize: '13px', color: 'var(--text-strong)' }}>
-                    CodeMind-Hub
+                    Tcode
                   </div>
                   <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
                     Enterprise AI Agentic IDE
@@ -217,7 +217,7 @@ export const ShareCardModal: React.FC<ShareCardModalProps> = ({
               fontSize: '10.5px',
               color: 'var(--text-muted)'
             }}>
-              <span>CodeMind Agent 架构协同生成 · 真实本地代码校验</span>
+              <span>Tcode Agent 架构协同生成 · 真实本地代码校验</span>
               <span>SHA-256: {Math.random().toString(36).substring(2, 10).toUpperCase()}</span>
             </div>
           </div>

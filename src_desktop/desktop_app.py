@@ -14,7 +14,7 @@ from pathlib import Path
 
 def get_storage_dir():
     appdata = os.environ.get('LOCALAPPDATA', os.path.expanduser('~'))
-    base = Path(appdata) / 'CodeMind-Hub' / 'storage'
+    base = Path(appdata) / 'Tcode' / 'storage'
     base.mkdir(parents=True, exist_ok=True)
     return base
 
@@ -334,7 +334,7 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
             if 'opencode' in target_url:
                 req.add_header('User-Agent', 'opencode/1.0')
             else:
-                req.add_header('User-Agent', 'CodeMind-Hub/1.1.5')
+                req.add_header('User-Agent', 'Tcode/1.1.5')
             if auth_header:
                 req.add_header('Authorization', auth_header)
                 
@@ -523,7 +523,7 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
             if 'opencode' in target_url:
                 req.add_header('User-Agent', 'opencode/1.0')
             else:
-                req.add_header('User-Agent', 'CodeMind-Hub/1.1.5')
+                req.add_header('User-Agent', 'Tcode/1.1.5')
 
             if auth_header:
                 req.add_header('Authorization', auth_header)
@@ -575,7 +575,7 @@ if __name__ == '__main__':
     url = f"http://127.0.0.1:{port}/"
     
     window = webview.create_window(
-        title="CodeMind-Hub - Enterprise AI Agentic IDE",
+        title="Tcode - Enterprise AI Agentic IDE",
         url=url,
         width=1440,
         height=900,
@@ -587,6 +587,6 @@ if __name__ == '__main__':
     )
     global_window = window
     appdata = os.environ.get('LOCALAPPDATA', os.path.expanduser('~'))
-    webview_data = os.path.join(appdata, 'CodeMind-Hub', 'webview_profile')
+    webview_data = os.path.join(appdata, 'Tcode', 'webview_profile')
     os.makedirs(webview_data, exist_ok=True)
     webview.start(debug=False, storage_path=webview_data, private_mode=False)

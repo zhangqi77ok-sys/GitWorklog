@@ -156,11 +156,19 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
   const [sessionQuery, setSessionQuery] = useState('');
   const [referencedSession, setReferencedSession] = useState<SessionItem | null>(null);
 
-  // Sync profile on mount / focus
+  // Real-time synchronization of Developer Profile
   React.useEffect(() => {
-    const handleFocus = () => setDevProfile(loadSavedProfile());
-    window.addEventListener('focus', handleFocus);
-    return () => window.removeEventListener('focus', handleFocus);
+    const syncProfile = () => {
+      setDevProfile(loadSavedProfile());
+    };
+    window.addEventListener('storage', syncProfile);
+    window.addEventListener('focus', syncProfile);
+    window.addEventListener('codemind_profile_updated', syncProfile);
+    return () => {
+      window.removeEventListener('storage', syncProfile);
+      window.removeEventListener('focus', syncProfile);
+      window.removeEventListener('codemind_profile_updated', syncProfile);
+    };
   }, []);
 
   const [editingQueueId, setEditingQueueId] = useState<string | null>(null);
@@ -728,7 +736,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
               color: 'var(--text-muted)'
             }}>
               <span style={{ fontWeight: 600, color: msg.role === 'user' ? 'var(--text-primary)' : 'var(--accent)' }}>
-                {msg.role === 'user' ? '开发者 (You)' : 'CodeMind 智能体'}
+                {msg.role === 'user' ? `${devProfile.name || '开发者'} (You)` : 'Tcode 智能体'}
               </span>
               <span>· {new Date(msg.timestamp).toLocaleTimeString()}</span>
               {msg.auditTag && (

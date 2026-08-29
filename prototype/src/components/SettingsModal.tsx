@@ -1459,22 +1459,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       }}
                     />
                     <button
-                      onClick={() => setProviderToast('已准备导入自定义技能模板')}
+                      onClick={() => setShowImportSkillModal(true)}
                       style={{
-                        padding: '4px 10px',
+                        padding: '5px 12px',
                         borderRadius: '4px',
                         background: 'var(--accent)',
                         color: '#FFF',
                         border: 'none',
-                        fontSize: '10px',
+                        fontSize: '11px',
                         fontWeight: 600,
                         cursor: 'pointer',
                         display: 'flex',
                         alignItems: 'center',
-                        gap: '3px'
+                        gap: '4px'
                       }}
                     >
-                      <Plus size={10} />
+                      <Plus size={12} />
                       <span>导入 Skill</span>
                     </button>
                   </div>
@@ -2050,7 +2050,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <button
                       onClick={() => {
                         saveProfileToStorage(devProfile);
-                        setProfileToast('✓ 用户昵称已保存并持久化至本地磁盘！');
+                        window.dispatchEvent(new Event('codemind_profile_updated'));
+                        setProfileToast('✓ 用户昵称已保存并在界面实时生效！');
                         setTimeout(() => setProfileToast(null), 3000);
                       }}
                       style={{
@@ -2228,7 +2229,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           alignItems: 'center'
         }}>
           <div style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>
-            CodeMind-Hub v1.0 · 配置已持久化至本地 SQLite / JSON
+            Tcode v1.0 · 配置已持久化至本地 SQLite / JSON
           </div>
 
           <button
@@ -2380,7 +2381,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     style={{ padding: '6px 8px', fontSize: '11px', borderRadius: '4px', border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)' }}
                   />
                   <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
-                    系统会自动解压并解析 Skill 规范，将其持久化至本地磁盘 `%LOCALAPPDATA%\CodeMind-Hub`。
+                    系统会自动解压并解析 Skill 规范，将其持久化至本地磁盘 `%LOCALAPPDATA%\Tcode`。
                   </div>
                 </>
               )}
