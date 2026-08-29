@@ -723,6 +723,60 @@ CodeMind 已通过本地磁盘桥接将工程目录结构与核心配置自动�
     }
   };
 
+  // Native Frameless Window Edge Drag Resize
+  const handleWindowEdgeResize = (direction: string) => (e: React.MouseEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const startW = window.innerWidth;
+    const startH = window.innerHeight;
+
+    let lastSent = Date.now();
+    const onMove = (ev: MouseEvent) => {
+      const deltaX = ev.clientX - startX;
+      const deltaY = ev.clientY - startY;
+      let newW = startW;
+      let newH = startH;
+
+      if (direction.includes('e')) newW = startW + deltaX;
+      if (direction.includes('w')) newW = startW - deltaX;
+      if (direction.includes('s')) newH = startH + deltaY;
+      if (direction.includes('n')) newH = startH - deltaY;
+
+      if (Date.now() - lastSent > 40) {
+        lastSent = Date.now();
+        fetch('/api/window/resize', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ width: Math.round(newW), height: Math.round(newH) })
+        }).catch(() => {});
+      }
+    };
+
+    const onUp = (ev: MouseEvent) => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      const deltaX = ev.clientX - startX;
+      const deltaY = ev.clientY - startY;
+      let newW = startW;
+      let newH = startH;
+
+      if (direction.includes('e')) newW = startW + deltaX;
+      if (direction.includes('w')) newW = startW - deltaX;
+      if (direction.includes('s')) newH = startH + deltaY;
+      if (direction.includes('n')) newH = startH - deltaY;
+
+      fetch('/api/window/resize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ width: Math.round(newW), height: Math.round(newH) })
+      }).catch(() => {});
+    };
+
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  };
+
   const handleResolveOptions = (messageId: string, selectedIds: string[], customInput?: string) => {
     setMessages(prev =>
       prev.map(m => {
@@ -744,6 +798,16 @@ CodeMind 已通过本地磁盘桥接将工程目录结构与核心配置自动�
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw', overflow: 'hidden' }}>
+      {/* 8-Directional Draggable Window Edge Resize Grippers */}
+      <div onMouseDown={handleWindowEdgeResize('n')} style={{ position: 'fixed', top: 0, left: 6, right: 6, height: '4px', cursor: 'ns-resize', zIndex: 9999 }} />
+      <div onMouseDown={handleWindowEdgeResize('s')} style={{ position: 'fixed', bottom: 0, left: 6, right: 6, height: '4px', cursor: 'ns-resize', zIndex: 9999 }} />
+      <div onMouseDown={handleWindowEdgeResize('w')} style={{ position: 'fixed', top: 6, bottom: 6, left: 0, width: '4px', cursor: 'ew-resize', zIndex: 9999 }} />
+      <div onMouseDown={handleWindowEdgeResize('e')} style={{ position: 'fixed', top: 6, bottom: 6, right: 0, width: '4px', cursor: 'ew-resize', zIndex: 9999 }} />
+      <div onMouseDown={handleWindowEdgeResize('nw')} style={{ position: 'fixed', top: 0, left: 0, width: '8px', height: '8px', cursor: 'nwse-resize', zIndex: 10000 }} />
+      <div onMouseDown={handleWindowEdgeResize('ne')} style={{ position: 'fixed', top: 0, right: 0, width: '8px', height: '8px', cursor: 'nesw-resize', zIndex: 10000 }} />
+      <div onMouseDown={handleWindowEdgeResize('sw')} style={{ position: 'fixed', bottom: 0, left: 0, width: '8px', height: '8px', cursor: 'nesw-resize', zIndex: 10000 }} />
+      <div onMouseDown={handleWindowEdgeResize('se')} style={{ position: 'fixed', bottom: 0, right: 0, width: '8px', height: '8px', cursor: 'nwse-resize', zIndex: 10000 }} />
+
       {/* 1. Titlebar */}
       <Titlebar
         currentProject={activeSession.projectName || (projects.length > 0 ? projects[0].name : '')}

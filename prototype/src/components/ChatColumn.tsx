@@ -151,6 +151,33 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
   const [showRulesPopover, setShowRulesPopover] = useState(false);
   const [isInputFocused, setIsInputFocused] = useState(false);
+  const [inputHeight, setInputHeight] = useState<number>(68);
+  const [isDraggingInputHeight, setIsDraggingInputHeight] = useState<boolean>(false);
+
+  React.useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (isDraggingInputHeight) {
+        const windowHeight = window.innerHeight;
+        const newH = windowHeight - e.clientY - 90;
+        setInputHeight(Math.max(48, Math.min(420, newH)));
+      }
+    };
+    const handleMouseUp = () => {
+      if (isDraggingInputHeight) {
+        setIsDraggingInputHeight(false);
+      }
+    };
+
+    if (isDraggingInputHeight) {
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+    }
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDraggingInputHeight]);
+
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const activeRules = getActiveRules(INITIAL_RULES);
 
@@ -1216,7 +1243,25 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
 
 
 
-          {/* 2. BORDERLESS AUTO-EXPANDING TEXTAREA */}
+          {/* Draggable Top Handle to resize input box height */}
+          <div
+            onMouseDown={() => setIsDraggingInputHeight(true)}
+            title="上下拖拽可自由调节输入框高度"
+            style={{
+              height: '6px',
+              cursor: 'ns-resize',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: isDraggingInputHeight ? 'var(--accent)' : 'transparent',
+              transition: 'background 0.15s ease',
+              userSelect: 'none'
+            }}
+          >
+            <div style={{ width: '28px', height: '2px', background: 'var(--border-subtle)', borderRadius: '1px' }} />
+          </div>
+
+          {/* 2. BORDERLESS RESIZABLE TEXTAREA */}
           <textarea
             placeholder={
               workMode === 'plan'
@@ -1234,10 +1279,12 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                 handleSend();
               }
             }}
-            rows={2}
             style={{
               width: '100%',
-              padding: '10px 12px 6px 12px',
+              height: `${inputHeight}px`,
+              minHeight: '48px',
+              maxHeight: '420px',
+              padding: '8px 12px 6px 12px',
               border: 'none',
               background: 'transparent',
               fontSize: '12.5px',
@@ -1245,7 +1292,8 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
               color: 'var(--text-primary)',
               resize: 'none',
               outline: 'none',
-              fontFamily: 'inherit'
+              fontFamily: 'inherit',
+              overflowY: 'auto'
             }}
           />
 
@@ -1419,10 +1467,13 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                     position: 'absolute',
                     bottom: '36px',
                     left: 0,
-                    width: 'min(560px, calc(100vw - 48px))',
+                    width: 'min(580px, calc(100vw - 48px))',
                     maxWidth: 'calc(100vw - 48px)',
-                    height: 'min(380px, 65vh)',
-                    maxHeight: '65vh',
+                    height: '380px',
+                    maxHeight: 'min(560px, 80vh)',
+                    resize: 'both',
+                    minWidth: '400px',
+                    minHeight: '260px',
                     background: 'var(--bg-surface-elevated)',
                     border: '1px solid var(--border-strong)',
                     borderRadius: '8px',
@@ -1719,9 +1770,13 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                     bottom: '36px',
                     right: 0,
                     left: 'auto',
-                    width: 'min(440px, calc(100vw - 48px))',
+                    width: 'min(460px, calc(100vw - 48px))',
                     maxWidth: 'calc(100vw - 48px)',
-                    maxHeight: 'min(380px, 60vh)',
+                    height: '360px',
+                    maxHeight: 'min(500px, 75vh)',
+                    resize: 'both',
+                    minWidth: '320px',
+                    minHeight: '220px',
                     background: 'var(--bg-surface-elevated)',
                     border: '1px solid var(--border-strong)',
                     borderRadius: '8px',

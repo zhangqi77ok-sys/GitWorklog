@@ -468,6 +468,29 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
                 self.wfile.write(json.dumps({'error': str(e)}).encode('utf-8'))
             return
 
+        # 7. Window Resize API (for frameless window edge drag)
+        if self.path == '/api/window/resize':
+            length = int(self.headers.get('Content-Length', 0))
+            body = self.rfile.read(length)
+            try:
+                payload = json.loads(body.decode('utf-8'))
+                w = payload.get('width')
+                h = payload.get('height')
+                if global_window and w and h:
+                    global_window.resize(max(800, int(w)), max(500, int(h)))
+                self.send_response(200)
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(b'{"success": true}')
+            except Exception as e:
+                self.send_response(500)
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'error': str(e)}).encode('utf-8'))
+            return
+
         # 2. Proxy POST Requests (e.g. for /chat/completions)
         if self.path.startswith('/api/proxy'):
             content_length = int(self.headers.get('Content-Length', 0))
