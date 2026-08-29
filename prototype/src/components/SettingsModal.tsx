@@ -455,9 +455,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
             )}
 
-                                    {/* TAB 1: GITHUB BENCHMARK MASTER-DETAIL MODEL PROVIDER (Cherry Studio / LobeChat Style) */}
+                                    {/* TAB 1: SYMMETRICAL AESTHETIC MODEL PROVIDER WORKBENCH (Top Matrix + Full-Width Balanced Grid) */}
             {activeTab === 'gateway' && (
-              <div style={{ display: 'flex', height: '460px', margin: '-8px -4px', position: 'relative' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', height: '500px', margin: '-8px -4px', position: 'relative' }}>
                 {providerToast && (
                   <div style={{
                     position: 'absolute',
@@ -476,188 +476,194 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
                 )}
 
-                {/* 1. LEFT MASTER SIDEBAR: Provider List (225px) */}
+                {/* 1. TOP ECOSYSTEM SELECTOR MATRIX (分类胶囊 + 搜索 + 服务商选择栏) */}
                 <div style={{
-                  width: '225px',
-                  borderRight: '1px solid var(--border-subtle)',
-                  paddingRight: '10px',
+                  padding: '10px 14px',
+                  background: 'var(--bg-surface)',
+                  borderRadius: '6px',
+                  border: '1px solid var(--border-subtle)',
+                  marginBottom: '12px',
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: '6px'
+                  gap: '8px'
                 }}>
-                  {/* Search Bar */}
-                  <input
-                    type="text"
-                    placeholder="搜索服务商或模型..."
-                    value={providerSearch}
-                    onChange={e => setProviderSearch(e.target.value)}
-                    style={{
-                      padding: '4px 8px',
-                      borderRadius: '4px',
-                      border: '1px solid var(--border-strong)',
-                      background: 'var(--bg-base)',
-                      fontSize: '11px',
-                      color: 'var(--text-primary)',
-                      outline: 'none'
-                    }}
-                  />
+                  {/* Category Pills + Search Box (Perfect Symmetry) */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', marginRight: '4px' }}>
+                        生态分类:
+                      </span>
+                      {[
+                        { id: 'all', label: '全部服务商' },
+                        { id: 'domestic', label: '🇨🇳 国内自研' },
+                        { id: 'aggregator', label: '🔀 聚合中转' },
+                        { id: 'international', label: '🌐 国际主流' },
+                        { id: 'local', label: '💻 本地私有' }
+                      ].map(tab => (
+                        <button
+                          key={tab.id}
+                          onClick={() => setCategoryFilter(tab.id as ProviderCategory)}
+                          style={{
+                            padding: '3px 8px',
+                            borderRadius: '4px',
+                            border: 'none',
+                            background: categoryFilter === tab.id ? 'var(--accent)' : 'var(--bg-base)',
+                            color: categoryFilter === tab.id ? '#FFF' : 'var(--text-secondary)',
+                            fontSize: '10px',
+                            fontWeight: categoryFilter === tab.id ? 700 : 500,
+                            cursor: 'pointer',
+                            transition: 'all 0.1s ease'
+                          }}
+                        >
+                          {tab.label}
+                        </button>
+                      ))}
+                    </div>
 
-                  {/* Category Filter Pills (GitHub Ecosystem Tabs) */}
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px', paddingBottom: '4px', borderBottom: '1px solid var(--border-subtle)' }}>
-                    {[
-                      { id: 'all', label: '全部' },
-                      { id: 'domestic', label: '🇨🇳 国内' },
-                      { id: 'aggregator', label: '🔀 中转' },
-                      { id: 'international', label: '🌐 国际' },
-                      { id: 'local', label: '💻 本地' }
-                    ].map(tab => (
-                      <button
-                        key={tab.id}
-                        onClick={() => setCategoryFilter(tab.id as ProviderCategory)}
+                    <div style={{ width: '180px' }}>
+                      <input
+                        type="text"
+                        placeholder="过滤服务商或模型..."
+                        value={providerSearch}
+                        onChange={e => setProviderSearch(e.target.value)}
                         style={{
-                          padding: '2px 6px',
-                          borderRadius: '3px',
-                          border: 'none',
-                          background: categoryFilter === tab.id ? 'var(--accent)' : 'var(--bg-surface)',
-                          color: categoryFilter === tab.id ? '#FFF' : 'var(--text-secondary)',
-                          fontSize: '10px',
-                          fontWeight: categoryFilter === tab.id ? 700 : 500,
-                          cursor: 'pointer',
-                          transition: 'all 0.1s ease'
+                          width: '100%',
+                          padding: '3px 8px',
+                          borderRadius: '4px',
+                          border: '1px solid var(--border-strong)',
+                          background: 'var(--bg-base)',
+                          fontSize: '11px',
+                          color: 'var(--text-primary)',
+                          outline: 'none'
                         }}
-                      >
-                        {tab.label}
-                      </button>
-                    ))}
+                      />
+                    </div>
                   </div>
 
-                  {/* Providers List */}
-                  <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                    {filterProviders(providers, categoryFilter, providerSearch)
-                      .map(p => {
-                        const isSelected = selectedProvider.id === p.id;
-                        return (
-                          <div
-                            key={p.id}
-                            onClick={() => setSelectedProviderId(p.id)}
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'space-between',
-                              padding: '6px 8px',
-                              borderRadius: '6px',
-                              cursor: 'pointer',
-                              background: isSelected ? 'var(--accent-subtle)' : 'transparent',
-                              border: isSelected ? '1px solid var(--accent)' : '1px solid transparent',
-                              transition: 'all 0.15s ease'
-                            }}
-                          >
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
-                              <span style={{ fontSize: '13px' }}>{p.icon}</span>
-                              <span style={{
-                                fontSize: '11px',
-                                fontWeight: isSelected ? 700 : 500,
-                                color: isSelected ? 'var(--accent)' : 'var(--text-primary)',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                whiteSpace: 'nowrap'
-                              }}>
-                                {p.name}
-                              </span>
-                            </div>
+                  {/* Horizontal Provider Badges Bar (No Cramped Vertical Stacking!) */}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', maxHeight: '72px', overflowY: 'auto' }}>
+                    {filterProviders(providers, categoryFilter, providerSearch).map(p => {
+                      const isSelected = selectedProvider.id === p.id;
+                      return (
+                        <div
+                          key={p.id}
+                          onClick={() => setSelectedProviderId(p.id)}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '5px',
+                            padding: '4px 8px',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            background: isSelected ? 'var(--accent-subtle)' : 'var(--bg-base)',
+                            border: isSelected ? '1px solid var(--accent)' : '1px solid var(--border-subtle)',
+                            boxShadow: isSelected ? '0 2px 6px rgba(217, 107, 39, 0.15)' : 'none',
+                            transition: 'all 0.15s ease'
+                          }}
+                        >
+                          <span style={{ fontSize: '12px' }}>{p.icon}</span>
+                          <span style={{
+                            fontSize: '11px',
+                            fontWeight: isSelected ? 700 : 500,
+                            color: isSelected ? 'var(--accent)' : 'var(--text-primary)'
+                          }}>
+                            {p.name}
+                          </span>
+                          <span style={{
+                            width: '6px',
+                            height: '6px',
+                            borderRadius: '50%',
+                            background: p.enabled ? '#10B981' : 'var(--text-muted)'
+                          }} />
+                        </div>
+                      );
+                    })}
 
-                            {/* Enable/Disable Mini Pill */}
-                            <span
-                              onClick={e => {
-                                e.stopPropagation();
-                                setProviders(toggleProviderSwitch(providers, p.id));
-                              }}
-                              title={p.enabled ? '点击禁用' : '点击启用'}
-                              style={{
-                                fontSize: '9px',
-                                padding: '1px 5px',
-                                borderRadius: '8px',
-                                background: p.enabled ? 'rgba(16, 185, 129, 0.15)' : 'var(--bg-base)',
-                                color: p.enabled ? '#10B981' : 'var(--text-muted)',
-                                border: p.enabled ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid var(--border-subtle)',
-                                fontWeight: 600
-                              }}
-                            >
-                              {p.enabled ? 'ON' : 'OFF'}
-                            </span>
-                          </div>
-                        );
-                      })}
+                    <button
+                      onClick={() => {
+                        const newP: ModelProviderItem = {
+                          id: `provider-custom-${Date.now()}`,
+                          name: '自定义中转站',
+                          icon: '🌐',
+                          category: 'aggregator',
+                          enabled: true,
+                          protocol: 'openai',
+                          baseUrl: 'https://api.openai-proxy.com/v1',
+                          defaultBaseUrl: 'https://api.openai-proxy.com/v1',
+                          apiKey: '',
+                          status: 'untested',
+                          latencyMs: 0,
+                          models: [
+                            { id: 'custom-model', name: 'Custom-GPT-4o', enabled: true, contextLimit: 128000, capabilities: ['code', 'custom'] }
+                          ]
+                        };
+                        setProviders([...providers, newP]);
+                        setSelectedProviderId(newP.id);
+                      }}
+                      style={{
+                        padding: '4px 8px',
+                        borderRadius: '4px',
+                        border: '1px dashed var(--border-strong)',
+                        background: 'transparent',
+                        color: 'var(--text-secondary)',
+                        fontSize: '10px',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '3px'
+                      }}
+                    >
+                      <Plus size={10} />
+                      <span>添加服务商</span>
+                    </button>
                   </div>
-
-                  {/* Add Provider Button */}
-                  <button
-                    onClick={() => {
-                      const newP: ModelProviderItem = {
-                        id: `provider-custom-${Date.now()}`,
-                        name: '自定义 OpenAI 兼容',
-                        icon: '🌐',
-                        category: 'aggregator',
-                        enabled: true,
-                        protocol: 'openai',
-                        baseUrl: 'https://api.openai-proxy.com/v1',
-                        defaultBaseUrl: 'https://api.openai-proxy.com/v1',
-                        apiKey: '',
-                        status: 'untested',
-                        latencyMs: 0,
-                        models: [
-                          { id: 'custom-model', name: 'Custom-GPT-4o', enabled: true, contextLimit: 128000, capabilities: ['code', 'custom'] }
-                        ]
-                      };
-                      setProviders([...providers, newP]);
-                      setSelectedProviderId(newP.id);
-                    }}
-                    style={{
-                      padding: '5px 8px',
-                      borderRadius: '4px',
-                      border: '1px dashed var(--border-strong)',
-                      background: 'transparent',
-                      color: 'var(--text-secondary)',
-                      fontSize: '10px',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '4px'
-                    }}
-                  >
-                    <Plus size={11} />
-                    <span>添加自定义服务商</span>
-                  </button>
                 </div>
 
-                {/* 2. RIGHT DETAIL WORKBENCH: Selected Provider Config (Flex 1) */}
-                <div style={{ flex: 1, paddingLeft: '14px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  {/* Top Bar: Title, Protocol, Status, Master Switch */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '8px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontSize: '18px' }}>{selectedProvider.icon}</span>
-                      <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <h3 style={{ fontSize: '13px', fontWeight: 700 }}>{selectedProvider.name}</h3>
-                          <span style={{
-                            fontSize: '9px',
-                            padding: '1px 5px',
-                            borderRadius: '3px',
-                            background: 'var(--bg-base)',
-                            border: '1px solid var(--border-subtle)',
-                            color: 'var(--text-muted)'
-                          }}>
-                            {selectedProvider.protocol.toUpperCase()} 协议
-                          </span>
-                        </div>
+                {/* 2. FULL-WIDTH SYMMETRICAL WORKBENCH FOR SELECTED PROVIDER (充裕对称的工作台) */}
+                <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px', paddingRight: '4px' }}>
+                  {/* Top Header Card (Zero Awkward Line Breaks!) */}
+                  <div style={{
+                    padding: '10px 14px',
+                    borderRadius: '6px',
+                    background: 'var(--bg-surface)',
+                    border: '1px solid var(--border-subtle)',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                      <span style={{ fontSize: '20px', flexShrink: 0 }}>{selectedProvider.icon}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flexWrap: 'wrap' }}>
+                        <h3 style={{ fontSize: '13px', fontWeight: 700, margin: 0, whiteSpace: 'nowrap' }}>
+                          {selectedProvider.name}
+                        </h3>
+                        <span style={{
+                          fontSize: '9px',
+                          padding: '1px 6px',
+                          borderRadius: '3px',
+                          background: 'var(--bg-base)',
+                          border: '1px solid var(--border-subtle)',
+                          color: 'var(--text-muted)',
+                          whiteSpace: 'nowrap'
+                        }}>
+                          {selectedProvider.protocol.toUpperCase()} 兼容协议
+                        </span>
                         {selectedProvider.docUrl && (
                           <a
                             href={selectedProvider.docUrl}
                             target="_blank"
                             rel="noreferrer"
-                            style={{ fontSize: '10px', color: 'var(--accent)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '2px', marginTop: '2px' }}
+                            style={{
+                              fontSize: '10px',
+                              color: 'var(--accent)',
+                              textDecoration: 'none',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '2px',
+                              marginLeft: '6px',
+                              whiteSpace: 'nowrap'
+                            }}
                           >
                             <span>获取 API Key / 官方文档</span>
                             <ExternalLink size={9} />
@@ -666,9 +672,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       </div>
                     </div>
 
-                    {/* Master Switch */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>服务商总开关:</span>
+                    {/* Master Enable Switch (Clean & Roomy) */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                      <span style={{ fontSize: '11px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                        服务商总开关:
+                      </span>
                       <button
                         onClick={() => setProviders(toggleProviderSwitch(providers, selectedProvider.id))}
                         style={{
@@ -677,9 +685,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           border: 'none',
                           background: selectedProvider.enabled ? 'var(--accent)' : 'var(--border-strong)',
                           color: '#FFF',
-                          fontSize: '11px',
+                          fontSize: '10px',
                           fontWeight: 700,
-                          cursor: 'pointer'
+                          cursor: 'pointer',
+                          whiteSpace: 'nowrap'
                         }}
                       >
                         {selectedProvider.enabled ? '已启用 (ON)' : '已禁用 (OFF)'}
@@ -687,99 +696,26 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </div>
                   </div>
 
-                  {/* Section 1: Endpoints & API Credentials */}
-                  <div style={{
-                    padding: '10px 12px',
-                    borderRadius: '6px',
-                    border: '1px solid var(--border-subtle)',
-                    background: 'var(--bg-surface)',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '10px'
-                  }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: '11px', fontWeight: 700 }}>API 凭证与端点设置</span>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <span style={{
-                          fontSize: '10px',
-                          padding: '2px 6px',
-                          borderRadius: '3px',
-                          background: selectedProvider.status === 'healthy' ? 'rgba(16, 185, 129, 0.12)' : 'var(--bg-base)',
-                          color: selectedProvider.status === 'healthy' ? '#10B981' : 'var(--text-muted)',
-                          fontWeight: 600
-                        }}>
-                          {testingProviderId === selectedProvider.id
-                            ? '正在测速...'
-                            : (selectedProvider.latencyMs === 0 ? '🟢 本地直连 0ms' : `🟢 正常 ${selectedProvider.latencyMs}ms`)}
-                        </span>
-                        <button
-                          onClick={() => handleTestProvider(selectedProvider)}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '3px',
-                            padding: '3px 8px',
-                            borderRadius: '4px',
-                            border: '1px solid var(--border-subtle)',
-                            background: 'var(--accent-subtle)',
-                            color: 'var(--accent)',
-                            fontSize: '10px',
-                            fontWeight: 600,
-                            cursor: 'pointer'
-                          }}
-                        >
-                          <Zap size={11} />
-                          <span>连通性测试</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* API Key */}
-                    <div>
-                      <label style={{ fontSize: '10px', color: 'var(--text-muted)', display: 'block', marginBottom: '2px' }}>
-                        API Key (密钥凭据):
-                      </label>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'var(--bg-base)', borderRadius: '4px', border: '1px solid var(--border-strong)', padding: '0 6px' }}>
-                        <input
-                          type={showProviderKeyMap[selectedProvider.id] ? 'text' : 'password'}
-                          value={selectedProvider.apiKey}
-                          placeholder={selectedProvider.id === 'provider-ollama' ? '本地 Ollama 免密钥' : 'sk-...'}
-                          onChange={e => {
-                            const val = e.target.value;
-                            setProviders(prev => prev.map(item => item.id === selectedProvider.id ? { ...item, apiKey: val } : item));
-                          }}
-                          style={{
-                            flex: 1,
-                            padding: '5px 0',
-                            fontSize: '11px',
-                            border: 'none',
-                            background: 'transparent',
-                            color: 'var(--text-primary)',
-                            fontFamily: 'var(--font-mono)',
-                            outline: 'none'
-                          }}
-                        />
-                        {selectedProvider.apiKey && (
-                          <button
-                            onClick={() => setShowProviderKeyMap(prev => ({ ...prev, [selectedProvider.id]: !prev[selectedProvider.id] }))}
-                            style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '2px' }}
-                          >
-                            {showProviderKeyMap[selectedProvider.id] ? <EyeOff size={13} /> : <Eye size={13} />}
-                          </button>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Base URL */}
-                    <div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
-                        <label style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
-                          API 地址 (Base URL):
+                  {/* 2-Column Balanced Symmetrical Grid: Base URL (Left) & API Key (Right) */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                    {/* Left Column: Base URL */}
+                    <div style={{
+                      padding: '10px 12px',
+                      borderRadius: '6px',
+                      background: 'var(--bg-surface)',
+                      border: '1px solid var(--border-subtle)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '4px'
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                          端点地址 (Base URL):
                         </label>
                         {selectedProvider.baseUrl !== selectedProvider.defaultBaseUrl && (
                           <span
                             onClick={() => setProviders(prev => prev.map(item => item.id === selectedProvider.id ? { ...item, baseUrl: item.defaultBaseUrl } : item))}
-                            style={{ fontSize: '9px', color: 'var(--accent)', cursor: 'pointer' }}
+                            style={{ fontSize: '10px', color: 'var(--accent)', cursor: 'pointer', fontWeight: 500 }}
                           >
                             恢复默认
                           </span>
@@ -805,22 +741,102 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         }}
                       />
                     </div>
+
+                    {/* Right Column: API Key & Test Connection */}
+                    <div style={{
+                      padding: '10px 12px',
+                      borderRadius: '6px',
+                      background: 'var(--bg-surface)',
+                      border: '1px solid var(--border-subtle)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '4px'
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                          API Key (密钥凭据):
+                        </label>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span style={{
+                            fontSize: '9px',
+                            padding: '1px 5px',
+                            borderRadius: '3px',
+                            background: selectedProvider.status === 'healthy' ? 'rgba(16, 185, 129, 0.12)' : 'var(--bg-base)',
+                            color: selectedProvider.status === 'healthy' ? '#10B981' : 'var(--text-muted)',
+                            fontWeight: 600
+                          }}>
+                            {testingProviderId === selectedProvider.id
+                              ? '测速中...'
+                              : (selectedProvider.latencyMs === 0 ? '🟢 本地 0ms' : `🟢 正常 ${selectedProvider.latencyMs}ms`)}
+                          </span>
+                          <button
+                            onClick={() => handleTestProvider(selectedProvider)}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '3px',
+                              padding: '2px 7px',
+                              borderRadius: '3px',
+                              border: '1px solid var(--border-subtle)',
+                              background: 'var(--accent-subtle)',
+                              color: 'var(--accent)',
+                              fontSize: '10px',
+                              fontWeight: 600,
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <Zap size={10} />
+                            <span>连通性测试</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'var(--bg-base)', borderRadius: '4px', border: '1px solid var(--border-strong)', padding: '0 6px' }}>
+                        <input
+                          type={showProviderKeyMap[selectedProvider.id] ? 'text' : 'password'}
+                          value={selectedProvider.apiKey}
+                          placeholder={selectedProvider.id === 'provider-ollama' ? '本地 Ollama 免密钥' : 'sk-...'}
+                          onChange={e => {
+                            const val = e.target.value;
+                            setProviders(prev => prev.map(item => item.id === selectedProvider.id ? { ...item, apiKey: val } : item));
+                          }}
+                          style={{
+                            flex: 1,
+                            padding: '5px 0',
+                            fontSize: '11px',
+                            border: 'none',
+                            background: 'transparent',
+                            color: 'var(--text-primary)',
+                            fontFamily: 'var(--font-mono)',
+                            outline: 'none'
+                          }}
+                        />
+                        {selectedProvider.apiKey && (
+                          <button
+                            onClick={() => setShowProviderKeyMap(prev => ({ ...prev, [selectedProvider.id]: !prev[selectedProvider.id] }))}
+                            style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '2px' }}
+                          >
+                            {showProviderKeyMap[selectedProvider.id] ? <EyeOff size={12} /> : <Eye size={12} />}
+                          </button>
+                        )}
+                      </div>
+                    </div>
                   </div>
 
-                  {/* Section 2: Model Management Table (核心 GitHub 交互!) */}
+                  {/* Full-Width Models Management Card (Symmetrical & Spacious) */}
                   <div style={{
-                    padding: '10px 12px',
+                    padding: '12px 14px',
                     borderRadius: '6px',
-                    border: '1px solid var(--border-subtle)',
                     background: 'var(--bg-surface)',
+                    border: '1px solid var(--border-subtle)',
                     display: 'flex',
                     flexDirection: 'column',
-                    gap: '8px'
+                    gap: '10px'
                   }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <span style={{ fontSize: '11px', fontWeight: 700 }}>模型列表与管理</span>
-                        <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontSize: '12px', fontWeight: 700 }}>模型列表与管理</span>
+                        <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
                           (已启用 {selectedProvider.models.filter(m => m.enabled).length}/{selectedProvider.models.length})
                         </span>
                       </div>
@@ -869,7 +885,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       </div>
                     </div>
 
-                    {/* Inline Add Model Input */}
+                    {/* Inline Add Model Form */}
                     {showAddCustomModel && (
                       <div style={{ display: 'flex', gap: '6px', padding: '6px', background: 'var(--bg-base)', borderRadius: '4px', border: '1px solid var(--accent)' }}>
                         <input
@@ -877,25 +893,25 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           placeholder="输入模型 ID (如 deepseek-coder 或 qwen2.5:72b)"
                           value={customModelInput}
                           onChange={e => setCustomModelInput(e.target.value)}
-                          style={{ flex: 1, padding: '3px 6px', fontSize: '11px', border: '1px solid var(--border-subtle)', borderRadius: '3px', background: 'var(--bg-surface)', color: 'var(--text-primary)', outline: 'none' }}
+                          style={{ flex: 1, padding: '4px 8px', fontSize: '11px', border: '1px solid var(--border-subtle)', borderRadius: '3px', background: 'var(--bg-surface)', color: 'var(--text-primary)', outline: 'none' }}
                         />
                         <button
                           onClick={handleAddCustomModelSubmit}
-                          style={{ padding: '3px 10px', borderRadius: '3px', background: 'var(--accent)', color: '#FFF', border: 'none', fontSize: '10px', fontWeight: 600, cursor: 'pointer' }}
+                          style={{ padding: '4px 12px', borderRadius: '3px', background: 'var(--accent)', color: '#FFF', border: 'none', fontSize: '10px', fontWeight: 600, cursor: 'pointer' }}
                         >
                           确定
                         </button>
                         <button
                           onClick={() => setShowAddCustomModel(false)}
-                          style={{ padding: '3px 6px', borderRadius: '3px', background: 'transparent', border: 'none', color: 'var(--text-muted)', fontSize: '10px', cursor: 'pointer' }}
+                          style={{ padding: '4px 8px', borderRadius: '3px', background: 'transparent', border: 'none', color: 'var(--text-muted)', fontSize: '10px', cursor: 'pointer' }}
                         >
                           取消
                         </button>
                       </div>
                     )}
 
-                    {/* Models Rows */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    {/* Models Rows (Full Width, Generous Breathing Room) */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                       {selectedProvider.models.map(m => (
                         <div
                           key={m.id}
@@ -903,62 +919,62 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'space-between',
-                            padding: '6px 8px',
+                            padding: '8px 12px',
                             borderRadius: '4px',
                             background: m.enabled ? 'var(--bg-base)' : 'transparent',
                             border: m.enabled ? '1px solid var(--border-subtle)' : '1px solid transparent',
                             opacity: m.enabled ? 1 : 0.6
                           }}
                         >
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                             <input
                               type="checkbox"
                               checked={m.enabled}
                               onChange={() => setProviders(toggleProviderModelSwitch(providers, selectedProvider.id, m.id))}
-                              style={{ cursor: 'pointer' }}
+                              style={{ cursor: 'pointer', width: '14px', height: '14px' }}
                             />
                             <div>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                <span style={{ fontSize: '11px', fontWeight: 600, fontFamily: 'var(--font-mono)' }}>{m.id}</span>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{ fontSize: '12px', fontWeight: 600, fontFamily: 'var(--font-mono)' }}>
+                                  {m.id}
+                                </span>
                                 {m.capabilities.map(cap => (
                                   <span
                                     key={cap}
                                     style={{
                                       fontSize: '9px',
-                                      padding: '0 4px',
-                                      borderRadius: '2px',
+                                      padding: '1px 5px',
+                                      borderRadius: '3px',
                                       background: cap === 'reasoning' || cap === 'thinking' ? 'rgba(147, 51, 234, 0.12)' : 'rgba(217, 107, 39, 0.1)',
                                       color: cap === 'reasoning' || cap === 'thinking' ? '#9333EA' : 'var(--accent)',
-                                      fontWeight: 500
+                                      fontWeight: 600
                                     }}
                                   >
-                                    {cap === 'reasoning' || cap === 'thinking' ? '思考链' : (cap === 'vision' ? '视觉' : '代码')}
+                                    {cap === 'reasoning' || cap === 'thinking' ? '🧠 思考链' : (cap === 'vision' ? '👁️ 视觉' : '💻 代码')}
                                   </span>
                                 ))}
                               </div>
-                              <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
-                                {m.name} · 上限 {Math.round(m.contextLimit / 1000)}k tokens
+                              <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                                {m.name} · 上下文上限 {Math.round(m.contextLimit / 1000)}k tokens
                               </div>
                             </div>
                           </div>
 
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <button
-                              onClick={() => setProviders(toggleProviderModelSwitch(providers, selectedProvider.id, m.id))}
-                              style={{
-                                padding: '2px 8px',
-                                borderRadius: '10px',
-                                border: 'none',
-                                background: m.enabled ? 'var(--accent)' : 'var(--border-strong)',
-                                color: '#FFF',
-                                fontSize: '10px',
-                                fontWeight: 600,
-                                cursor: 'pointer'
-                              }}
-                            >
-                              {m.enabled ? '已启用' : '已禁用'}
-                            </button>
-                          </div>
+                          <button
+                            onClick={() => setProviders(toggleProviderModelSwitch(providers, selectedProvider.id, m.id))}
+                            style={{
+                              padding: '3px 10px',
+                              borderRadius: '10px',
+                              border: 'none',
+                              background: m.enabled ? 'var(--accent)' : 'var(--border-strong)',
+                              color: '#FFF',
+                              fontSize: '10px',
+                              fontWeight: 600,
+                              cursor: 'pointer'
+                            }}
+                          >
+                            {m.enabled ? '已启用' : '已禁用'}
+                          </button>
                         </div>
                       ))}
                     </div>
