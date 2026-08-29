@@ -123,6 +123,8 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
   ]);
   const [isExecutingCmd, setIsExecutingCmd] = useState(false);
   const [cmdInput, setCmdInput] = useState('');
+  const [commandHistory, setCommandHistory] = useState<string[]>([]);
+  const [historyIndex, setHistoryIndex] = useState<number>(-1);
   const [isCiDrawerOpen, setIsCiDrawerOpen] = useState(false);
   const [hoveredAction, setHoveredAction] = useState<string | null>(null);
   // Real Disk File Loading
@@ -202,19 +204,53 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
     };
   }, [isDraggingVert]);
 
-  const handleRunCommand = (e: React.FormEvent) => {
+  const handleRunCommand = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!cmdInput.trim()) return;
-    const newLogs = [...terminalLogs, `$ ${cmdInput}`];
+    const rawCmd = cmdInput.trim();
+    if (!rawCmd) return;
 
-    if (cmdInput.toLowerCase().includes('rm -rf') || cmdInput.toLowerCase().includes('drop table')) {
-      newLogs.push('🛡️ [终端安全沙箱拦截]: 监测到高危写盘指令 rm -rf dist (本地构建产物)');
-    } else {
-      newLogs.push(`[${terminals.find(t => t.id === activeTerminalId)?.title || 'term'}]: 执行成功 (AST 状态健康)`);
+    // Handle clear / cls command
+    if (rawCmd.toLowerCase() === 'clear' || rawCmd.toLowerCase() === 'cls') {
+      setTerminalLogs([]);
+      setCmdInput('');
+      return;
     }
 
-    setTerminalLogs(newLogs);
+    const currentCwd = activeProject?.path || 'e:/pro/agent-learning';
+    const promptLine = `PS ${currentCwd}> ${rawCmd}`;
+    setTerminalLogs(prev => [...prev, promptLine]);
+    setCommandHistory(prev => [rawCmd, ...prev.filter(c => c !== rawCmd)]);
+    setHistoryIndex(-1);
     setCmdInput('');
+    setIsExecutingCmd(true);
+
+    try {
+      const res = await fetch('/api/terminal/exec', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          command: rawCmd,
+          cwd: currentCwd
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        const outLines = (data.stdout || '').split('\n');
+        const errLines = (data.stderr || '').split('\n');
+        const combined = [...outLines, ...errLines].map(l => l.replace(/\r/g, ''));
+        if (combined.filter(l => l.trim()).length === 0) {
+          setTerminalLogs(prev => [...prev, `[命令执行完成，退出代码: ${data.exitCode}]`]);
+        } else {
+          setTerminalLogs(prev => [...prev, ...combined]);
+        }
+      } else {
+        setTerminalLogs(prev => [...prev, `✕ 错误 (${data.exitCode || 1}): ${data.error || data.stderr || '命令执行失败'}`]);
+      }
+    } catch (err: any) {
+      setTerminalLogs(prev => [...prev, `✕ 终端执行异常: ${err.message}`]);
+    } finally {
+      setIsExecutingCmd(false);
+    }
   };
 
   const codeLines = [
@@ -865,44 +901,7 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
               </div>
             ))}
 
-            {/* Interactive Sudo Bypass Resolution Card */}
-            {!sudoBypassed && (
-              <div style={{
-                marginTop: '6px',
-                padding: '6px 10px',
-                borderRadius: '4px',
-                background: 'rgba(239, 68, 68, 0.1)',
-                border: '1px solid #EF4444',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                fontSize: '10.5px'
-              }}>
-                <span style={{ color: '#FCA5A5' }}>
-                  ⚠️ 检测到构建清理命令，是否确认为合法操作并放行？
-                </span>
-                <div style={{ display: 'flex', gap: '6px' }}>
-                  <button
-                    onClick={() => {
-                      setSudoBypassed(true);
-                      setTerminalLogs(prev => [...prev, '🔓 [开发者提权放行]: sudo rm -rf dist 执行成功 (已清理 42MB 缓存)']);
-                    }}
-                    style={{
-                      padding: '2px 8px',
-                      borderRadius: '3px',
-                      background: '#16A34A',
-                      border: 'none',
-                      color: '#FFF',
-                      fontSize: '10px',
-                      fontWeight: 600,
-                      cursor: 'pointer'
-                    }}
-                  >
-                    🔓 临时放行 (Sudo)
-                  </button>
-                </div>
-              </div>
-            )}
+
           </div>
 
           {/* Terminal Command Input Form */}
@@ -915,17 +914,38 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
             background: '#18181B'
           }}>
             <span style={{ color: '#4ADE80', fontWeight: 600 }}>❯</span>
-            <input
+                        <input
               type="text"
               value={cmdInput}
               onChange={e => setCmdInput(e.target.value)}
-              placeholder="输入终端指令 (例如: npm test 或 git status)..."
+              onKeyDown={e => {
+                if (e.key === 'ArrowUp') {
+                  e.preventDefault();
+                  if (commandHistory.length > 0) {
+                    const nextIdx = Math.min(historyIndex + 1, commandHistory.length - 1);
+                    setHistoryIndex(nextIdx);
+                    setCmdInput(commandHistory[nextIdx]);
+                  }
+                } else if (e.key === 'ArrowDown') {
+                  e.preventDefault();
+                  if (historyIndex > 0) {
+                    const nextIdx = historyIndex - 1;
+                    setHistoryIndex(nextIdx);
+                    setCmdInput(commandHistory[nextIdx]);
+                  } else if (historyIndex === 0) {
+                    setHistoryIndex(-1);
+                    setCmdInput('');
+                  }
+                }
+              }}
+              placeholder={isExecutingCmd ? '命令执行中...' : '输入系统终端指令 (例如: dir, git status, git log, npm test)...'}
+              disabled={isExecutingCmd}
               style={{
                 flex: 1,
                 background: 'transparent',
                 border: 'none',
                 outline: 'none',
-                color: '#FFF',
+                color: isExecutingCmd ? '#A1A1AA' : '#FFF',
                 fontSize: '11px',
                 fontFamily: 'var(--font-mono)'
               }}

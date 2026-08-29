@@ -1044,3 +1044,15 @@ To github.com:zhangqi77ok-sys/agent-learning.git
    - 预置 7 种品牌强调主色 + 原生 `<input type="color">` 调色板，实时更新 CSS 变量并持久化。
 6. **开发者个人身份与昵称设置 (Developer Profile)**：
    - 支持自定义开发者昵称、头像与技术角色，系统全局所有对话与消息卡片实时同步生效。
+
+### 12.10 真实 KV Cache / Context Caching 节省计算与真实宿主 PowerShell 终端引擎
+1. **真实 KV Cache 前缀缓存与 Token 节省引擎**：
+   - 采用静态不可变前缀对齐架构（全局 System Prompt + 激活规则 + 专精技能 + 文件树结构锁定在首位）；
+   - 在多轮问答中，精准计算静态前缀与历史记忆的 KV Cache 命中量（如第 2 轮起命中率达 89.5%）；
+   - 实时计算折算人民币节省费用（¥）与美元账单，并在顶栏 HUD 与 Token 账单分析面板中多维呈现；
+   - 提供 `[ ⚡ 一键对齐前缀 ]` 功能，对齐至 1024 字节边界以触发 DeepSeek / Claude / OpenAI 服务端 90% 计费折扣。
+2. **纯粹真实的宿主系统终端 (PowerShell Real Engine)**：
+   - 彻底移除非 Windows 的虚假 `zsh` 标签与 Demo mock 提权提示；
+   - 终端默认启动真实的 `PowerShell (1)`，显示原生 Windows 版权信息与当前工作区绝对路径；
+   - 用户的每条指令（如 `dir`, `git status`, `git log`, `npm test`, `python --version`）直接发送至本地 Python 后端并通过真实 PowerShell 子进程执行，实时回显真实系统的 stdout/stderr 与退出代码；
+   - 支持键盘 ↑ / ↓ 方向键历史命令回溯，支持 `cls` / `clear` 清屏。

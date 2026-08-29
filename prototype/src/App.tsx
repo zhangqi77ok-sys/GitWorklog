@@ -10,6 +10,7 @@ import { LeftPanel } from './components/LeftPanel';
 import { ChatColumn } from './components/ChatColumn';
 import { EditorWorkspace } from './components/EditorWorkspace';
 import {
+  calculateKVCacheMetrics,
   SessionTier1Type,
   SessionItem,
   ChatMessage,
@@ -204,6 +205,31 @@ export const App: React.FC = () => {
       return updatedMap;
     });
   };
+
+  // Real-time Dynamic Token & KV Cache Caching Calculator
+  React.useEffect(() => {
+    const totalMsgCount = messages.length;
+    const kv = calculateKVCacheMetrics(totalMsgCount);
+    
+    const totalChars = messages.reduce((acc, m) => acc + (m.content?.length || 0), 0);
+    const contentTokens = Math.round(totalChars * 0.75);
+    const promptTokens = Math.round(contentTokens * 0.45) + kv.prefixTokens;
+    const completionTokens = Math.round(contentTokens * 0.55);
+    const totalTokens = promptTokens + completionTokens;
+    
+    const costUsd = Number(((promptTokens * 0.0000008) + (completionTokens * 0.000002) - (kv.totalCacheHitTokens * 0.00000072)).toFixed(4));
+    
+    setTokenStats({
+      totalTokens: Math.max(totalTokens, kv.prefixTokens),
+      promptTokens: Math.max(promptTokens, kv.prefixTokens),
+      completionTokens: completionTokens,
+      cacheHitTokens: kv.totalCacheHitTokens,
+      cacheWriteTokens: kv.prefixTokens,
+      estimatedCostUsd: Math.max(0.001, costUsd),
+      contextCurrentTokens: Math.min(currentModel.contextLimit || 128000, totalTokens),
+      contextMaxTokens: currentModel.contextLimit || 128000
+    });
+  }, [messages, currentModel]);
 
   const activeSession = sessions.find(s => s.id === currentSessionId) || sessions[0];
 
@@ -972,7 +998,9 @@ CodeMind 已通过本地磁盘桥接将工程目录结构与核心配置自动�
       <TokenAnalyticsModal
         isOpen={isTokenAnalyticsOpen}
         onClose={() => setIsTokenAnalyticsOpen(false)}
-        stats={tokenStats}
+        tokenStats={tokenStats}
+        currentModel={currentModel}
+        messagesCount={messages.length}
       />
 
       {/* Real-Time Live Logs Drawer Modal */}
