@@ -25,6 +25,7 @@ import {
 export const App: React.FC = () => {
   const [activeNav, setActiveNav] = useState('sessions');
   const [currentSessionId, setCurrentSessionId] = useState('session-2');
+  const [rightWorkspaceOpen, setRightWorkspaceOpen] = useState<boolean>(false);
   const [workMode, setWorkMode] = useState<WorkMode>('act');
   const [currentModel, setCurrentModel] = useState<AIModelOption>(AVAILABLE_MODELS[0]);
   const [permissionPolicy, setPermissionPolicy] = useState<PermissionPolicy>('autonomous_agent');
@@ -85,11 +86,11 @@ export const App: React.FC = () => {
     },
     {
       id: 'session-3',
-      tier1: 'file',
+      tier1: 'project',
       projectId: 'proj-1',
       projectName: 'agent-learning',
-      filePath: 'src/bus/GatewayBus.ts',
-      title: 'GatewayBus.ts 事件防重优化',
+      gitBranch: 'main',
+      title: 'GatewayBus.ts 事件防重与重试',
       tags: ['bug'],
       messagesCount: 3,
       totalTokens: 4200,
@@ -176,25 +177,6 @@ export const App: React.FC = () => {
     setCurrentSessionId(newSession.id);
   };
 
-  const handleNewFileSession = (projectId: string, filePath: string) => {
-    const proj = projects.find(p => p.id === projectId);
-    const fileName = filePath.split('/').pop();
-    const newSession: SessionItem = {
-      id: `session-${Date.now()}`,
-      tier1: 'file',
-      projectId: projectId,
-      projectName: proj?.name || 'agent-learning',
-      filePath: filePath,
-      title: `${fileName} 专属会话`,
-      tags: ['refactor'],
-      messagesCount: 0,
-      totalTokens: 0,
-      createdAt: Date.now(),
-      updatedAt: Date.now()
-    };
-    setSessions(prev => [newSession, ...prev]);
-    setCurrentSessionId(newSession.id);
-  };
 
   const handleDeleteSession = (id: string) => {
     setSessions(prev => {
@@ -333,7 +315,6 @@ export const App: React.FC = () => {
           onSelectSession={setCurrentSessionId}
           onNewGlobalSession={handleNewGlobalSession}
           onNewProjectSession={handleNewProjectSession}
-          onNewFileSession={handleNewFileSession}
           onDeleteSession={handleDeleteSession}
           onRenameSession={handleRenameSession}
           onAddTag={handleAddTag}
@@ -342,8 +323,11 @@ export const App: React.FC = () => {
           onRemoveProject={handleRemoveProject}
         />
 
-        {/* ChatColumn (弹性 45%) */}
+        {/* ChatColumn (自适应宽幅: 工作台关闭时填满剩余空间，打开时 45%) */}
         <ChatColumn
+          style={{ flex: rightWorkspaceOpen ? '0 0 45%' : 1 }}
+          rightWorkspaceOpen={rightWorkspaceOpen}
+          onToggleWorkspace={() => setRightWorkspaceOpen(!rightWorkspaceOpen)}
           session={activeSession}
           messages={messages}
           workMode={workMode}
@@ -356,8 +340,10 @@ export const App: React.FC = () => {
           onResolveOptions={handleResolveOptions}
         />
 
-        {/* EditorWorkspace (弹性 55%) */}
-        <EditorWorkspace />
+        {/* EditorWorkspace (默认关闭，打开时占满剩余空间，内部 4:6 终端与文件) */}
+        {rightWorkspaceOpen && (
+          <EditorWorkspace onCloseWorkspace={() => setRightWorkspaceOpen(false)} />
+        )}
       </div>
     </div>
   );

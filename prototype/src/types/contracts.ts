@@ -1,6 +1,6 @@
 // CodeMind-Hub 核心接口规范契约 (SDD Contract)
 
-export type SessionTier1Type = 'global' | 'project' | 'file';
+export type SessionTier1Type = 'global' | 'project';
 
 export interface SessionItem {
   id: string;
@@ -230,4 +230,28 @@ export const AVAILABLE_MODELS: AIModelOption[] = [
 
 export function findModelById(id: string): AIModelOption {
   return AVAILABLE_MODELS.find(m => m.id === id) || AVAILABLE_MODELS[0];
+}
+
+
+// Terminal Management Contract
+export interface TerminalTab {
+  id: string;
+  title: string;
+  shell: 'zsh' | 'pwsh' | 'bash' | 'node';
+  logs: string[];
+}
+
+export function createTerminalTab(existing: TerminalTab[], shell: 'zsh' | 'pwsh' | 'bash' = 'zsh'): TerminalTab {
+  const num = existing.length + 1;
+  return {
+    id: `term-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
+    title: `${shell} (${num})`,
+    shell,
+    logs: [`$ Terminal #${num} ready (${shell})`, `$ npm test --watch`]
+  };
+}
+
+export function closeTerminalTab(existing: TerminalTab[], tabId: string): TerminalTab[] {
+  if (existing.length <= 1) return existing;
+  return existing.filter(t => t.id !== tabId);
 }

@@ -24,6 +24,9 @@ import {
 import { OptionsCard } from './OptionsCard';
 
 interface ChatColumnProps {
+  rightWorkspaceOpen: boolean;
+  onToggleWorkspace: () => void;
+  style?: React.CSSProperties;
   session: SessionItem;
   messages: ChatMessage[];
   workMode: WorkMode;
@@ -37,6 +40,9 @@ interface ChatColumnProps {
 }
 
 export const ChatColumn: React.FC<ChatColumnProps> = ({
+  rightWorkspaceOpen,
+  onToggleWorkspace,
+  style,
   session,
   messages,
   workMode,
@@ -92,7 +98,28 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
           color: 'var(--accent)'
         }}>
           <span>📁 <strong>工程作用域</strong>: {session.projectName || 'agent-learning'} (🌿 {session.gitBranch || 'main'})</span>
-          <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>AST 骨架已载入</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>AST 骨架已载入</span>
+            <button
+              onClick={onToggleWorkspace}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                padding: '2px 6px',
+                borderRadius: '4px',
+                background: rightWorkspaceOpen ? 'rgba(217, 107, 39, 0.1)' : 'var(--accent)',
+                color: rightWorkspaceOpen ? 'var(--accent)' : '#FFF',
+                border: 'none',
+                fontSize: '10px',
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+            >
+              <FileCode size={11} />
+              <span>{rightWorkspaceOpen ? '收起工作台' : '◫ 打开工作台 (4:6终端)'}</span>
+            </button>
+          </div>
         </div>
       );
     }
@@ -115,15 +142,17 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
 
   return (
     <div style={{
-      flex: '0 0 45%',
+      flex: rightWorkspaceOpen ? '0 0 45%' : 1,
       minWidth: '320px',
-      maxWidth: '700px',
+      maxWidth: rightWorkspaceOpen ? '700px' : 'none',
       height: 'calc(100vh - 38px)',
       background: 'var(--bg-surface-elevated)',
-      borderRight: '1px solid var(--border-subtle)',
+      borderRight: rightWorkspaceOpen ? '1px solid var(--border-subtle)' : 'none',
       display: 'flex',
       flexDirection: 'column',
-      position: 'relative'
+      position: 'relative',
+      transition: 'all 0.2s ease',
+      ...style
     }}>
       {/* Pinned Scope Badge */}
       {renderTier1Badge()}

@@ -9,6 +9,8 @@ import {
   addProjectToWorkspace,
   AVAILABLE_MODELS,
   findModelById,
+  createTerminalTab,
+  closeTerminalTab,
   removeProjectFromWorkspace,
   SessionItem,
   TokenStats
@@ -105,5 +107,32 @@ describe('SDD Contract - AI Model Registry & Dynamic Switching', () => {
 
     const fallback = findModelById('non-existent-id');
     expect(fallback.id).toBe('claude-3-5-sonnet');
+  });
+});
+
+
+describe('SDD Contract - Multi-Terminal Tab Lifecycle', () => {
+  it('should create and append new terminal tab with auto-naming', () => {
+    const initialTabs = [
+      { id: 'term-1', title: 'zsh (1)', shell: 'zsh' as const, logs: ['$ init'] }
+    ];
+    const newTab = createTerminalTab(initialTabs, 'pwsh');
+    expect(newTab.title).toBe('pwsh (2)');
+    expect(newTab.shell).toBe('pwsh');
+    expect(newTab.logs.length).toBeGreaterThan(0);
+  });
+
+  it('should close terminal tab but preserve at least one active terminal', () => {
+    const tabs = [
+      { id: 'term-1', title: 'zsh (1)', shell: 'zsh' as const, logs: [] },
+      { id: 'term-2', title: 'pwsh (2)', shell: 'pwsh' as const, logs: [] }
+    ];
+    const afterClose = closeTerminalTab(tabs, 'term-1');
+    expect(afterClose.length).toBe(1);
+    expect(afterClose[0].id).toBe('term-2');
+
+    // Attempt to close the last one should keep it
+    const cannotCloseLast = closeTerminalTab(afterClose, 'term-2');
+    expect(cannotCloseLast.length).toBe(1);
   });
 });
