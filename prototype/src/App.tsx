@@ -478,13 +478,15 @@ export const App: React.FC = () => {
       timestamp: Date.now()
     };
 
+    // Snapshot active model at call initiation to guarantee immunity against concurrent model switching
+    const streamingModel = { ...currentModel };
     const assistantId = `reply-${Date.now()}`;
     const assistantMsg: ChatMessage = {
       id: assistantId,
       role: 'assistant',
       content: '',
       timestamp: Date.now(),
-      auditTag: `⚡ ${currentModel.name} 真实流式响应`
+      auditTag: `⚡ ${streamingModel.name} 真实流式响应`
     };
 
     // Append both to current session in memory
@@ -496,11 +498,11 @@ export const App: React.FC = () => {
 
     const callStartTime = performance.now();
     try {
-      addLog('INFO', 'GatewayBus', `[发送指令] 正在调度模型 [${currentModel.name}] (${currentModel.id})`);
+      addLog('INFO', 'GatewayBus', `[发送指令] 正在调度模型 [${streamingModel.name}] (${streamingModel.id})`);
       const savedProviders = loadSavedProviders();
       // Intelligent Provider matching for selected model
-      let provider = savedProviders.find(p => p.enabled && p.models?.some(m => m.id === currentModel.id));
-      if (!provider && (currentModel.id.includes('mimo') || currentModel.name.includes('OpenCode') || currentModel.id.includes('free'))) {
+      let provider = savedProviders.find(p => p.enabled && p.models?.some(m => m.id === streamingModel.id));
+      if (!provider && (streamingModel.id.includes('mimo') || streamingModel.name.includes('OpenCode') || streamingModel.id.includes('free'))) {
         provider = savedProviders.find(p => p.id === 'provider-opencode');
       }
       if (!provider) {
@@ -511,7 +513,7 @@ export const App: React.FC = () => {
       if (baseUrl.endsWith('/')) baseUrl = baseUrl.slice(0, -1);
       const apiKey = provider?.apiKey?.trim() || 'sk-REVOKED_PLACEHOLDER';
       // Use the exact model ID selected by user without hardcoding
-      const targetModel = currentModel.id;
+      const targetModel = streamingModel.id;
 
       // Pack Agent Workspace & Mentioned Files Context
       let contextualizedUserContent = text;
@@ -704,7 +706,7 @@ CodeMind 已通过本地磁盘桥接将工程目录结构与核心配置自动�
         totalTokens: addedPrompt + addedComp
       };
 
-      addLog('NET', 'GatewayBus', `[调用完成] 模型: ${currentModel.name} · 耗时: ${durationSec}s · Token消耗: ${tokenDetail.totalTokens}`);
+      addLog('NET', 'GatewayBus', `[调用完成] 模型: ${streamingModel.name} · 耗时: ${durationSec}s · Token消耗: ${tokenDetail.totalTokens}`);
 
       setSessionMessages(prev => {
         const list = prev[currentSessionId] || [];

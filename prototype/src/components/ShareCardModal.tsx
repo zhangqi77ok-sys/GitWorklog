@@ -10,6 +10,15 @@ interface ShareCardModalProps {
   session: SessionItem;
 }
 
+// Helper to clean and strip deep thinking process for clean social/export cards
+export function stripThinkingProcess(raw: string): string {
+  if (!raw) return '';
+  let cleaned = raw.replace(/<think>[\s\S]*?<\/think>/gi, '');
+  cleaned = cleaned.replace(/^\s*\*正在深入推演与分析代码架构\.\.\.\*\s*/gm, '');
+  cleaned = cleaned.replace(/^\s*\*Thinking Process\*\s*/gm, '');
+  return cleaned.trim();
+}
+
 export const ShareCardModal: React.FC<ShareCardModalProps> = ({
   isOpen,
   onClose,
@@ -42,8 +51,11 @@ export const ShareCardModal: React.FC<ShareCardModalProps> = ({
     minute: '2-digit'
   });
 
+  // Extract clean content: strictly strip all thinking processes and reasoning blocks
+  const cleanContent = stripThinkingProcess(message.content) || message.content;
+
   const handleCopyCardText = async () => {
-    const text = `【Tcode AI 协作记录卡片】\n会话: ${session.title}\n工程: ${session.projectName || '主工程'}\n时间: ${cardDate}\n\n--- 问答内容 ---\n${message.content}\n\n— 来自 Tcode 企业级 AI 桌面 IDE`;
+    const text = `【Tcode AI 协作记录卡片】\n会话: ${session.title}\n工程: ${session.projectName || '主工程'}\n时间: ${cardDate}\n\n--- 问答内容 ---\n${cleanContent}\n\n— 来自 Tcode 企业级 AI 桌面 IDE`;
     await navigator.clipboard.writeText(text);
     setCopiedText(true);
     setTimeout(() => setCopiedText(false), 2500);
@@ -63,7 +75,7 @@ export const ShareCardModal: React.FC<ShareCardModalProps> = ({
       
       // Calculate wrapped lines
       ctx.font = '14px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-      const rawLines = message.content.split('\n');
+      const rawLines = cleanContent.split('\n');
       const lines: string[] = [];
 
       for (const rLine of rawLines) {
@@ -374,7 +386,7 @@ export const ShareCardModal: React.FC<ShareCardModalProps> = ({
 
             {/* Message Content Render */}
             <div style={{ padding: '18px', userSelect: 'text' }}>
-              <MarkdownCard content={message.content} />
+              <MarkdownCard content={cleanContent} />
             </div>
 
             {/* Card Footer Watermark */}
