@@ -156,15 +156,19 @@ export const Titlebar: React.FC<TitlebarProps> = ({
           {showTokenPopover && (
             <div style={{
               position: 'absolute',
-              top: '28px',
+              top: '32px',
               right: '0',
-              width: '280px',
+              left: 'auto',
+              width: 'min(300px, calc(100vw - 40px))',
+              maxWidth: 'calc(100vw - 40px)',
+              maxHeight: 'min(420px, 70vh)',
+              overflowY: 'auto',
               background: 'var(--bg-surface-elevated)',
               border: '1px solid var(--border-strong)',
-              borderRadius: '6px',
-              boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+              borderRadius: '8px',
+              boxShadow: '0 12px 32px rgba(0,0,0,0.2)',
               padding: '12px',
-              zIndex: 100
+              zIndex: 300
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '6px' }}>
                 <span style={{ fontWeight: 600 }}>会话 Token 全链路账单</span>

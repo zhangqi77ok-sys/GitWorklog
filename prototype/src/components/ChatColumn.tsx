@@ -1312,15 +1312,18 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                 {showModeMenu && (
                   <div style={{
                     position: 'absolute',
-                    bottom: '30px',
+                    bottom: '34px',
                     left: '0',
-                    width: '280px',
+                    width: 'min(280px, calc(100vw - 48px))',
+                    maxWidth: 'calc(100vw - 48px)',
+                    maxHeight: 'min(360px, 60vh)',
+                    overflowY: 'auto',
                     background: 'var(--bg-surface-elevated)',
                     border: '1px solid var(--border-strong)',
-                    borderRadius: '6px',
-                    boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
+                    borderRadius: '8px',
+                    boxShadow: '0 12px 32px rgba(0,0,0,0.22)',
                     padding: '6px',
-                    zIndex: 100
+                    zIndex: 200
                   }}>
                     <div style={{ fontSize: '10px', color: 'var(--text-muted)', padding: '2px 8px 6px', fontWeight: 600, borderBottom: '1px solid var(--border-subtle)', marginBottom: '4px' }}>
                       DeepSeek Harness 运行时模态矩阵 (Runtime Modes)
@@ -1416,13 +1419,15 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                     position: 'absolute',
                     bottom: '36px',
                     left: 0,
-                    width: '560px',
-                    height: '380px',
+                    width: 'min(560px, calc(100vw - 48px))',
+                    maxWidth: 'calc(100vw - 48px)',
+                    height: 'min(380px, 65vh)',
+                    maxHeight: '65vh',
                     background: 'var(--bg-surface-elevated)',
                     border: '1px solid var(--border-strong)',
                     borderRadius: '8px',
                     boxShadow: '0 12px 36px rgba(0,0,0,0.28)',
-                    zIndex: 150,
+                    zIndex: 200,
                     display: 'flex',
                     flexDirection: 'column',
                     overflow: 'hidden'
@@ -1712,15 +1717,17 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                   <div style={{
                     position: 'absolute',
                     bottom: '36px',
-                    left: 0,
-                    width: '460px',
-                    maxHeight: '360px',
+                    right: 0,
+                    left: 'auto',
+                    width: 'min(440px, calc(100vw - 48px))',
+                    maxWidth: 'calc(100vw - 48px)',
+                    maxHeight: 'min(380px, 60vh)',
                     background: 'var(--bg-surface-elevated)',
                     border: '1px solid var(--border-strong)',
                     borderRadius: '8px',
                     boxShadow: '0 12px 32px rgba(0,0,0,0.24)',
                     padding: '8px',
-                    zIndex: 150,
+                    zIndex: 200,
                     display: 'flex',
                     flexDirection: 'column',
                     overflow: 'hidden'
@@ -1866,15 +1873,19 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                 {showRulesPopover && (
                   <div style={{
                     position: 'absolute',
-                    bottom: '30px',
-                    left: 0,
-                    width: '320px',
+                    bottom: '34px',
+                    right: 0,
+                    left: 'auto',
+                    width: 'min(340px, calc(100vw - 48px))',
+                    maxWidth: 'calc(100vw - 48px)',
+                    maxHeight: 'min(360px, 60vh)',
+                    overflowY: 'auto',
                     background: 'var(--bg-surface-elevated)',
                     border: '1px solid var(--border-strong)',
-                    borderRadius: '6px',
-                    boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
+                    borderRadius: '8px',
+                    boxShadow: '0 12px 32px rgba(0,0,0,0.22)',
                     padding: '10px',
-                    zIndex: 80,
+                    zIndex: 200,
                     fontSize: '11px'
                   }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '4px' }}>
