@@ -19,6 +19,8 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { TerminalTab, OpenedEditorFile } from '../types/contracts';
+import { TestExplorer, TestCaseItem } from './TestExplorer';
+import { InteractiveDiffViewer, FileDiffPayload } from './InteractiveDiffViewer';
 
 interface EditorWorkspaceProps {
   isOpen: boolean;
@@ -61,12 +63,60 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
 
+  // Workbench View Mode: 'editor' | 'diff' | 'tests'
+  const [workbenchViewMode, setWorkbenchViewMode] = useState<'editor' | 'diff' | 'tests'>('editor');
+  
+  // Mock/Live Test Cases in Explorer
+  const [testCases, setTestCases] = useState<TestCaseItem[]>([
+    { id: 't-1', name: 'test_contracts_serialization', suite: 'contracts.test.ts', status: 'passed', durationMs: 16, filePath: 'tests/contracts.test.ts', lineNumber: 24 },
+    { id: 't-2', name: 'test_agent_loop_breakdown', suite: 'agentLoop.test.ts', status: 'passed', durationMs: 12, filePath: 'tests/agentLoop.test.ts', lineNumber: 48 },
+    { id: 't-3', name: 'test_tool_timeout_and_exit_code_zero_guard', suite: 'real_live_system.test.ts', status: 'passed', durationMs: 10, filePath: 'tests/real_live_system.test.ts', lineNumber: 18 }
+  ]);
+  const [isRunningAllTests, setIsRunningAllTests] = useState(false);
+
+  // Active Diff Payload
+  const [currentDiff, setCurrentDiff] = useState<FileDiffPayload | null>(null);
+
   // Real Opened Files State (Empty by default if no file opened)
   const [openedFiles, setOpenedFiles] = useState<OpenedEditorFile[]>([]);
   const [activeFileId, setActiveFileId] = useState<string>('');
   const [fileContent, setFileContent] = useState<string>('');
   const [isLoadingFile, setIsLoadingFile] = useState<boolean>(false);
   const codeContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (activeDiffTarget && activeDiffTarget.filePath) {
+      setWorkbenchViewMode('diff');
+      setCurrentDiff({
+        fileId: activeDiffTarget.fileId,
+        filePath: activeDiffTarget.filePath,
+        oldContent: '// 历史版本代码',
+        newContent: '// 新版修复代码',
+        additions: 12,
+        deletions: 4,
+        reason: '修复测试超时熔断与退出码强校验',
+        riskLevel: 'low',
+        hunks: [
+          {
+            id: 'hunk-1',
+            oldStart: 18,
+            oldLines: 4,
+            newStart: 18,
+            newLines: 12,
+            header: '@@ -18,4 +18,12 @@ verifyTargetAcceptance',
+            status: 'pending',
+            lines: [
+              { type: 'context', content: '  const updatedItems = items.map(item => ({ ...item }));', oldLineNumber: 18, newLineNumber: 18 },
+              { type: 'del', content: '-   if (tr.status === "success" && tr.exitCode === 0) {', oldLineNumber: 19 },
+              { type: 'add', content: '+   const hasFailures = /FAILED|FAILURES|SyntaxError/i.test(combinedOutput);', newLineNumber: 19 },
+              { type: 'add', content: '+   if (tr.status === "success" && tr.exitCode === 0 && !hasFailures) {', newLineNumber: 20 },
+              { type: 'context', content: '      evidenceList.push(`测试与验证通过: ${tr.target}`);', oldLineNumber: 20, newLineNumber: 21 }
+            ]
+          }
+        ]
+      });
+    }
+  }, [activeDiffTarget]);
 
   useEffect(() => {
     if (activeFile?.line && codeContainerRef.current) {
@@ -305,17 +355,79 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
         justifyContent: 'space-between',
         padding: '0 8px 0 12px'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
-          <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-            工作台
-          </span>
-          {currentFile ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', overflow: 'hidden' }}>
+          {/* Workbench Mode Tabs: Code / Diff / Tests */}
+          <div style={{ display: 'flex', background: 'var(--bg-base)', padding: '2px', borderRadius: '6px', border: '1px solid var(--border-subtle)' }}>
+            <button
+              onClick={() => setWorkbenchViewMode('editor')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                padding: '2px 8px',
+                borderRadius: '4px',
+                border: 'none',
+                background: workbenchViewMode === 'editor' ? 'var(--bg-surface-elevated)' : 'transparent',
+                color: workbenchViewMode === 'editor' ? 'var(--accent)' : 'var(--text-muted)',
+                fontWeight: workbenchViewMode === 'editor' ? 700 : 500,
+                fontSize: '11px',
+                cursor: 'pointer',
+                boxShadow: workbenchViewMode === 'editor' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none'
+              }}
+            >
+              <Code size={12} />
+              <span>代码</span>
+            </button>
+
+            <button
+              onClick={() => setWorkbenchViewMode('diff')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                padding: '2px 8px',
+                borderRadius: '4px',
+                border: 'none',
+                background: workbenchViewMode === 'diff' ? 'var(--bg-surface-elevated)' : 'transparent',
+                color: workbenchViewMode === 'diff' ? 'var(--accent)' : 'var(--text-muted)',
+                fontWeight: workbenchViewMode === 'diff' ? 700 : 500,
+                fontSize: '11px',
+                cursor: 'pointer',
+                boxShadow: workbenchViewMode === 'diff' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none'
+              }}
+            >
+              <GitBranch size={12} />
+              <span>Diff 审查</span>
+              {currentDiff && <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--accent)' }} />}
+            </button>
+
+            <button
+              onClick={() => setWorkbenchViewMode('tests')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                padding: '2px 8px',
+                borderRadius: '4px',
+                border: 'none',
+                background: workbenchViewMode === 'tests' ? 'var(--bg-surface-elevated)' : 'transparent',
+                color: workbenchViewMode === 'tests' ? 'var(--accent)' : 'var(--text-muted)',
+                fontWeight: workbenchViewMode === 'tests' ? 700 : 500,
+                fontSize: '11px',
+                cursor: 'pointer',
+                boxShadow: workbenchViewMode === 'tests' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none'
+              }}
+            >
+              <Sparkles size={12} />
+              <span>测试资源</span>
+            </button>
+          </div>
+
+          {currentFile && workbenchViewMode === 'editor' && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11.5px', color: 'var(--text-secondary)' }}>
               <span style={{ color: 'var(--text-muted)' }}>/</span>
               <span style={{ color: 'var(--accent)', fontWeight: 600 }}>{currentFile.path}</span>
             </div>
-          ) : (
-            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>· 无活动文件</span>
           )}
         </div>
 
@@ -388,8 +500,67 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
             </div>
           )}
 
-          {/* Editor Body: Clean Empty State with Actionable Guidance OR Real Code Lines */}
-          {openedFiles.length === 0 ? (
+          {/* Conditional Rendering: Tests Explorer / Interactive Diff / Code Editor */}
+          {workbenchViewMode === 'tests' ? (
+            <TestExplorer
+              testCases={testCases}
+              isRunningAll={isRunningAllTests}
+              onRunAllTests={() => {
+                setIsRunningAllTests(true);
+                setTimeout(() => {
+                  setIsRunningAllTests(false);
+                  setTestCases(prev => prev.map(t => ({ ...t, status: 'passed' })));
+                }, 1200);
+              }}
+              onRunSingleTest={(tc) => {
+                setTestCases(prev => prev.map(t => t.id === tc.id ? { ...t, status: 'running' } : t));
+                setTimeout(() => {
+                  setTestCases(prev => prev.map(t => t.id === tc.id ? { ...t, status: 'passed' } : t));
+                }, 800);
+              }}
+              onNavigateToCode={(path, line) => {
+                setWorkbenchViewMode('editor');
+                // Trigger file open in editor
+              }}
+              onAutoFixTest={(tc) => {
+                // Trigger auto fix
+              }}
+            />
+          ) : workbenchViewMode === 'diff' && currentDiff ? (
+            <InteractiveDiffViewer
+              diff={currentDiff}
+              onAcceptHunk={(hunkId) => {
+                setCurrentDiff(prev => prev ? {
+                  ...prev,
+                  hunks: prev.hunks.map(h => h.id === hunkId ? { ...h, status: 'accepted' } : h)
+                } : null);
+              }}
+              onRejectHunk={(hunkId) => {
+                setCurrentDiff(prev => prev ? {
+                  ...prev,
+                  hunks: prev.hunks.map(h => h.id === hunkId ? { ...h, status: 'rejected' } : h)
+                } : null);
+              }}
+              onAcceptAll={() => {
+                setCurrentDiff(prev => prev ? {
+                  ...prev,
+                  hunks: prev.hunks.map(h => ({ ...h, status: 'accepted' }))
+                } : null);
+              }}
+              onRejectAll={() => {
+                setCurrentDiff(prev => prev ? {
+                  ...prev,
+                  hunks: prev.hunks.map(h => ({ ...h, status: 'rejected' }))
+                } : null);
+              }}
+              onRollbackHunk={(hunkId) => {
+                setCurrentDiff(prev => prev ? {
+                  ...prev,
+                  hunks: prev.hunks.map(h => h.id === hunkId ? { ...h, status: 'pending' } : h)
+                } : null);
+              }}
+            />
+          ) : openedFiles.length === 0 ? (
             <div style={{
               flex: 1,
               display: 'flex',
