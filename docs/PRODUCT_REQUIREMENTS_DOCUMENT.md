@@ -274,6 +274,23 @@
    - 每次发起问答或执行 Act 任务时，底座必须优先将所有处于“已启用”状态的 Rule 规则拼接注入为 System Prompt 顶层约束；
    - 智能体执行胶囊透明提示：`[Rule Preload]: 已预加载 N 条规则（含三大铁律与严格类型约束）先行生效`。
 
+
+### 4.11 工业级模型网关与调度中心架构规约 (Model Gateway & Routing Center)
+参考 OneAPI、Cherry Studio、Cursor 与 Continue.dev 最佳工程实践，模型网关绝非简单的供应商卡片陈列，必须具备“**角色智能路由分工**”与“**多渠道凭据与模型池管理**”两大核心能力体系：
+
+1. **智能任务角色路由分工 (Task Role Routing)**：
+   - 杜绝全局使用单一模型。网关必须将工作流解构为四大专业职能角色，各司其职：
+     - **架构规划模型 (Plan / Reasoner)**：高深度推理模型（如 DeepSeek R1、Claude 3.7 Sonnet、o3-mini），负责复杂架构剖析、SDD 契约推演与方案比选；
+     - **代码落地模型 (Act / Coder)**：高工程落地执行力模型（如 Claude 3.5 Sonnet、DeepSeek V3），负责高准确率改写代码、执行 Vitest 自测与语法修复；
+     - **行内极速补全 (Inline / Fast)**：极速低时延模型（如 Claude 3.5 Haiku、GPT-4o-mini），负责敲击过程中的补全预测与代码行解释；
+     - **离线与容灾兜底 (Fallback / Offline)**：本地私有化模型（如 Ollama Qwen 2.5 Coder），当外部云端出现 429 限流、网络波动或开启 Air-Gapped 离线模式时，零感知平滑兜底接管。
+
+2. **渠道凭据与模型池管理 (Providers & API Keys Management)**：
+   - **渠道凭据标准化配置**：每个 Provider 包含协议类型（OpenAI / Anthropic / Ollama）、Base URL 输入框（支持各类第三方中转站、OneAPI 或内网代理）、API Key（带掩码保护与明文切换眼睛 `👁️`）；
+   - **动态模型发现 (Fetch Models)**：支持一键向 `/v1/models` 发起模型元数据拉取，动态探测可用模型清单并可视化复选启用；
+   - **靶向连通性探测 (Ping & Latency)**：对特定渠道或模型下发轻量探测请求，精确测量真实 HTTP 状态码与毫秒级延迟（如 `🟢 85ms` 或明确错误码如 `401 Unauthorized`）；
+   - **自定义中转渠道挂载**：支持用户随时添加自定义渠道（如硅基流动 SiliconFlow、OpenRouter、自建 vLLM），并赋予专属别名与参数配置。
+
 ## 五、人机协同动态交互选择体系 (Dynamic Human-in-the-Loop)
 
 当 Agent 在推理过程中遇到技术分叉或歧义时，**严禁盲猜代劳**，主动触发结构化微型卡片挂起：

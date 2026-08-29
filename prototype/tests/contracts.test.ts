@@ -22,6 +22,13 @@ import {
   INITIAL_RULES,
   AttachedFile,
   RuleItem,
+  INITIAL_ROLE_ROUTING,
+  INITIAL_CHANNELS,
+  updateModelRoleRouting,
+  toggleChannelModel,
+  addCustomChannel,
+  GatewayChannel,
+
   SkillItem,
   KeybindingItem,
   removeProjectFromWorkspace,
@@ -229,5 +236,36 @@ describe('SDD Contract - Attached Files & Rules Preloading', () => {
     const toggled = toggleRuleItem(rules, 'rule-iron-triple');
     expect(getActiveRules(toggled).length).toBe(2);
     expect(toggled.find(r => r.id === 'rule-iron-triple')?.enabled).toBe(false);
+  });
+});
+
+
+describe('SDD Contract - Industrial Model Gateway & Roles Routing', () => {
+  it('should update model role assignments accurately', () => {
+    const current = { ...INITIAL_ROLE_ROUTING };
+    const updated = updateModelRoleRouting(current, 'planModelId', 'claude-3-7-sonnet');
+    expect(updated.planModelId).toBe('claude-3-7-sonnet');
+    expect(updated.actModelId).toBe('claude-3-5-sonnet');
+  });
+
+  it('should toggle channel models and add custom channels', () => {
+    const channels = [...INITIAL_CHANNELS];
+    const toggled = toggleChannelModel(channels, 'chan-deepseek', 'deepseek-reasoner');
+    const targetModel = toggled[0].models.find(m => m.id === 'deepseek-reasoner');
+    expect(targetModel?.enabled).toBe(false);
+
+    const custom: GatewayChannel = {
+      id: 'chan-siliconflow',
+      name: '硅基流动 (SiliconFlow)',
+      protocol: 'openai',
+      baseUrl: 'https://api.siliconflow.cn/v1',
+      apiKey: 'sk-sf123456',
+      status: 'healthy',
+      latencyMs: 65,
+      models: [{ id: 'deepseek-ai/DeepSeek-V3', name: 'DeepSeek-V3', enabled: true, contextLimit: 64000 }]
+    };
+    const added = addCustomChannel(toggled, custom);
+    expect(added.length).toBe(5);
+    expect(added[4].name).toBe('硅基流动 (SiliconFlow)');
   });
 });

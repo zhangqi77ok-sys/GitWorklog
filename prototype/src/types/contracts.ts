@@ -590,3 +590,122 @@ export function getActiveRules(rules: RuleItem[]): RuleItem[] {
 export function toggleRuleItem(rules: RuleItem[], ruleId: string): RuleItem[] {
   return rules.map(r => r.id === ruleId ? { ...r, enabled: !r.enabled } : r);
 }
+
+
+// Industrial-Grade Model Gateway Contracts
+export interface ModelRoleRouting {
+  planModelId: string;
+  actModelId: string;
+  inlineModelId: string;
+  fallbackModelId: string;
+}
+
+export const INITIAL_ROLE_ROUTING: ModelRoleRouting = {
+  planModelId: 'deepseek-reasoner',
+  actModelId: 'claude-3-5-sonnet',
+  inlineModelId: 'claude-3-5-haiku',
+  fallbackModelId: 'qwen2.5-coder:32b'
+};
+
+export function updateModelRoleRouting(
+  current: ModelRoleRouting,
+  role: keyof ModelRoleRouting,
+  newModelId: string
+): ModelRoleRouting {
+  return { ...current, [role]: newModelId };
+}
+
+export interface GatewayModelItem {
+  id: string;
+  name: string;
+  enabled: boolean;
+  contextLimit: number;
+}
+
+export interface GatewayChannel {
+  id: string;
+  name: string;
+  protocol: 'openai' | 'anthropic' | 'ollama';
+  baseUrl: string;
+  apiKey: string;
+  status: 'healthy' | 'error' | 'untested';
+  latencyMs: number;
+  models: GatewayModelItem[];
+}
+
+export const INITIAL_CHANNELS: GatewayChannel[] = [
+  {
+    id: 'chan-deepseek',
+    name: 'DeepSeek 官方渠道 (百炼推理)',
+    protocol: 'openai',
+    baseUrl: 'https://api.deepseek.com/v1',
+    apiKey: 'sk-dsk984729104810284729103847',
+    status: 'healthy',
+    latencyMs: 85,
+    models: [
+      { id: 'deepseek-reasoner', name: 'deepseek-reasoner (R1 推理)', enabled: true, contextLimit: 64000 },
+      { id: 'deepseek-chat', name: 'deepseek-chat (V3 主力)', enabled: true, contextLimit: 64000 }
+    ]
+  },
+  {
+    id: 'chan-anthropic',
+    name: 'Anthropic 官方渠道 (Claude)',
+    protocol: 'anthropic',
+    baseUrl: 'https://api.anthropic.com/v1',
+    apiKey: 'sk-ant938471928471928471928374',
+    status: 'healthy',
+    latencyMs: 128,
+    models: [
+      { id: 'claude-3-7-sonnet', name: 'claude-3-7-sonnet-20250219', enabled: true, contextLimit: 200000 },
+      { id: 'claude-3-5-sonnet', name: 'claude-3-5-sonnet-20241022', enabled: true, contextLimit: 200000 },
+      { id: 'claude-3-5-haiku', name: 'claude-3-5-haiku-20241022', enabled: true, contextLimit: 200000 }
+    ]
+  },
+  {
+    id: 'chan-openai',
+    name: 'OpenAI 官方渠道 (GPT)',
+    protocol: 'openai',
+    baseUrl: 'https://api.openai.com/v1',
+    apiKey: 'sk-proj-938471928471928471928374',
+    status: 'healthy',
+    latencyMs: 142,
+    models: [
+      { id: 'gpt-4o', name: 'gpt-4o (全能旗舰)', enabled: true, contextLimit: 128000 },
+      { id: 'o3-mini', name: 'o3-mini (深度推理)', enabled: true, contextLimit: 128000 }
+    ]
+  },
+  {
+    id: 'chan-ollama',
+    name: '本地私有 Ollama (物理隔离)',
+    protocol: 'ollama',
+    baseUrl: 'http://localhost:11434',
+    apiKey: '',
+    status: 'healthy',
+    latencyMs: 0,
+    models: [
+      { id: 'qwen2.5-coder:32b', name: 'qwen2.5-coder:32b', enabled: true, contextLimit: 32000 },
+      { id: 'deepseek-r1:14b', name: 'deepseek-r1:14b', enabled: true, contextLimit: 32000 }
+    ]
+  }
+];
+
+export function toggleChannelModel(
+  channels: GatewayChannel[],
+  channelId: string,
+  modelId: string
+): GatewayChannel[] {
+  return channels.map(c => {
+    if (c.id !== channelId) return c;
+    return {
+      ...c,
+      models: c.models.map(m => m.id === modelId ? { ...m, enabled: !m.enabled } : m)
+    };
+  });
+}
+
+export function addCustomChannel(
+  channels: GatewayChannel[],
+  newChannel: GatewayChannel
+): GatewayChannel[] {
+  return [...channels, newChannel];
+}
