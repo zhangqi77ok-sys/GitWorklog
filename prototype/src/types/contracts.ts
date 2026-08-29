@@ -711,7 +711,9 @@ export function addCustomChannel(
 }
 
 
-// GitHub Benchmark Model Provider Contracts (Cherry Studio / LobeChat Master-Detail Style)
+// GitHub Benchmark Model Provider Contracts
+export type ProviderCategory = 'all' | 'domestic' | 'international' | 'aggregator' | 'local';
+
 export interface ModelItem {
   id: string;
   name: string;
@@ -724,6 +726,7 @@ export interface ModelProviderItem {
   id: string;
   name: string;
   icon: string;
+  category: 'domestic' | 'international' | 'aggregator' | 'local';
   enabled: boolean;
   protocol: 'openai' | 'anthropic' | 'ollama';
   baseUrl: string;
@@ -736,10 +739,12 @@ export interface ModelProviderItem {
 }
 
 export const INITIAL_PROVIDERS: ModelProviderItem[] = [
+  // 1. Domestic Chinese Models (国内顶流)
   {
     id: 'provider-deepseek',
     name: 'DeepSeek (深度求索)',
     icon: '🔵',
+    category: 'domestic',
     enabled: true,
     protocol: 'openai',
     baseUrl: 'https://api.deepseek.com/v1',
@@ -754,9 +759,144 @@ export const INITIAL_PROVIDERS: ModelProviderItem[] = [
     ]
   },
   {
+    id: 'provider-zhipu',
+    name: '智谱 AI (GLM / CodeGeeX)',
+    icon: '⚡',
+    category: 'domestic',
+    enabled: true,
+    protocol: 'openai',
+    baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+    defaultBaseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+    apiKey: '98472918374910283749.zhipu',
+    status: 'healthy',
+    latencyMs: 92,
+    docUrl: 'https://open.bigmodel.cn',
+    models: [
+      { id: 'glm-4-plus', name: 'GLM-4-Plus (高智旗舰)', enabled: true, contextLimit: 128000, capabilities: ['reasoning', 'code'] },
+      { id: 'codegeex-4', name: 'CodeGeeX-4 (专业代码大模型)', enabled: true, contextLimit: 128000, capabilities: ['code'] },
+      { id: 'glm-4-flash', name: 'GLM-4-Flash (超快极速免算力)', enabled: true, contextLimit: 128000, capabilities: ['fast'] }
+    ]
+  },
+  {
+    id: 'provider-bailian',
+    name: '阿里通义百炼 (Qwen)',
+    icon: '🟧',
+    category: 'domestic',
+    enabled: true,
+    protocol: 'openai',
+    baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    defaultBaseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    apiKey: 'sk-dashscope-9284719284',
+    status: 'healthy',
+    latencyMs: 88,
+    docUrl: 'https://bailian.console.aliyun.com',
+    models: [
+      { id: 'qwen-max', name: 'Qwen-Max (全能百炼旗舰)', enabled: true, contextLimit: 32000, capabilities: ['reasoning', 'code'] },
+      { id: 'qwen2.5-coder-32b', name: 'Qwen2.5-Coder-32B (代码利器)', enabled: true, contextLimit: 128000, capabilities: ['code'] },
+      { id: 'qwen-plus', name: 'Qwen-Plus (高性价比均衡)', enabled: true, contextLimit: 128000, capabilities: ['fast', 'code'] }
+    ]
+  },
+  {
+    id: 'provider-moonshot',
+    name: '月之暗面 (Moonshot Kimi)',
+    icon: '🌙',
+    category: 'domestic',
+    enabled: false,
+    protocol: 'openai',
+    baseUrl: 'https://api.moonshot.cn/v1',
+    defaultBaseUrl: 'https://api.moonshot.cn/v1',
+    apiKey: '',
+    status: 'untested',
+    latencyMs: 0,
+    docUrl: 'https://platform.moonshot.cn',
+    models: [
+      { id: 'moonshot-v1-128k', name: 'Moonshot-V1-128k (长文档理解)', enabled: false, contextLimit: 128000, capabilities: ['long-context'] },
+      { id: 'kimi-latest', name: 'Kimi-Latest (智能体搜索)', enabled: false, contextLimit: 128000, capabilities: ['reasoning'] }
+    ]
+  },
+  {
+    id: 'provider-01ai',
+    name: '零一万物 (01.AI / Yi)',
+    icon: '🔴',
+    category: 'domestic',
+    enabled: false,
+    protocol: 'openai',
+    baseUrl: 'https://api.lingyiwanwu.com/v1',
+    defaultBaseUrl: 'https://api.lingyiwanwu.com/v1',
+    apiKey: '',
+    status: 'untested',
+    latencyMs: 0,
+    docUrl: 'https://platform.lingyiwanwu.com',
+    models: [
+      { id: 'yi-lightning', name: 'Yi-Lightning (超快推理)', enabled: false, contextLimit: 16000, capabilities: ['fast', 'code'] },
+      { id: 'yi-large', name: 'Yi-Large (全能通识)', enabled: false, contextLimit: 32000, capabilities: ['reasoning'] }
+    ]
+  },
+
+  // 2. Aggregators & Middlewares (聚合中转站)
+  {
+    id: 'provider-siliconflow',
+    name: '硅基流动 (SiliconFlow)',
+    icon: '⚡',
+    category: 'aggregator',
+    enabled: true,
+    protocol: 'openai',
+    baseUrl: 'https://api.siliconflow.cn/v1',
+    defaultBaseUrl: 'https://api.siliconflow.cn/v1',
+    apiKey: 'sk-sf-938471928471928374',
+    status: 'healthy',
+    latencyMs: 68,
+    docUrl: 'https://cloud.siliconflow.cn',
+    models: [
+      { id: 'deepseek-ai/DeepSeek-R1', name: 'DeepSeek-R1 (免配置秒级拉起)', enabled: true, contextLimit: 64000, capabilities: ['reasoning', 'code'] },
+      { id: 'deepseek-ai/DeepSeek-V3', name: 'DeepSeek-V3 (极速满血并发)', enabled: true, contextLimit: 64000, capabilities: ['fast', 'code'] },
+      { id: 'Qwen/Qwen2.5-Coder-32B-Instruct', name: 'Qwen2.5-Coder-32B (高并发)', enabled: true, contextLimit: 32000, capabilities: ['code'] }
+    ]
+  },
+  {
+    id: 'provider-oneapi',
+    name: 'OneAPI / NewAPI 中转站',
+    icon: '🔀',
+    category: 'aggregator',
+    enabled: true,
+    protocol: 'openai',
+    baseUrl: 'https://api.oneapi-hub.com/v1',
+    defaultBaseUrl: 'https://api.oneapi-hub.com/v1',
+    apiKey: 'sk-oneapi-9384719284719284',
+    status: 'healthy',
+    latencyMs: 72,
+    docUrl: 'https://github.com/songquanpeng/one-api',
+    models: [
+      { id: 'gpt-4o', name: 'GPT-4o (OneAPI 中转分发)', enabled: true, contextLimit: 128000, capabilities: ['vision', 'code'] },
+      { id: 'claude-3-5-sonnet', name: 'Claude-3.5-Sonnet (负载均衡)', enabled: true, contextLimit: 200000, capabilities: ['code'] },
+      { id: 'deepseek-reasoner', name: 'DeepSeek-R1 (多 Key 轮询)', enabled: true, contextLimit: 64000, capabilities: ['reasoning'] }
+    ]
+  },
+  {
+    id: 'provider-openrouter',
+    name: 'OpenRouter (全球聚合)',
+    icon: '🌐',
+    category: 'aggregator',
+    enabled: false,
+    protocol: 'openai',
+    baseUrl: 'https://openrouter.ai/api/v1',
+    defaultBaseUrl: 'https://openrouter.ai/api/v1',
+    apiKey: '',
+    status: 'untested',
+    latencyMs: 0,
+    docUrl: 'https://openrouter.ai',
+    models: [
+      { id: 'anthropic/claude-3.5-sonnet', name: 'Claude 3.5 Sonnet (OpenRouter)', enabled: false, contextLimit: 200000, capabilities: ['code'] },
+      { id: 'openai/gpt-4o', name: 'GPT-4o (OpenRouter)', enabled: false, contextLimit: 128000, capabilities: ['vision', 'code'] }
+    ]
+  },
+
+  // 3. International Mainstream (国际主流)
+  {
     id: 'provider-anthropic',
     name: 'Anthropic (Claude)',
     icon: '🟣',
+    category: 'international',
     enabled: true,
     protocol: 'anthropic',
     baseUrl: 'https://api.anthropic.com/v1',
@@ -775,6 +915,7 @@ export const INITIAL_PROVIDERS: ModelProviderItem[] = [
     id: 'provider-openai',
     name: 'OpenAI (GPT)',
     icon: '🟢',
+    category: 'international',
     enabled: true,
     protocol: 'openai',
     baseUrl: 'https://api.openai.com/v1',
@@ -788,10 +929,13 @@ export const INITIAL_PROVIDERS: ModelProviderItem[] = [
       { id: 'o3-mini', name: 'o3-mini (深度推理)', enabled: true, contextLimit: 128000, capabilities: ['reasoning', 'code'] }
     ]
   },
+
+  // 4. Local & Private (本地私有)
   {
     id: 'provider-ollama',
     name: '本地私有 Ollama',
     icon: '🦙',
+    category: 'local',
     enabled: true,
     protocol: 'ollama',
     baseUrl: 'http://localhost:11434',
@@ -806,22 +950,35 @@ export const INITIAL_PROVIDERS: ModelProviderItem[] = [
     ]
   },
   {
-    id: 'provider-siliconflow',
-    name: '硅基流动 (SiliconFlow)',
-    icon: '⚡',
+    id: 'provider-lmstudio',
+    name: 'LM Studio 本地引擎',
+    icon: '🖥️',
+    category: 'local',
     enabled: false,
     protocol: 'openai',
-    baseUrl: 'https://api.siliconflow.cn/v1',
-    defaultBaseUrl: 'https://api.siliconflow.cn/v1',
+    baseUrl: 'http://localhost:1234/v1',
+    defaultBaseUrl: 'http://localhost:1234/v1',
     apiKey: '',
     status: 'untested',
     latencyMs: 0,
-    docUrl: 'https://siliconflow.cn',
+    docUrl: 'https://lmstudio.ai',
     models: [
-      { id: 'deepseek-ai/DeepSeek-V3', name: 'DeepSeek-V3 (云端加速)', enabled: false, contextLimit: 64000, capabilities: ['fast', 'code'] }
+      { id: 'local-model', name: 'Local Model (GGUF)', enabled: false, contextLimit: 32000, capabilities: ['local'] }
     ]
   }
 ];
+
+export function filterProviders(
+  providers: ModelProviderItem[],
+  category: ProviderCategory,
+  keyword: string
+): ModelProviderItem[] {
+  return providers.filter(p => {
+    const matchCategory = category === 'all' || p.category === category;
+    const matchKeyword = !keyword.trim() || p.name.toLowerCase().includes(keyword.toLowerCase()) || p.models.some(m => m.id.toLowerCase().includes(keyword.toLowerCase()));
+    return matchCategory && matchKeyword;
+  });
+}
 
 export function toggleProviderSwitch(providers: ModelProviderItem[], providerId: string): ModelProviderItem[] {
   return providers.map(p => p.id === providerId ? { ...p, enabled: !p.enabled } : p);

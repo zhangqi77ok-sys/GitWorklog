@@ -33,6 +33,8 @@ import {
   toggleProviderSwitch,
   toggleProviderModelSwitch,
   addCustomModelToProvider,
+  filterProviders,
+  ProviderCategory,
 
   SkillItem,
   KeybindingItem,
@@ -279,8 +281,9 @@ describe('SDD Contract - Industrial Model Gateway & Roles Routing', () => {
 describe('SDD Contract - GitHub Style Model Providers Master-Detail', () => {
   it('should toggle provider overall enabled switch', () => {
     const providers = [...INITIAL_PROVIDERS];
+    const initialStatus = providers.find(p => p.id === 'provider-siliconflow')?.enabled ?? false;
     const toggled = toggleProviderSwitch(providers, 'provider-siliconflow');
-    expect(toggled.find(p => p.id === 'provider-siliconflow')?.enabled).toBe(true);
+    expect(toggled.find(p => p.id === 'provider-siliconflow')?.enabled).toBe(!initialStatus);
   });
 
   it('should toggle individual model inside provider and add custom model', () => {
@@ -293,4 +296,16 @@ describe('SDD Contract - GitHub Style Model Providers Master-Detail', () => {
     const targetProvider = withCustom.find(p => p.id === 'provider-deepseek');
     expect(targetProvider?.models.some(m => m.id === 'deepseek-coder-33b')).toBe(true);
   });
+
+  it('should filter providers by category (domestic vs aggregator)', () => {
+    const domestic = filterProviders(INITIAL_PROVIDERS, 'domestic', '');
+    expect(domestic.length).toBeGreaterThanOrEqual(4);
+    expect(domestic.some(p => p.id === 'provider-zhipu')).toBe(true);
+
+    const aggregators = filterProviders(INITIAL_PROVIDERS, 'aggregator', '');
+    expect(aggregators.length).toBeGreaterThanOrEqual(2);
+    expect(aggregators.some(p => p.id === 'provider-oneapi')).toBe(true);
+    expect(aggregators.some(p => p.id === 'provider-siliconflow')).toBe(true);
+  });
+
 });

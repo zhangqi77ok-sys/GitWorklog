@@ -45,6 +45,8 @@ import {
   toggleProviderSwitch,
   toggleProviderModelSwitch,
   addCustomModelToProvider,
+  ProviderCategory,
+  filterProviders,
   RuleItem,
   INITIAL_RULES,
   toggleRuleItem,
@@ -74,6 +76,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [providers, setProviders] = useState<ModelProviderItem[]>(INITIAL_PROVIDERS);
   const [selectedProviderId, setSelectedProviderId] = useState<string>('provider-deepseek');
   const [providerSearch, setProviderSearch] = useState<string>('');
+  const [categoryFilter, setCategoryFilter] = useState<ProviderCategory>('all');
   const [showAddCustomModel, setShowAddCustomModel] = useState<boolean>(false);
   const [customModelInput, setCustomModelInput] = useState<string>('');
   const [testingProviderId, setTestingProviderId] = useState<string | null>(null);
@@ -473,19 +476,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
                 )}
 
-                {/* 1. LEFT MASTER SIDEBAR: Provider List (210px) */}
+                {/* 1. LEFT MASTER SIDEBAR: Provider List (225px) */}
                 <div style={{
-                  width: '210px',
+                  width: '225px',
                   borderRight: '1px solid var(--border-subtle)',
                   paddingRight: '10px',
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: '8px'
+                  gap: '6px'
                 }}>
                   {/* Search Bar */}
                   <input
                     type="text"
-                    placeholder="搜索服务商..."
+                    placeholder="搜索服务商或模型..."
                     value={providerSearch}
                     onChange={e => setProviderSearch(e.target.value)}
                     style={{
@@ -499,10 +502,38 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     }}
                   />
 
+                  {/* Category Filter Pills (GitHub Ecosystem Tabs) */}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px', paddingBottom: '4px', borderBottom: '1px solid var(--border-subtle)' }}>
+                    {[
+                      { id: 'all', label: '全部' },
+                      { id: 'domestic', label: '🇨🇳 国内' },
+                      { id: 'aggregator', label: '🔀 中转' },
+                      { id: 'international', label: '🌐 国际' },
+                      { id: 'local', label: '💻 本地' }
+                    ].map(tab => (
+                      <button
+                        key={tab.id}
+                        onClick={() => setCategoryFilter(tab.id as ProviderCategory)}
+                        style={{
+                          padding: '2px 6px',
+                          borderRadius: '3px',
+                          border: 'none',
+                          background: categoryFilter === tab.id ? 'var(--accent)' : 'var(--bg-surface)',
+                          color: categoryFilter === tab.id ? '#FFF' : 'var(--text-secondary)',
+                          fontSize: '10px',
+                          fontWeight: categoryFilter === tab.id ? 700 : 500,
+                          cursor: 'pointer',
+                          transition: 'all 0.1s ease'
+                        }}
+                      >
+                        {tab.label}
+                      </button>
+                    ))}
+                  </div>
+
                   {/* Providers List */}
-                  <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    {providers
-                      .filter(p => p.name.toLowerCase().includes(providerSearch.toLowerCase()))
+                  <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                    {filterProviders(providers, categoryFilter, providerSearch)
                       .map(p => {
                         const isSelected = selectedProvider.id === p.id;
                         return (
@@ -566,6 +597,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         id: `provider-custom-${Date.now()}`,
                         name: '自定义 OpenAI 兼容',
                         icon: '🌐',
+                        category: 'aggregator',
                         enabled: true,
                         protocol: 'openai',
                         baseUrl: 'https://api.openai-proxy.com/v1',

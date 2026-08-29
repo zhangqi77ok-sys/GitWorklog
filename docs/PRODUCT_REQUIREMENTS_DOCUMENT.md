@@ -275,23 +275,33 @@
    - 智能体执行胶囊透明提示：`[Rule Preload]: 已预加载 N 条规则（含三大铁律与严格类型约束）先行生效`。
 
 
-### 4.11 GitHub 标杆级模型服务与网关管理体系 (Model Providers Master-Detail)
-深度对标 GitHub 最受开发者欢迎的顶级开源 AI 客户端（**Cherry Studio**、**LobeChat**、**NextChat**），将“模型网关与服务商设置”重构为标准的 **Master-Detail（左侧服务商列表 + 右侧配置与模型工作台）** 专业架构：
+### 4.11 GitHub 标杆级多渠道模型生态与中转站矩阵规约 (Comprehensive Model Providers & Aggregators)
+深入复盘 GitHub 顶级开源 AI 客户端（**Cherry Studio**、**LobeChat**、**OneAPI**、**NextChat**）支持的模型服务商体系，CodeMind-Hub 必须原生建立面向**“国内自研生态”**、**“中转分发网络”**与**“本地私有引擎”**的全矩阵支持体系：
 
-1. **左侧服务商导航栏 (Master Providers Sidebar)**：
-   - **服务商矩阵**：内置 DeepSeek、Anthropic (Claude)、OpenAI、本地私有 Ollama、硅基流动 (SiliconFlow)、OpenRouter 等主流服务商，支持快速检索；
-   - **独立总开关 (Provider Switch)**：每个服务商配备全局启闭开关，未启用的服务商不会在对话框的模型下拉列表中出现；
-   - **添加自定义服务商**：底部提供 `[ ➕ 添加自定义服务商 ]`，支持任意兼容 OpenAI 规范的中转或企业内部部署。
+#### 1. 全矩阵服务商生态谱系 (Provider Categories)
+系统按开发者实际用云场景划分为五大维度，并在左侧导航提供分类快速筛选胶囊（`全部`、`🇨🇳 国内精选`、`🌐 国际主流`、`🔀 聚合中转`、`💻 本地私有`）：
+1. **🇨🇳 国内国产大模型 (Domestic)**：
+   - **DeepSeek (深度求索)**：默认端点 `https://api.deepseek.com/v1`，内置 `deepseek-reasoner (R1)`, `deepseek-chat (V3)`；
+   - **智谱 AI (Zhipu GLM / CodeGeeX)**：默认端点 `https://open.bigmodel.cn/api/paas/v4`，内置 `glm-4-plus`, `glm-4-flash`, `codegeex-4 (代码大模型)`；
+   - **阿里通义千问 / 百炼 (Alibaba Bailian)**：默认端点 `https://dashscope.aliyuncs.com/compatible-mode/v1`，内置 `qwen-max`, `qwen2.5-coder-32b`, `qwen-plus`；
+   - **月之暗面 (Moonshot Kimi)**：默认端点 `https://api.moonshot.cn/v1`，内置长上下文 `moonshot-v1-128k`, `kimi-latest`；
+   - **零一万物 (01.AI / Yi)**：默认端点 `https://api.lingyiwanwu.com/v1`，内置 `yi-lightning`, `yi-large`；
+   - **字节豆包 (ByteDance Doubao 火山引擎)**：默认端点 `https://ark.cn-beijing.volces.com/api/v3`，内置 `doubao-pro`, `doubao-lite`；
+2. **🔀 聚合中转站与分发网关 (Aggregators & Proxies)**：
+   - **硅基流动 (SiliconFlow)**：国内超高并发云端开源模型托管（`https://api.siliconflow.cn/v1`），支持满血免部署的 DeepSeek R1/V3 与 Qwen2.5-Coder；
+   - **OneAPI / NewAPI 自建中转**：支持对接企业自建或社区 OneAPI/NewAPI 聚合网关，支持多账号 Key 负载均衡；
+   - **OpenRouter**：全球聚合路由平台（`https://openrouter.ai/api/v1`），统一调度全球 200+ 大模型；
+3. **🌐 国际主流模型 (International)**：
+   - **Anthropic (Claude)**：`claude-3-7-sonnet`, `claude-3-5-sonnet`, `claude-3-5-haiku`；
+   - **OpenAI (GPT)**：`gpt-4o`, `o3-mini`, `gpt-4o-mini`；
+   - **Google Gemini**：`gemini-2.5-pro`, `gemini-2.5-flash`；
+4. **💻 本地与私有化算力 (Local Private)**：
+   - **本地私有 Ollama**：`http://localhost:11434`，适合离线环境与防泄漏涉密工程；
+   - **LM Studio / vLLM / TGI**：支持直连企业内网私有 GPU 算力集群。
 
-2. **右侧配置与模型管理工作台 (Detail Workbench)**：
-   - **端点与安全凭证 (Endpoints & Credentials)**：
-     - **API 密钥 (API Key)**：支持密码掩码保护与明文切换眼睛 `👁️`，支持一键粘贴；
-     - **API 地址 (Base URL)**：支持自定义反代或第三方中转地址，配备“恢复默认地址”；
-     - **连通性即时检查**：独立 `[ ⚡ 检查连通性 / 测速 ]`，显示 HTTP 状态与毫秒延迟（如 `🟢 正常 · 85ms`）。
-   - **模型管理与动态发现 (Models Management & Fetch)**：
-     - **动态获取模型 (Fetch Models)**：提供 `[ 🔄 获取模型列表 ]` 按钮，一键向 `/v1/models` 发起请求，自动拉取并同步该服务商支持的全部可用模型；
-     - **添加自定义模型**：支持点击 `[ ➕ 添加自定义模型 ]` 输入任意私有或较新模型 ID（如 `deepseek-reasoner`、`qwen2.5-coder:32b`）；
-     - **模型颗粒度开关与能力标签**：每个模型具备独立启闭开关、上下文上限提示（如 `64k`、`200k`）及能力标识（思考推理、代码、视觉）。
+#### 2. Master-Detail 双栏深度配置机制
+- **左侧服务商列表**：提供分类筛选胶囊、搜索过滤、品牌彩色图标与独立总开关；
+- **右侧工作台**：预置官方默认 Base URL 与官方 API Key 申领文档外链，支持测速、`/v1/models` 动态拉取与自定义模型增删。
 
 ## 五、人机协同动态交互选择体系 (Dynamic Human-in-the-Loop)
 
