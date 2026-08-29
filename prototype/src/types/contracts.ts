@@ -481,3 +481,44 @@ export const WORKSPACE_MOCK_DATA: Record<string, ProjectWorkspaceData> = {
 export function getProjectWorkspaceData(projectId: string): ProjectWorkspaceData {
   return WORKSPACE_MOCK_DATA[projectId] || WORKSPACE_MOCK_DATA['proj-1'];
 }
+
+
+// Settings Modal System Contracts
+export interface SkillItem {
+  id: string;
+  name: string;
+  category: 'workflow' | 'architecture' | 'quality' | 'tools';
+  description: string;
+  enabled: boolean;
+  slashCommand?: string;
+}
+
+export interface KeybindingItem {
+  id: string;
+  actionName: string;
+  category: 'chat' | 'editor' | 'navigation' | 'agent';
+  currentKey: string;
+  defaultKey: string;
+}
+
+export interface AccentColorOption {
+  id: string;
+  name: string;
+  hex: string;
+  bgSubtle: string;
+}
+
+export const ACCENT_COLOR_PRESETS: AccentColorOption[] = [
+  { id: 'terracotta', name: '陶土暖橙 (默认)', hex: '#D96B27', bgSubtle: 'rgba(217, 107, 39, 0.12)' },
+  { id: 'emerald', name: '极客荧光绿', hex: '#10B981', bgSubtle: 'rgba(16, 185, 129, 0.12)' },
+  { id: 'azure', name: '深邃蔚蓝', hex: '#2563EB', bgSubtle: 'rgba(37, 99, 235, 0.12)' },
+  { id: 'purple', name: '典雅紫罗兰', hex: '#9333EA', bgSubtle: 'rgba(147, 51, 234, 0.12)' }
+];
+
+export function toggleSkillItem(skills: SkillItem[], skillId: string): SkillItem[] {
+  return skills.map(s => s.id === skillId ? { ...s, enabled: !s.enabled } : s);
+}
+
+export function updateKeybinding(bindings: KeybindingItem[], id: string, newKey: string): KeybindingItem[] {
+  return bindings.map(b => b.id === id ? { ...b, currentKey: newKey } : b);
+}

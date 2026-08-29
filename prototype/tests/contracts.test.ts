@@ -13,6 +13,10 @@ import {
   closeTerminalTab,
   filterFilesByQuery,
   getProjectWorkspaceData,
+  toggleSkillItem,
+  updateKeybinding,
+  SkillItem,
+  KeybindingItem,
   removeProjectFromWorkspace,
   SessionItem,
   TokenStats
@@ -172,5 +176,28 @@ describe('SDD Contract - Context-Scoped Project Linking', () => {
     expect(dataProj2.fileTree.name).toBe('codemind-sdk');
     expect(dataProj2.gitBranch).toBe('dev');
     expect(dataProj2.searchableFiles[0].path).toBe('codemind/harness.py');
+  });
+});
+
+
+describe('SDD Contract - Settings Modal (Skills & Keybindings)', () => {
+  it('should toggle skill activation status properly', () => {
+    const mockSkills: SkillItem[] = [
+      { id: 'sdd-tdd', name: 'SDD-TDD', category: 'workflow', description: '测试先行', enabled: true },
+      { id: 'sec-audit', name: 'SecAudit', category: 'quality', description: '安全审计', enabled: false }
+    ];
+    const toggled = toggleSkillItem(mockSkills, 'sec-audit');
+    expect(toggled[1].enabled).toBe(true);
+
+    const toggledBack = toggleSkillItem(toggled, 'sec-audit');
+    expect(toggledBack[1].enabled).toBe(false);
+  });
+
+  it('should update keybinding cleanly', () => {
+    const mockKeymaps: KeybindingItem[] = [
+      { id: 'act-run', actionName: '唤醒 Act 落地', category: 'agent', currentKey: 'Ctrl+Enter', defaultKey: 'Ctrl+Enter' }
+    ];
+    const updated = updateKeybinding(mockKeymaps, 'act-run', 'Ctrl+Shift+Enter');
+    expect(updated[0].currentKey).toBe('Ctrl+Shift+Enter');
   });
 });

@@ -4,9 +4,10 @@ import { MessageSquare, FolderTree, Search, GitBranch, Cpu, Settings } from 'luc
 interface ActivityBarProps {
   activeNav: string;
   setActiveNav: (nav: string) => void;
+  onOpenSettings: () => void;
 }
 
-export const ActivityBar: React.FC<ActivityBarProps> = ({ activeNav, setActiveNav }) => {
+export const ActivityBar: React.FC<ActivityBarProps> = ({ activeNav, setActiveNav, onOpenSettings }) => {
   const navItems = [
     { id: 'sessions', icon: MessageSquare, label: '会话管理' },
     { id: 'files', icon: FolderTree, label: '项目代码' },
@@ -58,7 +59,7 @@ export const ActivityBar: React.FC<ActivityBarProps> = ({ activeNav, setActiveNa
       </div>
 
       <button
-        onClick={() => setActiveNav('settings')}
+        onClick={onOpenSettings}
         title="设置与首选项"
         style={{
           width: '32px',

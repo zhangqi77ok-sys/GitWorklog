@@ -1,3 +1,4 @@
+import { SettingsModal } from './components/SettingsModal';
 import React, { useState } from 'react';
 import './styles/theme.css';
 import { Titlebar } from './components/Titlebar';
@@ -23,6 +24,15 @@ import {
 } from './types/contracts';
 
 export const App: React.FC = () => {
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [accentHex, setAccentHex] = useState('#D96B27');
+
+  const handleSelectAccentHex = (hex: string) => {
+    setAccentHex(hex);
+    document.documentElement.style.setProperty('--accent', hex);
+    document.documentElement.style.setProperty('--accent-subtle', `${hex}1F`);
+  };
+
   const [activeNav, setActiveNav] = useState('sessions');
   const [currentSessionId, setCurrentSessionId] = useState('session-2');
   const [rightWorkspaceOpen, setRightWorkspaceOpen] = useState<boolean>(false);
@@ -312,7 +322,11 @@ export const App: React.FC = () => {
       {/* 2. Main Workspace Body */}
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
         {/* ActivityBar (42px) */}
-        <ActivityBar activeNav={activeNav} setActiveNav={setActiveNav} />
+        <ActivityBar
+          activeNav={activeNav}
+          setActiveNav={setActiveNav}
+          onOpenSettings={() => setIsSettingsOpen(true)}
+        />
 
         {/* LeftPanel: Dynamic Modules (Sessions, Files, Search, Git, Gateway, Settings) */}
         <LeftPanel
@@ -355,6 +369,14 @@ export const App: React.FC = () => {
           <EditorWorkspace onCloseWorkspace={() => setRightWorkspaceOpen(false)} />
         )}
       </div>
+
+      {/* Global Settings & Preferences Modal Dialog */}
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        currentAccentHex={accentHex}
+        onSelectAccentHex={handleSelectAccentHex}
+      />
     </div>
   );
 };
