@@ -1,4 +1,5 @@
 import { hostGateway } from './services/hostGateway';
+import { getContextTelemetry, compressModelContext } from './services/contextTelemetry';
 // ────────────────────────────────────────────────────────────
 // 🧠 CONTEXT TELEMETRY & SMART AUTO-COMPRESSION ENGINE
 // ────────────────────────────────────────────────────────────
@@ -978,21 +979,22 @@ Tcode 已通过宿主磁盘与终端桥接将工程提供给你。` : '当前处
         loopCount++;
         const assistantId = singleRunCardId;
 
-        // Context Usage Telemetry & Smart Auto-Compression (Compresses LLM Model Context ONLY, Never Erases User UI History)
-        const breakdown = calculateContextBreakdown(conversationSnapshot);
+        // 🧠 Unified Context Telemetry Check (Using actual currentModel.contextLimit)
+        const limit = streamingModel.contextLimit || 128000;
+        let telemetry = getContextTelemetry(conversationSnapshot, limit);
         let modelFeedMessages = conversationSnapshot;
-        if (breakdown.statusLevel === 'auto_compress' || breakdown.statusLevel === 'force_compress') {
-          const { compressed, beforeTokens, afterTokens } = smartCompressMessages(conversationSnapshot);
-          const beforePercent = Math.round((beforeTokens / 128000) * 100);
-          const afterPercent = Math.round((afterTokens / 128000) * 100);
-          modelFeedMessages = compressed; // Feed compressed snapshot to LLM
-          // 🛡️ DO NOT setSessionMessages(compressed) - Keep user chat history 100% visible!
+
+        if (telemetry.status === 'auto_compress' || telemetry.status === 'force_compress' || telemetry.usagePercent >= 85) {
+          const compressRes = compressModelContext(conversationSnapshot, limit);
+          modelFeedMessages = compressRes.compressed;
+          telemetry = getContextTelemetry(modelFeedMessages, limit);
+
           setActiveAutoExecutedToast({
             count: 1,
-            glob: `模型上下文已就地智能压缩 · ${beforePercent}% → ${afterPercent}% (界面聊天历史完整保留)`
+            glob: `⚡ 模型上下文已就地智能压缩 · ${compressRes.beforePercent}% → ${compressRes.afterPercent}% (节约 ${compressRes.savedTokens} tokens)`
           });
           setTimeout(() => setActiveAutoExecutedToast(null), 3500);
-          addLog('INFO', 'ContextEngine', `[智能压缩] 模型上下文使用率达 ${beforePercent}%，收敛至 ${afterPercent}%，UI 会话历史永久保留。`);
+          addLog('INFO', 'ContextEngine', `[智能压缩] 上下文使用率 ${compressRes.beforePercent}% → ${compressRes.afterPercent}%，UI 聊天历史永久完整保留。`);
         }
 
         const cleanHistory = modelFeedMessages
