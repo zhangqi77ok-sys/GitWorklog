@@ -66,6 +66,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
   const [inputText, setInputText] = useState('');
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
   const [showRulesPopover, setShowRulesPopover] = useState(false);
+  const [isInputFocused, setIsInputFocused] = useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const activeRules = getActiveRules(INITIAL_RULES);
 
@@ -294,374 +295,76 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
         ))}
       </div>
 
-      {/* Bottom Controls & Input Area */}
+      {/* INPUT AREA: UNIFIED COMMAND DECK (Cursor Composer / Claude Desktop Grade) */}
       <div style={{
-        padding: '8px 12px',
+        padding: '10px 16px 12px 16px',
         borderTop: '1px solid var(--border-subtle)',
         background: 'var(--bg-surface)',
-        position: 'relative'
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '6px'
       }}>
-        {/* ========================================================= */}
-        {/* 1. TOP TOOLBAR: Fused Mode Selector + Model Switcher + Perm */}
-        {/* ========================================================= */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', position: 'relative' }}>
-
-            {/* 1.1 Fused Mode Button (Default Act, Popover on click) */}
-            <div style={{ position: 'relative' }}>
-              <button
-                onClick={() => {
-                  setShowModeMenu(!showModeMenu);
-                  setShowModelMenu(false);
-                }}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  padding: '3px 8px',
-                  borderRadius: '4px',
-                  background: workMode === 'act' ? 'var(--accent)' : '#6366F1',
-                  color: '#FFF',
-                  border: 'none',
-                  fontSize: '11px',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
-                }}
-              >
-                {workMode === 'act' ? <Zap size={12} /> : <Compass size={12} />}
-                <span>{workMode === 'act' ? '⚡ Act 落地模式' : '📐 Plan 规划模式'}</span>
-                <ChevronDown size={12} />
-              </button>
-
-              {/* Mode Selection Popover Dropdown */}
-              {showModeMenu && (
-                <div style={{
-                  position: 'absolute',
-                  bottom: '30px',
-                  left: '0',
-                  width: '240px',
-                  background: 'var(--bg-surface-elevated)',
-                  border: '1px solid var(--border-strong)',
-                  borderRadius: '6px',
-                  boxShadow: '0 8px 24px rgba(0,0,0,0.14)',
-                  padding: '6px',
-                  zIndex: 100
-                }}>
-                  <div style={{ fontSize: '10px', color: 'var(--text-muted)', padding: '2px 6px', fontWeight: 600 }}>
-                    选择智能体执行策略
-                  </div>
-                  {/* Act Option (Default) */}
-                  <div
-                    onClick={() => {
-                      setWorkMode('act');
-                      setShowModeMenu(false);
-                    }}
-                    style={{
-                      padding: '6px 8px',
-                      borderRadius: '4px',
-                      background: workMode === 'act' ? 'var(--accent-subtle)' : 'transparent',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'flex-start',
-                      gap: '6px',
-                      marginBottom: '2px'
-                    }}
-                  >
-                    <Zap size={14} color="var(--accent)" style={{ marginTop: '2px' }} />
-                    <div style={{ flex: 1 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontWeight: 600, fontSize: '11px', color: 'var(--accent)' }}>⚡ Act 落地模式</span>
-                        <span style={{ fontSize: '9px', background: 'rgba(217, 107, 39, 0.15)', color: 'var(--accent)', padding: '0 4px', borderRadius: '3px' }}>默认</span>
-                      </div>
-                      <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>直接修改代码、落盘补丁并执行自动化测试治具验证</div>
-                    </div>
-                    {workMode === 'act' && <Check size={12} color="var(--accent)" style={{ marginTop: '2px' }} />}
-                  </div>
-
-                  {/* Plan Option */}
-                  <div
-                    onClick={() => {
-                      setWorkMode('plan');
-                      setShowModeMenu(false);
-                    }}
-                    style={{
-                      padding: '6px 8px',
-                      borderRadius: '4px',
-                      background: workMode === 'plan' ? 'rgba(99, 102, 241, 0.1)' : 'transparent',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'flex-start',
-                      gap: '6px'
-                    }}
-                  >
-                    <Compass size={14} color="#6366F1" style={{ marginTop: '2px' }} />
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 600, fontSize: '11px', color: '#6366F1' }}>📐 Plan 规划模式</div>
-                      <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>深度解析工程架构并制定计划，严禁修改任何代码</div>
-                    </div>
-                    {workMode === 'plan' && <Check size={12} color="#6366F1" style={{ marginTop: '2px' }} />}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* 1.2 Model Switcher Button (Click to popover, Auto switch) */}
-            <div style={{ position: 'relative' }}>
-              <button
-                onClick={() => {
-                  setShowModelMenu(!showModelMenu);
-                  setShowModeMenu(false);
-                }}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  padding: '3px 8px',
-                  borderRadius: '4px',
-                  background: 'var(--bg-base)',
-                  color: 'var(--text-primary)',
-                  border: '1px solid var(--border-subtle)',
-                  fontSize: '11px',
-                  fontWeight: 500,
-                  cursor: 'pointer'
-                }}
-              >
-                <Cpu size={12} color="var(--accent)" />
-                <span>{currentModel.name}</span>
-                <span style={{ fontSize: '9px', color: 'var(--accent)', background: 'var(--accent-subtle)', padding: '0 3px', borderRadius: '2px' }}>
-                  {currentModel.badge || currentModel.provider}
-                </span>
-                <ChevronDown size={11} color="var(--text-muted)" />
-              </button>
-
-              {/* Model Switcher Popover Dropdown */}
-              {showModelMenu && (
-                <div style={{
-                  position: 'absolute',
-                  bottom: '30px',
-                  left: '0',
-                  width: '280px',
-                  background: 'var(--bg-surface-elevated)',
-                  border: '1px solid var(--border-strong)',
-                  borderRadius: '6px',
-                  boxShadow: '0 8px 24px rgba(0,0,0,0.14)',
-                  padding: '6px',
-                  zIndex: 100,
-                  maxHeight: '320px',
-                  overflowY: 'auto'
-                }}>
-                  <div style={{ fontSize: '10px', color: 'var(--text-muted)', padding: '2px 6px', fontWeight: 600 }}>
-                    选择底层推理大模型 (点击自动热切)
-                  </div>
-
-                  {AVAILABLE_MODELS.map(model => {
-                    const isSelected = model.id === currentModel.id;
-                    return (
-                      <div
-                        key={model.id}
-                        onClick={() => {
-                          onSelectModel(model);
-                          setShowModelMenu(false);
-                        }}
-                        style={{
-                          padding: '6px 8px',
-                          borderRadius: '4px',
-                          background: isSelected ? 'var(--accent-subtle)' : 'transparent',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          marginBottom: '2px'
-                        }}
-                      >
-                        <div style={{ flex: 1 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <span style={{ fontWeight: isSelected ? 600 : 500, fontSize: '11px', color: isSelected ? 'var(--accent)' : 'var(--text-primary)' }}>
-                              {model.name}
-                            </span>
-                            {model.badge && (
-                              <span style={{
-                                fontSize: '9px',
-                                padding: '1px 4px',
-                                borderRadius: '2px',
-                                background: isSelected ? 'var(--accent)' : 'rgba(0,0,0,0.06)',
-                                color: isSelected ? '#FFF' : 'var(--text-muted)'
-                              }}>
-                                {model.badge}
-                              </span>
-                            )}
-                          </div>
-                          <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                            {model.description} · 上限 {Math.round(model.contextLimit / 1000)}k tokens
-                          </div>
-                        </div>
-                        {isSelected && <Check size={14} color="var(--accent)" />}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-          </div>
-
-            {/* 1.2.2 File Upload & Attach Button */}
-            <input
-              type="file"
-              ref={fileInputRef}
-              multiple
-              onChange={handleFileSelect}
-              style={{ display: 'none' }}
-            />
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              title="上传文件或从剪贴板粘贴 (支持代码、图片、文档)"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px',
-                padding: '3px 8px',
-                borderRadius: '4px',
-                background: 'var(--bg-base)',
-                border: '1px solid var(--border-subtle)',
-                color: 'var(--text-secondary)',
-                fontSize: '11px',
-                cursor: 'pointer'
-              }}
-            >
-              <Paperclip size={12} color="var(--accent)" />
-              <span>上传文件/粘贴</span>
-            </button>
-
-            {/* 1.2.3 Rule Rules Preload Indicator Pill */}
-            <div style={{ position: 'relative' }}>
-              <button
-                onClick={() => setShowRulesPopover(!showRulesPopover)}
-                title="查看当前问答前置加载的顶层规则"
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  padding: '3px 8px',
-                  borderRadius: '4px',
-                  background: 'rgba(217, 107, 39, 0.08)',
-                  border: '1px solid rgba(217, 107, 39, 0.25)',
-                  color: 'var(--accent)',
-                  fontSize: '11px',
-                  fontWeight: 600,
-                  cursor: 'pointer'
-                }}
-              >
-                <ScrollText size={12} />
-                <span>📜 {activeRules.length}条规则前置加载 ▾</span>
-              </button>
-
-              {/* Rules Popover */}
-              {showRulesPopover && (
-                <div style={{
-                  position: 'absolute',
-                  bottom: '30px',
-                  left: 0,
-                  width: '320px',
-                  background: 'var(--bg-surface-elevated)',
-                  border: '1px solid var(--border-strong)',
-                  borderRadius: '6px',
-                  boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
-                  padding: '10px',
-                  zIndex: 80,
-                  fontSize: '11px'
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '4px' }}>
-                    <span style={{ fontWeight: 700, color: 'var(--accent)' }}>已生效的顶层 System Rules</span>
-                    <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>先行注入 Prompt</span>
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    {activeRules.map(r => (
-                      <div key={r.id} style={{ padding: '4px 6px', background: 'var(--bg-surface)', borderRadius: '4px', border: '1px solid var(--border-subtle)' }}>
-                        <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '2px' }}>
-                          ● {r.title}
-                        </div>
-                        <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
-                          {r.content}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-
-          {/* 1.3 Dual-Track Permission Pill */}
-          <div
-            style={{
+        {/* UNIFIED ELEVATED COMMAND CARD */}
+        <div style={{
+          background: 'var(--bg-surface-elevated)',
+          borderRadius: '10px',
+          border: isInputFocused ? '1px solid var(--accent)' : '1px solid var(--border-strong)',
+          boxShadow: isInputFocused
+            ? '0 6px 24px rgba(217, 107, 39, 0.14), 0 0 0 1px rgba(217, 107, 39, 0.2)'
+            : '0 2px 8px rgba(0,0,0,0.04)',
+          transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'visible',
+          position: 'relative'
+        }}>
+          {/* 1. ATTACHED FILES CHIPS (Inside Top of Card) */}
+          {attachedFiles.length > 0 && (
+            <div style={{
               display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-              padding: '2px 8px',
-              borderRadius: '12px',
-              background: 'var(--bg-base)',
-              border: '1px solid var(--border-subtle)',
-              fontSize: '11px',
-              cursor: 'pointer'
-            }}
-            onClick={() => {
-              if (permissionPolicy === 'strict_approval') setPermissionPolicy('autonomous_agent');
-              else if (permissionPolicy === 'autonomous_agent') setPermissionPolicy('risk_adaptive');
-              else setPermissionPolicy('strict_approval');
-            }}
-          >
-            <Shield size={12} color="var(--accent)" />
-            <span>
-              {permissionPolicy === 'strict_approval' && '🛡️ 逐次审核'}
-              {permissionPolicy === 'autonomous_agent' && '🤖 智能自决'}
-              {permissionPolicy === 'risk_adaptive' && '⚡ 风险熔断'}
-            </span>
-          </div>
-        </div>
+              flexWrap: 'wrap',
+              gap: '6px',
+              padding: '8px 12px 0 12px'
+            }}>
+              {attachedFiles.map(f => (
+                <div
+                  key={f.id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    padding: '2px 8px',
+                    borderRadius: '4px',
+                    background: 'var(--accent-subtle)',
+                    border: '1px solid rgba(217, 107, 39, 0.3)',
+                    color: 'var(--accent)',
+                    fontSize: '11px',
+                    fontWeight: 500
+                  }}
+                >
+                  <Paperclip size={11} />
+                  <span>{f.name} ({(f.size / 1024).toFixed(1)}KB)</span>
+                  <XIcon
+                    size={12}
+                    style={{ cursor: 'pointer', marginLeft: '2px' }}
+                    onClick={() => setAttachedFiles(prev => prev.filter(item => item.id !== f.id))}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
 
-        {/* ========================================================= */}
-        {/* 2. INPUT BOX                                              */}
-        {/* ========================================================= */}
-        {/* Attached Files Chips Bar */}
-        {attachedFiles.length > 0 && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '6px' }}>
-            {attachedFiles.map(f => (
-              <div
-                key={f.id}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '5px',
-                  padding: '2px 8px',
-                  borderRadius: '4px',
-                  background: 'var(--accent-subtle)',
-                  border: '1px solid rgba(217, 107, 39, 0.3)',
-                  color: 'var(--accent)',
-                  fontSize: '11px',
-                  fontWeight: 500
-                }}
-              >
-                <Paperclip size={11} />
-                <span>{f.name} ({(f.size / 1024).toFixed(1)}KB)</span>
-                <XIcon
-                  size={12}
-                  style={{ cursor: 'pointer', marginLeft: '2px' }}
-                  onClick={() => setAttachedFiles(prev => prev.filter(item => item.id !== f.id))}
-                />
-              </div>
-            ))}
-          </div>
-        )}
-        <div style={{ display: 'flex', gap: '8px' }}>
+          {/* 2. BORDERLESS AUTO-EXPANDING TEXTAREA */}
           <textarea
             placeholder={
               workMode === 'plan'
-                ? `[${currentModel.name} · Plan模式] 请输入指令，AI 将进行纯分析与架构规划（不写盘）...`
-                : `[${currentModel.name} · Act模式] 请输入需求，AI 将落地修改代码并执行测试自纠...`
+                ? `[${currentModel.name} · Plan 模式] 描述你的架构设计或分析意图，AI 将推演方案并制定计划（只读，不改写代码）...`
+                : `[${currentModel.name} · Act 模式] 描述你的开发需求，AI 将直接落地修改代码并运行测试自纠（回车发送）...`
             }
             value={inputText}
             onChange={e => setInputText(e.target.value)}
+            onFocus={() => setIsInputFocused(true)}
+            onBlur={() => setIsInputFocused(false)}
             onPaste={handlePaste}
             onKeyDown={e => {
               if (e.key === 'Enter' && !e.shiftKey) {
@@ -671,33 +374,368 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
             }}
             rows={2}
             style={{
-              flex: 1,
-              padding: '8px 10px',
-              borderRadius: '6px',
-              border: '1px solid var(--border-strong)',
-              background: 'var(--bg-surface-elevated)',
-              fontSize: '12px',
+              width: '100%',
+              padding: '10px 12px 6px 12px',
+              border: 'none',
+              background: 'transparent',
+              fontSize: '12.5px',
+              lineHeight: 1.55,
               color: 'var(--text-primary)',
               resize: 'none',
-              outline: 'none'
+              outline: 'none',
+              fontFamily: 'inherit'
             }}
           />
-          <button
-            onClick={handleSend}
-            style={{
-              width: '42px',
-              borderRadius: '6px',
-              background: 'var(--accent)',
-              border: 'none',
-              color: '#FFF',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer'
-            }}
-          >
-            <Send size={16} />
-          </button>
+
+          {/* 3. INTEGRATED COMMAND DECK (Bottom Control Bar Inside Card) */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '6px 10px 8px 10px',
+            borderTop: '1px solid var(--border-subtle)',
+            background: 'rgba(0, 0, 0, 0.015)'
+          }}>
+            {/* Left Tools Group: Mode, Model, Attachments, Rules */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+              {/* Mode Switcher Pill */}
+              <div style={{ position: 'relative' }}>
+                <button
+                  onClick={() => {
+                    setShowModeMenu(!showModeMenu);
+                    setShowModelMenu(false);
+                    setShowRulesPopover(false);
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '2px 8px',
+                    borderRadius: '4px',
+                    background: workMode === 'act' ? 'rgba(217, 107, 39, 0.12)' : 'rgba(147, 51, 234, 0.12)',
+                    color: workMode === 'act' ? 'var(--accent)' : '#9333EA',
+                    border: workMode === 'act' ? '1px solid rgba(217, 107, 39, 0.3)' : '1px solid rgba(147, 51, 234, 0.3)',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  {workMode === 'act' ? <Zap size={11} /> : <Compass size={11} />}
+                  <span>{workMode === 'act' ? 'Act 落地模式' : 'Plan 规划模式'}</span>
+                  <ChevronDown size={10} />
+                </button>
+
+                {/* Mode Dropdown Popover */}
+                {showModeMenu && (
+                  <div style={{
+                    position: 'absolute',
+                    bottom: '30px',
+                    left: '0',
+                    width: '240px',
+                    background: 'var(--bg-surface-elevated)',
+                    border: '1px solid var(--border-strong)',
+                    borderRadius: '6px',
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
+                    padding: '6px',
+                    zIndex: 100
+                  }}>
+                    <div
+                      onClick={() => { setWorkMode('act'); setShowModeMenu(false); }}
+                      style={{
+                        padding: '6px 8px',
+                        borderRadius: '4px',
+                        background: workMode === 'act' ? 'var(--accent-subtle)' : 'transparent',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        gap: '6px',
+                        marginBottom: '4px'
+                      }}
+                    >
+                      <Zap size={13} color="var(--accent)" style={{ marginTop: '2px' }} />
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 600, fontSize: '11px', color: 'var(--accent)' }}>⚡ Act 落地模式 (默认)</div>
+                        <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>直接修改代码、调用终端执行测试并自动纠错</div>
+                      </div>
+                      {workMode === 'act' && <Check size={12} color="var(--accent)" />}
+                    </div>
+
+                    <div
+                      onClick={() => { setWorkMode('plan'); setShowModeMenu(false); }}
+                      style={{
+                        padding: '6px 8px',
+                        borderRadius: '4px',
+                        background: workMode === 'plan' ? 'rgba(147, 51, 234, 0.1)' : 'transparent',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        gap: '6px'
+                      }}
+                    >
+                      <Compass size={13} color="#9333EA" style={{ marginTop: '2px' }} />
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 600, fontSize: '11px', color: '#9333EA' }}>📐 Plan 规划模式</div>
+                        <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>深度解析架构与推演步骤，严禁修改任何代码</div>
+                      </div>
+                      {workMode === 'plan' && <Check size={12} color="#9333EA" />}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Model Switcher Pill */}
+              <div style={{ position: 'relative' }}>
+                <button
+                  onClick={() => {
+                    setShowModelMenu(!showModelMenu);
+                    setShowModeMenu(false);
+                    setShowRulesPopover(false);
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '2px 8px',
+                    borderRadius: '4px',
+                    background: 'var(--bg-base)',
+                    color: 'var(--text-primary)',
+                    border: '1px solid var(--border-subtle)',
+                    fontSize: '11px',
+                    fontWeight: 500,
+                    cursor: 'pointer'
+                  }}
+                >
+                  <Cpu size={11} color="var(--accent)" />
+                  <span>{currentModel.name}</span>
+                  <ChevronDown size={10} color="var(--text-muted)" />
+                </button>
+
+                {/* Model Dropdown */}
+                {showModelMenu && (
+                  <div style={{
+                    position: 'absolute',
+                    bottom: '30px',
+                    left: '0',
+                    width: '280px',
+                    background: 'var(--bg-surface-elevated)',
+                    border: '1px solid var(--border-strong)',
+                    borderRadius: '6px',
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
+                    padding: '6px',
+                    zIndex: 100,
+                    maxHeight: '320px',
+                    overflowY: 'auto'
+                  }}>
+                    <div style={{ fontSize: '10px', color: 'var(--text-muted)', padding: '2px 6px', fontWeight: 600 }}>
+                      选择底层推理模型 (自动无缝热切)
+                    </div>
+                    {AVAILABLE_MODELS.map(model => {
+                      const isSelected = model.id === currentModel.id;
+                      return (
+                        <div
+                          key={model.id}
+                          onClick={() => { onSelectModel(model); setShowModelMenu(false); }}
+                          style={{
+                            padding: '6px 8px',
+                            borderRadius: '4px',
+                            background: isSelected ? 'var(--accent-subtle)' : 'transparent',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            marginBottom: '2px'
+                          }}
+                        >
+                          <div style={{ flex: 1 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ fontWeight: isSelected ? 600 : 500, fontSize: '11px', color: isSelected ? 'var(--accent)' : 'var(--text-primary)' }}>
+                                {model.name}
+                              </span>
+                              {model.badge && (
+                                <span style={{ fontSize: '9px', padding: '1px 4px', borderRadius: '2px', background: isSelected ? 'var(--accent)' : 'rgba(0,0,0,0.06)', color: isSelected ? '#FFF' : 'var(--text-muted)' }}>
+                                  {model.badge}
+                                </span>
+                              )}
+                            </div>
+                            <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                              {model.description} · 上限 {Math.round(model.contextLimit / 1000)}k tokens
+                            </div>
+                          </div>
+                          {isSelected && <Check size={14} color="var(--accent)" />}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Upload File Button */}
+              <input
+                type="file"
+                ref={fileInputRef}
+                multiple
+                onChange={handleFileSelect}
+                style={{ display: 'none' }}
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                title="上传文件或剪贴板粘贴 (Ctrl+V)"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '3px',
+                  padding: '2px 7px',
+                  borderRadius: '4px',
+                  background: 'var(--bg-base)',
+                  border: '1px solid var(--border-subtle)',
+                  color: 'var(--text-secondary)',
+                  fontSize: '11px',
+                  cursor: 'pointer'
+                }}
+              >
+                <Paperclip size={11} color="var(--accent)" />
+                <span>附件</span>
+              </button>
+
+              {/* Rules Preload Indicator Pill */}
+              <div style={{ position: 'relative' }}>
+                <button
+                  onClick={() => setShowRulesPopover(!showRulesPopover)}
+                  title="查看已前置注入的顶层规则"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '2px 7px',
+                    borderRadius: '4px',
+                    background: 'rgba(217, 107, 39, 0.08)',
+                    border: '1px solid rgba(217, 107, 39, 0.25)',
+                    color: 'var(--accent)',
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    cursor: 'pointer'
+                  }}
+                >
+                  <ScrollText size={11} />
+                  <span>📜 {activeRules.length}条规则生效 ▾</span>
+                </button>
+
+                {/* Rules Popover */}
+                {showRulesPopover && (
+                  <div style={{
+                    position: 'absolute',
+                    bottom: '30px',
+                    left: 0,
+                    width: '320px',
+                    background: 'var(--bg-surface-elevated)',
+                    border: '1px solid var(--border-strong)',
+                    borderRadius: '6px',
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
+                    padding: '10px',
+                    zIndex: 80,
+                    fontSize: '11px'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '4px' }}>
+                      <span style={{ fontWeight: 700, color: 'var(--accent)' }}>已生效的顶层 System Rules</span>
+                      <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>先行注入 Prompt</span>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      {activeRules.map(r => (
+                        <div key={r.id} style={{ padding: '4px 6px', background: 'var(--bg-surface)', borderRadius: '4px', border: '1px solid var(--border-subtle)' }}>
+                          <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '2px' }}>
+                            ● {r.title}
+                          </div>
+                          <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                            {r.content}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Right Tools Group: Permission, Shortcut Hint, Send Button */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {/* Dual-Track Permission Pill */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '3px',
+                  padding: '2px 7px',
+                  borderRadius: '10px',
+                  background: 'var(--bg-base)',
+                  border: '1px solid var(--border-subtle)',
+                  fontSize: '10.5px',
+                  cursor: 'pointer',
+                  color: 'var(--text-secondary)'
+                }}
+                onClick={() => {
+                  if (permissionPolicy === 'strict_approval') setPermissionPolicy('autonomous_agent');
+                  else if (permissionPolicy === 'autonomous_agent') setPermissionPolicy('risk_adaptive');
+                  else setPermissionPolicy('strict_approval');
+                }}
+                title="切换 AI 动作自主决策模式"
+              >
+                <Shield size={11} color="var(--accent)" />
+                <span>
+                  {permissionPolicy === 'strict_approval' && '逐次审核'}
+                  {permissionPolicy === 'autonomous_agent' && '智能自决'}
+                  {permissionPolicy === 'risk_adaptive' && '风险熔断'}
+                </span>
+              </div>
+
+              {/* Keyboard Shortcut Hint */}
+              <span style={{
+                fontSize: '10px',
+                color: 'var(--text-muted)',
+                padding: '1px 4px',
+                borderRadius: '3px',
+                background: 'var(--bg-base)',
+                border: '1px solid var(--border-subtle)',
+                fontFamily: 'var(--font-mono)'
+              }}>
+                Ctrl+↵
+              </span>
+
+              {/* Primary Send Button */}
+              <button
+                onClick={handleSend}
+                disabled={!inputText.trim() && attachedFiles.length === 0}
+                style={{
+                  width: '28px',
+                  height: '28px',
+                  borderRadius: '6px',
+                  background: (inputText.trim() || attachedFiles.length > 0) ? 'var(--accent)' : 'var(--bg-base)',
+                  border: (inputText.trim() || attachedFiles.length > 0) ? 'none' : '1px solid var(--border-subtle)',
+                  color: (inputText.trim() || attachedFiles.length > 0) ? '#FFF' : 'var(--text-muted)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: (inputText.trim() || attachedFiles.length > 0) ? 'pointer' : 'not-allowed',
+                  boxShadow: (inputText.trim() || attachedFiles.length > 0) ? '0 2px 8px rgba(217, 107, 39, 0.35)' : 'none',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <Send size={13} />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* 4. BOTTOM INTERACTION HELPER STREAM (极简提示流) */}
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          padding: '0 4px',
+          fontSize: '10px',
+          color: 'var(--text-muted)'
+        }}>
+          <span>💡 提示：按 <strong>Enter</strong> 发送，<strong>Shift+Enter</strong> 换行 · 剪贴板文件或截图支持 <strong>Ctrl+V</strong> 粘贴挂载</span>
+          <span>已自动先行注入项目级三大铁律与活跃 Rule 规则</span>
         </div>
       </div>
     </div>
