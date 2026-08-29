@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { GitBranch, RotateCcw, ShieldCheck, ChevronDown, RefreshCw, GitCommit, Check } from 'lucide-react';
+import { GitBranch, RotateCcw, ShieldCheck, ChevronDown, RefreshCw, GitCommit, Check, ArrowDown, ArrowUp, Plus } from 'lucide-react';
 import { ProjectGroup } from '../../types/contracts';
 
 interface GitSnapshotsPanelProps {
@@ -30,12 +30,15 @@ export const GitSnapshotsPanel: React.FC<GitSnapshotsPanelProps> = ({
   const [gitChanges, setGitChanges] = useState<RealGitChange[]>([]);
   const [commits, setCommits] = useState<RealGitCommit[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isExecutingGit, setIsExecutingGit] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [showProjDropdown, setShowProjDropdown] = useState(false);
+  const [commitInput, setCommitInput] = useState('');
+
+  const targetPath = activeProject?.path || 'e:/pro/agent-learning';
 
   const fetchRealGitData = async () => {
     setIsLoading(true);
-    const targetPath = activeProject?.path || 'e:/pro/agent-learning';
     try {
       // 1. Fetch git status
       const resStatus = await fetch(`/api/git/status?path=${encodeURIComponent(targetPath)}`);
@@ -50,7 +53,7 @@ export const GitSnapshotsPanel: React.FC<GitSnapshotsPanelProps> = ({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          command: 'git log -n 6 --pretty=format:"%h|%an|%ar|%s"',
+          command: 'git log -n 8 --pretty=format:"%h|%an|%ar|%s"',
           cwd: targetPath
         })
       });
@@ -80,9 +83,70 @@ export const GitSnapshotsPanel: React.FC<GitSnapshotsPanelProps> = ({
     fetchRealGitData();
   }, [activeProject]);
 
-  const handleRollback = async (commit: RealGitCommit) => {
-    setToastMessage(`✨ 正在基于快照 [${commit.hash}] 准备分支状态...`);
-    setTimeout(() => setToastMessage(null), 3000);
+  // Mainstream Git Operations
+  const handleGitPull = async () => {
+    setIsExecutingGit(true);
+    try {
+      const res = await fetch('/api/terminal/exec', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ command: 'git pull', cwd: targetPath })
+      });
+      const data = await res.json();
+      setToastMessage(data.success ? '✓ 成功拉取远端更新 (git pull)' : `❌ 拉取失败: ${data.error || data.stderr}`);
+      fetchRealGitData();
+    } catch (e: any) {
+      setToastMessage(`❌ 拉取异常: ${e.message}`);
+    } finally {
+      setIsExecutingGit(false);
+      setTimeout(() => setToastMessage(null), 3500);
+    }
+  };
+
+  const handleGitPush = async () => {
+    setIsExecutingGit(true);
+    try {
+      const res = await fetch('/api/terminal/exec', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ command: `git push origin ${branch}`, cwd: targetPath })
+      });
+      const data = await res.json();
+      setToastMessage(data.success ? `✓ 成功推送至 origin/${branch} (git push)` : `❌ 推送失败: ${data.error || data.stderr}`);
+      fetchRealGitData();
+    } catch (e: any) {
+      setToastMessage(`❌ 推送异常: ${e.message}`);
+    } finally {
+      setIsExecutingGit(false);
+      setTimeout(() => setToastMessage(null), 3500);
+    }
+  };
+
+  const handleGitCommit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!commitInput.trim() || isExecutingGit) return;
+    setIsExecutingGit(true);
+    const msg = commitInput.trim();
+    try {
+      const res = await fetch('/api/terminal/exec', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ command: `git add -A && git commit -m "${msg.replace(/"/g, '\\"')}"`, cwd: targetPath })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setToastMessage(`✓ 成功提交变更: "${msg}"`);
+        setCommitInput('');
+        fetchRealGitData();
+      } else {
+        setToastMessage(`❌ 提交失败: ${data.error || data.stderr}`);
+      }
+    } catch (e: any) {
+      setToastMessage(`❌ 提交异常: ${e.message}`);
+    } finally {
+      setIsExecutingGit(false);
+      setTimeout(() => setToastMessage(null), 3500);
+    }
   };
 
   return (
@@ -94,7 +158,7 @@ export const GitSnapshotsPanel: React.FC<GitSnapshotsPanelProps> = ({
           left: '8px',
           right: '8px',
           padding: '6px 10px',
-          background: 'var(--accent)',
+          background: toastMessage.startsWith('✓') ? '#16A34A' : '#DC2626',
           color: '#FFF',
           borderRadius: '4px',
           fontSize: '11px',
@@ -106,11 +170,11 @@ export const GitSnapshotsPanel: React.FC<GitSnapshotsPanelProps> = ({
         </div>
       )}
 
-      {/* Header */}
+      {/* Header & Mainstream Action Bar */}
       <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--border-subtle)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
           <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-            Git 真实仓库与快照
+            Git 真实仓库与操作
           </span>
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
             <div style={{
@@ -138,7 +202,7 @@ export const GitSnapshotsPanel: React.FC<GitSnapshotsPanelProps> = ({
         </div>
 
         {/* Project Switcher */}
-        <div style={{ position: 'relative', marginBottom: '4px' }}>
+        <div style={{ position: 'relative', marginBottom: '8px' }}>
           <div
             onClick={() => setShowProjDropdown(!showProjDropdown)}
             style={{
@@ -154,7 +218,7 @@ export const GitSnapshotsPanel: React.FC<GitSnapshotsPanelProps> = ({
             }}
           >
             <span style={{ color: 'var(--text-secondary)' }}>
-              工程仓库: 📁 <strong>{activeProject.name}</strong>
+              仓库: 📁 <strong>{activeProject.name}</strong>
             </span>
             <ChevronDown size={11} color="var(--text-muted)" />
           </div>
@@ -194,6 +258,92 @@ export const GitSnapshotsPanel: React.FC<GitSnapshotsPanelProps> = ({
             </div>
           )}
         </div>
+
+        {/* Mainstream Git Action Buttons: Pull, Push */}
+        <div style={{ display: 'flex', gap: '6px', marginBottom: '6px' }}>
+          <button
+            onClick={handleGitPull}
+            disabled={isExecutingGit}
+            style={{
+              flex: 1,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '4px',
+              padding: '4px 8px',
+              borderRadius: '4px',
+              background: 'var(--bg-surface)',
+              border: '1px solid var(--border-subtle)',
+              color: 'var(--text-primary)',
+              fontSize: '11px',
+              fontWeight: 600,
+              cursor: 'pointer'
+            }}
+          >
+            <ArrowDown size={12} color="#16A34A" />
+            <span>Pull 拉取</span>
+          </button>
+
+          <button
+            onClick={handleGitPush}
+            disabled={isExecutingGit}
+            style={{
+              flex: 1,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '4px',
+              padding: '4px 8px',
+              borderRadius: '4px',
+              background: 'var(--accent)',
+              border: 'none',
+              color: '#FFF',
+              fontSize: '11px',
+              fontWeight: 600,
+              cursor: 'pointer'
+            }}
+          >
+            <ArrowUp size={12} />
+            <span>Push 推送</span>
+          </button>
+        </div>
+
+        {/* Inline Commit Form */}
+        <form onSubmit={handleGitCommit} style={{ display: 'flex', gap: '4px' }}>
+          <input
+            type="text"
+            placeholder="Commit 提交信息 (feat / fix)..."
+            value={commitInput}
+            onChange={e => setCommitInput(e.target.value)}
+            disabled={isExecutingGit}
+            style={{
+              flex: 1,
+              padding: '3px 6px',
+              fontSize: '11px',
+              borderRadius: '4px',
+              border: '1px solid var(--border-strong)',
+              background: 'var(--bg-surface)',
+              color: 'var(--text-primary)',
+              outline: 'none'
+            }}
+          />
+          <button
+            type="submit"
+            disabled={isExecutingGit || !commitInput.trim()}
+            style={{
+              padding: '3px 8px',
+              borderRadius: '4px',
+              background: commitInput.trim() ? 'var(--accent)' : 'var(--border-subtle)',
+              border: 'none',
+              color: '#FFF',
+              fontSize: '10.5px',
+              fontWeight: 600,
+              cursor: commitInput.trim() ? 'pointer' : 'default'
+            }}
+          >
+            提交
+          </button>
+        </form>
       </div>
 
       {/* Body: Real Working Tree Changes & Real Git Log Snapshots */}
@@ -201,7 +351,7 @@ export const GitSnapshotsPanel: React.FC<GitSnapshotsPanelProps> = ({
         {/* Real Modified Files */}
         <div>
           <div style={{ fontSize: '10.5px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '4px', display: 'flex', justifyContent: 'space-between' }}>
-            <span>工作区未提交变更 (Working Tree)</span>
+            <span>工作区未提交变更</span>
             <span style={{ color: gitChanges.length > 0 ? 'var(--accent)' : '#16A34A' }}>
               {gitChanges.length > 0 ? `${gitChanges.length} 个文件变动` : '✓ 干净无变动'}
             </span>
@@ -242,7 +392,7 @@ export const GitSnapshotsPanel: React.FC<GitSnapshotsPanelProps> = ({
         {/* Real Git Commit Log Snapshots */}
         <div>
           <div style={{ fontSize: '10.5px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '4px' }}>
-            真实 Git 提交历史 (Commit Snapshots)
+            真实 Git 提交快照 (Commit Log)
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -272,20 +422,6 @@ export const GitSnapshotsPanel: React.FC<GitSnapshotsPanelProps> = ({
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '2px' }}>
                   <span style={{ fontSize: '9.5px', color: 'var(--text-muted)' }}>by {c.author}</span>
-                  <button
-                    onClick={() => handleRollback(c)}
-                    style={{
-                      padding: '1px 6px',
-                      borderRadius: '3px',
-                      border: '1px solid var(--border-subtle)',
-                      background: 'var(--bg-base)',
-                      color: 'var(--text-secondary)',
-                      fontSize: '9.5px',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    查看此快照
-                  </button>
                 </div>
               </div>
             ))}

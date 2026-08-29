@@ -1482,8 +1482,10 @@ export interface OpenedEditorFile {
   path: string;
   name: string;
   language: string;
-  isDirty: boolean;
-  content: string;
+  isDirty?: boolean;
+  isModified?: boolean;
+  content?: string;
+  astStatus?: string;
 }
 
 export const INITIAL_OPENED_FILES: OpenedEditorFile[] = [

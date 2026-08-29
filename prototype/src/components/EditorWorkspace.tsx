@@ -1,32 +1,24 @@
-import React, { useState } from 'react';
-import { PreFlightCiDrawer } from './PreFlightCiDrawer';
-import { ArchitectureGraphView } from './ArchitectureGraphView';
-import { MonacoCodeEditor } from './MonacoCodeEditor';
-import { Network } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   X,
-  FileCode,
-  Terminal,
-  Play,
-  RotateCcw,
-  Sparkles,
   Plus,
-  ShieldCheck,
-  Boxes,
-  Camera
+  Play,
+  Terminal,
+  FolderGit2,
+  FileCode,
+  FileText,
+  Sparkles,
+  ChevronRight,
+  Maximize2,
+  Minimize2,
+  RotateCcw,
+  Check,
+  Search,
+  Code,
+  GitBranch,
+  RefreshCw
 } from 'lucide-react';
-import {
-  TerminalTab,
-  createTerminalTab,
-  closeTerminalTab,
-  INITIAL_OPENED_FILES,
-  OpenedEditorFile,
-  closeEditorFile,
-  clampTerminalHeightPercent,
-  DebugProbeItem,
-  toggleDebugProbe,
-  calculateBlastRadius
-} from '../types/contracts';
+import { TerminalTab, OpenedEditorFile } from '../types/contracts';
 
 interface EditorWorkspaceProps {
   isOpen: boolean;
@@ -36,9 +28,19 @@ interface EditorWorkspaceProps {
   activeProject?: { name: string; path: string; gitBranch: string } | null;
 }
 
-const INITIAL_TERMINALS_STATE: TerminalTab[] = [
-  { id: 'term-1', title: 'zsh (1)', shell: 'zsh', logs: [] },
-  { id: 'term-2', title: 'pwsh (2)', shell: 'pwsh', logs: [] }
+const INITIAL_TERMINALS: TerminalTab[] = [
+  {
+    id: 'term-1',
+    title: 'PowerShell (1)',
+    shell: 'pwsh',
+    cwd: 'e:/pro/agent-learning',
+    logs: [
+      'Windows PowerShell',
+      '版权所有 (C) Microsoft Corporation。保留所有权利。',
+      '已接入真实本地宿主执行引擎。',
+      ''
+    ]
+  }
 ];
 
 export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
@@ -48,466 +50,254 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
   activeFile,
   activeProject
 }) => {
+  // Universal ESC key support
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isOpen) {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
+  // Real Opened Files State (Empty by default if no file opened)
   const [openedFiles, setOpenedFiles] = useState<OpenedEditorFile[]>([]);
   const [activeFileId, setActiveFileId] = useState<string>('');
-  const [workspaceViewMode, setWorkspaceViewMode] = useState<'code' | 'graph'>('code');
-  const [showInlineEdit, setShowInlineEdit] = useState(false);
-  const [inlineInput, setInlineInput] = useState('');
-  const [inlineToast, setInlineToast] = useState<string | null>(null);
+  const [fileContent, setFileContent] = useState<string>('');
+  const [isLoadingFile, setIsLoadingFile] = useState<boolean>(false);
+
+  // Load real file content when activeFile changes
+  useEffect(() => {
+    if (activeFile && activeFile.path) {
+      const existing = openedFiles.find(f => f.path === activeFile.path);
+      if (!existing) {
+        const newFile: OpenedEditorFile = {
+          id: `file-${Date.now()}`,
+          name: activeFile.name,
+          path: activeFile.path,
+          language: activeFile.name.endsWith('.tsx') || activeFile.name.endsWith('.ts') ? 'typescript' : activeFile.name.endsWith('.py') ? 'python' : 'markdown',
+          isModified: false,
+          astStatus: 'verified'
+        };
+        setOpenedFiles(prev => [...prev, newFile]);
+        setActiveFileId(newFile.id);
+      } else {
+        setActiveFileId(existing.id);
+      }
+
+      // Fetch file content from backend
+      setIsLoadingFile(true);
+      fetch(`/api/fs/read?path=${encodeURIComponent(activeFile.path)}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.success && typeof data.content === 'string') {
+            setFileContent(data.content);
+          } else {
+            setFileContent(`// ${activeFile.name}\n// 无法读取文件内容或文件为空`);
+          }
+        })
+        .catch(() => {
+          setFileContent(`// ${activeFile.name}\n// 读取本地文件失败`);
+        })
+        .finally(() => setIsLoadingFile(false));
+    }
+  }, [activeFile]);
+
+  // Terminal State: 100% Independent Tabs
+  const [terminals, setTerminals] = useState<TerminalTab[]>(INITIAL_TERMINALS);
+  const [activeTerminalId, setActiveTerminalId] = useState<string>('term-1');
+  const [cmdInput, setCmdInput] = useState<string>('');
+  const [isExecutingCmd, setIsExecutingCmd] = useState<boolean>(false);
+  const [commandHistory, setCommandHistory] = useState<string[]>([]);
+  const [historyIndex, setHistoryIndex] = useState<number>(-1);
+  const [terminalHeightPercent, setTerminalHeightPercent] = useState<number>(38);
+  const [isDraggingSplit, setIsDraggingSplit] = useState<boolean>(false);
+
+  const activeTerminal = terminals.find(t => t.id === activeTerminalId) || terminals[0];
+  const terminalLogsEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    terminalLogsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [activeTerminal?.logs]);
+
+  // Handle Split Dragging
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (isDraggingSplit) {
+        const container = document.getElementById('workbench-split-container');
+        if (container) {
+          const rect = container.getBoundingClientRect();
+          const percent = ((rect.bottom - e.clientY) / rect.height) * 100;
+          setTerminalHeightPercent(Math.max(15, Math.min(80, percent)));
+        }
+      }
+    };
+    const handleMouseUp = () => setIsDraggingSplit(false);
+
+    if (isDraggingSplit) {
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+    }
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDraggingSplit]);
+
+  // Terminal Tab Operations
+  const handleAddTerminal = () => {
+    const nextIdx = terminals.length + 1;
+    const newTab: TerminalTab = {
+      id: `term-${Date.now()}`,
+      title: `PowerShell (${nextIdx})`,
+      shell: 'pwsh',
+      cwd: activeProject?.path || 'e:/pro/agent-learning',
+      logs: [
+        'Windows PowerShell',
+        '版权所有 (C) Microsoft Corporation。保留所有权利。',
+        `[新终端实例 #${nextIdx} 已就绪]`,
+        ''
+      ]
+    };
+    setTerminals(prev => [...prev, newTab]);
+    setActiveTerminalId(newTab.id);
+  };
+
+  const handleCloseTerminal = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (terminals.length <= 1) return; // Keep at least one
+    const remaining = terminals.filter(t => t.id !== id);
+    setTerminals(remaining);
+    if (activeTerminalId === id) {
+      setActiveTerminalId(remaining[0].id);
+    }
+  };
+
+  // Real PowerShell Command Execution
   const handleExecuteTerminalCommand = async (e: React.FormEvent) => {
     e.preventDefault();
     const cmd = cmdInput.trim();
     if (!cmd || isExecutingCmd) return;
 
     setCmdInput('');
-    setTerminalLogs(prev => [...prev, `PS ${activeProject?.path || 'e:/pro/agent-learning'}> ${cmd}`]);
+    setCommandHistory(prev => [cmd, ...prev.filter(c => c !== cmd)]);
+    setHistoryIndex(-1);
+
+    const cwdPath = activeTerminal.cwd || activeProject?.path || 'e:/pro/agent-learning';
+
+    if (cmd.toLowerCase() === 'cls' || cmd.toLowerCase() === 'clear') {
+      setTerminals(prev => prev.map(t => t.id === activeTerminalId ? { ...t, logs: [] } : t));
+      return;
+    }
+
+    // Append command to active tab's independent log
+    setTerminals(prev => prev.map(t => {
+      if (t.id === activeTerminalId) {
+        return {
+          ...t,
+          logs: [...t.logs, `PS ${cwdPath}> ${cmd}`]
+        };
+      }
+      return t;
+    }));
+
     setIsExecutingCmd(true);
 
     try {
       const res = await fetch('/api/terminal/exec', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          command: cmd,
-          cwd: activeProject?.path || undefined
-        })
+        body: JSON.stringify({ command: cmd, cwd: cwdPath })
       });
       const data = await res.json();
       if (data.success) {
         const outLines = (data.stdout || '').split('\n').filter(Boolean);
         const errLines = (data.stderr || '').split('\n').filter(Boolean);
-        const combined = [...outLines, ...errLines];
-        if (combined.length === 0) {
-          setTerminalLogs(prev => [...prev, `[命令执行完成，返回值: ${data.exitCode}]`]);
-        } else {
-          setTerminalLogs(prev => [...prev, ...combined]);
-        }
-      } else {
-        setTerminalLogs(prev => [...prev, `✕ 错误: ${data.error || '命令执行失败'}`]);
-      }
-    } catch (err: any) {
-      setTerminalLogs(prev => [...prev, `✕ 终端连接异常: ${err.message}`]);
-    } finally {
-      setIsExecutingCmd(false);
-    }
-  };
-
-  const handleSaveCurrentFile = async () => {
-    const current = openedFiles.find(f => f.id === activeFileId);
-    if (!current) return;
-    try {
-      const res = await fetch('/api/fs/write', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: current.path, content: current.content })
-      });
-      const data = await res.json();
-      if (data.success) {
-        setOpenedFiles(prev => prev.map(f => f.id === activeFileId ? { ...f, isDirty: false } : f));
-        setInlineToast(`💾 文件已实时同步写入本地磁盘: ${current.name}`);
-        setTimeout(() => setInlineToast(null), 3000);
-      }
-    } catch (e) {
-      setInlineToast(`✕ 保存失败: ${e}`);
-    }
-  };
-
-  const [activeTerminalId, setActiveTerminalId] = useState<string>('term-1');
-  const [terminals, setTerminals] = useState<TerminalTab[]>(INITIAL_TERMINALS_STATE);
-  const [terminalLogs, setTerminalLogs] = useState<string[]>([
-    `Windows PowerShell (Desktop Real Engine) [实时本地终端已就绪]`,
-    `工作区目录: ${activeProject?.path || 'e:/pro/agent-learning'} · 分支: ${activeProject?.gitBranch || 'main'}`,
-    `提示: 直接输入系统命令 (例如: dir, git status, npm test, python --version) 即可实时执行。`
-  ]);
-  const [isExecutingCmd, setIsExecutingCmd] = useState(false);
-  const [cmdInput, setCmdInput] = useState('');
-  const [commandHistory, setCommandHistory] = useState<string[]>([]);
-  const [historyIndex, setHistoryIndex] = useState<number>(-1);
-  const [isCiDrawerOpen, setIsCiDrawerOpen] = useState(false);
-  const [hoveredAction, setHoveredAction] = useState<string | null>(null);
-  // Real Disk File Loading
-  React.useEffect(() => {
-    if (activeFile && activeFile.path) {
-      const loadRealFile = async () => {
-        try {
-          const res = await fetch(`/api/fs/read?path=${encodeURIComponent(activeFile.path)}`);
-          const data = await res.json();
-          if (data.success && typeof data.content === 'string') {
-            const ext = activeFile.name.split('.').pop() || 'ts';
-            const lang = ext === 'py' ? 'python' : ext === 'md' ? 'markdown' : ext === 'json' ? 'json' : 'typescript';
-            const fileItem: OpenedEditorFile = {
-              id: activeFile.path,
-              path: activeFile.path,
-              name: activeFile.name,
-              language: lang,
-              content: data.content,
-              isDirty: false
+        setTerminals(prev => prev.map(t => {
+          if (t.id === activeTerminalId) {
+            return {
+              ...t,
+              logs: [...t.logs, ...outLines, ...errLines, '']
             };
-            setOpenedFiles(prev => {
-              const exists = prev.find(f => f.path === activeFile.path);
-              if (exists) return prev;
-              return [...prev, fileItem];
-            });
-            setActiveFileId(activeFile.path);
-            setInlineToast(`📄 已从磁盘载入: ${activeFile.name} (${(data.size / 1024).toFixed(1)} KB)`);
-            setTimeout(() => setInlineToast(null), 2500);
           }
-        } catch (e) {}
-      };
-      loadRealFile();
-    }
-  }, [activeFile?.path]);
-
-  // Listen for Diff Navigation Targets from ChatColumn
-  React.useEffect(() => {
-    if (activeDiffTarget) {
-      setActiveFileId(activeDiffTarget.fileId);
-      setInlineToast(`🎯 已自动定位至 ${activeDiffTarget.filePath} 行内 Diff 区域`);
-      setTimeout(() => setInlineToast(null), 3000);
-    }
-  }, [activeDiffTarget]);
-
-  const [sudoBypassed, setSudoBypassed] = useState(false);
-  const [debugProbes, setDebugProbes] = useState<DebugProbeItem[]>([ 
-    { id: 'probe-contracts-13', fileId: 'file-contracts', line: 13, variableName: 'solveGeneric', capturedValue: '{ input: "test", resolved: true }', status: 'active' }
-  ]);
-
-  // Vertical Resizable Split for Editor vs Terminal
-  const [terminalHeightPercent, setTerminalHeightPercent] = useState<number>(40);
-  const [isDraggingVert, setIsDraggingVert] = useState(false);
-
-  React.useEffect(() => {
-    const handleVertMove = (e: MouseEvent) => {
-      if (isDraggingVert) {
-        const container = document.getElementById('workbench-split-container');
-        if (container) {
-          const rect = container.getBoundingClientRect();
-          const newPercent = ((rect.bottom - e.clientY) / rect.height) * 100;
-          setTerminalHeightPercent(clampTerminalHeightPercent(newPercent));
-        }
-      }
-    };
-
-    const handleVertUp = () => {
-      setIsDraggingVert(false);
-    };
-
-    if (isDraggingVert) {
-      window.addEventListener('mousemove', handleVertMove);
-      window.addEventListener('mouseup', handleVertUp);
-    }
-    return () => {
-      window.removeEventListener('mousemove', handleVertMove);
-      window.removeEventListener('mouseup', handleVertUp);
-    };
-  }, [isDraggingVert]);
-
-  const handleRunCommand = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const rawCmd = cmdInput.trim();
-    if (!rawCmd) return;
-
-    // Handle clear / cls command
-    if (rawCmd.toLowerCase() === 'clear' || rawCmd.toLowerCase() === 'cls') {
-      setTerminalLogs([]);
-      setCmdInput('');
-      return;
-    }
-
-    const currentCwd = activeProject?.path || 'e:/pro/agent-learning';
-    const promptLine = `PS ${currentCwd}> ${rawCmd}`;
-    setTerminalLogs(prev => [...prev, promptLine]);
-    setCommandHistory(prev => [rawCmd, ...prev.filter(c => c !== rawCmd)]);
-    setHistoryIndex(-1);
-    setCmdInput('');
-    setIsExecutingCmd(true);
-
-    try {
-      const res = await fetch('/api/terminal/exec', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          command: rawCmd,
-          cwd: currentCwd
-        })
-      });
-      const data = await res.json();
-      if (data.success) {
-        const outLines = (data.stdout || '').split('\n');
-        const errLines = (data.stderr || '').split('\n');
-        const combined = [...outLines, ...errLines].map(l => l.replace(/\r/g, ''));
-        if (combined.filter(l => l.trim()).length === 0) {
-          setTerminalLogs(prev => [...prev, `[命令执行完成，退出代码: ${data.exitCode}]`]);
-        } else {
-          setTerminalLogs(prev => [...prev, ...combined]);
-        }
+          return t;
+        }));
       } else {
-        setTerminalLogs(prev => [...prev, `✕ 错误 (${data.exitCode || 1}): ${data.error || data.stderr || '命令执行失败'}`]);
+        setTerminals(prev => prev.map(t => {
+          if (t.id === activeTerminalId) {
+            return {
+              ...t,
+              logs: [...t.logs, `❌ 执行失败: ${data.error || '未知错误'}`, '']
+            };
+          }
+          return t;
+        }));
       }
     } catch (err: any) {
-      setTerminalLogs(prev => [...prev, `✕ 终端执行异常: ${err.message}`]);
+      setTerminals(prev => prev.map(t => {
+        if (t.id === activeTerminalId) {
+          return {
+            ...t,
+            logs: [...t.logs, `❌ 连接本地宿主终端失败: ${err.message || 'Network error'}`, '']
+          };
+        }
+        return t;
+      }));
     } finally {
       setIsExecutingCmd(false);
     }
   };
 
-  const codeLines = [
-    { num: 1, text: '// CodeMind-Hub 核心数据契约 (SDD Contract)', type: 'comment' },
-    { num: 2, text: '', type: 'normal' },
-    { num: 3, text: 'export type WorkMode = \'act\' | \'plan\' | \'minimal\' | \'creator\';', type: 'type_def' },
-    { num: 4, text: '', type: 'normal' },
-    { num: 5, text: 'export interface SessionItem {', type: 'interface' },
-    { num: 6, text: '  id: string;', type: 'field' },
-    { num: 7, text: '  tier1: \'global\' | \'project\';', type: 'field' },
-    { num: 8, text: '  title: string;', type: 'field' },
-    { num: 9, text: '  totalTokens: number;', type: 'field' },
-    { num: 10, text: '  forkedFromId?: string;', type: 'field' },
-    { num: 11, text: '}', type: 'interface' },
-    { num: 12, text: '', type: 'normal' }
-  ];
+  const currentFile = openedFiles.find(f => f.id === activeFileId);
+  const codeLines = fileContent.split('\n');
 
   return (
-    <aside style={{
-      width: '100%',
-      height: '100%',
-      background: 'var(--bg-surface)',
-      borderLeft: '1px solid var(--border-subtle)',
+    <div style={{
       display: 'flex',
       flexDirection: 'column',
-      userSelect: isDraggingVert ? 'none' : 'auto'
+      height: '100%',
+      width: '100%',
+      background: 'var(--bg-base)',
+      borderLeft: '1px solid var(--border-subtle)',
+      userSelect: 'none',
+      position: 'relative'
     }}>
-      {/* 1. TOP TAB BAR & CONTROLS */}
+      {/* 1. TOP TITLEBAR */}
       <div style={{
-        height: '36px',
-        background: 'var(--bg-surface)',
+        height: '38px',
         borderBottom: '1px solid var(--border-subtle)',
+        background: 'var(--bg-surface)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        padding: '0 8px'
+        padding: '0 8px 0 12px'
       }}>
-        {/* Dynamic Multi-File Tabs */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '2px', overflowX: 'auto' }}>
-          {openedFiles.map(file => {
-            const isActive = activeFileId === file.id;
-            return (
-              <div
-                key={file.id}
-                onClick={() => setActiveFileId(file.id)}
-                style={{
-                  padding: '5px 10px',
-                  borderRadius: '4px 4px 0 0',
-                  background: isActive ? 'var(--bg-base)' : 'transparent',
-                  border: isActive ? '1px solid var(--border-subtle)' : '1px solid transparent',
-                  borderBottom: 'none',
-                  fontSize: '11px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  cursor: 'pointer',
-                  fontWeight: isActive ? 600 : 400,
-                  color: isActive ? 'var(--accent)' : 'var(--text-secondary)'
-                }}
-              >
-                <FileCode size={12} color={isActive ? 'var(--accent)' : 'var(--text-muted)'} />
-                <span>{file.name}</span>
-                {file.isDirty && (
-                  <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: 'var(--accent)' }} />
-                )}
-                <span
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    const res = closeEditorFile(openedFiles, file.id);
-                    setOpenedFiles(res.remainingFiles);
-                    if (res.activeFileId) setActiveFileId(res.activeFileId);
-                  }}
-                  style={{ fontSize: '10px', color: 'var(--text-muted)', cursor: 'pointer', marginLeft: '2px' }}
-                >
-                  ✕
-                </span>
-              </div>
-            );
-          })}
-          {/* Architecture Topology Graph Tab */}
-          <div
-            onClick={() => setWorkspaceViewMode(workspaceViewMode === 'graph' ? 'code' : 'graph')}
-            style={{
-              padding: '5px 10px',
-              borderRadius: '4px 4px 0 0',
-              background: workspaceViewMode === 'graph' ? 'var(--bg-base)' : 'transparent',
-              border: workspaceViewMode === 'graph' ? '1px solid var(--border-subtle)' : '1px solid transparent',
-              borderBottom: 'none',
-              fontSize: '11px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              cursor: 'pointer',
-              fontWeight: workspaceViewMode === 'graph' ? 700 : 500,
-              color: workspaceViewMode === 'graph' ? 'var(--accent)' : 'var(--text-secondary)'
-            }}
-          >
-            <Network size={12} color={workspaceViewMode === 'graph' ? 'var(--accent)' : 'var(--text-muted)'} />
-            <span>🕸️ 架构拓扑</span>
-          </div>
-        </div>
-
-        {/* Compact Icon-Only Action Group with Rich Hover Tooltips */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', position: 'relative' }}>
-          {/* 1. Monorepo Blast Radius Icon */}
-          <div
-            onMouseEnter={() => setHoveredAction('blast-radius')}
-            onMouseLeave={() => setHoveredAction(null)}
-            onClick={() => {
-              setInlineToast('📦 已触发 Monorepo core ➔ web (3处) 跨包级联自动修复！');
-              setTimeout(() => setInlineToast(null), 3000);
-            }}
-            style={{
-              position: 'relative',
-              width: '26px',
-              height: '26px',
-              borderRadius: '5px',
-              background: 'rgba(37, 99, 235, 0.1)',
-              border: '1px solid rgba(37, 99, 235, 0.25)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-              color: '#2563EB'
-            }}
-          >
-            <Boxes size={13} />
-            <span style={{
-              position: 'absolute',
-              top: '-2px',
-              right: '-2px',
-              width: '6px',
-              height: '6px',
-              borderRadius: '50%',
-              background: '#2563EB'
-            }} />
-          </div>
-
-          {/* 2. Pre-Flight CI Icon */}
-          <div
-            onMouseEnter={() => setHoveredAction('preflight-ci')}
-            onMouseLeave={() => setHoveredAction(null)}
-            onClick={() => setIsCiDrawerOpen(true)}
-            style={{
-              width: '26px',
-              height: '26px',
-              borderRadius: '5px',
-              background: 'rgba(22, 163, 74, 0.1)',
-              border: '1px solid rgba(22, 163, 74, 0.3)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-              color: '#16A34A'
-            }}
-          >
-            <ShieldCheck size={13} />
-          </div>
-
-          {/* 3. Inline Refactor Icon */}
-          <div
-            onMouseEnter={() => setHoveredAction('inline-refactor')}
-            onMouseLeave={() => setHoveredAction(null)}
-            onClick={() => setShowInlineEdit(!showInlineEdit)}
-            style={{
-              width: '26px',
-              height: '26px',
-              borderRadius: '5px',
-              background: showInlineEdit ? 'rgba(147, 51, 234, 0.2)' : 'var(--bg-base)',
-              border: showInlineEdit ? '1px solid #9333EA' : '1px solid var(--border-subtle)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-              color: showInlineEdit ? '#9333EA' : 'var(--accent)'
-            }}
-          >
-            <Sparkles size={13} />
-          </div>
-
-          {/* 4. Shadow Snapshot Icon */}
-          <div
-            onMouseEnter={() => setHoveredAction('shadow-snapshot')}
-            onMouseLeave={() => setHoveredAction(null)}
-            onClick={() => {
-              setInlineToast('📷 已捕获当前工作区代码影子快照 (安全点已同步)');
-              setTimeout(() => setInlineToast(null), 3000);
-            }}
-            style={{
-              width: '26px',
-              height: '26px',
-              borderRadius: '5px',
-              background: 'rgba(217, 107, 39, 0.08)',
-              border: '1px solid rgba(217, 107, 39, 0.25)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-              color: 'var(--accent)'
-            }}
-          >
-            <Camera size={13} />
-          </div>
-
-          {/* Close Workbench Button */}
-          <button
-            onClick={onClose}
-            style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', marginLeft: '4px' }}
-          >
-            <X size={14} />
-          </button>
-
-          {/* Floating Rich Tooltip Bubble on Hover */}
-          {hoveredAction && (
-            <div style={{
-              position: 'absolute',
-              top: '32px',
-              right: 0,
-              padding: '6px 10px',
-              borderRadius: '6px',
-              background: '#18181B',
-              color: '#F4F4F5',
-              boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
-              fontSize: '11px',
-              zIndex: 100,
-              whiteSpace: 'nowrap',
-              pointerEvents: 'none',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '2px',
-              border: '1px solid rgba(255,255,255,0.1)'
-            }}>
-              <div style={{ fontWeight: 700, color: 'var(--accent)' }}>
-                {hoveredAction === 'blast-radius' && '📦 Monorepo 跨包波及分析'}
-                {hoveredAction === 'preflight-ci' && '🚀 本地 CI 门禁与覆盖率'}
-                {hoveredAction === 'inline-refactor' && '⚡ 行内智能重构 (Alt+Enter)'}
-                {hoveredAction === 'shadow-snapshot' && '📷 影子快照历史时光机'}
-              </div>
-              <div style={{ fontSize: '10px', color: '#A1A1AA' }}>
-                {hoveredAction === 'blast-radius' && 'core ➔ web (3处影响)，点击执行级联修复'}
-                {hoveredAction === 'preflight-ci' && '并行跑测 TypeScript + ESLint + Vitest (覆盖率 88.4%)'}
-                {hoveredAction === 'inline-refactor' && '对当前文件选区生成 AST 级精准重构方案'}
-                {hoveredAction === 'shadow-snapshot' && '已自动捕获 4 个本地安全还原点，可随时一键回溯'}
-              </div>
-            </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
+          <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+            工作台 · 高精代码与终端
+          </span>
+          {currentFile && (
+            <span style={{ fontSize: '11.5px', color: 'var(--accent)', fontWeight: 600 }}>
+              📁 {currentFile.name}
+            </span>
           )}
         </div>
+
+        <button
+          onClick={onClose}
+          title="关闭工作台 (ESC)"
+          style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '4px' }}
+        >
+          <X size={15} />
+        </button>
       </div>
 
-      {/* 2. SPLIT BODY: RESIZABLE EDITOR (TOP) + TERMINAL (BOTTOM) OR GRAPH */}
-      {workspaceViewMode === 'graph' ? (
-        <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
-          <ArchitectureGraphView />
-        </div>
-      ) : (
+      {/* 2. MAIN SPLIT BODY */}
       <div id="workbench-split-container" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
-        {/* TOP: CODE EDITOR AREA (Dynamic Height) */}
+        {/* TOP: CODE EDITOR AREA */}
         <div style={{
           flex: 1,
           height: `${100 - terminalHeightPercent}%`,
@@ -518,452 +308,273 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
           fontFamily: 'var(--font-mono)',
           fontSize: '12px'
         }}>
-          {/* Ctrl+K Floating Input Widget */}
-          {showInlineEdit && (
+          {/* File Tabs Strip */}
+          {openedFiles.length > 0 && (
             <div style={{
-              margin: '8px 12px',
-              padding: '6px 10px',
-              borderRadius: '6px',
-              background: 'var(--bg-surface-elevated)',
-              border: '1px solid #9333EA',
-              boxShadow: '0 4px 16px rgba(147, 51, 234, 0.15)',
               display: 'flex',
               alignItems: 'center',
-              gap: '8px',
-              zIndex: 30
+              background: 'var(--bg-surface)',
+              borderBottom: '1px solid var(--border-subtle)',
+              overflowX: 'auto',
+              height: '32px'
             }}>
-              <Sparkles size={13} color="#9333EA" />
-              <input
-                type="text"
-                value={inlineInput}
-                onChange={e => setInlineInput(e.target.value)}
-                placeholder="输入行内重构指令（例如：为 solveGeneric 添加泛型约束与单元测试）..."
-                style={{
-                  flex: 1,
-                  background: 'transparent',
-                  border: 'none',
-                  outline: 'none',
-                  fontSize: '11px',
-                  color: 'var(--text-primary)'
-                }}
-              />
-              <button
-                onClick={() => {
-                  setShowInlineEdit(false);
-                  setInlineToast('✓ 行内重构已自动接入 AST 静态检查');
-                  setTimeout(() => setInlineToast(null), 3000);
-                }}
-                style={{
-                  padding: '2px 8px',
-                  borderRadius: '3px',
-                  background: '#9333EA',
-                  border: 'none',
-                  color: '#FFF',
-                  fontSize: '10px',
-                  fontWeight: 600,
-                  cursor: 'pointer'
-                }}
-              >
-                生成
-              </button>
-            </div>
-          )}
-
-          {/* Toast */}
-          {inlineToast && (
-            <div style={{
-              position: 'absolute',
-              top: '45px',
-              right: '15px',
-              padding: '3px 8px',
-              background: '#16A34A',
-              color: '#FFF',
-              borderRadius: '3px',
-              fontSize: '10.5px',
-              fontWeight: 600,
-              zIndex: 50
-            }}>
-              {inlineToast}
-            </div>
-          )}
-
-          {/* Editor Body with Gutter (Line Numbers) & Rich Syntax Coloring */}
-          <div style={{ flex: 1, display: 'flex', overflowY: 'auto', padding: '8px 0' }}>
-            {/* Gutter Line Numbers with Interactive Probes */}
-            <div style={{
-              width: '42px',
-              padding: '0 6px 0 0',
-              textAlign: 'right',
-              color: 'var(--text-muted)',
-              opacity: 0.7,
-              userSelect: 'none',
-              borderRight: '1px solid var(--border-subtle)',
-              fontSize: '11px',
-              lineHeight: '20px'
-            }}>
-              {codeLines.map(l => {
-                const hasProbe = debugProbes.some(p => p.line === l.num);
-                return (
-                  <div
-                    key={l.num}
-                    onClick={() => setDebugProbes(prev => toggleDebugProbe(prev, 'file-contracts', l.num))}
-                    style={{
-                      cursor: 'pointer',
-                      color: hasProbe ? '#F59E0B' : 'inherit',
-                      fontWeight: hasProbe ? 700 : 400
+              {openedFiles.map(f => (
+                <div
+                  key={f.id}
+                  onClick={() => setActiveFileId(f.id)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '0 10px',
+                    height: '100%',
+                    background: f.id === activeFileId ? 'var(--bg-base)' : 'transparent',
+                    borderRight: '1px solid var(--border-subtle)',
+                    borderTop: f.id === activeFileId ? '2px solid var(--accent)' : '2px solid transparent',
+                    cursor: 'pointer',
+                    fontSize: '11px',
+                    color: f.id === activeFileId ? 'var(--accent)' : 'var(--text-secondary)'
+                  }}
+                >
+                  <FileCode size={12} />
+                  <span>{f.name}</span>
+                  <X
+                    size={11}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const remaining = openedFiles.filter(item => item.id !== f.id);
+                      setOpenedFiles(remaining);
+                      if (activeFileId === f.id && remaining.length > 0) {
+                        setActiveFileId(remaining[0].id);
+                      }
                     }}
-                    title="点击插入/移除非侵入式动态探针 (Debug Probe)"
-                  >
-                    {hasProbe ? '⚡' : l.num}
-                  </div>
-                );
-              })}
-              <div
-                onClick={() => setDebugProbes(prev => toggleDebugProbe(prev, 'file-contracts', 13))}
-                style={{ cursor: 'pointer', color: debugProbes.some(p => p.line === 13) ? '#F59E0B' : 'inherit', fontWeight: 700 }}
-                title="点击插入动态探针"
-              >
-                {debugProbes.some(p => p.line === 13) ? '⚡' : '13'}
-              </div>
-              <div>14</div>
+                    style={{ cursor: 'pointer', opacity: 0.7 }}
+                  />
+                </div>
+              ))}
             </div>
+          )}
 
-            {/* Code Content Area with Indentation Guides & Folding */}
-            <div style={{ flex: 1, padding: '0 12px', lineHeight: '20px' }}>
-              <div><span style={{ color: '#6B7280' }}>// CodeMind-Hub 核心数据契约 (SDD Contract)</span></div>
-              <div>&nbsp;</div>
-              <div>
-                <span style={{ color: '#9333EA', fontWeight: 600 }}>export type</span> <span style={{ color: '#0284C7' }}>WorkMode</span> = <span style={{ color: '#16A34A' }}>'act'</span> | <span style={{ color: '#16A34A' }}>'plan'</span> | <span style={{ color: '#16A34A' }}>'minimal'</span> | <span style={{ color: '#16A34A' }}>'creator'</span>;
+          {/* Editor Body: Clean Empty State OR Real Code Lines */}
+          {openedFiles.length === 0 ? (
+            <div style={{
+              flex: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'var(--text-muted)',
+              gap: '10px'
+            }}>
+              <FileCode size={36} color="var(--border-strong)" />
+              <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                未打开任何代码文件
               </div>
-              <div>&nbsp;</div>
-              {/* Floating Selection Quick Bar */}
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                从左侧【项目代码】或按 <kbd style={{ padding: '2px 6px', borderRadius: '4px', background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', color: 'var(--text-primary)' }}>Ctrl+P</kbd> 选择文件打开编辑
+              </div>
+            </div>
+          ) : (
+            <div style={{ flex: 1, display: 'flex', overflowY: 'auto', padding: '8px 0' }}>
+              {/* Line Numbers Gutter */}
               <div style={{
-                margin: '4px 0 6px 0',
-                padding: '2px 8px',
-                borderRadius: '16px',
-                background: '#18181B',
-                border: '1px solid var(--accent)',
-                boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '8px',
-                fontSize: '10px',
-                color: '#FFF',
-                zIndex: 10
+                width: '42px',
+                padding: '0 6px 0 0',
+                textAlign: 'right',
+                color: 'var(--text-muted)',
+                opacity: 0.7,
+                userSelect: 'none',
+                borderRight: '1px solid var(--border-subtle)',
+                fontSize: '11px',
+                lineHeight: '20px'
               }}>
-                <span style={{ color: 'var(--accent)', fontWeight: 600 }}>Ln 5-11 选中:</span>
-                <button
-                  onClick={() => {
-                    setInlineToast('⚡ 已针对 SessionItem 接口生成 AST 优化重构方案');
-                    setTimeout(() => setInlineToast(null), 3000);
-                  }}
-                  style={{ background: 'transparent', border: 'none', color: '#60A5FA', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '2px', padding: 0 }}
-                >
-                  <Sparkles size={10} /> 智能重构
-                </button>
-                <button
-                  onClick={() => {
-                    setInlineToast('🧪 已生成 SessionItem 契约边界模糊测试用例');
-                    setTimeout(() => setInlineToast(null), 3000);
-                  }}
-                  style={{ background: 'transparent', border: 'none', color: '#4ADE80', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '2px', padding: 0 }}
-                >
-                  <ShieldCheck size={10} /> 补全单测
-                </button>
-                <button
-                  onClick={() => {
-                    setInlineToast('💬 已将 SessionItem 选区注入左侧对话流');
-                    setTimeout(() => setInlineToast(null), 3000);
-                  }}
-                  style={{ background: 'transparent', border: 'none', color: '#FCD34D', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '2px', padding: 0 }}
-                >
-                  💬 追问
-                </button>
+                {codeLines.map((_, idx) => (
+                  <div key={idx}>{idx + 1}</div>
+                ))}
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <span style={{ color: 'var(--text-muted)', fontSize: '9px', userSelect: 'none' }}>⌄</span>
-                <span style={{ color: '#9333EA', fontWeight: 600 }}>export interface</span> <span style={{ color: '#0284C7' }}>SessionItem</span> &#123;
-              </div>
-              <div style={{ paddingLeft: '16px', borderLeft: '1px solid rgba(0,0,0,0.06)', marginLeft: '4px' }}>
-                <span style={{ color: 'var(--text-primary)' }}>id:</span> <span style={{ color: '#D97706' }}>string</span>;
-              </div>
-              <div style={{ paddingLeft: '16px', borderLeft: '1px solid rgba(0,0,0,0.06)', marginLeft: '4px' }}>
-                <span style={{ color: 'var(--text-primary)' }}>tier1:</span> <span style={{ color: '#16A34A' }}>'global'</span> | <span style={{ color: '#16A34A' }}>'project'</span>;
-              </div>
-              <div style={{ paddingLeft: '16px', borderLeft: '1px solid rgba(0,0,0,0.06)', marginLeft: '4px' }}>
-                <span style={{ color: 'var(--text-primary)' }}>title:</span> <span style={{ color: '#D97706' }}>string</span>;
-              </div>
-              <div style={{ paddingLeft: '16px', borderLeft: '1px solid rgba(0,0,0,0.06)', marginLeft: '4px' }}>
-                <span style={{ color: 'var(--text-primary)' }}>totalTokens:</span> <span style={{ color: '#D97706' }}>number</span>;
-              </div>
-              <div style={{ paddingLeft: '16px', borderLeft: '1px solid rgba(0,0,0,0.06)', marginLeft: '4px' }}>
-                <span style={{ color: 'var(--text-primary)' }}>forkedFromId?:</span> <span style={{ color: '#D97706' }}>string</span>;
-              </div>
-              <div>&#125;</div>
-
-              {/* Live Dynamic Probe Bubble */}
-              {debugProbes.some(p => p.line === 13) && (
-                <div style={{
-                  margin: '4px 0',
-                  padding: '3px 8px',
-                  borderRadius: '4px',
-                  background: 'rgba(245, 158, 11, 0.12)',
-                  border: '1px dashed #F59E0B',
-                  color: '#D97706',
-                  fontSize: '10.5px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between'
-                }}>
-                  <span>⚡ [动态探针捕获] input: &#123; mode: 'act', tokens: 21000 &#125; ➔ 返回: Promise&lt;Resolved&gt;</span>
-                  <span style={{ fontSize: '9px', opacity: 0.8 }}>零侵入式探针 (测试通过自动清除)</span>
-                </div>
-              )}
-
-              {/* Live Inline Diff Block */}
-              <div style={{
-                marginTop: '4px',
-                borderRadius: '4px',
-                border: '1px solid var(--border-subtle)',
-                background: 'var(--bg-surface)',
-                overflow: 'hidden'
-              }}>
-                <div style={{
-                  padding: '2px 8px',
-                  background: 'rgba(22, 163, 74, 0.12)',
-                  borderLeft: '3px solid #16A34A',
-                  color: '#16A34A',
-                  fontSize: '11px',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center'
-                }}>
-                  <code>+ export function solveGeneric&lt;T&gt;(input: T): Promise&lt;T&gt;; // [AST 校验通过]</code>
-                  <span style={{ fontSize: '9px', padding: '1px 4px', borderRadius: '3px', background: '#16A34A', color: '#FFF', fontWeight: 600 }}>Tab 接受</span>
-                </div>
-                <div style={{
-                  padding: '2px 8px',
-                  background: 'rgba(220, 38, 38, 0.08)',
-                  borderLeft: '3px solid #DC2626',
-                  color: '#DC2626',
-                  fontSize: '11px',
-                  textDecoration: 'line-through'
-                }}>
-                  <code>- export function solve(input: any): any;</code>
-                </div>
+              {/* Real Code Content */}
+              <div style={{ flex: 1, padding: '0 12px', lineHeight: '20px', userSelect: 'text', WebkitUserSelect: 'text' }}>
+                {isLoadingFile ? (
+                  <div style={{ color: 'var(--text-muted)', padding: '20px 0' }}>正在从磁盘加载文件...</div>
+                ) : (
+                  codeLines.map((line, idx) => (
+                    <div key={idx} style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+                      {line || ' '}
+                    </div>
+                  ))
+                )}
               </div>
             </div>
-          </div>
-
-          {/* IDE Mini Status Bar */}
-          <div style={{
-            height: '22px',
-            borderTop: '1px solid var(--border-subtle)',
-            background: 'var(--bg-surface)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '0 10px',
-            fontSize: '10px',
-            color: 'var(--text-muted)',
-            userSelect: 'none'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <span>TypeScript</span>
-              <span>UTF-8</span>
-              <span>Ln 14, Col 28</span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ color: '#16A34A', fontWeight: 600 }}>🟢 AST Verified</span>
-              <span>·</span>
-              <span>Prettier</span>
-            </div>
-          </div>
+          )}
         </div>
 
-        {/* VERTICAL DRAGGABLE DIVIDER (Row-Resize) */}
+        {/* DRAGGABLE RESIZE DIVIDER */}
         <div
-          onMouseDown={() => setIsDraggingVert(true)}
-          title="上下拖拽调整编辑器与终端高度"
+          onMouseDown={() => setIsDraggingSplit(true)}
           style={{
-            height: '5px',
-            background: isDraggingVert ? 'var(--accent)' : 'var(--bg-surface)',
-            borderTop: '1px solid var(--border-subtle)',
-            borderBottom: '1px solid var(--border-subtle)',
+            height: '4px',
+            background: isDraggingSplit ? 'var(--accent)' : 'var(--border-subtle)',
             cursor: 'row-resize',
-            zIndex: 40,
-            transition: 'background 0.15s ease'
+            zIndex: 30,
+            transition: 'background 0.12s ease'
           }}
         />
 
-        {/* BOTTOM: INTEGRATED TERMINAL DRAWER (Dynamic Height) */}
+        {/* BOTTOM: INDEPENDENT TERMINAL AREA */}
         <div style={{
           height: `${terminalHeightPercent}%`,
-          background: '#18181B',
-          color: '#F4F4F5',
           display: 'flex',
           flexDirection: 'column',
-          overflow: 'hidden',
-          fontFamily: 'var(--font-mono)',
-          fontSize: '11.5px'
+          background: '#0D1117',
+          color: '#C9D1D9',
+          fontFamily: 'Consolas, Monaco, monospace',
+          fontSize: '11.5px',
+          overflow: 'hidden'
         }}>
-          {/* Terminal Drawer Header */}
+          {/* Terminal Tabs Strip */}
           <div style={{
-            height: '30px',
-            background: '#27272A',
-            borderBottom: '1px solid #3F3F46',
+            height: '28px',
+            background: '#161B22',
+            borderBottom: '1px solid #30363D',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            padding: '0 8px'
+            padding: '0 6px'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              {terminals.map(t => {
-                const isActive = activeTerminalId === t.id;
+            <div style={{ display: 'flex', alignItems: 'center', gap: '2px', overflowX: 'auto' }}>
+              {terminals.map(term => {
+                const isActive = term.id === activeTerminalId;
                 return (
                   <div
-                    key={t.id}
-                    onClick={() => setActiveTerminalId(t.id)}
+                    key={term.id}
+                    onClick={() => setActiveTerminalId(term.id)}
                     style={{
-                      padding: '2px 8px',
-                      borderRadius: '3px',
-                      background: isActive ? '#18181B' : 'transparent',
-                      color: isActive ? '#FFF' : '#A1A1AA',
-                      cursor: 'pointer',
-                      fontSize: '10.5px',
                       display: 'flex',
                       alignItems: 'center',
-                      gap: '4px'
+                      gap: '5px',
+                      padding: '2px 8px',
+                      borderRadius: '3px 3px 0 0',
+                      background: isActive ? '#0D1117' : 'transparent',
+                      color: isActive ? 'var(--accent)' : '#8B949E',
+                      fontWeight: isActive ? 700 : 400,
+                      cursor: 'pointer',
+                      fontSize: '10.5px'
                     }}
                   >
-                    <span>{t.title}</span>
-                    <span
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        const rem = closeTerminalTab(terminals, t.id);
-                        setTerminals(rem);
-                        if (rem.length > 0) setActiveTerminalId(rem[rem.length - 1].id);
-                      }}
-                      style={{ fontSize: '9px', opacity: 0.6 }}
-                    >
-                      ✕
-                    </span>
+                    <Terminal size={11} />
+                    <span>{term.title}</span>
+                    {terminals.length > 1 && (
+                      <X
+                        size={10}
+                        onClick={(e) => handleCloseTerminal(term.id, e)}
+                        style={{ cursor: 'pointer', opacity: 0.7 }}
+                      />
+                    )}
                   </div>
                 );
               })}
 
               <button
-                onClick={() => {
-                  const newT = createTerminalTab(terminals);
-                  setTerminals(prev => [...prev, newT]);
-                  setActiveTerminalId(newT.id);
+                onClick={handleAddTerminal}
+                title="新建独立 PowerShell 终端"
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: '#8B949E',
+                  cursor: 'pointer',
+                  padding: '2px 4px',
+                  display: 'flex',
+                  alignItems: 'center'
                 }}
-                style={{ background: 'transparent', border: 'none', color: '#A1A1AA', cursor: 'pointer' }}
               >
-                <Plus size={11} />
+                <Plus size={12} />
               </button>
             </div>
 
-            {/* Terminal Safety Guard Status */}
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-              padding: '1px 6px',
-              borderRadius: '3px',
-              background: 'rgba(22, 163, 74, 0.2)',
-              border: '1px solid #16A34A',
-              color: '#4ADE80',
-              fontSize: '9.5px',
-              fontWeight: 600
-            }}>
-              <ShieldCheck size={11} />
-              <span>🛡️ 沙箱防护中</span>
+            <div style={{ fontSize: '9.5px', color: '#8B949E' }}>
+              宿主引擎 · 原生 PowerShell
             </div>
           </div>
 
-          {/* Terminal Console Logs & Interactive Sudo Override Card */}
-          <div style={{ flex: 1, padding: '8px 10px', overflowY: 'auto', lineHeight: '18px' }}>
-            {terminalLogs.map((log, idx) => (
-              <div key={idx} style={{
-                color: log.startsWith('$')
-                  ? '#38BDF8'
-                  : log.includes('✓')
-                  ? '#4ADE80'
-                  : log.includes('过滤')
-                  ? '#F59E0B'
-                  : log.includes('🛡️')
-                  ? '#F87171'
-                  : '#D4D4D8'
-              }}>
+          {/* Active Terminal Logs Stream (100% Isolated per tab) */}
+          <div style={{
+            flex: 1,
+            overflowY: 'auto',
+            padding: '8px 12px',
+            lineHeight: 1.45,
+            userSelect: 'text',
+            WebkitUserSelect: 'text'
+          }}>
+            {activeTerminal.logs.map((log, idx) => (
+              <div
+                key={idx}
+                style={{
+                  color: log.startsWith('PS ') ? 'var(--accent)' : log.startsWith('❌') ? '#F85149' : '#C9D1D9',
+                  fontWeight: log.startsWith('PS ') ? 600 : 400,
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-all'
+                }}
+              >
                 {log}
               </div>
             ))}
-
-
+            <div ref={terminalLogsEndRef} />
           </div>
 
-          {/* Terminal Command Input Form */}
-          <form onSubmit={handleRunCommand} style={{
-            padding: '6px 10px',
-            borderTop: '1px solid #27272A',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            background: '#18181B'
-          }}>
-            <span style={{ color: '#4ADE80', fontWeight: 600 }}>❯</span>
-                        <input
+          {/* Terminal Input Prompt */}
+          <form
+            onSubmit={handleExecuteTerminalCommand}
+            style={{
+              padding: '6px 12px',
+              borderTop: '1px solid #30363D',
+              background: '#161B22',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+          >
+            <span style={{ color: 'var(--accent)', fontWeight: 700 }}>❯</span>
+            <input
               type="text"
               value={cmdInput}
               onChange={e => setCmdInput(e.target.value)}
               onKeyDown={e => {
                 if (e.key === 'ArrowUp') {
                   e.preventDefault();
-                  if (commandHistory.length > 0) {
-                    const nextIdx = Math.min(historyIndex + 1, commandHistory.length - 1);
-                    setHistoryIndex(nextIdx);
-                    setCmdInput(commandHistory[nextIdx]);
+                  if (commandHistory.length > 0 && historyIndex < commandHistory.length - 1) {
+                    const next = historyIndex + 1;
+                    setHistoryIndex(next);
+                    setCmdInput(commandHistory[next]);
                   }
                 } else if (e.key === 'ArrowDown') {
                   e.preventDefault();
                   if (historyIndex > 0) {
-                    const nextIdx = historyIndex - 1;
-                    setHistoryIndex(nextIdx);
-                    setCmdInput(commandHistory[nextIdx]);
+                    const prev = historyIndex - 1;
+                    setHistoryIndex(prev);
+                    setCmdInput(commandHistory[prev]);
                   } else if (historyIndex === 0) {
                     setHistoryIndex(-1);
                     setCmdInput('');
                   }
                 }
               }}
-              placeholder={isExecutingCmd ? '命令执行中...' : '输入系统终端指令 (例如: dir, git status, git log, npm test)...'}
+              placeholder="输入系统终端指令 (例如: dir, git status, git log, npm test)..."
               disabled={isExecutingCmd}
               style={{
                 flex: 1,
                 background: 'transparent',
                 border: 'none',
                 outline: 'none',
-                color: isExecutingCmd ? '#A1A1AA' : '#FFF',
-                fontSize: '11px',
-                fontFamily: 'var(--font-mono)'
+                color: '#C9D1D9',
+                fontFamily: 'inherit',
+                fontSize: '11px'
               }}
             />
-            <button
-              type="submit"
-              style={{ background: 'transparent', border: 'none', color: '#A1A1AA', cursor: 'pointer' }}
-            >
-              <Play size={11} />
-            </button>
+            {isExecutingCmd && <span style={{ color: 'var(--accent)', fontSize: '10px' }}>执行中...</span>}
           </form>
         </div>
       </div>
-      )}
-      <PreFlightCiDrawer
-        isOpen={isCiDrawerOpen}
-        onClose={() => setIsCiDrawerOpen(false)}
-      />
-    </aside>
+    </div>
   );
 };

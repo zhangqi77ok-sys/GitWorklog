@@ -1,18 +1,18 @@
 import React, { useState } from 'react';
 import { X, Trash2, Copy, Check, Filter, Terminal, RefreshCw } from 'lucide-react';
-import { LiveLogItem, liveLogStore } from '../types/contracts';
+import { LiveLogItem } from '../types/contracts';
 
 interface LiveLogsModalProps {
   isOpen: boolean;
   onClose: () => void;
-  logs: LiveLogItem[];
+  logs?: LiveLogItem[];
   onClearLogs: () => void;
 }
 
 export const LiveLogsModal: React.FC<LiveLogsModalProps> = ({
   isOpen,
   onClose,
-  logs,
+  logs = [],
   onClearLogs
 }) => {
   // Universal ESC key support
@@ -28,15 +28,16 @@ export const LiveLogsModal: React.FC<LiveLogsModalProps> = ({
 
   if (!isOpen) return null;
 
+  const safeLogs = Array.isArray(logs) ? logs : [];
   const [filterLevel, setFilterLevel] = useState<'ALL' | 'INFO' | 'WARN' | 'ERROR' | 'NET'>('ALL');
   const [copied, setCopied] = useState(false);
 
   const filteredLogs = filterLevel === 'ALL'
-    ? logs
-    : logs.filter(l => l.level === filterLevel);
+    ? safeLogs
+    : safeLogs.filter(l => l && l.level === filterLevel);
 
   const handleCopyAll = () => {
-    const text = logs.map(l => `[${new Date(l.timestamp).toLocaleTimeString()}] [${l.level}] [${l.module}] ${l.message}`).join('\n');
+    const text = safeLogs.map(l => `[${new Date(l?.timestamp || Date.now()).toLocaleTimeString()}] [${l?.level || 'INFO'}] [${l?.module || 'App'}] ${l?.message || ''}`).join('\n');
     navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -53,11 +54,12 @@ export const LiveLogsModal: React.FC<LiveLogsModalProps> = ({
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      zIndex: 999,
-      backdropFilter: 'blur(2px)'
+      zIndex: 1000,
+      backdropFilter: 'blur(4px)'
     }}>
       <div style={{
-        width: '680px',
+        width: '720px',
+        maxWidth: '92vw',
         maxHeight: '80vh',
         height: '540px',
         background: 'var(--bg-surface-elevated)',
@@ -88,7 +90,7 @@ export const LiveLogsModal: React.FC<LiveLogsModalProps> = ({
               color: '#16A34A',
               fontWeight: 600
             }}>
-              ● 实时监听中 ({logs.length})
+              ● 实时监听中 ({safeLogs.length})
             </span>
           </div>
 
@@ -135,6 +137,7 @@ export const LiveLogsModal: React.FC<LiveLogsModalProps> = ({
 
             <button
               onClick={onClose}
+              title="关闭 (ESC)"
               style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', marginLeft: '4px' }}
             >
               <X size={15} />
