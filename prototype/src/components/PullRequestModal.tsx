@@ -17,6 +17,17 @@ export const PullRequestModal: React.FC<PullRequestModalProps> = ({
   sessionTitle = '重构三栏自适应流体布局',
   onSuccess
 }) => {
+  // Universal ESC key support
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isOpen) {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   const draft = generatePullRequestDraft(branchName, sessionTitle, '扩展现有全局 Store (单例状态源)');

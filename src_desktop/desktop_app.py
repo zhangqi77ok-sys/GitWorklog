@@ -141,7 +141,7 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
         if parsed.path == '/api/fs/search':
             qs = urllib.parse.parse_qs(parsed.query)
             target_path = qs.get('path', [None])[0]
-            query = qs.get('query', [''])[0].strip()
+            query = (qs.get('q', [''])[0] or qs.get('query', [''])[0]).strip()
             if not target_path or not Path(target_path).exists() or not query:
                 self.send_response(200)
                 self.send_header('Access-Control-Allow-Origin', '*')
@@ -165,8 +165,12 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
                                 matches = []
                                 for idx, line in enumerate(content.splitlines()):
                                     if query.lower() in line.lower():
-                                        matches.append({'line': idx + 1, 'text': line.strip()[:160]})
-                                        if len(matches) >= 5: break
+                                        matches.append({
+                                            'lineNumber': idx + 1,
+                                            'lineContent': line.strip()[:160],
+                                            'matchRange': [0, 0]
+                                        })
+                                        if len(matches) >= 10: break
                                 if matches:
                                     rel = str(file_path.relative_to(p)).replace('\\', '/')
                                     results.append({
@@ -174,7 +178,7 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
                                         'fullPath': str(file_path).replace('\\', '/'),
                                         'matches': matches
                                     })
-                                    if len(results) >= 30: break
+                                    if len(results) >= 50: break
                         except Exception:
                             continue
             except Exception:

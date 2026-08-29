@@ -65,6 +65,16 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
   });
 
   const [showDirPickerModal, setShowDirPickerModal] = useState(false);
+  React.useEffect(() => {
+    const handleDirEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && showDirPickerModal) {
+        setShowDirPickerModal(false);
+      }
+    };
+    window.addEventListener('keydown', handleDirEsc);
+    return () => window.removeEventListener('keydown', handleDirEsc);
+  }, [showDirPickerModal]);
+
   const [customPathInput, setCustomPathInput] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 

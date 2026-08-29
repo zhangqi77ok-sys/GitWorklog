@@ -1056,3 +1056,12 @@ To github.com:zhangqi77ok-sys/agent-learning.git
    - 终端默认启动真实的 `PowerShell (1)`，显示原生 Windows 版权信息与当前工作区绝对路径；
    - 用户的每条指令（如 `dir`, `git status`, `git log`, `npm test`, `python --version`）直接发送至本地 Python 后端并通过真实 PowerShell 子进程执行，实时回显真实系统的 stdout/stderr 与退出代码；
    - 支持键盘 ↑ / ↓ 方向键历史命令回溯，支持 `cls` / `clear` 清屏。
+
+### 12.11 左侧导航栏全业务真逻辑研发与全局弹窗 ESC/关闭键统一规范
+1. **左侧导航栏真实业务逻辑研发（彻底绝迹 Demo）**：
+   - **全局检索 (Global Search)**：打通本地 Python 后端 `/api/fs/search` 真实扫描磁盘代码，毫秒级返回真实文件路径、匹配行号与代码行内容，点击即时在工作台精准定位；
+   - **Git 影子快照中心 (Git Snapshots)**：打通 `/api/git/status` 与原生 `git log`，实时呈现当前分支真实的未提交变更文件与近期 Git 提交历史；
+   - **项目代码树 (File Explorer)**：打通 `/api/fs/tree` 扫描当前打开工作区的真实目录结构，支持多层级折叠展开与真实文件读取。
+2. **全局弹窗通用 ESC 按键关闭与显式关闭按钮规范**：
+   - 全系统所有模态弹窗与抽屉（包括设置中心 `SettingsModal`、Token分析 `TokenAnalyticsModal`、分享卡片 `ShareCardModal`、运行日志 `LiveLogsModal`、全局指令面板 `CommandPaletteModal`、语义提交 `SemanticCommitModal`、Pull Request `PullRequestModal`、影子时光机 `TrajectorySnapshotModal`、CI预检 `PreFlightCiDrawer` 及目录选择器）统一支持按下键盘 `Escape` 键即刻平滑关闭；
+   - 每个弹窗均配备右上角显式 `[ ✕ ]` 关闭按钮与底部 `[ 完成并关闭 ]` 操作按钮，确保人机交互标准严谨统一。

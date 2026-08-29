@@ -11,6 +11,17 @@ export const PreFlightCiDrawer: React.FC<PreFlightCiDrawerProps> = ({
   isOpen,
   onClose
 }) => {
+  // Universal ESC key support
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isOpen) {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   const [report, setReport] = useState<PreFlightCiReport>(() => generatePreFlightCiReport(true, 88.4, 85.2));

@@ -381,6 +381,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setProviderToast(`✓ 强调色已更新为: ${hex}`);
     setTimeout(() => setProviderToast(null), 2500);
   };
+  // Universal ESC key support
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isOpen) {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
 
   if (!isOpen) return null;
 
