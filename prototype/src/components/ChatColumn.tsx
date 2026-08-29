@@ -2297,34 +2297,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
 
             {/* Right Tools Group: Permission, Shortcut Hint, Send Button */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              {/* Dual-Track Permission Pill */}
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '3px',
-                  padding: '2px 7px',
-                  borderRadius: '10px',
-                  background: 'var(--bg-base)',
-                  border: '1px solid var(--border-subtle)',
-                  fontSize: '10.5px',
-                  cursor: 'pointer',
-                  color: 'var(--text-secondary)'
-                }}
-                onClick={() => {
-                  if (permissionPolicy === 'strict_approval') setPermissionPolicy('autonomous_agent');
-                  else if (permissionPolicy === 'autonomous_agent') setPermissionPolicy('risk_adaptive');
-                  else setPermissionPolicy('strict_approval');
-                }}
-                title="切换 AI 动作自主决策模式"
-              >
-                <Shield size={11} color="var(--accent)" />
-                <span>
-                  {permissionPolicy === 'strict_approval' && '逐次审核'}
-                  {permissionPolicy === 'autonomous_agent' && '智能自决'}
-                  {permissionPolicy === 'risk_adaptive' && '风险熔断'}
-                </span>
-              </div>
+
 
               {/* Keyboard Shortcut Hint */}
               <span style={{

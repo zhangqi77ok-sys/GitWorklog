@@ -38,3 +38,64 @@
 - `docs/` 目录专属于产品需求文档（PRD）与架构设计规约；
 - `prototype/` 目录专属于交互式原型系统，独立运行与单测；
 - 根目录严禁堆砌散落临时代码与构建产物。
+
+
+---
+# CodeMind-Hub 研发团队与智能体开发守则 (AGENTS.md)
+
+## 🚨 项目级绝对强制规则 (Always-On Mandatory Rules)
+
+### 1. SDD + TDD 强制工作流
+- **触发条件**：任何涉及代码生成、功能实现、接口定义、Bug 修复或架构重构的请求；
+- **执行规约**：必须自动激活并在首要环节调用 `.agents/skills/sdd-tdd-workflow/`；
+- **严禁事项**：
+  - 严禁在未输出 Spec 规范与契约前直接写业务逻辑；
+  - 严禁在未编写前置测试前直接写实现代码；
+  - 严禁先写代码后补测试用例；
+  - 严禁过度封装，必须坚持积木思想、Harness 治具思想与 ReAct 自愈循环。
+
+### 2. 架构设计原则
+- 保持单一架构主轴（Tauri v2 原生桌面端 + React 19 / TS 扁平极简 UI）；
+- 严格遵循暖米白（`#FAF8F5`）与低饱和陶土橙（`#D96B27`）界面视觉规范；
+- 模块间彻底解耦，依赖倒置，保持极简无冗余。
+
+
+
+---
+# CodeMind-Hub 项目级开发规范与规则 (Project Rules)
+
+## 🚨 核心强制工作流规范 (Mandatory Workflow)
+
+每次代码修改或新功能开发完成后，**必须无条件严格执行以下四大步骤闭环**：
+
+### 1. 增量打包 EXE 安装包 (Incremental Installer Packaging)
+- **命令**：`npm run build:installer` 或 `python build_installer.py`
+- **目标产物**：`dist/CodeMind-Studio-Setup.exe` (单文件 Windows 图形化安装向导)
+- **要求**：禁止仅仅构建 Web 端，必须增量生成 EXE 安装包，便于用户在真实 Windows 宿主环境进行安装与功能验证。
+
+### 2. 真实执行与安装探活测试 (Live Verification)
+- **严禁虚假模拟**，必须执行安装包真实解压安装；
+- 启动执行程序，验证：
+  - 后端微内核探活：`GET http://127.0.0.1:8010/health` (返回 HTTP 200)；
+  - 静态前端挂载验证：`GET http://127.0.0.1:8010/` (返回完整 HTML 页面)；
+  - 确保脱离源码目录后独立运行无缺失 DLL、黑框或白屏崩溃。
+
+### 3. 文档同步更新 (Update Documentation)
+- 全面更新 `README.md`，同步最新的架构图、功能说明、使用指引与构建方法。
+
+### 4. Git 提交与远程推送 (Git Commit & Push)
+- 执行代码与配置提交：
+  ```bash
+  git add <changed-files>
+  git commit -m "<semantic-commit-message>"
+  git push origin main
+  ```
+- 确保远程仓库与本地保持绝对同步，工作区保持 Clean。
+
+---
+
+## 🎨 视觉与交互规范
+- 主底色：`#FAF8F5` (Warm Cream 柔和暖色)
+- 强调色：`#D96B27` (Terracotta Orange 陶土暖橙)
+- 风格：扁平极简企业级，克制微型控件，无大按钮，无多余网格卡片，纯净原生文件多标签，抽屉式集成终端。
+
