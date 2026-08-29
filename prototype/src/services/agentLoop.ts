@@ -267,24 +267,32 @@ export function verifyTargetAcceptance(
   const updatedItems = items.map(item => ({ ...item }));
   const evidenceList: string[] = [];
 
-  const testResults = latestResults.filter(r => r.type === 'run_command' && /test|vitest|pytest|tsc|typecheck/i.test(r.target));
+  const testResults = latestResults.filter(r => r.type === 'run_command' && /test|vitest|pytest|tsc|typecheck|python/i.test(r.target));
   const writeResults = latestResults.filter(r => r.type === 'write_file');
 
   testResults.forEach(tr => {
-    if (tr.status === 'success' && (tr.exitCode === 0 || tr.exitCode === undefined)) {
+    // 🛡️ Strict Test Output & Failure Parser: Detect FFFF, FAILURES, FAILED, error even if exit code was 0 in compound shell commands
+    const combinedOutput = `${tr.output || ''} ${tr.error || ''}`;
+    const hasTestFailurePatterns = /(?:^|\s)(?:FAILED|FAILURES?|ERRORS?|SyntaxError|Traceback|AssertionError|FAIL\s+|[F\.]{3,}F)(?:\s|$|:)/i.test(combinedOutput) ||
+                                  /tests?\s+failed/i.test(combinedOutput);
+
+    const isReallyPassed = tr.status === 'success' && (tr.exitCode === 0 || tr.exitCode === undefined) && !hasTestFailurePatterns;
+
+    if (isReallyPassed) {
       evidenceList.push(`测试与验证通过: ${tr.target}`);
       updatedItems.forEach(item => {
         if (/测试|单测|验证|类型|type/i.test(item.description)) {
           item.status = 'passed';
-          item.evidence = `✓ ${tr.target} (Exit Code: 0)`;
+          item.evidence = `✓ ${tr.target} (全部测试用例通过)`;
         }
       });
-    } else if (tr.status === 'failed') {
-      evidenceList.push(`测试失败: ${tr.target} (${tr.error || 'Exit code ' + tr.exitCode})`);
+    } else {
+      const failureReason = hasTestFailurePatterns ? '测试输出包含失败用例 (FAILURES / FFFF)' : (tr.error || `Exit code ${tr.exitCode}`);
+      evidenceList.push(`测试失败: ${tr.target} (${failureReason})`);
       updatedItems.forEach(item => {
         if (/测试|单测|验证|类型/i.test(item.description)) {
           item.status = 'failed';
-          item.evidence = `✕ ${tr.target} (${tr.error || '失败'})`;
+          item.evidence = `✕ ${tr.target} (${failureReason})`;
         }
       });
     }

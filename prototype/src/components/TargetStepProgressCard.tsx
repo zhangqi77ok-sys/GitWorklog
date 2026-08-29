@@ -1,10 +1,13 @@
 import React from 'react';
-import { CheckCircle2, XCircle, Clock, AlertTriangle, Zap, ChevronDown, ChevronUp } from 'lucide-react';
-import { TargetAcceptanceItem, InternalStepTag, LoopTerminationStatus } from '../types/contracts';
+import { CheckCircle2, XCircle, Clock, AlertTriangle, Zap, ChevronDown, ChevronUp, Layers } from 'lucide-react';
+import { TargetAcceptanceItem, InternalStepTag, LoopTerminationStatus, AgentRoundItem } from '../types/contracts';
 
 interface TargetStepProgressCardProps {
   items?: TargetAcceptanceItem[];
   stepTags?: InternalStepTag[];
+  rounds?: AgentRoundItem[];
+  activeRoundId?: number;
+  onSelectRound?: (roundId: number) => void;
   loopStatus?: LoopTerminationStatus;
   terminationSummary?: string;
   onSelectAction?: (actionId: string) => void;
@@ -13,6 +16,9 @@ interface TargetStepProgressCardProps {
 export const TargetStepProgressCard: React.FC<TargetStepProgressCardProps> = ({
   items = [],
   stepTags = [],
+  rounds = [],
+  activeRoundId,
+  onSelectRound,
   loopStatus = 'running',
   terminationSummary,
   onSelectAction
@@ -114,6 +120,42 @@ export const TargetStepProgressCard: React.FC<TargetStepProgressCardProps> = ({
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Internal Rounds Tabs [Round 1] [Round 2] (No History Overwrite) */}
+      {rounds && rounds.length > 0 && (
+        <div style={{ padding: '6px 12px', background: 'rgba(0,0,0,0.02)', borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', gap: '6px', overflowX: 'auto' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10.5px', color: 'var(--text-muted)', fontWeight: 600 }}>
+            <Layers size={12} />
+            <span>执行轮次:</span>
+          </div>
+          {rounds.map(r => {
+            const isCur = r.roundId === activeRoundId || (!activeRoundId && r.roundId === rounds[rounds.length - 1].roundId);
+            return (
+              <button
+                key={r.roundId}
+                onClick={() => onSelectRound && onSelectRound(r.roundId)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  padding: '2px 8px',
+                  borderRadius: '4px',
+                  border: isCur ? '1px solid var(--accent)' : '1px solid var(--border-subtle)',
+                  background: isCur ? 'var(--accent-subtle)' : 'var(--bg-surface)',
+                  color: isCur ? 'var(--accent)' : 'var(--text-secondary)',
+                  fontSize: '10px',
+                  fontWeight: isCur ? 700 : 500,
+                  cursor: 'pointer',
+                  transition: 'all 0.12s ease'
+                }}
+              >
+                <span>{r.status === 'passed' ? '✓' : r.status === 'failed' ? '✕' : '●'} Round {r.roundId}</span>
+                <span style={{ fontSize: '9px', opacity: 0.8 }}>({r.title})</span>
+              </button>
+            );
+          })}
         </div>
       )}
 

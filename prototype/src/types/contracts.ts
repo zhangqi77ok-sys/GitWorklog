@@ -329,6 +329,18 @@ export interface InternalStepTag {
   label: string;
 }
 
+export interface AgentRoundItem {
+  roundId: number;
+  title: string;
+  status: 'running' | 'passed' | 'failed' | 'blocked';
+  phase: 'understand' | 'plan' | 'inspect' | 'modify' | 'verify' | 'fix' | 'done';
+  content: string;
+  thinkingText?: string;
+  actionResults?: ActionResult[];
+  feedback?: string;
+  timestamp: number;
+}
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant' | 'system';
@@ -347,6 +359,8 @@ export interface ChatMessage {
   turnIndex?: number;                 // 1-based user conversational turn index
   acceptanceItems?: TargetAcceptanceItem[]; // 🎯 目标驱动验收项清单
   stepTags?: InternalStepTag[];       // 🏷️ 内部执行步骤 Tag 列表
+  rounds?: AgentRoundItem[];           // 🔄 单 Agent Run 内部各轮次历史记录（不覆盖历史，追加存储）
+  activeRoundId?: number;             // 当前正在运行或查看的轮次 ID
   loopStatus?: LoopTerminationStatus; // 🏁 当前任务终止或进行状态
   terminationSummary?: string;        // 总结描述（如：4/4 项验收通过 · 测试通过）
 }

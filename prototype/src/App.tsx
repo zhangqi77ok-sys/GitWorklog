@@ -76,6 +76,7 @@ import {
   SessionTier1Type,
   SessionItem,
   ChatMessage,
+  AgentRoundItem,
   QueuedPromptItem,
   TokenStats,
   WorkMode,
@@ -951,16 +952,19 @@ Tcode 已通过宿主磁盘与终端桥接将工程提供给你。` : '当前处
       const singleRunCardId = `agent-run-${Date.now()}`;
       let accumulatedActionResults: ActionResult[] = [];
 
-      // Initial single assistant message container
+      // Initial single assistant message container with rounds[]
+      let accumulatedRounds: AgentRoundItem[] = [];
       const runCardMsg: ChatMessage = {
         id: singleRunCardId,
         role: 'assistant',
         content: '',
         timestamp: Date.now(),
-        auditTag: `⚡ ${streamingModel.name} · Agent Run`,
+        auditTag: `⚡ ${streamingModel.name} · Agent Run (${frozenRunMode})`,
         permissionPolicy,
         stepTags: [],
-        acceptanceItems: []
+        acceptanceItems: [],
+        rounds: [],
+        activeRoundId: 1
       };
 
       conversationSnapshot.push(runCardMsg);
@@ -974,28 +978,24 @@ Tcode 已通过宿主磁盘与终端桥接将工程提供给你。` : '当前处
         loopCount++;
         const assistantId = singleRunCardId;
 
-        // Context Usage Telemetry & Smart Auto-Compression
+        // Context Usage Telemetry & Smart Auto-Compression (Compresses LLM Model Context ONLY, Never Erases User UI History)
         const breakdown = calculateContextBreakdown(conversationSnapshot);
+        let modelFeedMessages = conversationSnapshot;
         if (breakdown.statusLevel === 'auto_compress' || breakdown.statusLevel === 'force_compress') {
           const { compressed, beforeTokens, afterTokens } = smartCompressMessages(conversationSnapshot);
           const beforePercent = Math.round((beforeTokens / 128000) * 100);
           const afterPercent = Math.round((afterTokens / 128000) * 100);
-          conversationSnapshot = compressed;
-          setSessionMessages(prev => ({
-            ...prev,
-            [currentSessionId]: compressed
-          }));
+          modelFeedMessages = compressed; // Feed compressed snapshot to LLM
+          // 🛡️ DO NOT setSessionMessages(compressed) - Keep user chat history 100% visible!
           setActiveAutoExecutedToast({
             count: 1,
-            glob: `上下文已智能压缩 · ${beforePercent}% → ${afterPercent}% (保留当前目标与最新证据)`
+            glob: `模型上下文已就地智能压缩 · ${beforePercent}% → ${afterPercent}% (界面聊天历史完整保留)`
           });
-          setTimeout(() => setActiveAutoExecutedToast(null), 4000);
-          addLog('INFO', 'ContextEngine', `[智能压缩] 上下文使用率达到 ${beforePercent}%，自动收敛历史思考与落盘代码至 ${afterPercent}%，继续执行...`);
+          setTimeout(() => setActiveAutoExecutedToast(null), 3500);
+          addLog('INFO', 'ContextEngine', `[智能压缩] 模型上下文使用率达 ${beforePercent}%，收敛至 ${afterPercent}%，UI 会话历史永久保留。`);
         }
 
-        const currentMsgs = conversationSnapshot;
-
-        const cleanHistory = currentMsgs
+        const cleanHistory = modelFeedMessages
           .filter(m => m.content && m.content.trim() && m.id !== assistantId)
           .slice(-12)
           .map(m => ({
@@ -1146,12 +1146,23 @@ Tcode 已通过宿主磁盘与终端桥接将工程提供给你。` : '当前处
 
         const actions = (frozenRunMode === 'act' || frozenRunMode === 'minimal') ? parseActionsFromContent(finalContent) : [];
 
-        // Record Step Tag
+        // Record Step Tag & Append Round Item without overwriting history
         const currentPhase: InternalStepTag['phase'] = actions.some(a => a.type === 'write_file')
           ? 'modify'
           : actions.some(a => /test|vitest|pytest/i.test(a.target))
           ? 'verify'
           : 'inspect';
+
+        const currentRoundItem: AgentRoundItem = {
+          roundId: loopCount,
+          title: currentPhase === 'modify' ? `修改 ${actions.filter(a => a.type === 'write_file').length} 个文件` : currentPhase === 'verify' ? '运行测试验证' : '分析与探索',
+          status: 'running',
+          phase: currentPhase,
+          content: finalContent,
+          thinkingText: accumulatedThinking,
+          timestamp: Date.now()
+        };
+        accumulatedRounds = [...accumulatedRounds.filter(r => r.roundId !== loopCount), currentRoundItem];
 
         stepTags.push({
           turn: userMsg.turnIndex || 1,
@@ -1174,6 +1185,7 @@ Tcode 已通过宿主磁盘与终端桥接将工程提供给你。` : '当前处
 
           stepTags[stepTags.length - 1].status = 'passed';
 
+          currentRoundItem.status = currentLoopStatus === 'completed' ? 'passed' : currentLoopStatus === 'blocked' ? 'blocked' : 'failed';
           setSessionMessages(prev => {
             const list = prev[currentSessionId] || [];
             const updated = list.map(m => m.id === assistantId ? {
@@ -1181,6 +1193,8 @@ Tcode 已通过宿主磁盘与终端桥接将工程提供给你。` : '当前处
               content: finalContent,
               acceptanceItems: activeAcceptanceItems,
               stepTags: [...stepTags],
+              rounds: [...accumulatedRounds],
+              activeRoundId: loopCount,
               loopStatus: currentLoopStatus,
               terminationSummary: terminationSummaryText,
               tokensDetail: { promptTokens: addedPrompt, completionTokens: addedComp, totalTokens: addedPrompt + addedComp },

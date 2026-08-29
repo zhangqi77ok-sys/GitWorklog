@@ -1061,12 +1061,17 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
             </div>
 
             {/* 🎯 Target-Driven Acceptance Criteria & Step Chain Card */}
-            {(msg.acceptanceItems?.length || msg.stepTags?.length) ? (
+            {(msg.acceptanceItems?.length || msg.stepTags?.length || msg.rounds?.length) ? (
               <TargetStepProgressCard
                 items={msg.acceptanceItems}
                 stepTags={msg.stepTags}
+                rounds={msg.rounds}
+                activeRoundId={msg.activeRoundId}
                 loopStatus={msg.loopStatus}
                 terminationSummary={msg.terminationSummary}
+                onSelectRound={(roundId) => {
+                  // Round switching without page jumping
+                }}
                 onSelectAction={(actionId) => {
                   if (actionId === 'try_new_approach') {
                     onSendMessage('请换一种全新架构思路重新设计并实施修复。');
