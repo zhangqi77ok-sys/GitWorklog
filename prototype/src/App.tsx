@@ -605,7 +605,7 @@ Tcode 已通过宿主磁盘与终端桥接将工程提供给你。` : '当前处
    文件完整内容
    \`\`\`
 
-   - 执行系统终端命令 (PowerShell / Git / npm / cargo 等):
+   - 执行系统终端命令 (PowerShell / Git / npm / cargo 等，注意：Windows 环境下多条命令请分行写或用分号 ';' 分隔，严禁使用 '&&'):
    \`\`\`run_command
    具体的终端指令
    \`\`\`

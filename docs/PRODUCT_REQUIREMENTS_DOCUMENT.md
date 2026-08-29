@@ -1172,3 +1172,9 @@ To github.com:zhangqi77ok-sys/agent-learning.git
    - **【只读分析与咨询】**：开发者进行概念讨论、优化咨询、架构探讨时，大模型**必须且只能**输出纯文本 Markdown 论述与只读代码块供预览，严禁输出动作指令块；
    - **【明确落地指令】**：只有当开发者明确发出“帮我修改/创建/重构/执行”指令时，大模型才允许输出 `write_file` 与 `run_command`；
    - 结合三态权限策略（逐次审核/智能自决/风险熔断），实现严密无死角的意图与权限双重安全锁。
+
+### 12.24 PowerShell 跨平台指令适配器与消除 && 语法错误 (PowerShell Command Normalization)
+1. **Windows PowerShell 5.1 语法兼容适配**：
+   - 彻底修复大模型输出 `cmd1 && cmd2` 连接符在 Windows PowerShell 5.1 环境下触发 `The token '&&' is not a valid statement separator` 报错的根本原因；
+   - **后端自动转义适配器 (`normalize_windows_cmd`)**：将 `&&` 自动平滑转换为 PowerShell 原生语义安全链式语句，使所有跨平台 Git 脚本与复杂命令在 Windows 下 100% 顺畅执行；
+   - **Prompt 终端语法指南升级**：向大模型注入明确的 Windows 终端书写规范。

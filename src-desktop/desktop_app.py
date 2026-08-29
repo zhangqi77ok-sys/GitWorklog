@@ -13,6 +13,30 @@ def get_silent_startupinfo():
         return si
     return None
 
+def normalize_windows_cmd(cmd: str) -> str:
+    """
+    Converts Unix/bash command chains like 'cmd1 && cmd2' into
+    PowerShell 5.1 compatible format: 'cmd1; if ($?) { cmd2 }'.
+    This prevents 'The token && is not a valid statement separator' error.
+    """
+    lines = []
+    for raw_line in cmd.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        if '&&' in line:
+            parts = [p.strip() for p in line.split('&&') if p.strip()]
+            if len(parts) > 1:
+                ps_chain = parts[0]
+                for p in parts[1:]:
+                    ps_chain += f"; if ($?) {{ {p} }}"
+                lines.append(ps_chain)
+            else:
+                lines.append(line)
+        else:
+            lines.append(line)
+    return "\n".join(lines)
+
 def run_silent_cmd(cmd_list, cwd=None, timeout=60):
     si = get_silent_startupinfo()
     kwargs = {
@@ -422,8 +446,9 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
                 
                 # Execute completely silently without popping any CMD / Windows Terminal console
                 if os.name == 'nt':
+                    normalized_cmd = normalize_windows_cmd(cmd)
                     proc = run_silent_cmd(
-                        ['powershell.exe', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', cmd],
+                        ['powershell.exe', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', normalized_cmd],
                         cwd=cwd,
                         timeout=60
                     )
