@@ -1159,3 +1159,9 @@ To github.com:zhangqi77ok-sys/agent-learning.git
 2. **彻底根治日志与所有弹窗 React Error #310 崩溃问题**：
    - 全面重构 `LiveLogsModal`、`CommandPaletteModal`、`PreFlightCiDrawer`、`PullRequestModal`、`SemanticCommitModal` 和 `EditorWorkspace`；
    - 彻底修复 `if (!isOpen) return null;` 在 `useState` / `useEffect` 前返回导致的 React Hook 规则违规问题，全量消除运行时崩溃。
+
+### 12.22 彻底根除 Windows 启动与终端操作弹黑框 (Zero-Console Subprocess Architecture)
+1. **Windows 进程完全静默无感执行 (Zero-Console Execution)**：
+   - 彻底解决 Windows 11 下因为默认终端宿主导致启动工程、Git 分支查询或终端执行时频繁弹黑框（CMD / Windows Terminal）的体验问题；
+   - 宿主所有 `subprocess.run` 与 `subprocess.Popen` 调用全面注入 `CREATE_NO_WINDOW = 0x08000000` 与 `STARTUPINFO.wShowWindow = SW_HIDE`；
+   - 终端命令与脚本执行完全在后台静默完成，执行结果平滑流转回前端内嵌卡片回显，实现 100% 纯净的原生应用体验。

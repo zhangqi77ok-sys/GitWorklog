@@ -3,6 +3,33 @@ import os
 import sys
 import json
 import subprocess
+CREATE_NO_WINDOW = 0x08000000
+
+def get_silent_startupinfo():
+    if os.name == 'nt':
+        si = subprocess.STARTUPINFO()
+        si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        si.wShowWindow = subprocess.SW_HIDE
+        return si
+    return None
+
+def run_silent_cmd(cmd_list, cwd=None, timeout=60):
+    si = get_silent_startupinfo()
+    kwargs = {
+        'capture_output': True,
+        'text': True,
+        'timeout': timeout,
+        'encoding': 'utf-8',
+        'errors': 'replace'
+    }
+    if cwd:
+        kwargs['cwd'] = cwd
+    if os.name == 'nt':
+        kwargs['creationflags'] = CREATE_NO_WINDOW
+        if si:
+            kwargs['startupinfo'] = si
+    return subprocess.run(cmd_list, **kwargs)
+
 import urllib.request
 import urllib.parse
 import urllib.error
@@ -72,13 +99,7 @@ def pick_folder_native(window=None):
     CREATE_NO_WINDOW = 0x08000000
     ps_cmd = "[System.Reflection.Assembly]::LoadWithPartialName('System.Windows.Forms') | Out-Null; $f = New-Object System.Windows.Forms.FolderBrowserDialog; $f.Description = '选择要打开的工作区工程文件夹'; $f.ShowNewFolderButton = $true; if ($f.ShowDialog() -eq 'OK') { Write-Output $f.SelectedPath }"
     try:
-        res = subprocess.run(
-            ["powershell.exe", "-NoProfile", "-Command", ps_cmd],
-            capture_output=True,
-            text=True,
-            timeout=120,
-            creationflags=CREATE_NO_WINDOW
-        )
+        res = run_silent_cmd(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", ps_cmd], timeout=120)
         out = res.stdout.strip()
         if out and Path(out).exists():
             return out.replace('\\', '/')
@@ -201,12 +222,12 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
             try:
                 CREATE_NO_WINDOW = 0x08000000
                 # Get current branch
-                res_b = subprocess.run(['git', 'branch', '--show-current'], cwd=target_path, capture_output=True, text=True, creationflags=CREATE_NO_WINDOW)
+                res_b = run_silent_cmd(['git', 'branch', '--show-current'], cwd=target_path, timeout=10)
                 if res_b.returncode == 0 and res_b.stdout.strip():
                     branch = res_b.stdout.strip()
                 
                 # Get status porcelain
-                res_s = subprocess.run(['git', 'status', '--porcelain'], cwd=target_path, capture_output=True, text=True, creationflags=CREATE_NO_WINDOW)
+                res_s = run_silent_cmd(['git', 'status', '--porcelain'], cwd=target_path, timeout=10)
                 if res_s.returncode == 0:
                     for line in res_s.stdout.splitlines():
                         if len(line) >= 3:
@@ -399,23 +420,18 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
                 if not cmd:
                     raise Exception('Empty command')
                 
-                # Execute in PowerShell on Windows, bash on Unix
+                # Execute completely silently without popping any CMD / Windows Terminal console
                 if os.name == 'nt':
-                    proc = subprocess.run(
-                        ['powershell.exe', '-NoProfile', '-Command', cmd],
+                    proc = run_silent_cmd(
+                        ['powershell.exe', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', cmd],
                         cwd=cwd,
-                        capture_output=True,
-                        text=True,
-                        timeout=30
+                        timeout=60
                     )
                 else:
-                    proc = subprocess.run(
-                        cmd,
-                        shell=True,
+                    proc = run_silent_cmd(
+                        ['bash', '-c', cmd],
                         cwd=cwd,
-                        capture_output=True,
-                        text=True,
-                        timeout=30
+                        timeout=60
                     )
                 
                 self.send_response(200)

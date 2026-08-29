@@ -9,7 +9,7 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from pathlib import Path
 
-VERSION = "1.3.8"
+VERSION = "1.3.9"
 APP_NAME = "Tcode"
 
 def get_detected_installed_dir():
@@ -335,7 +335,10 @@ class SetupWizard(tk.Tk):
         if self.launch_after_install.get():
             target_exe = os.path.join(self.install_dir.get(), "Tcode.exe")
             if os.path.exists(target_exe):
-                subprocess.Popen([target_exe])
+                si = subprocess.STARTUPINFO()
+                si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                si.wShowWindow = subprocess.SW_HIDE
+                subprocess.Popen([str(target_exe)], creationflags=0x08000000, startupinfo=si, close_fds=True)
         self.destroy()
 
     def next_step(self):
