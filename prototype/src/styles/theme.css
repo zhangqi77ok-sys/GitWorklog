@@ -1,7 +1,16 @@
 :root {
+  /* 统一暖米白对话背景层级 */
   --bg-base: #FAF8F5;
   --bg-surface: #F4EFEA;
-  --bg-surface-elevated: #FFFFFF;
+  --bg-surface-elevated: #F4EFEA;
+
+  /* 语义化 Chat Token */
+  --chat-bg: #FAF8F5;
+  --chat-user-bg: #F4EFEA;
+  --chat-system-bg: #F4EFEA;
+  --chat-code-bg: #1E1C1A;
+  --chat-input-bg: #FAF8F5;
+
   --border-subtle: #E8E2D9;
   --border-strong: #D5CCC0;
   --text-primary: #2B2621;
@@ -25,7 +34,7 @@
 }
 
 body {
-  background-color: var(--bg-base);
+  background-color: var(--chat-bg);
   color: var(--text-primary);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   font-size: 13px;

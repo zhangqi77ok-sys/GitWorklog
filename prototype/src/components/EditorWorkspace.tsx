@@ -111,7 +111,15 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
   const [isExecutingCmd, setIsExecutingCmd] = useState<boolean>(false);
   const [commandHistory, setCommandHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState<number>(-1);
-  const [terminalHeightPercent, setTerminalHeightPercent] = useState<number>(38);
+  // Vertical Ratio State: Editor 62% / Terminal 38% (Persistent per project)
+  const [terminalRatio, setTerminalRatio] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem(`codemind_terminal_ratio_${activeProject?.path || 'default'}`);
+      return saved ? parseFloat(saved) : 0.38;
+    } catch (e) {
+      return 0.38;
+    }
+  });
   const [isDraggingSplit, setIsDraggingSplit] = useState<boolean>(false);
 
   const activeTerminal = terminals.find(t => t.id === activeTerminalId) || terminals[0];
@@ -121,29 +129,39 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
     terminalLogsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [activeTerminal?.logs]);
 
-  // Handle Split Dragging
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (isDraggingSplit) {
-        const container = document.getElementById('workbench-split-container');
-        if (container) {
-          const rect = container.getBoundingClientRect();
-          const percent = ((rect.bottom - e.clientY) / rect.height) * 100;
-          setTerminalHeightPercent(Math.max(15, Math.min(80, percent)));
-        }
-      }
-    };
-    const handleMouseUp = () => setIsDraggingSplit(false);
+  // Pointer Events with setPointerCapture for reliable drag over Monaco/Terminal
+  const handleSplitPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setIsDraggingSplit(true);
+  };
 
-    if (isDraggingSplit) {
-      window.addEventListener('mousemove', handleMouseMove);
-      window.addEventListener('mouseup', handleMouseUp);
+  const handleSplitPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDraggingSplit) return;
+    const container = document.getElementById('workbench-split-container');
+    if (container) {
+      const rect = container.getBoundingClientRect();
+      const rawRatio = (rect.bottom - e.clientY) / rect.height;
+      const clampedRatio = Math.max(0.15, Math.min(0.80, rawRatio));
+      setTerminalRatio(clampedRatio);
+      try {
+        localStorage.setItem(`codemind_terminal_ratio_${activeProject?.path || 'default'}`, clampedRatio.toString());
+      } catch (err) {}
     }
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [isDraggingSplit]);
+  };
+
+  const handleSplitPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch (err) {}
+    setIsDraggingSplit(false);
+  };
+
+  const handleResetSplitRatio = () => {
+    setTerminalRatio(0.38);
+    try {
+      localStorage.setItem(`codemind_terminal_ratio_${activeProject?.path || 'default'}`, '0.38');
+    } catch (err) {}
+  };
 
   // Terminal Tab Operations
   const handleAddTerminal = () => {
@@ -298,7 +316,7 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
         {/* TOP: CODE EDITOR AREA */}
         <div style={{
           flex: 1,
-          height: `${100 - terminalHeightPercent}%`,
+          height: `${(1 - terminalRatio) * 100}%`,
           display: 'flex',
           flexDirection: 'column',
           background: 'var(--bg-base)',
@@ -407,21 +425,48 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
           )}
         </div>
 
-        {/* DRAGGABLE RESIZE DIVIDER */}
+        {/* DRAGGABLE RESIZE DIVIDER (Pointer Events + Double Click Reset + Real-time Ratio) */}
         <div
-          onMouseDown={() => setIsDraggingSplit(true)}
+          onPointerDown={handleSplitPointerDown}
+          onPointerMove={handleSplitPointerMove}
+          onPointerUp={handleSplitPointerUp}
+          onDoubleClick={handleResetSplitRatio}
+          title="上下拖拽调节比例 (双击恢复默认 Editor 62% / Terminal 38%)"
           style={{
-            height: '4px',
+            height: '6px',
             background: isDraggingSplit ? 'var(--accent)' : 'var(--border-subtle)',
             cursor: 'row-resize',
             zIndex: 30,
-            transition: 'background 0.12s ease'
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            position: 'relative',
+            touchAction: 'none',
+            userSelect: 'none'
           }}
-        />
+        >
+          {isDraggingSplit && (
+            <div style={{
+              position: 'absolute',
+              right: '12px',
+              padding: '1px 6px',
+              borderRadius: '3px',
+              background: 'var(--accent)',
+              color: '#FFF',
+              fontSize: '9.5px',
+              fontWeight: 700,
+              fontFamily: 'var(--font-mono)',
+              pointerEvents: 'none',
+              zIndex: 40
+            }}>
+              {Math.round((1 - terminalRatio) * 100)}% / {Math.round(terminalRatio * 100)}%
+            </div>
+          )}
+        </div>
 
         {/* BOTTOM: INDEPENDENT TERMINAL AREA */}
         <div style={{
-          height: `${terminalHeightPercent}%`,
+          height: `${terminalRatio * 100}%`,
           display: 'flex',
           flexDirection: 'column',
           background: '#0D1117',

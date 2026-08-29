@@ -657,7 +657,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
         height: '36px',
         padding: '0 20px',
         borderBottom: '1px solid var(--border-subtle)',
-        background: 'var(--bg-surface)',
+        background: 'var(--chat-bg)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
@@ -859,7 +859,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
       )}
 
       {/* Messages Stream Area */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', background: 'var(--chat-bg)' }}>
         <div style={{ width: '100%', maxWidth: '960px', display: 'flex', flexDirection: 'column' }}>
         {/* Real Product Onboarding / Zero-State Welcome Screen */}
         {messages.length === 0 && (
@@ -1106,14 +1106,14 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                     </div>
                   )}
 
-                  {/* Cardified Markdown Content Text */}
+                  {/* Cardified Markdown Content Text (User message: light surface layer #F4EFEA; Agent message: seamless on #FAF8F5) */}
                   {(parsed.cleanContent || (!parsed.thinkingText && parsed.toolCalls.length === 0)) && (
                     <div style={{
-                      padding: '12px 14px',
+                      padding: msg.role === 'user' ? '10px 14px' : '6px 0',
                       borderRadius: '8px',
-                      background: 'var(--bg-surface-elevated)',
-                      boxShadow: '0 2px 8px rgba(0,0,0,0.03)',
-                      border: msg.role === 'user' ? '1px solid var(--border-strong)' : '1px solid var(--border-subtle)',
+                      background: msg.role === 'user' ? 'var(--chat-user-bg)' : 'transparent',
+                      boxShadow: msg.role === 'user' ? '0 1px 4px rgba(0,0,0,0.03)' : 'none',
+                      border: msg.role === 'user' ? '1px solid var(--border-strong)' : 'none',
                       fontSize: '12.5px',
                       lineHeight: 1.65,
                       wordBreak: 'break-word',

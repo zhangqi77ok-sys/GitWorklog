@@ -198,53 +198,90 @@ export const App: React.FC = () => {
   const [scopedTrusts, setScopedTrusts] = useState<ActionScopeTrust[]>([]);
   const [activeAutoExecutedToast, setActiveAutoExecutedToast] = useState<{ count: number; glob: string } | null>(null);
 
-  // Resizable Layout & Collapse States
-  const [leftPanelWidth, setLeftPanelWidth] = useState<number>(260);
+  // 📐 3-Column Percentage Grid Layout: Left 20% | Chat 50% | Workbench 30% (Persistent per project)
   const [isLeftDrawerCollapsed, setIsLeftDrawerCollapsed] = useState<boolean>(false);
-  const [workbenchWidth, setWorkbenchWidth] = useState<number>(560);
+  const [leftRatio, setLeftRatio] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('codemind_layout_left_ratio');
+      return saved ? parseFloat(saved) : 0.20;
+    } catch (e) {
+      return 0.20;
+    }
+  });
+  const [workbenchRatio, setWorkbenchRatio] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('codemind_layout_wb_ratio');
+      return saved ? parseFloat(saved) : 0.30;
+    } catch (e) {
+      return 0.30;
+    }
+  });
+
   const [isDraggingLeft, setIsDraggingLeft] = useState(false);
   const [isDraggingRight, setIsDraggingRight] = useState(false);
   const [activeDiffTarget, setActiveDiffTarget] = useState<DiffNavigationTarget | null>(null);
   const [activeFile, setActiveFile] = useState<{ path: string; name: string } | null>(null);
 
-  // Global Drag Listeners for Left & Right Panels
-  React.useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (isDraggingLeft) {
-        const rawW = e.clientX - 44;
-        if (rawW < 130) {
-          setIsLeftDrawerCollapsed(true);
-          setLeftPanelWidth(260);
-        } else {
-          setIsLeftDrawerCollapsed(false);
-          setLeftPanelWidth(Math.min(520, Math.max(180, rawW)));
-        }
-      } else if (isDraggingRight) {
-        const newWbWidth = window.innerWidth - e.clientX;
-        setWorkbenchWidth(Math.min(window.innerWidth - 320, Math.max(300, newWbWidth)));
+  // Pointer Events with setPointerCapture for Left Divider
+  const handleLeftPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setIsDraggingLeft(true);
+  };
+
+  const handleLeftPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDraggingLeft) return;
+    const mainContainer = document.getElementById('app-main-grid-container');
+    if (mainContainer) {
+      const rect = mainContainer.getBoundingClientRect();
+      const rawRatio = (e.clientX - rect.left) / rect.width;
+      if (rawRatio < 0.08) {
+        setIsLeftDrawerCollapsed(true);
+      } else {
+        setIsLeftDrawerCollapsed(false);
+        const clamped = Math.max(0.12, Math.min(0.40, rawRatio));
+        setLeftRatio(clamped);
+        try { localStorage.setItem('codemind_layout_left_ratio', clamped.toString()); } catch (err) {}
       }
-    };
-
-    const handleMouseUp = () => {
-      setIsDraggingLeft(false);
-      setIsDraggingRight(false);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-    };
-
-    if (isDraggingLeft || isDraggingRight) {
-      document.body.style.cursor = 'col-resize';
-      document.body.style.userSelect = 'none';
-      window.addEventListener('mousemove', handleMouseMove);
-      window.addEventListener('mouseup', handleMouseUp);
     }
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-    };
-  }, [isDraggingLeft, isDraggingRight]);
+  };
+
+  const handleLeftPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    try { e.currentTarget.releasePointerCapture(e.pointerId); } catch (err) {}
+    setIsDraggingLeft(false);
+  };
+
+  // Pointer Events with setPointerCapture for Right Divider
+  const handleRightPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setIsDraggingRight(true);
+  };
+
+  const handleRightPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDraggingRight) return;
+    const mainContainer = document.getElementById('app-main-grid-container');
+    if (mainContainer) {
+      const rect = mainContainer.getBoundingClientRect();
+      const rawRatio = (rect.right - e.clientX) / rect.width;
+      const clamped = Math.max(0.18, Math.min(0.55, rawRatio));
+      setWorkbenchRatio(clamped);
+      try { localStorage.setItem('codemind_layout_wb_ratio', clamped.toString()); } catch (err) {}
+    }
+  };
+
+  const handleRightPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    try { e.currentTarget.releasePointerCapture(e.pointerId); } catch (err) {}
+    setIsDraggingRight(false);
+  };
+
+  const handleResetLayout = () => {
+    setLeftRatio(0.20);
+    setWorkbenchRatio(0.30);
+    setIsLeftDrawerCollapsed(false);
+    try {
+      localStorage.setItem('codemind_layout_left_ratio', '0.20');
+      localStorage.setItem('codemind_layout_wb_ratio', '0.30');
+    } catch (err) {}
+  };
 
   // Multi-Project Groups (Clean initial state, loaded from local storage)
   const [projects, setProjects] = useState<ProjectGroup[]>(loadSavedProjects());
@@ -1335,7 +1372,7 @@ Tcode 已通过宿主磁盘与终端桥接将工程提供给你。` : '当前处
         onOpenTokenAnalytics={() => setIsTokenAnalyticsOpen(true)}
       />
 
-      {/* 2. Main Workspace Body */}
+      {/* 2. Main Workspace Body (ActivityBar + 3-Column Percentage Grid) */}
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
         {/* ActivityBar (42px) */}
         <ActivityBar
@@ -1345,132 +1382,173 @@ Tcode 已通过宿主磁盘与终端桥接将工程提供给你。` : '当前处
           onOpenLiveLogs={() => setIsLiveLogsOpen(true)}
         />
 
-        {/* LeftPanel: Dynamic Modules with Dynamic Resizable Width & Ctrl+B Collapse */}
-        {!isLeftDrawerCollapsed && (
-          <LeftPanel
-            width={leftPanelWidth}
-            activeNav={activeNav}
-            onOpenFile={handleOpenFile}
-            projects={projects}
-            sessions={sessions}
-            currentSessionId={currentSessionId}
-            onSelectSession={handleSelectSession}
-            onNewGlobalSession={handleNewGlobalSession}
-            onNewProjectSession={handleNewProjectSession}
-            onDeleteSession={handleDeleteSession}
-            onRenameSession={handleRenameSession}
-            onAddTag={handleAddTag}
-            onRemoveTag={handleRemoveTag}
-            onOpenDirectory={handleOpenDirectory}
-            onRemoveProject={handleRemoveProject}
-          />
-        )}
-
-        {/* Left Divider (Draggable Hit-Area, 10px wide) */}
-        {!isLeftDrawerCollapsed && (
-          <div
-            onMouseDown={(e) => {
-              e.preventDefault();
-              setIsDraggingLeft(true);
-            }}
-            onDoubleClick={() => setIsLeftDrawerCollapsed(true)}
-            title="拖拽调节侧边栏宽度，双击一键折叠 (Ctrl+B)"
-            style={{
-              width: '10px',
-              marginLeft: '-5px',
-              marginRight: '-5px',
-              cursor: 'col-resize',
-              zIndex: 90,
-              position: 'relative',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}
-          >
-            <div style={{
-              width: '2px',
-              height: '100%',
-              background: isDraggingLeft ? 'var(--accent)' : 'transparent',
-              transition: 'background 0.15s ease'
-            }} />
-          </div>
-        )}
-
-        {/* ChatColumn (自适应宽幅: 填满剩余空间) */}
-        <ChatColumn
-          style={{ flex: 1, minWidth: '360px' }}
-          rightWorkspaceOpen={rightWorkspaceOpen}
-          onToggleWorkspace={() => setRightWorkspaceOpen(!rightWorkspaceOpen)}
-          session={activeSession}
-          sessions={sessions}
-          sessionMessagesMap={sessionMessages}
-          messages={messages}
-          workMode={workMode}
-          setWorkMode={setWorkMode}
-          currentModel={currentModel}
-          onSelectModel={handleSelectModel}
-          permissionPolicy={permissionPolicy}
-          pendingApproval={pendingApproval}
-          onApprovalDecision={(approvedIds, trustGlob) => handleBatchApprovalDecision({ approvedIds, trustGlob })}
-          onRejectBatchApproval={() => handleBatchApprovalDecision({ approvedIds: [] })}
-          onRollbackToCheckpoint={handleRollbackToCheckpoint}
-          setPermissionPolicy={setPermissionPolicy}
-          isStreaming={isStreaming}
-          onStopGeneration={handleStopGeneration}
-          promptQueue={promptQueue}
-          onWithdrawQueuedPrompt={handleWithdrawQueuedPrompt}
-          onEditQueuedPrompt={handleEditQueuedPrompt}
-          onMoveQueuedPrompt={handleMoveQueuedPrompt}
-          onPreemptQueuedPrompt={handlePreemptQueuedPrompt}
-          onSendMessage={handleSendMessage}
-          onResolveOptions={handleResolveOptions}
-          onForkMessage={handleForkSessionFromMessage}
-          onNavigateDiff={(target) => {
-            setRightWorkspaceOpen(true);
-            setActiveDiffTarget({ ...target, highlightToken: `diff-${target.fileId}` });
+        {/* 3-Column Percentage CSS Grid Container */}
+        <div
+          id="app-main-grid-container"
+          style={{
+            flex: 1,
+            display: 'grid',
+            gridTemplateColumns: isLeftDrawerCollapsed
+              ? (rightWorkspaceOpen ? `1fr auto ${workbenchRatio * 100}%` : '1fr')
+              : (rightWorkspaceOpen
+                  ? `${leftRatio * 100}% auto 1fr auto ${workbenchRatio * 100}%`
+                  : `${leftRatio * 100}% auto 1fr`),
+            overflow: 'hidden',
+            position: 'relative'
           }}
-        />
-
-        {/* Right Divider (Draggable Hit-Area, 10px wide) */}
-        {rightWorkspaceOpen && (
-          <div
-            onMouseDown={(e) => {
-              e.preventDefault();
-              setIsDraggingRight(true);
-            }}
-            onDoubleClick={() => setWorkbenchWidth(560)}
-            title="拖拽调节右侧工作台宽度，双击恢复默认宽度"
-            style={{
-              width: '10px',
-              marginLeft: '-5px',
-              marginRight: '-5px',
-              cursor: 'col-resize',
-              zIndex: 90,
-              position: 'relative',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}
-          >
-            <div style={{
-              width: '2px',
-              height: '100%',
-              background: isDraggingRight ? 'var(--accent)' : 'transparent',
-              transition: 'background 0.15s ease'
-            }} />
-          </div>
-        )}
-
-        {/* EditorWorkspace (Dynamic Resizable Width & Diff Navigation) */}
-        {rightWorkspaceOpen && (
-          <div style={{ width: `${workbenchWidth}px`, flexShrink: 0, height: '100%', display: 'flex' }}>
-            <EditorWorkspace
-              isOpen={rightWorkspaceOpen}
-              onClose={() => setRightWorkspaceOpen(false)}
-              activeDiffTarget={activeDiffTarget}
+        >
+          {/* Column 1: LeftPanel */}
+          {!isLeftDrawerCollapsed && (
+            <LeftPanel
+              activeNav={activeNav}
+              onOpenFile={handleOpenFile}
+              projects={projects}
+              sessions={sessions}
+              currentSessionId={currentSessionId}
+              onSelectSession={handleSelectSession}
+              onNewGlobalSession={handleNewGlobalSession}
+              onNewProjectSession={handleNewProjectSession}
+              onDeleteSession={handleDeleteSession}
+              onRenameSession={handleRenameSession}
+              onAddTag={handleAddTag}
+              onRemoveTag={handleRemoveTag}
+              onOpenDirectory={handleOpenDirectory}
+              onRemoveProject={handleRemoveProject}
             />
-          </div>
-        )}
+          )}
+
+          {/* Left Divider (Pointer Events + Double Click Reset) */}
+          {!isLeftDrawerCollapsed && (
+            <div
+              onPointerDown={handleLeftPointerDown}
+              onPointerMove={handleLeftPointerMove}
+              onPointerUp={handleLeftPointerUp}
+              onDoubleClick={handleResetLayout}
+              title="拖拽调节比例，双击恢复默认布局 (左侧 20% / 对话 50% / 工作台 30%)"
+              style={{
+                width: '6px',
+                cursor: 'col-resize',
+                zIndex: 90,
+                position: 'relative',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                touchAction: 'none',
+                userSelect: 'none',
+                background: isDraggingLeft ? 'var(--accent)' : 'transparent',
+                transition: 'background 0.12s ease'
+              }}
+            >
+              {isDraggingLeft && (
+                <div style={{
+                  position: 'absolute',
+                  top: '12px',
+                  left: '10px',
+                  padding: '2px 6px',
+                  borderRadius: '3px',
+                  background: 'var(--accent)',
+                  color: '#FFF',
+                  fontSize: '9.5px',
+                  fontWeight: 700,
+                  fontFamily: 'var(--font-mono)',
+                  pointerEvents: 'none',
+                  zIndex: 100,
+                  whiteSpace: 'nowrap'
+                }}>
+                  {Math.round(leftRatio * 100)}%
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Column 2: ChatColumn (统一 #FAF8F5 暖米白背景) */}
+          <ChatColumn
+            style={{ width: '100%', height: '100%' }}
+            rightWorkspaceOpen={rightWorkspaceOpen}
+            onToggleWorkspace={() => setRightWorkspaceOpen(!rightWorkspaceOpen)}
+            session={activeSession}
+            sessions={sessions}
+            sessionMessagesMap={sessionMessages}
+            messages={messages}
+            workMode={workMode}
+            setWorkMode={setWorkMode}
+            currentModel={currentModel}
+            onSelectModel={handleSelectModel}
+            permissionPolicy={permissionPolicy}
+            pendingApproval={pendingApproval}
+            onApprovalDecision={(approvedIds, trustGlob) => handleBatchApprovalDecision({ approvedIds, trustGlob })}
+            onRejectBatchApproval={() => handleBatchApprovalDecision({ approvedIds: [] })}
+            onRollbackToCheckpoint={handleRollbackToCheckpoint}
+            setPermissionPolicy={setPermissionPolicy}
+            isStreaming={isStreaming}
+            onStopGeneration={handleStopGeneration}
+            promptQueue={promptQueue}
+            onWithdrawQueuedPrompt={handleWithdrawQueuedPrompt}
+            onEditQueuedPrompt={handleEditQueuedPrompt}
+            onMoveQueuedPrompt={handleMoveQueuedPrompt}
+            onPreemptQueuedPrompt={handlePreemptQueuedPrompt}
+            onSendMessage={handleSendMessage}
+            onResolveOptions={handleResolveOptions}
+            onForkMessage={handleForkSessionFromMessage}
+            onNavigateDiff={(target) => {
+              setRightWorkspaceOpen(true);
+              setActiveDiffTarget({ ...target, highlightToken: `diff-${target.fileId}` });
+            }}
+          />
+
+          {/* Right Divider (Pointer Events + Double Click Reset) */}
+          {rightWorkspaceOpen && (
+            <div
+              onPointerDown={handleRightPointerDown}
+              onPointerMove={handleRightPointerMove}
+              onPointerUp={handleRightPointerUp}
+              onDoubleClick={handleResetLayout}
+              title="拖拽调节比例，双击恢复默认布局 (左侧 20% / 对话 50% / 工作台 30%)"
+              style={{
+                width: '6px',
+                cursor: 'col-resize',
+                zIndex: 90,
+                position: 'relative',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                touchAction: 'none',
+                userSelect: 'none',
+                background: isDraggingRight ? 'var(--accent)' : 'transparent',
+                transition: 'background 0.12s ease'
+              }}
+            >
+              {isDraggingRight && (
+                <div style={{
+                  position: 'absolute',
+                  top: '12px',
+                  right: '10px',
+                  padding: '2px 6px',
+                  borderRadius: '3px',
+                  background: 'var(--accent)',
+                  color: '#FFF',
+                  fontSize: '9.5px',
+                  fontWeight: 700,
+                  fontFamily: 'var(--font-mono)',
+                  pointerEvents: 'none',
+                  zIndex: 100,
+                  whiteSpace: 'nowrap'
+                }}>
+                  {Math.round(workbenchRatio * 100)}%
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Column 3: Right Monaco Code Workspace & Terminal Deck */}
+          <EditorWorkspace
+            isOpen={rightWorkspaceOpen}
+            onClose={() => setRightWorkspaceOpen(false)}
+            activeDiffTarget={activeDiffTarget}
+            activeFile={activeFile}
+            activeProject={activeSession.projectPath ? { name: activeSession.projectName || 'Default Project', path: activeSession.projectPath, gitBranch: activeSession.gitBranch || 'main' } : null}
+          />
+        </div>
       </div>
 
       {/* Transparent Global Drag Overlay during layout resizing */}

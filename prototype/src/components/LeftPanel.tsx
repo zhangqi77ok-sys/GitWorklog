@@ -24,7 +24,7 @@ import {
 import { SessionItem, ProjectGroup } from '../types/contracts';
 
 interface LeftPanelProps {
-  width: number;
+  width?: number;
   activeNav: string;
   onOpenFile: (filePath: string, fileName: string, line?: number) => void;
   projects: ProjectGroup[];
@@ -199,7 +199,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
 
   if (activeNav === 'rules') {
     return (
-      <div style={{ width: `${width}px`, minWidth: '220px', maxWidth: '380px', height: 'calc(100vh - 38px)', background: 'var(--bg-base)', borderRight: '1px solid var(--border-subtle)' }}>
+      <div style={{ width: '100%', height: 'calc(100vh - 38px)', background: 'var(--chat-bg)', borderRight: '1px solid var(--border-subtle)' }}>
         <RulesMemoryPanel />
       </div>
     );
@@ -207,7 +207,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
 
   if (activeNav === 'gateway') {
     return (
-      <div style={{ width: `${width}px`, minWidth: '220px', maxWidth: '380px', height: 'calc(100vh - 38px)', background: 'var(--bg-base)', borderRight: '1px solid var(--border-subtle)' }}>
+      <div style={{ width: '100%', height: 'calc(100vh - 38px)', background: 'var(--chat-bg)', borderRight: '1px solid var(--border-subtle)' }}>
         <GatewayCockpitPanel />
       </div>
     );
@@ -215,7 +215,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
 
   if (activeNav === 'settings') {
     return (
-      <div style={{ width: `${width}px`, minWidth: '220px', maxWidth: '380px', height: 'calc(100vh - 38px)', background: 'var(--bg-base)', borderRight: '1px solid var(--border-subtle)' }}>
+      <div style={{ width: '100%', height: 'calc(100vh - 38px)', background: 'var(--chat-bg)', borderRight: '1px solid var(--border-subtle)' }}>
         <SettingsPanel />
       </div>
     );
@@ -223,11 +223,9 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
 
   return (
     <div style={{
-      width: `${width}px`,
-      minWidth: '220px',
-      maxWidth: '380px',
+      width: '100%',
       height: 'calc(100vh - 38px)',
-      background: 'var(--bg-base)',
+      background: 'var(--chat-bg)',
       borderRight: '1px solid var(--border-subtle)',
       display: 'flex',
       flexDirection: 'column',
