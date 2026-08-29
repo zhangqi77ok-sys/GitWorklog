@@ -43,7 +43,8 @@ import {
   STORAGE_KEYS,
   MentionContextItem,
   LiveLogItem,
-  appendLiveLog
+  appendLiveLog,
+  loadSavedAccentColor
 } from './types/contracts';
 
 export const App: React.FC = () => {
@@ -58,6 +59,15 @@ export const App: React.FC = () => {
     setLiveLogs(prev => [item, ...prev.slice(0, 199)]);
   };
   const [isTokenAnalyticsOpen, setIsTokenAnalyticsOpen] = useState(false);
+  // Apply saved theme accent color on launch
+  React.useEffect(() => {
+    const savedAccent = loadSavedAccentColor();
+    if (savedAccent) {
+      document.documentElement.style.setProperty('--accent', savedAccent);
+      document.documentElement.style.setProperty('--accent-subtle', savedAccent + '1F');
+    }
+  }, []);
+
   const [isPaletteOpen, setIsPaletteOpen] = useState(false);
   const [paletteMode, setPaletteMode] = useState<'files' | 'commands'>('files');
 
@@ -880,6 +890,8 @@ CodeMind 已通过本地磁盘桥接将工程目录结构与核心配置自动�
           rightWorkspaceOpen={rightWorkspaceOpen}
           onToggleWorkspace={() => setRightWorkspaceOpen(!rightWorkspaceOpen)}
           session={activeSession}
+          sessions={sessions}
+          sessionMessagesMap={sessionMessages}
           messages={messages}
           workMode={workMode}
           setWorkMode={setWorkMode}

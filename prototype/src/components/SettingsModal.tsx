@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { loadSavedProfile, saveProfileToStorage, loadSavedAccentColor, saveAccentColorToStorage, DeveloperProfile, DEFAULT_DEVELOPER_PROFILE, AgentSkillItem, loadSavedSkills, saveSkillsToStorage, INITIAL_AGENT_SKILLS } from '../types/contracts';
 import {
   X,
   Search,
@@ -333,6 +334,27 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   ]);
   const [editingKbId, setEditingKbId] = useState<string | null>(null);
 
+  // Developer Profile State
+  const [devProfile, setDevProfile] = useState<DeveloperProfile>(loadSavedProfile());
+  const [profileToast, setProfileToast] = useState<string | null>(null);
+
+  // Skill Import Dialog States
+  const [showImportSkillModal, setShowImportSkillModal] = useState(false);
+  const [skillImportTab, setSkillImportTab] = useState<'url' | 'file' | 'custom'>('url');
+  const [importSkillUrl, setImportSkillUrl] = useState('');
+  const [newCustomSkillName, setNewCustomSkillName] = useState('');
+  const [newCustomSkillTier, setNewCustomSkillTier] = useState<'capability' | 'skill' | 'mcp'>('skill');
+  const [newCustomSkillIcon, setNewCustomSkillIcon] = useState('✨');
+  const [newCustomSkillDesc, setNewCustomSkillDesc] = useState('');
+  const [newCustomSkillPrompt, setNewCustomSkillPrompt] = useState('');
+
+  // Add MCP Dialog States
+  const [showAddMcpModal, setShowAddMcpModal] = useState(false);
+  const [newMcpName, setNewMcpName] = useState('');
+  const [newMcpType, setNewMcpType] = useState<'stdio' | 'sse'>('stdio');
+  const [newMcpEndpoint, setNewMcpEndpoint] = useState('');
+  const [newMcpDesc, setNewMcpDesc] = useState('');
+
   // 6. System State
   const [airGapped, setAirGapped] = useState(false);
   const [autoApproveReads, setAutoApproveReads] = useState(true);
@@ -349,6 +371,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
+
+
+  const applyAccentColor = (hex: string) => {
+    onSelectAccentHex(hex);
+    saveAccentColorToStorage(hex);
+    document.documentElement.style.setProperty('--accent', hex);
+    document.documentElement.style.setProperty('--accent-subtle', hex + '1F');
+    setProviderToast(`✓ 强调色已更新为: ${hex}`);
+    setTimeout(() => setProviderToast(null), 2500);
+  };
 
   if (!isOpen) return null;
 
@@ -1532,22 +1564,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
 
                   <button
-                    onClick={() => setProviderToast('已准备连接新的 Stdio/SSE MCP 服务端')}
+                    onClick={() => setShowAddMcpModal(true)}
                     style={{
-                      padding: '4px 10px',
+                      padding: '5px 12px',
                       borderRadius: '4px',
                       background: 'var(--accent)',
                       color: '#FFF',
                       border: 'none',
-                      fontSize: '10px',
+                      fontSize: '11px',
                       fontWeight: 600,
                       cursor: 'pointer',
                       display: 'flex',
                       alignItems: 'center',
-                      gap: '3px'
+                      gap: '4px'
                     }}
                   >
-                    <Plus size={10} />
+                    <Plus size={12} />
                     <span>添加 MCP 服务</span>
                   </button>
                 </div>
@@ -1737,18 +1769,29 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
                 </div>
 
-                {/* 2. Accent Color Swatches */}
+                {/* 2. Custom Color Picker & Presets */}
                 <div>
-                  <label style={{ fontSize: '11px', fontWeight: 600, display: 'block', marginBottom: '6px' }}>
-                    品牌强调主色 (Accent Color - 实时应用):
-                  </label>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                    <label style={{ fontSize: '11px', fontWeight: 600 }}>
+                      品牌强调主色 (Accent Color - 实时应用):
+                    </label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>自定义取色:</span>
+                      <input
+                        type="color"
+                        value={currentAccentHex}
+                        onChange={e => applyAccentColor(e.target.value)}
+                        style={{ width: '24px', height: '24px', padding: 0, border: '1px solid var(--border-subtle)', borderRadius: '4px', cursor: 'pointer', background: 'transparent' }}
+                      />
+                    </div>
+                  </div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px' }}>
                     {ACCENT_COLOR_PRESETS.map(c => {
                       const isChosen = currentAccentHex.toLowerCase() === c.hex.toLowerCase();
                       return (
                         <div
                           key={c.id}
-                          onClick={() => onSelectAccentHex(c.hex)}
+                          onClick={() => applyAccentColor(c.hex)}
                           style={{
                             display: 'flex',
                             alignItems: 'center',
@@ -1941,6 +1984,79 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
                 </div>
 
+                {/* Developer Profile Card */}
+                <div style={{
+                  padding: '12px 14px',
+                  borderRadius: '6px',
+                  background: 'var(--bg-surface)',
+                  border: '1px solid var(--border-subtle)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--accent)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span>👤 开发者个人身份与昵称设置 (Developer Profile)</span>
+                    </div>
+                    {profileToast && (
+                      <span style={{ fontSize: '10px', color: '#16A34A', fontWeight: 600 }}>{profileToast}</span>
+                    )}
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr 1fr', gap: '10px', alignItems: 'center' }}>
+                    <div>
+                      <label style={{ fontSize: '10px', color: 'var(--text-muted)', display: 'block', marginBottom: '3px' }}>头像/图标</label>
+                      <input
+                        type="text"
+                        value={devProfile.avatar}
+                        onChange={e => setDevProfile({ ...devProfile, avatar: e.target.value })}
+                        style={{ width: '100%', padding: '4px 6px', fontSize: '12px', borderRadius: '4px', border: '1px solid var(--border-strong)', background: 'var(--bg-base)', color: 'var(--text-primary)', outline: 'none', textAlign: 'center' }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '10px', color: 'var(--text-muted)', display: 'block', marginBottom: '3px' }}>开发者昵称</label>
+                      <input
+                        type="text"
+                        placeholder="例如: 张工, Architect"
+                        value={devProfile.name}
+                        onChange={e => setDevProfile({ ...devProfile, name: e.target.value })}
+                        style={{ width: '100%', padding: '4px 8px', fontSize: '11px', borderRadius: '4px', border: '1px solid var(--border-strong)', background: 'var(--bg-base)', color: 'var(--text-primary)', outline: 'none' }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '10px', color: 'var(--text-muted)', display: 'block', marginBottom: '3px' }}>技术职位 / 角色</label>
+                      <input
+                        type="text"
+                        placeholder="例如: 资深全栈工程师"
+                        value={devProfile.roleTitle}
+                        onChange={e => setDevProfile({ ...devProfile, roleTitle: e.target.value })}
+                        style={{ width: '100%', padding: '4px 8px', fontSize: '11px', borderRadius: '4px', border: '1px solid var(--border-strong)', background: 'var(--bg-base)', color: 'var(--text-primary)', outline: 'none' }}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '2px' }}>
+                    <button
+                      onClick={() => {
+                        saveProfileToStorage(devProfile);
+                        setProfileToast('✓ 用户昵称已保存并持久化至本地磁盘！');
+                        setTimeout(() => setProfileToast(null), 3000);
+                      }}
+                      style={{
+                        padding: '4px 14px',
+                        borderRadius: '4px',
+                        background: 'var(--accent)',
+                        color: '#FFF',
+                        border: 'none',
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      💾 保存用户设置
+                    </button>
+                  </div>
+                </div>
                 {/* Symmetrical 2-Column Grid */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                   {/* Left Column: Data Security & Desensitization */}
@@ -2121,6 +2237,358 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </button>
         </div>
       </div>
+      {/* Modal 1: Import Skill Modal */}
+      {showImportSkillModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.55)',
+          backdropFilter: 'blur(4px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1200
+        }}>
+          <div style={{
+            width: '540px',
+            maxWidth: '92vw',
+            background: 'var(--bg-surface-elevated)',
+            border: '1px solid var(--border-strong)',
+            borderRadius: '10px',
+            boxShadow: '0 24px 64px rgba(0,0,0,0.3)',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden'
+          }}>
+            <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-surface)' }}>
+              <span style={{ fontWeight: 700, fontSize: '12.5px' }}>📦 导入或新建 Agent Skill 技能</span>
+              <X size={16} style={{ cursor: 'pointer', color: 'var(--text-muted)' }} onClick={() => setShowImportSkillModal(false)} />
+            </div>
+
+            <div style={{ display: 'flex', borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-base)' }}>
+              {[
+                { id: 'url', label: '🔗 URL 远程导入' },
+                { id: 'file', label: '📁 本地 ZIP / JSON 导入' },
+                { id: 'custom', label: '✍️ 手动新建 Skill' }
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setSkillImportTab(tab.id as any)}
+                  style={{
+                    flex: 1,
+                    padding: '8px 4px',
+                    border: 'none',
+                    borderBottom: skillImportTab === tab.id ? '2px solid var(--accent)' : 'none',
+                    background: 'transparent',
+                    color: skillImportTab === tab.id ? 'var(--accent)' : 'var(--text-muted)',
+                    fontWeight: skillImportTab === tab.id ? 700 : 500,
+                    fontSize: '11px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {skillImportTab === 'url' && (
+                <>
+                  <label style={{ fontSize: '11px', fontWeight: 600 }}>Skill Manifest / Git 仓库 URL:</label>
+                  <input
+                    type="text"
+                    placeholder="https://github.com/.../skill.json 或 https://..."
+                    value={importSkillUrl}
+                    onChange={e => setImportSkillUrl(e.target.value)}
+                    style={{ padding: '6px 8px', fontSize: '11px', borderRadius: '4px', border: '1px solid var(--border-strong)', background: 'var(--bg-base)', color: 'var(--text-primary)', outline: 'none' }}
+                  />
+                  <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                    支持直接解析包含 name, description, promptInstruction 的标准 Skill JSON 契约。
+                  </div>
+                  <button
+                    onClick={() => {
+                      if (!importSkillUrl.trim()) return;
+                      const parsedName = importSkillUrl.split('/').pop()?.replace('.json', '') || '自定义导入技能';
+                      const newSkill: AgentSkillItem = {
+                        id: `skill-url-${Date.now()}`,
+                        name: parsedName,
+                        tier: 'skill',
+                        category: '自定义',
+                        icon: '🌐',
+                        description: `从 ${importSkillUrl} 远程导入的专精技能`,
+                        promptInstruction: `请作为来自 ${importSkillUrl} 的专精助手，严格按照专业标准执行开发任务。`,
+                        enabled: true,
+                        isCustom: true
+                      };
+                      const updated = [newSkill, ...loadSavedSkills()];
+                      saveSkillsToStorage(updated);
+                      setProviderToast(`✓ 成功从 URL 导入并注册 Skill: ${parsedName}`);
+                      setShowImportSkillModal(false);
+                      setImportSkillUrl('');
+                    }}
+                    style={{ padding: '6px 14px', borderRadius: '4px', background: 'var(--accent)', color: '#FFF', border: 'none', fontSize: '11px', fontWeight: 600, cursor: 'pointer', alignSelf: 'flex-end' }}
+                  >
+                    🚀 解析并导入
+                  </button>
+                </>
+              )}
+
+              {skillImportTab === 'file' && (
+                <>
+                  <label style={{ fontSize: '11px', fontWeight: 600 }}>选择本地 Skill 压缩包 (.zip) 或 JSON 配置文件:</label>
+                  <input
+                    type="file"
+                    accept=".json,.zip,.tar.gz"
+                    onChange={e => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onload = () => {
+                          const newSkill: AgentSkillItem = {
+                            id: `skill-file-${Date.now()}`,
+                            name: file.name.replace(/\.[^/.]+$/, ''),
+                            tier: 'skill',
+                            category: '本地',
+                            icon: '📦',
+                            description: `从本地文件 ${file.name} 导入的技能包`,
+                            promptInstruction: '请遵循本本地技能包中的专业开发约束与流程指导。',
+                            enabled: true,
+                            isCustom: true
+                          };
+                          const updated = [newSkill, ...loadSavedSkills()];
+                          saveSkillsToStorage(updated);
+                          setProviderToast(`✓ 成功从文件注册 Skill: ${newSkill.name}`);
+                          setShowImportSkillModal(false);
+                        };
+                        reader.readAsText(file);
+                      }
+                    }}
+                    style={{ padding: '6px 8px', fontSize: '11px', borderRadius: '4px', border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)' }}
+                  />
+                  <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                    系统会自动解压并解析 Skill 规范，将其持久化至本地磁盘 `%LOCALAPPDATA%\CodeMind-Hub`。
+                  </div>
+                </>
+              )}
+
+              {skillImportTab === 'custom' && (
+                <>
+                  <div style={{ display: 'grid', gridTemplateColumns: '60px 1fr 100px', gap: '8px' }}>
+                    <div>
+                      <label style={{ fontSize: '10px', color: 'var(--text-muted)' }}>图标</label>
+                      <input
+                        type="text"
+                        value={newCustomSkillIcon}
+                        onChange={e => setNewCustomSkillIcon(e.target.value)}
+                        style={{ width: '100%', padding: '4px 6px', fontSize: '12px', textAlign: 'center', borderRadius: '4px', border: '1px solid var(--border-strong)', background: 'var(--bg-base)', color: 'var(--text-primary)' }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '10px', color: 'var(--text-muted)' }}>技能名称</label>
+                      <input
+                        type="text"
+                        placeholder="例如: Vue3 组合式重构专家"
+                        value={newCustomSkillName}
+                        onChange={e => setNewCustomSkillName(e.target.value)}
+                        style={{ width: '100%', padding: '4px 8px', fontSize: '11px', borderRadius: '4px', border: '1px solid var(--border-strong)', background: 'var(--bg-base)', color: 'var(--text-primary)' }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '10px', color: 'var(--text-muted)' }}>分类层级</label>
+                      <select
+                        value={newCustomSkillTier}
+                        onChange={e => setNewCustomSkillTier(e.target.value as any)}
+                        style={{ width: '100%', padding: '4px 4px', fontSize: '10.5px', borderRadius: '4px', border: '1px solid var(--border-strong)', background: 'var(--bg-base)', color: 'var(--text-primary)' }}
+                      >
+                        <option value="capability">🛠️ 专精能力</option>
+                        <option value="skill">📦 专属Skill</option>
+                        <option value="mcp">🔌 MCP工具</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: '10px', color: 'var(--text-muted)' }}>技能简介描述</label>
+                    <input
+                      type="text"
+                      placeholder="简述该技能解决的问题..."
+                      value={newCustomSkillDesc}
+                      onChange={e => setNewCustomSkillDesc(e.target.value)}
+                      style={{ width: '100%', padding: '4px 8px', fontSize: '11px', borderRadius: '4px', border: '1px solid var(--border-strong)', background: 'var(--bg-base)', color: 'var(--text-primary)' }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: '10px', color: 'var(--text-muted)' }}>专精 System Prompt 指令</label>
+                    <textarea
+                      rows={3}
+                      placeholder="输入注入大模型上下文的专精系统指令规范..."
+                      value={newCustomSkillPrompt}
+                      onChange={e => setNewCustomSkillPrompt(e.target.value)}
+                      style={{ width: '100%', padding: '4px 8px', fontSize: '11px', borderRadius: '4px', border: '1px solid var(--border-strong)', background: 'var(--bg-base)', color: 'var(--text-primary)', resize: 'none' }}
+                    />
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '6px' }}>
+                    <button
+                      onClick={() => setShowImportSkillModal(false)}
+                      style={{ padding: '4px 10px', borderRadius: '4px', border: 'none', background: 'transparent', color: 'var(--text-muted)', fontSize: '11px', cursor: 'pointer' }}
+                    >
+                      取消
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (!newCustomSkillName.trim()) return;
+                        const newSkill: AgentSkillItem = {
+                          id: `skill-custom-${Date.now()}`,
+                          name: newCustomSkillName.trim(),
+                          tier: newCustomSkillTier,
+                          category: '自定义',
+                          icon: newCustomSkillIcon || '✨',
+                          description: newCustomSkillDesc.trim() || '自定义专精技能',
+                          promptInstruction: newCustomSkillPrompt.trim() || '请遵循该领域最佳实践进行专业编码。',
+                          enabled: true,
+                          isCustom: true
+                        };
+                        const updated = [newSkill, ...loadSavedSkills()];
+                        saveSkillsToStorage(updated);
+                        setProviderToast(`✓ 成功创建并生效新 Skill: ${newCustomSkillName}`);
+                        setShowImportSkillModal(false);
+                        setNewCustomSkillName('');
+                        setNewCustomSkillDesc('');
+                        setNewCustomSkillPrompt('');
+                      }}
+                      style={{ padding: '5px 14px', borderRadius: '4px', background: 'var(--accent)', color: '#FFF', border: 'none', fontSize: '11px', fontWeight: 600, cursor: 'pointer' }}
+                    >
+                      保存并注册
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal 2: Add MCP Server Modal */}
+      {showAddMcpModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.55)',
+          backdropFilter: 'blur(4px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1200
+        }}>
+          <div style={{
+            width: '540px',
+            maxWidth: '92vw',
+            background: 'var(--bg-surface-elevated)',
+            border: '1px solid var(--border-strong)',
+            borderRadius: '10px',
+            boxShadow: '0 24px 64px rgba(0,0,0,0.3)',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden'
+          }}>
+            <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-surface)' }}>
+              <span style={{ fontWeight: 700, fontSize: '12.5px' }}>🔌 接入新的 MCP 服务端 (Model Context Protocol)</span>
+              <X size={16} style={{ cursor: 'pointer', color: 'var(--text-muted)' }} onClick={() => setShowAddMcpModal(false)} />
+            </div>
+
+            <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px', gap: '8px' }}>
+                <div>
+                  <label style={{ fontSize: '10px', color: 'var(--text-muted)' }}>服务名称</label>
+                  <input
+                    type="text"
+                    placeholder="例如: Postgres Production MCP"
+                    value={newMcpName}
+                    onChange={e => setNewMcpName(e.target.value)}
+                    style={{ width: '100%', padding: '4px 8px', fontSize: '11px', borderRadius: '4px', border: '1px solid var(--border-strong)', background: 'var(--bg-base)', color: 'var(--text-primary)' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: '10px', color: 'var(--text-muted)' }}>通信协议</label>
+                  <select
+                    value={newMcpType}
+                    onChange={e => setNewMcpType(e.target.value as any)}
+                    style={{ width: '100%', padding: '4px 4px', fontSize: '11px', borderRadius: '4px', border: '1px solid var(--border-strong)', background: 'var(--bg-base)', color: 'var(--text-primary)' }}
+                  >
+                    <option value="stdio">Stdio (本地命令行)</option>
+                    <option value="sse">SSE (远程 HTTP)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '10px', color: 'var(--text-muted)' }}>端点命令 / URL Endpoint</label>
+                <input
+                  type="text"
+                  placeholder={newMcpType === 'stdio' ? 'npx -y @modelcontextprotocol/server-postgres "postgresql://..."' : 'https://mcp.company.com/sse'}
+                  value={newMcpEndpoint}
+                  onChange={e => setNewMcpEndpoint(e.target.value)}
+                  style={{ width: '100%', padding: '4px 8px', fontSize: '11px', borderRadius: '4px', border: '1px solid var(--border-strong)', background: 'var(--bg-base)', color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '10px', color: 'var(--text-muted)' }}>服务功能描述</label>
+                <input
+                  type="text"
+                  placeholder="简述该 MCP 服务端提供的工具集..."
+                  value={newMcpDesc}
+                  onChange={e => setNewMcpDesc(e.target.value)}
+                  style={{ width: '100%', padding: '4px 8px', fontSize: '11px', borderRadius: '4px', border: '1px solid var(--border-strong)', background: 'var(--bg-base)', color: 'var(--text-primary)' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '6px', marginTop: '4px' }}>
+                <button
+                  onClick={() => setShowAddMcpModal(false)}
+                  style={{ padding: '4px 10px', borderRadius: '4px', border: 'none', background: 'transparent', color: 'var(--text-muted)', fontSize: '11px', cursor: 'pointer' }}
+                >
+                  取消
+                </button>
+                <button
+                  onClick={() => {
+                    if (!newMcpName.trim() || !newMcpEndpoint.trim()) return;
+                    const newServer = {
+                      id: `mcp-${Date.now()}`,
+                      name: newMcpName.trim(),
+                      type: newMcpType,
+                      endpoint: newMcpEndpoint.trim(),
+                      status: 'running' as const,
+                      toolsCount: 3,
+                      latencyMs: 18,
+                      tools: [
+                        { name: 'execute_query', description: newMcpDesc || '执行安全查询', parameters: { query: 'string' } }
+                      ]
+                    };
+                    setMcpList(prev => [newServer, ...prev]);
+                    setProviderToast(`✓ 成功添加并运行 MCP 服务: ${newMcpName}`);
+                    setShowAddMcpModal(false);
+                    setNewMcpName('');
+                    setNewMcpEndpoint('');
+                    setNewMcpDesc('');
+                  }}
+                  style={{ padding: '5px 14px', borderRadius: '4px', background: 'var(--accent)', color: '#FFF', border: 'none', fontSize: '11px', fontWeight: 600, cursor: 'pointer' }}
+                >
+                  连接并保存
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

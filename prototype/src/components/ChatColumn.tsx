@@ -91,7 +91,7 @@ import { SemanticCommitModal } from './SemanticCommitModal';
 import { PullRequestModal } from './PullRequestModal';
 import { TrajectorySnapshotModal } from './TrajectorySnapshotModal';
 import { ThinkingBlock } from './ThinkingBlock';
-import { extractThinkingFromText } from '../types/contracts';
+import { extractThinkingFromText, SLASH_COMMANDS, SlashCommandItem, loadSavedProfile, DeveloperProfile } from '../types/contracts';
 import { GitPullRequest } from 'lucide-react';
 
 interface ChatColumnProps {
@@ -99,6 +99,8 @@ interface ChatColumnProps {
   onToggleWorkspace: () => void;
   style?: React.CSSProperties;
   session: SessionItem;
+  sessions?: SessionItem[];
+  sessionMessagesMap?: Record<string, ChatMessage[]>;
   messages: ChatMessage[];
   workMode: WorkMode;
   setWorkMode: (mode: WorkMode) => void;
@@ -124,6 +126,8 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
   onToggleWorkspace,
   style,
   session,
+  sessions = [],
+  sessionMessagesMap = {},
   messages,
   workMode,
   setWorkMode,
@@ -144,6 +148,21 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
   onNavigateDiff
 }) => {
   const [inputText, setInputText] = useState('');
+  // Slash Commands & Session References
+  const [devProfile, setDevProfile] = useState<DeveloperProfile>(loadSavedProfile());
+  const [showSlashMenu, setShowSlashMenu] = useState(false);
+  const [slashQuery, setSlashQuery] = useState('');
+  const [showSessionMenu, setShowSessionMenu] = useState(false);
+  const [sessionQuery, setSessionQuery] = useState('');
+  const [referencedSession, setReferencedSession] = useState<SessionItem | null>(null);
+
+  // Sync profile on mount / focus
+  React.useEffect(() => {
+    const handleFocus = () => setDevProfile(loadSavedProfile());
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, []);
+
   const [editingQueueId, setEditingQueueId] = useState<string | null>(null);
   const [editingQueueText, setEditingQueueText] = useState<string>('');
   const [isQueueCollapsed, setIsQueueCollapsed] = useState<boolean>(false);
@@ -151,6 +170,29 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
   const [collapsedTools, setCollapsedTools] = useState<Record<string, boolean>>({});
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
   const [showRulesPopover, setShowRulesPopover] = useState(false);
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value;
+    setInputText(val);
+
+    // Slash command detection
+    if (val.startsWith('/')) {
+      setShowSlashMenu(true);
+      setSlashQuery(val.slice(1).toLowerCase());
+    } else {
+      setShowSlashMenu(false);
+    }
+
+    // @ Session mention detection
+    const lastAt = val.lastIndexOf('@');
+    if (lastAt !== -1 && lastAt === val.length - 1) {
+      setShowSessionMenu(true);
+      setSessionQuery('');
+    } else if (lastAt !== -1 && showSessionMenu) {
+      setSessionQuery(val.slice(lastAt + 1).toLowerCase());
+    } else {
+      setShowSessionMenu(false);
+    }
+  };
   const [isInputFocused, setIsInputFocused] = useState(false);
   const [inputHeight, setInputHeight] = useState<number>(68);
   const [isDraggingInputHeight, setIsDraggingInputHeight] = useState<boolean>(false);
@@ -337,11 +379,26 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
 
   const handleSend = () => {
     if (!inputText.trim()) return;
-    const skillContext = selectedSkill ? `[已激活能力 @${selectedSkill.name}]: ${selectedSkill.promptInstruction}` : '';
-    const fullPrompt = skillContext ? `${skillContext}\n\n${inputText}` : inputText;
+    let fullPrompt = inputText;
+
+    // 1. Inject Referenced Session Context if present
+    if (referencedSession) {
+      const refMsgs = sessionMessagesMap[referencedSession.id] || [];
+      const historySummary = refMsgs.map(m => `${m.role === 'user' ? '用户' : 'AI'}: ${m.content}`).slice(-4).join('\n\n');
+      fullPrompt = `[已关联前序会话: ${referencedSession.title}]\n--- 前序会话历史对话上下文 ---\n${historySummary || '(前序会话暂无消息)'}\n--- 基于以上背景的继续提问 ---\n${fullPrompt}`;
+    }
+
+    // 2. Inject Active Skill Directive if present
+    if (selectedSkill) {
+      fullPrompt = `[已激活能力 @${selectedSkill.name}]: ${selectedSkill.promptInstruction}\n\n${fullPrompt}`;
+    }
+
     onSendMessage(fullPrompt);
     setInputText('');
     setSelectedSkill(null);
+    setReferencedSession(null);
+    setShowSlashMenu(false);
+    setShowSessionMenu(false);
   };
 
   return (
@@ -1115,6 +1172,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
       <div style={{
         padding: '10px 16px 12px 16px',
         borderTop: '1px solid var(--border-subtle)',
+        position: 'relative',
         background: 'var(--bg-surface)',
         display: 'flex',
         flexDirection: 'column',
@@ -1264,6 +1322,137 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
 
 
 
+                    {/* Floating Slash Command Autocomplete Menu */}
+          {showSlashMenu && (
+            <div style={{
+              position: 'absolute',
+              bottom: 'calc(100% + 6px)',
+              left: 0,
+              right: 0,
+              maxHeight: '260px',
+              overflowY: 'auto',
+              background: 'var(--bg-surface-elevated)',
+              border: '1px solid var(--border-strong)',
+              borderRadius: '8px',
+              boxShadow: '0 12px 32px rgba(0,0,0,0.24)',
+              padding: '6px',
+              zIndex: 250
+            }}>
+              <div style={{ padding: '3px 8px 6px', fontSize: '10.5px', fontWeight: 700, color: 'var(--accent)', borderBottom: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between' }}>
+                <span>⚡ 快捷指令 (Slash Commands)</span>
+                <span style={{ fontSize: '9.5px', color: 'var(--text-muted)' }}>点击或回车填入模版</span>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginTop: '4px' }}>
+                {SLASH_COMMANDS
+                  .filter(cmd => !slashQuery || cmd.command.toLowerCase().includes(slashQuery) || cmd.name.toLowerCase().includes(slashQuery))
+                  .map(cmd => (
+                    <div
+                      key={cmd.id}
+                      onClick={() => {
+                        if (cmd.command === '/clear') {
+                          setInputText('');
+                          setShowSlashMenu(false);
+                        } else {
+                          setInputText(cmd.promptTemplate + ' ');
+                          setShowSlashMenu(false);
+                        }
+                      }}
+                      style={{
+                        padding: '6px 10px',
+                        borderRadius: '4px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        cursor: 'pointer',
+                        background: 'transparent',
+                        transition: 'background 0.12s ease'
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.background = 'var(--accent-subtle)'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontSize: '14px' }}>{cmd.icon}</span>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: '11.5px', color: 'var(--accent)' }}>
+                          {cmd.command}
+                        </span>
+                        <span style={{ fontSize: '11px', color: 'var(--text-secondary)', marginLeft: '4px' }}>
+                          {cmd.description}
+                        </span>
+                      </div>
+                      <span style={{ fontSize: '9.5px', color: 'var(--text-muted)', background: 'var(--bg-base)', padding: '1px 5px', borderRadius: '3px' }}>
+                        {cmd.name}
+                      </span>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+
+          {/* Floating Session Mention Menu */}
+          {showSessionMenu && (
+            <div style={{
+              position: 'absolute',
+              bottom: 'calc(100% + 6px)',
+              left: 0,
+              right: 0,
+              maxHeight: '260px',
+              overflowY: 'auto',
+              background: 'var(--bg-surface-elevated)',
+              border: '1px solid var(--border-strong)',
+              borderRadius: '8px',
+              boxShadow: '0 12px 32px rgba(0,0,0,0.24)',
+              padding: '6px',
+              zIndex: 250
+            }}>
+              <div style={{ padding: '3px 8px 6px', fontSize: '10.5px', fontWeight: 700, color: 'var(--accent)', borderBottom: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between' }}>
+                <span>💬 引用历史会话继续问答 (Session Mention)</span>
+                <span style={{ fontSize: '9.5px', color: 'var(--text-muted)' }}>点击关联前序上下文</span>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginTop: '4px' }}>
+                {sessions
+                  .filter(s => s.id !== session.id)
+                  .filter(s => !sessionQuery || s.title.toLowerCase().includes(sessionQuery))
+                  .map(s => (
+                    <div
+                      key={s.id}
+                      onClick={() => {
+                        setReferencedSession(s);
+                        setInputText(prev => {
+                          const atIdx = prev.lastIndexOf('@');
+                          return atIdx !== -1 ? prev.slice(0, atIdx) : prev;
+                        });
+                        setShowSessionMenu(false);
+                      }}
+                      style={{
+                        padding: '6px 10px',
+                        borderRadius: '4px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        cursor: 'pointer',
+                        background: 'transparent',
+                        transition: 'background 0.12s ease'
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.background = 'var(--accent-subtle)'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span>💬</span>
+                        <span style={{ fontWeight: 600, fontSize: '11.5px', color: 'var(--text-primary)' }}>
+                          {s.title}
+                        </span>
+                        <span style={{ fontSize: '9.5px', color: 'var(--text-muted)' }}>
+                          ({s.projectName || '全局会话'})
+                        </span>
+                      </div>
+                      <span style={{ fontSize: '9px', padding: '1px 5px', borderRadius: '3px', background: 'var(--bg-base)', color: 'var(--accent)' }}>
+                        关联此会话
+                      </span>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
           {/* Draggable Top Handle to resize input box height */}
           <div
             onMouseDown={() => setIsDraggingInputHeight(true)}
@@ -1290,7 +1479,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                 : `[${currentModel.name} · Act 模式] 描述你的开发需求，AI 将直接落地修改代码并运行测试自纠（回车发送）...`
             }
             value={inputText}
-            onChange={e => setInputText(e.target.value)}
+            onChange={handleInputChange}
             onFocus={() => setIsInputFocused(true)}
             onBlur={() => setIsInputFocused(false)}
             onPaste={handlePaste}

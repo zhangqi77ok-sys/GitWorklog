@@ -3110,3 +3110,147 @@ export function resolveApiEndpoint(targetUrl: string): { url: string; headers: R
     headers: {}
   };
 }
+
+// Slash Commands Definition
+export interface SlashCommandItem {
+  id: string;
+  command: string;
+  name: string;
+  description: string;
+  icon: string;
+  promptTemplate: string;
+}
+
+export const SLASH_COMMANDS: SlashCommandItem[] = [
+  {
+    id: 'cmd-refactor',
+    command: '/refactor',
+    name: '代码架构重构',
+    description: '深度审查代码架构坏味道，识别圈复杂度与消除循环依赖',
+    icon: '⚡',
+    promptTemplate: '请针对当前工程进行深度的代码架构坏味道审查，指出潜在的高耦合与循环依赖，并给出模块化重构与单测方案：'
+  },
+  {
+    id: 'cmd-test',
+    command: '/test',
+    name: '补全单元测试',
+    description: '深入分析边界值与异常分支，自动生成 Vitest / Pytest 单元测试',
+    icon: '🧪',
+    promptTemplate: '请为当前模块补充完整的单元测试，覆盖正常流、边界极值与异常拦截，确保断言严谨：'
+  },
+  {
+    id: 'cmd-audit',
+    command: '/audit',
+    name: '安全与漏洞审计',
+    description: '全面检测硬编码密钥、SQL注入、XSS与 OWASP Top 10 漏洞',
+    icon: '🔍',
+    promptTemplate: '请对代码进行企业级安全审计，检查硬编码凭据、未鉴权调用与 SQL/XSS 隐患并提供修复方案：'
+  },
+  {
+    id: 'cmd-docs',
+    command: '/docs',
+    name: 'API 与架构文档',
+    description: '自动解析 AST 生成标准化 OpenAPI / Markdown 架构与接口文档',
+    icon: '📝',
+    promptTemplate: '请基于代码实现与类型定义，生成结构清晰的生产级 API 与系统架构设计文档：'
+  },
+  {
+    id: 'cmd-perf',
+    command: '/perf',
+    name: '性能剖析调优',
+    description: '剖析重渲染、内存泄漏、算法时间复杂度与 IO 吞吐瓶颈',
+    icon: '🚀',
+    promptTemplate: '请分析当前代码的执行性能与潜在瓶颈，给出降低时间复杂度与减少内存占用的极致优化方案：'
+  },
+  {
+    id: 'cmd-db',
+    command: '/db',
+    name: '数据库变更脚本',
+    description: '设计无锁 DDL 迁移脚本、慢查询 EXPLAIN 分析与联合索引调优',
+    icon: '🗄️',
+    promptTemplate: '请评估数据库变更方案，编写支持向后兼容且带安全回滚机制的无锁 DDL/DML 脚本：'
+  },
+  {
+    id: 'cmd-pr',
+    command: '/pr',
+    name: 'Git 语义提交与 PR',
+    description: '自动分析变更集并生成 Conventional Commits 提交与 PR 摘要',
+    icon: '🛠️',
+    promptTemplate: '请分析当前工程的修改变更集，生成符合规范的 Conventional Commits 语义化提交信息与详细 PR 描述：'
+  },
+  {
+    id: 'cmd-goal',
+    command: '/goal',
+    name: '持续目标推进',
+    description: '持续推演并自主规划执行任务链，直到最终目标彻底达成',
+    icon: '⏱️',
+    promptTemplate: '请启动长链路自主目标推演，将以下复杂需求拆解为阶段里程碑并持续推进完成：'
+  },
+  {
+    id: 'cmd-browser',
+    command: '/browser',
+    name: '浏览器端到端巡检',
+    description: '调度无头浏览器自动化巡检页面 DOM、交互与控制台报错',
+    icon: '🌐',
+    promptTemplate: '请通过浏览器自动化工具链，对页面进行端到端渲染验证与功能交互巡检：'
+  },
+  {
+    id: 'cmd-clear',
+    command: '/clear',
+    name: '清空上下文',
+    description: '重置并清空当前会话的上下文记忆，开启全新提问',
+    icon: '🧹',
+    promptTemplate: ''
+  }
+];
+
+// Developer Profile Definition
+export interface DeveloperProfile {
+  name: string;
+  avatar: string;
+  roleTitle: string;
+}
+
+export const DEFAULT_DEVELOPER_PROFILE: DeveloperProfile = {
+  name: '开发者',
+  avatar: '👨‍💻',
+  roleTitle: '资深全栈工程师'
+};
+
+export function loadSavedProfile(): DeveloperProfile {
+  try {
+    const raw = localStorage.getItem('codemind_developer_profile');
+    if (raw) return JSON.parse(raw);
+  } catch (e) {}
+  return DEFAULT_DEVELOPER_PROFILE;
+}
+
+export function saveProfileToStorage(profile: DeveloperProfile): void {
+  try {
+    localStorage.setItem('codemind_developer_profile', JSON.stringify(profile));
+    fetch('/api/storage', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'codemind_developer_profile', data: profile })
+    }).catch(() => {});
+  } catch (e) {}
+}
+
+export function loadSavedAccentColor(): string {
+  try {
+    const raw = localStorage.getItem('codemind_accent_color');
+    if (raw) return raw;
+  } catch (e) {}
+  return '#D96B27';
+}
+
+export function saveAccentColorToStorage(color: string): void {
+  try {
+    localStorage.setItem('codemind_accent_color', color);
+    fetch('/api/storage', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'codemind_accent_color', data: { color } })
+    }).catch(() => {});
+  } catch (e) {}
+}
