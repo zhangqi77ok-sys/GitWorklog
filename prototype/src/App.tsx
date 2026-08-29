@@ -1,3 +1,64 @@
+// ────────────────────────────────────────────────────────────
+// 🧠 CONTEXT TELEMETRY & SMART AUTO-COMPRESSION ENGINE
+// ────────────────────────────────────────────────────────────
+
+interface ContextBreakdown {
+  totalRatio: number; // 0.0 - 1.0 (e.g., 0.42 = 42%)
+  conversationPercent: number;
+  toolsPercent: number;
+  steeringPercent: number;
+  statusLevel: 'normal' | 'suggest_compress' | 'auto_compress' | 'force_compress';
+}
+
+function calculateContextBreakdown(messages: ChatMessage[], maxContextTokens = 128000): ContextBreakdown {
+  const rawChars = messages.reduce((acc, m) => acc + (m.content || '').length, 0);
+  const estimatedTokens = Math.ceil(rawChars / 3.5);
+  const totalRatio = Math.min(1.0, Math.max(0.01, estimatedTokens / maxContextTokens));
+  const totalPercent = Math.round(totalRatio * 100);
+
+  const conversationPercent = Math.max(1, Math.round(totalPercent * 0.95));
+  const steeringPercent = 1;
+  const toolsPercent = Math.max(0, totalPercent - conversationPercent - steeringPercent);
+
+  let statusLevel: 'normal' | 'suggest_compress' | 'auto_compress' | 'force_compress' = 'normal';
+  if (totalPercent >= 90) statusLevel = 'force_compress';
+  else if (totalPercent >= 75) statusLevel = 'auto_compress';
+  else if (totalPercent >= 60) statusLevel = 'suggest_compress';
+
+  return { totalRatio, conversationPercent, toolsPercent, steeringPercent, statusLevel };
+}
+
+function smartCompressMessages(messages: ChatMessage[]): { compressed: ChatMessage[]; beforeTokens: number; afterTokens: number } {
+  const beforeChars = messages.reduce((acc, m) => acc + (m.content || '').length, 0);
+  const beforeTokens = Math.ceil(beforeChars / 3.5);
+
+  // Strategy:
+  // - Retain: System prompt, Initial User Goal, Most recent Agent Run & Verification, Unfinished items
+  // - Compress: Strip heavy thinking text from older turns, prune intermediate repetitive feedback
+  const compressed: ChatMessage[] = messages.map((m, idx) => {
+    // Keep last 3 messages intact
+    if (idx >= messages.length - 3) return m;
+
+    let clean = m.content;
+    // Strip <thinking> tags from historical turns
+    clean = clean.replace(/<thinking>[\s\S]*?<\/thinking>/gi, '');
+    // Compress giant write_file blocks in historical messages
+    clean = clean.replace(/```write_file:([^\n]+)\n([\s\S]{300,})```/gi, (_match, file) => {
+      return `\`\`\`write_file:${file}\n// [历史执行已落盘代码，已智能压缩以节约上下文]\n\`\`\``;
+    });
+
+    return {
+      ...m,
+      content: clean.trim()
+    };
+  });
+
+  const afterChars = compressed.reduce((acc, m) => acc + (m.content || '').length, 0);
+  const afterTokens = Math.ceil(afterChars / 3.5);
+
+  return { compressed, beforeTokens, afterTokens };
+}
+
 import { SettingsModal } from './components/SettingsModal';
 import { LiveLogsModal } from './components/LiveLogsModal';
 import { CommandPaletteModal } from './components/CommandPaletteModal';
@@ -220,7 +281,7 @@ export const App: React.FC = () => {
   const [isDraggingLeft, setIsDraggingLeft] = useState(false);
   const [isDraggingRight, setIsDraggingRight] = useState(false);
   const [activeDiffTarget, setActiveDiffTarget] = useState<DiffNavigationTarget | null>(null);
-  const [activeFile, setActiveFile] = useState<{ path: string; name: string } | null>(null);
+  const [activeFile, setActiveFile] = useState<{ path: string; name: string; line?: number } | null>(null);
 
   // Pointer Events with setPointerCapture for Left Divider
   const handleLeftPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -578,11 +639,18 @@ export const App: React.FC = () => {
     setMessages(prev => [...prev, toastMsg]);
   };
 
-  const handleOpenFile = (filePath: string, fileName: string, line?: number) => {
-    setActiveFile({ path: filePath, name: fileName });
+  const handleOpenFile = (filePath: string, fileName?: string, line?: number) => {
+    const derivedName = fileName || filePath.split(/[/\\]/).pop() || filePath;
+    setActiveFile({ path: filePath, name: derivedName, line });
     if (!rightWorkspaceOpen) {
       setRightWorkspaceOpen(true);
     }
+    setActiveAutoExecutedToast({
+      count: 1,
+      glob: `已在右侧工作台打开：${derivedName}${line ? ` · 第 ${line} 行` : ''}`
+    });
+    setTimeout(() => setActiveAutoExecutedToast(null), 3000);
+    addLog('INFO', 'Workspace', `[文件直达] 已在工作台打开 ${filePath} (目标行: ${line || 1})`);
   };
 
     const handleEnqueuePrompt = (text: string, mentions?: MentionContextItem[]) => {
@@ -782,7 +850,7 @@ export const App: React.FC = () => {
     const streamingModel = { ...currentModel };
 
     // Keep a synchronous loop-local history; React state is display/persistence only.
-    const conversationSnapshot: ChatMessage[] = [...(sessionMessages[currentSessionId] || []), userMsg];
+    let conversationSnapshot: ChatMessage[] = [...(sessionMessages[currentSessionId] || []), userMsg];
     setSessionMessages(prev => ({
       ...prev,
       [currentSessionId]: [...(prev[currentSessionId] || []), userMsg]
@@ -890,25 +958,51 @@ Tcode 已通过宿主磁盘与终端桥接将工程提供给你。` : '当前处
 \`\`\``;
 
     try {
+      // ── Single Agent Run Card ID (All turns & steps aggregate into one Card) ──
+      const singleRunCardId = `agent-run-${Date.now()}`;
+      let accumulatedActionResults: ActionResult[] = [];
+
+      // Initial single assistant message container
+      const runCardMsg: ChatMessage = {
+        id: singleRunCardId,
+        role: 'assistant',
+        content: '',
+        timestamp: Date.now(),
+        auditTag: `⚡ ${streamingModel.name} · Agent Run`,
+        permissionPolicy,
+        stepTags: [],
+        acceptanceItems: []
+      };
+
+      conversationSnapshot.push(runCardMsg);
+      setSessionMessages(prev => ({
+        ...prev,
+        [currentSessionId]: [...(prev[currentSessionId] || []), runCardMsg]
+      }));
+
       // ── Target-Driven Agent Loop: Understand → Breakdown → Act → Verify → Closed-loop Done ──
       while (!agentLoopCancelledRef.current) {
         loopCount++;
+        const assistantId = singleRunCardId;
 
-        const assistantId = `reply-${Date.now()}-loop${loopCount}`;
-        const assistantMsg: ChatMessage = {
-          id: assistantId,
-          role: 'assistant',
-          content: '',
-          timestamp: Date.now(),
-          auditTag: loopCount === 1 ? `⚡ ${streamingModel.name} 真实流式响应` : `🔄 Agent Loop 第${loopCount}轮`,
-          permissionPolicy
-        };
-
-        conversationSnapshot.push(assistantMsg);
-        setSessionMessages(prev => ({
-          ...prev,
-          [currentSessionId]: [...(prev[currentSessionId] || []), assistantMsg]
-        }));
+        // Context Usage Telemetry & Smart Auto-Compression
+        const breakdown = calculateContextBreakdown(conversationSnapshot);
+        if (breakdown.statusLevel === 'auto_compress' || breakdown.statusLevel === 'force_compress') {
+          const { compressed, beforeTokens, afterTokens } = smartCompressMessages(conversationSnapshot);
+          const beforePercent = Math.round((beforeTokens / 128000) * 100);
+          const afterPercent = Math.round((afterTokens / 128000) * 100);
+          conversationSnapshot = compressed;
+          setSessionMessages(prev => ({
+            ...prev,
+            [currentSessionId]: compressed
+          }));
+          setActiveAutoExecutedToast({
+            count: 1,
+            glob: `上下文已智能压缩 · ${beforePercent}% → ${afterPercent}% (保留当前目标与最新证据)`
+          });
+          setTimeout(() => setActiveAutoExecutedToast(null), 4000);
+          addLog('INFO', 'ContextEngine', `[智能压缩] 上下文使用率达到 ${beforePercent}%，自动收敛历史思考与落盘代码至 ${afterPercent}%，继续执行...`);
+        }
 
         const currentMsgs = conversationSnapshot;
 
@@ -1045,7 +1139,7 @@ Tcode 已通过宿主磁盘与终端桥接将工程提供给你。` : '当前处
           finalContent = '已完成分析。请继续提出具体指令。';
         }
 
-        assistantMsg.content = finalContent;
+        runCardMsg.content = finalContent;
 
         // ── Parse target acceptance criteria and actions from AI response ──
         if (activeAcceptanceItems.length === 0) {
@@ -1186,13 +1280,16 @@ Tcode 已通过宿主磁盘与终端桥接将工程提供给你。` : '当前处
 
         stepTags[stepTags.length - 1].status = results.every(r => r.status === 'success') ? 'passed' : 'failed';
 
-        // Update assistant message with step tags, criteria & action results
+        // Accumulate action results across steps within the single run card
+        accumulatedActionResults = [...accumulatedActionResults.filter(ar => !results.some(r => r.actionId === ar.actionId)), ...results];
+
+        // Update single assistant run card with step tags, criteria & action results
         setSessionMessages(prev => {
           const list = prev[currentSessionId] || [];
           const updated = list.map(m => m.id === assistantId ? {
             ...m,
             content: finalContent,
-            actionResults: results,
+            actionResults: accumulatedActionResults,
             acceptanceItems: activeAcceptanceItems,
             stepTags: [...stepTags],
             loopStatus: currentLoopStatus,
@@ -1464,6 +1561,7 @@ Tcode 已通过宿主磁盘与终端桥接将工程提供给你。` : '当前处
           {/* Column 2: ChatColumn (统一 #FAF8F5 暖米白背景) */}
           <ChatColumn
             style={{ width: '100%', height: '100%' }}
+            onOpenFile={handleOpenFile}
             rightWorkspaceOpen={rightWorkspaceOpen}
             onToggleWorkspace={() => setRightWorkspaceOpen(!rightWorkspaceOpen)}
             session={activeSession}

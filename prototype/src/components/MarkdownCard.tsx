@@ -7,7 +7,7 @@ interface MarkdownCardProps {
   content: string;
   isStreaming?: boolean;
   actionResults?: ActionResult[];
-  onOpenFile?: (filePath: string) => void;
+  onOpenFile?: (filePath: string, line?: number) => void;
 }
 
 interface CodeBlockCardProps {
@@ -382,23 +382,53 @@ export const MarkdownCard: React.FC<MarkdownCardProps> = ({
           </strong>
         );
       } else if (token.startsWith('`') && token.endsWith('`')) {
-        parts.push(
-          <code
-            key={match.index}
-            style={{
-              background: 'rgba(234, 88, 12, 0.12)',
-              color: '#EA580C',
-              padding: '2px 5px',
-              borderRadius: '4px',
-              fontSize: '11px',
-              fontFamily: 'Consolas, monospace',
-              border: '1px solid rgba(234, 88, 12, 0.25)',
-              margin: '0 2px'
-            }}
-          >
-            {token.slice(1, -1)}
-          </code>
-        );
+        const rawCode = token.slice(1, -1);
+        const fileMatch = rawCode.match(/^([a-zA-Z0-9_./\\-]+\.[a-zA-Z0-9]+)(?::(\d+)|#L(\d+))?$/);
+        const isFilePath = fileMatch && (rawCode.includes('/') || rawCode.includes('\\') || rawCode.endsWith('.ts') || rawCode.endsWith('.tsx') || rawCode.endsWith('.py') || rawCode.endsWith('.json') || rawCode.endsWith('.css') || rawCode.endsWith('.md'));
+
+        if (isFilePath && onOpenFile) {
+          const filePath = fileMatch[1];
+          const lineNum = fileMatch[2] || fileMatch[3] ? parseInt(fileMatch[2] || fileMatch[3], 10) : undefined;
+          parts.push(
+            <code
+              key={match.index}
+              onClick={() => onOpenFile(filePath, lineNum)}
+              title={`点击在右侧工作台打开文件：${filePath}${lineNum ? ` (第 ${lineNum} 行)` : ''}`}
+              style={{
+                background: 'rgba(217, 107, 39, 0.12)',
+                color: 'var(--accent)',
+                padding: '2px 6px',
+                borderRadius: '4px',
+                fontSize: '11px',
+                fontFamily: 'Consolas, monospace',
+                border: '1px solid rgba(217, 107, 39, 0.3)',
+                margin: '0 2px',
+                cursor: 'pointer',
+                textDecoration: 'underline'
+              }}
+            >
+              📄 {rawCode}
+            </code>
+          );
+        } else {
+          parts.push(
+            <code
+              key={match.index}
+              style={{
+                background: 'rgba(234, 88, 12, 0.12)',
+                color: '#EA580C',
+                padding: '2px 5px',
+                borderRadius: '4px',
+                fontSize: '11px',
+                fontFamily: 'Consolas, monospace',
+                border: '1px solid rgba(234, 88, 12, 0.25)',
+                margin: '0 2px'
+              }}
+            >
+              {rawCode}
+            </code>
+          );
+        }
       } else if (token.startsWith('[') && token.includes('](')) {
         const linkText = token.slice(1, token.indexOf(']('));
         const linkUrl = token.slice(token.indexOf('](') + 2, -1);

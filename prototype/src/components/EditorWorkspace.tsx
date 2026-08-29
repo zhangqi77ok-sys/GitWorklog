@@ -24,7 +24,7 @@ interface EditorWorkspaceProps {
   isOpen: boolean;
   onClose: () => void;
   activeDiffTarget?: { fileId: string; filePath: string; targetLine: number } | null;
-  activeFile?: { path: string; name: string } | null;
+  activeFile?: { path: string; name: string; line?: number } | null;
   activeProject?: { name: string; path: string; gitBranch: string } | null;
 }
 
@@ -66,6 +66,16 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
   const [activeFileId, setActiveFileId] = useState<string>('');
   const [fileContent, setFileContent] = useState<string>('');
   const [isLoadingFile, setIsLoadingFile] = useState<boolean>(false);
+  const codeContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (activeFile?.line && codeContainerRef.current) {
+      const targetElement = document.getElementById(`editor-line-${activeFile.line}`);
+      if (targetElement) {
+        targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
+  }, [activeFile?.line, fileContent]);
 
   // Load real file content when activeFile changes
   useEffect(() => {
@@ -409,16 +419,32 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
                 ))}
               </div>
 
-              {/* Real Code Content */}
-              <div style={{ flex: 1, padding: '0 12px', lineHeight: '20px', userSelect: 'text', WebkitUserSelect: 'text' }}>
+              {/* Real Code Content (With Line Highlighting & Smooth Auto-Scroll) */}
+              <div ref={codeContainerRef} style={{ flex: 1, padding: '0 12px', lineHeight: '20px', userSelect: 'text', WebkitUserSelect: 'text' }}>
                 {isLoadingFile ? (
                   <div style={{ color: 'var(--text-muted)', padding: '20px 0' }}>正在从磁盘加载文件...</div>
                 ) : (
-                  codeLines.map((line, idx) => (
-                    <div key={idx} style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
-                      {line || ' '}
-                    </div>
-                  ))
+                  codeLines.map((line, idx) => {
+                    const lineNum = idx + 1;
+                    const isTargetLine = activeFile?.line === lineNum;
+                    return (
+                      <div
+                        id={`editor-line-${lineNum}`}
+                        key={idx}
+                        style={{
+                          whiteSpace: 'pre-wrap',
+                          wordBreak: 'break-all',
+                          background: isTargetLine ? 'rgba(217, 107, 39, 0.18)' : 'transparent',
+                          borderLeft: isTargetLine ? '3px solid var(--accent)' : '3px solid transparent',
+                          paddingLeft: '4px',
+                          borderRadius: '2px',
+                          transition: 'background 0.2s ease'
+                        }}
+                      >
+                        {line || ' '}
+                      </div>
+                    );
+                  })
                 )}
               </div>
             </div>

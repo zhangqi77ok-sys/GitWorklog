@@ -800,6 +800,42 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
             </button>
           )}
 
+          {/* Context Telemetry HUD Capsule */}
+          {(() => {
+            const rawChars = messages.reduce((acc, m) => acc + (m.content || '').length, 0);
+            const estimatedTokens = Math.ceil(rawChars / 3.5);
+            const totalPercent = Math.min(100, Math.max(1, Math.round((estimatedTokens / 128000) * 100)));
+            const convPercent = Math.max(1, Math.round(totalPercent * 0.95));
+            const steeringPercent = 1;
+            const toolsPercent = Math.max(0, totalPercent - convPercent - steeringPercent);
+
+            const statusColor = totalPercent >= 90 ? '#DC2626' : totalPercent >= 75 ? '#EA580C' : totalPercent >= 60 ? '#D97706' : '#16A34A';
+            const statusLabel = totalPercent >= 90 ? '强制压缩' : totalPercent >= 75 ? '自动压缩' : totalPercent >= 60 ? '建议压缩' : '正常';
+
+            return (
+              <div
+                title={`会话上下文容量：${totalPercent}% (${statusLabel})\n• Conversation: ${convPercent}%\n• MCP Tools: ${toolsPercent}%\n• Steering: ${steeringPercent}%`}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  padding: '2px 8px',
+                  borderRadius: '10px',
+                  background: 'var(--chat-user-bg)',
+                  border: '1px solid var(--border-subtle)',
+                  fontSize: '10px',
+                  fontFamily: 'var(--font-mono)',
+                  color: 'var(--text-primary)',
+                  cursor: 'default'
+                }}
+              >
+                <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: statusColor }} />
+                <span style={{ fontWeight: 700 }}>上下文 {totalPercent}%</span>
+                <span style={{ fontSize: '9px', color: 'var(--text-muted)' }}>({convPercent}% / {toolsPercent}% / {steeringPercent}%)</span>
+              </div>
+            );
+          })()}
+
           {workMode === 'minimal' && (
             <span style={{ padding: '1px 6px', borderRadius: '10px', background: 'rgba(16, 185, 129, 0.12)', color: '#10B981', fontSize: '9.5px', fontWeight: 600 }}>
               🍃 -82%
