@@ -1,5 +1,6 @@
+import { ActionApprovalModal } from './ActionApprovalModal';
 import { ShareCardModal } from './ShareCardModal';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { MarkdownCard } from './MarkdownCard';
 import {
   Send,
@@ -45,6 +46,7 @@ import {
 } from 'lucide-react';
 import {
   SessionItem,
+  AgentPendingAction,
   AgentSkillItem,
   INITIAL_AGENT_SKILLS,
   loadSavedSkills,

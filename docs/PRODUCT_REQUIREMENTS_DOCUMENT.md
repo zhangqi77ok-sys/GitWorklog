@@ -1189,3 +1189,12 @@ To github.com:zhangqi77ok-sys/agent-learning.git
    - 会话中的用户提问卡片、AI 回答卡片与底部的输入指令工作台统一采用高质感白底卡片 (`var(--bg-surface-elevated)`)，呈现和谐高级的现代化 IDE 视觉体验；
 3. **项目与会话架构树实时搜索框 (Tree Real-time Search Box)**：
    - 在左侧“项目与会话架构树”正下方常驻高保真搜索框，支持对项目、会话标题与标签（tags）进行秒级动态模糊过滤。
+
+### 12.26 智能体动作人机协同审批交互窗口与连续决策流 (ActionApprovalModal & Action Stream) (v1.4.3)
+1. **智能体操作人机交互审批弹窗 (Interactive Action Approval Window)**：
+   - 当大模型在会话中生成物理写盘（`write_file:path`）或终端指令（`run_command`）时，系统自动在界面底部正中央弹出悬浮立体的人机交互审批决策卡片；
+   - 弹窗直观展示：目标文件/命令名称、修改代码行数、差异预览（支持收起/展开）、高危操作安全拦截提示；
+2. **三大权限决策按钮组合 (3-Tier Human-in-the-Loop Action Trio)**：
+   - **`[ ▶️ 确认执行 (Allow Once) ]`**（快捷键 `Enter`）：执行当前落地动作，落盘成功后若大模型回答中还有后续动作，**自动流畅切换弹出下一个待确认动作**；
+   - **`[ 🛑 不执行 (Reject / Skip) ]`**（快捷键 `Esc`）：跳过本次操作，不写入磁盘，并继续推进会话或切换下一项；
+   - **`[ ⚡ 当前对话所有都执行 (Always Allow in Session) ]`**（快捷键 `Shift+Enter`）：临时为当前会话开启全自主权限，**将当前及后续产生的所有写盘/命令全自动批量执行完毕**，无需用户再次逐个点击！

@@ -1,1 +1,1 @@
-﻿console.log('[CodeMind] Sync check stub');
+console.log('[CodeMind] Sync check stub');
