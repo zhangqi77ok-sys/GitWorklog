@@ -20,7 +20,7 @@ CORE_OUTPUT = CORE_DIST_DIR / "CodeMind-Studio.exe"
 
 
 def installer_output() -> Path:
-    return ROOT / "dist" / "CodeMind-Studio-Setup.exe"
+    return ROOT / "release" / "CodeMind-Studio-Setup.exe"
 
 
 def pyinstaller_base_command() -> list[str]:

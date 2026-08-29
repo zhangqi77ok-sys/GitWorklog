@@ -20,7 +20,7 @@ class WindowsInstallerContractTests(unittest.TestCase):
     def test_installer_output_has_required_name_and_location(self):
         self.assertEqual(
             build_installer.installer_output(),
-            Path(build_installer.ROOT, "dist", "CodeMind-Studio-Setup.exe")
+            Path(build_installer.ROOT, "release", "CodeMind-Studio-Setup.exe")
         )
 
 

@@ -188,6 +188,16 @@ export const INITIAL_AGENT_SKILLS: AgentSkillItem[] = [
 
   // Tier 2: 专属 Skill (Domain Skills)
   {
+    id: 'skill-build-installer',
+    name: 'Windows 安装包构建与发布',
+    tier: 'skill',
+    category: '发布',
+    icon: '📦',
+    description: '自动执行前端编译、101项测试门禁、PyInstaller 核心打包并生成 release/ 目录单文件安装包',
+    promptInstruction: '你作为 Windows 桌面客户端发布专家，请严格遵循 build_installer.py 自动化流水线，确保通过全量单元测试与编译门禁后在 release/ 目录下生成生产级安装向导。',
+    enabled: true
+  },
+  {
     id: 'skill-api-docs',
     name: 'API 与架构文档自动化',
     tier: 'skill',
