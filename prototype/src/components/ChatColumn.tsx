@@ -201,11 +201,11 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
           )}
         </div>
 
-        {/* Center: Ultra-Sleek Swarm Relay Indicator */}
+        {/* Center: Ultra-Sleek Swarm Relay Indicator & Mode Switcher Button */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', overflowX: 'auto', padding: '0 4px' }}>
           {pipelineMode === 'swarm' ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--accent)' }}>🐝 Swarm:</span>
+              <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--accent)' }}>🐝 Swarm 协同:</span>
               <span style={{ padding: '1px 5px', borderRadius: '3px', background: 'rgba(22, 163, 74, 0.1)', color: '#16A34A', fontSize: '9.5px', fontWeight: 600 }}>
                 🧭 R1 ✓
               </span>
@@ -220,15 +220,44 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
             </div>
           ) : (
             <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', color: 'var(--text-muted)' }}>
-              <span>📜 规则(3)</span>
+              <span style={{ fontWeight: 700, color: '#2563EB' }}>🛡️ Harness 管道:</span>
+              <span style={{ padding: '1px 4px', borderRadius: '3px', background: 'var(--bg-base)' }}>📜 规则(3)</span>
               <span>➔</span>
-              <span style={{ color: '#10B981' }}>🛡️ AST</span>
+              <span style={{ color: '#10B981', fontWeight: 600 }}>🛡️ AST</span>
               <span>➔</span>
-              <span style={{ color: 'var(--text-primary)' }}>🧠 {currentModel.name.split(' ')[0]}</span>
+              <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>🧠 {currentModel.name.split(' ')[0]}</span>
               <span>➔</span>
-              <span style={{ color: '#2563EB' }}>🔌 MCP</span>
+              <span style={{ color: '#2563EB', fontWeight: 600 }}>🔌 MCP</span>
             </div>
           )}
+
+          {/* Explicit Mode Switch Button */}
+          <button
+            onClick={() => {
+              const nextMode = pipelineMode === 'swarm' ? 'harness' : 'swarm';
+              setPipelineMode(nextMode);
+              setChangesetToast(nextMode === 'swarm' ? '🐝 已切换至多智能体异构协同蜂群 (Swarm)' : '🛡️ 已切换至轻量 Harness 串行执行管道');
+              setTimeout(() => setChangesetToast(null), 3000);
+            }}
+            style={{
+              padding: '2px 7px',
+              borderRadius: '10px',
+              background: 'var(--bg-base)',
+              border: '1px solid var(--border-subtle)',
+              color: 'var(--text-secondary)',
+              fontSize: '10px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '3px',
+              transition: 'all 0.15s ease'
+            }}
+            title="点击在 Swarm 蜂群与 Harness 管道之间切换"
+          >
+            <span style={{ color: 'var(--accent)' }}>⇄</span>
+            <span>{pipelineMode === 'swarm' ? '切为 Harness' : '切为 Swarm'}</span>
+          </button>
         </div>
 
         {/* Right: Merge to Main Pill & Toggle Workbench */}
