@@ -4,6 +4,15 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>CodeMind-Hub · 极简暖色原生 AI 编程工作台</title>
+    <script>
+      window.addEventListener('error', function(e) {
+        var el = document.createElement('div');
+        el.id = 'js-error-dump';
+        el.style.cssText = 'color:red;padding:20px;font-family:monospace;background:#FFF;';
+        el.innerHTML = '<h3>JS Runtime Error:</h3><p>' + e.message + '</p><pre>' + (e.error ? e.error.stack : '') + '</pre>';
+        document.body.appendChild(el);
+      });
+    </script>
   </head>
   <body>
     <div id="root"></div>
