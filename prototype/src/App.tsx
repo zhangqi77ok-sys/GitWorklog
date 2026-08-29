@@ -297,25 +297,113 @@ export const App: React.FC = () => {
     }
   };
 
-  const handleSendMessage = (text: string) => {
-    const newMsg: ChatMessage = {
+  const handleSendMessage = async (text: string) => {
+    if (!text.trim()) return;
+
+    const userMsg: ChatMessage = {
       id: `msg-${Date.now()}`,
       role: 'user',
       content: text,
       timestamp: Date.now()
     };
-    setMessages(prev => [...prev, newMsg]);
+    setMessages(prev => [...prev, userMsg]);
 
-    setTimeout(() => {
-      const replyMsg: ChatMessage = {
-        id: `reply-${Date.now()}`,
-        role: 'assistant',
-        content: `已为您执行落地：${text}。代码已触发 AST 语法前检并打上 [CodeMind Checkpoint] 影子快照，测试全绿通过。`,
-        timestamp: Date.now(),
-        auditTag: '🤖 自动决策通过 · 已存快照'
-      };
-      setMessages(prev => [...prev, replyMsg]);
-    }, 600);
+    // Active assistant message placeholder for real streaming
+    const assistantId = `reply-${Date.now()}`;
+    const assistantMsg: ChatMessage = {
+      id: assistantId,
+      role: 'assistant',
+      content: '',
+      timestamp: Date.now(),
+      auditTag: `⚡ ${currentModel.name} 真实流式响应`
+    };
+    setMessages(prev => [...prev, assistantMsg]);
+
+    try {
+      const savedProviders = loadSavedProviders();
+      const provider = savedProviders.find(p => p.enabled && p.apiKey && p.baseUrl) || savedProviders[0];
+
+      let baseUrl = provider?.baseUrl?.trim() || 'https://platform.ai.hixinghai.com/api/v1';
+      if (baseUrl.endsWith('/')) baseUrl = baseUrl.slice(0, -1);
+      const apiKey = provider?.apiKey?.trim() || 'sk-xh-ZVKvOZcvzLKxUSWECPQ3mUKfP9q9sxrz14NQmtoQ000';
+      const targetModel = currentModel.id.includes('deepseek') ? 'deepseek-v4-flash' : currentModel.id;
+
+      const apiMessages = [
+        { role: 'system', content: '你是 CodeMind-Hub 接入的真实生产级大模型助手。请针对用户的需求给出专业、精炼且正确的回答与代码。' },
+        ...messages.slice(-6).map(m => ({ role: m.role, content: m.content })),
+        { role: 'user', content: text }
+      ];
+
+      const response = await fetch(`${baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model: targetModel,
+          messages: apiMessages,
+          stream: true
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let accumulated = '';
+      let buffer = '';
+
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (trimmed.startsWith('data: ')) {
+              const dataStr = trimmed.slice(6);
+              if (dataStr === '[DONE]') break;
+              try {
+                const parsed = JSON.parse(dataStr);
+                const delta = parsed.choices?.[0]?.delta?.content || '';
+                if (delta) {
+                  accumulated += delta;
+                  setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, content: accumulated } : m));
+                }
+              } catch (e) {}
+            }
+          }
+        }
+      }
+
+      if (!accumulated.trim()) {
+        accumulated = '（大模型已生成完成）';
+        setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, content: accumulated } : m));
+      }
+
+      // Realistic Token increment
+      const addedPrompt = Math.round(text.length * 0.75);
+      const addedComp = Math.round(accumulated.length * 0.75);
+      setTokenStats(prev => ({
+        ...prev,
+        promptTokens: prev.promptTokens + addedPrompt,
+        completionTokens: prev.completionTokens + addedComp,
+        estimatedCostUsd: prev.estimatedCostUsd + ((addedPrompt + addedComp) * 0.0000002)
+      }));
+
+    } catch (err: any) {
+      setMessages(prev => prev.map(m => m.id === assistantId ? {
+        ...m,
+        content: `✕ 大模型连接异常: ${err.message}。请在左侧系统设置中检查服务商 Base URL 与 API Key 凭据。`,
+        auditTag: '⚠️ 网络或鉴权异常'
+      } : m));
+    }
   };
 
   const handleResolveOptions = (messageId: string, selectedIds: string[], customInput?: string) => {
