@@ -280,7 +280,34 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
   }, [isDraggingInputHeight]);
 
   const fileInputRef = React.useRef<HTMLInputElement>(null);
-  const activeRules = getActiveRules(INITIAL_RULES);
+  const [allRules, setAllRules] = useState<RuleItem[]>(() => {
+    try {
+      const raw = localStorage.getItem('codemind_unified_rules');
+      if (raw) return JSON.parse(raw);
+    } catch (e) {}
+    return INITIAL_RULES;
+  });
+
+  // Sync rules across Settings and ChatColumn dynamically
+  React.useEffect(() => {
+    const handleRulesUpdate = (e: any) => {
+      if (e.detail) {
+        setAllRules(e.detail);
+      }
+    };
+    window.addEventListener('codemind_rules_updated', handleRulesUpdate);
+    window.addEventListener('storage', () => {
+      try {
+        const raw = localStorage.getItem('codemind_unified_rules');
+        if (raw) setAllRules(JSON.parse(raw));
+      } catch (e) {}
+    });
+    return () => {
+      window.removeEventListener('codemind_rules_updated', handleRulesUpdate);
+    };
+  }, []);
+
+  const activeRules = allRules.filter(r => r.enabled);
 
   // DX & PM Power States: Mentions, Changeset, Pinned Files
   const [showSkillMenu, setShowSkillMenu] = useState(false);

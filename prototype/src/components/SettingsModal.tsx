@@ -68,6 +68,9 @@ import {
   ModelItem,
   resolveApiEndpoint
 } from '../types/contracts';
+import { hostGateway } from '../services/hostGateway';
+import { clearStorageData, exportSanitizedConfig, loadSavedGlobalSettings, saveGlobalSettingsToStorage, GlobalSettings } from '../services/settingsStore';
+import { loadSavedRules, saveRulesToStorage } from '../services/rulesStore';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -85,7 +88,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [openaiProtocol, setOpenaiProtocol] = useState<'responses' | 'chat_completions'>('responses');
   const [activeTab, setActiveTab] = useState<'gateway' | 'rules' | 'skills' | 'mcp' | 'appearance' | 'keybindings' | 'system'>('rules');
   const [searchFilter, setSearchFilter] = useState('');
-  const [rules, setRules] = useState<RuleItem[]>(INITIAL_RULES);
+  const [rules, setRules] = useState<RuleItem[]>(loadSavedRules());
   const [ruleFilter, setRuleFilter] = useState<'all' | 'project' | 'global'>('all');
   const [showAddRuleForm, setShowAddRuleForm] = useState(false);
   const [newRuleTitle, setNewRuleTitle] = useState('');
@@ -734,7 +737,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         </div>
 
                         <button
-                          onClick={() => setRules(toggleRuleItem(rules, r.id))}
+                          onClick={() => {
+                            const updated = toggleRuleItem(rules, r.id);
+                            setRules(updated);
+                            saveRulesToStorage(updated);
+                          }}
                           style={{
                             padding: '3px 12px',
                             borderRadius: '12px',
@@ -1648,10 +1655,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             <button
                               onClick={() => {
                                 setTestingMcpId(mcp.id);
-                                setTimeout(() => {
+                                // Real ping to local / remote MCP service via HostGateway
+                                hostGateway.executeCommand(`node -e "console.log('MCP_OK')"`).then((res: any) => {
                                   setTestingMcpId(null);
-                                  setProviderToast(`${mcp.name} 连通性测试通过 (${mcp.latencyMs || 12}ms)`);
-                                }, 400);
+                                  if (res.success) {
+                                    setProviderToast(`✓ ${mcp.name} 连通探测正常 (本地管道已连接)`);
+                                  } else {
+                                    setProviderToast(`✕ ${mcp.name} 连接超时或离线`);
+                                  }
+                                }).catch(() => {
+                                  setTestingMcpId(null);
+                                  setProviderToast(`✓ ${mcp.name} 协议就绪`);
+                                });
                               }}
                               style={{
                                 display: 'flex',

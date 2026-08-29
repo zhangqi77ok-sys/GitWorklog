@@ -2,6 +2,7 @@ import { defaultSandboxGuard } from './sandboxGuard';
 import { defaultSecurityShield } from './securityShield';
 import { WorkMode } from '../types/contracts';
 import { getRuntimePolicy } from './runtimePolicy';
+import { loadSavedGlobalSettings } from './settingsStore';
 
 export interface HostExecOptions {
   cwd?: string;
@@ -25,6 +26,20 @@ export class HostGatewayService {
    * Universal terminal command execution with SecurityShield sanitize, SandboxGuard & Mode Policy Check
    */
   public async executeCommand(cmd: string, options: HostExecOptions = {}): Promise<HostExecResult> {
+    // 🛡️ Air-Gapped Network Isolation Guard
+    const settings = loadSavedGlobalSettings();
+    if (settings.isAirGapped) {
+      const isOutboundNetCommand = /curl\s+|wget\s+|ping\s+|ssh\s+|git\s+push|git\s+fetch|git\s+clone|npm\s+install|pip\s+install/i.test(cmd);
+      if (isOutboundNetCommand) {
+        return {
+          success: false,
+          stdout: '',
+          stderr: '🚫 [Air-Gapped Isolation]: 纯离线物理隔离模式已开启，已物理阻断外部公网请求与远程包下载。',
+          exitCode: 1,
+          isPolicyDenied: true
+        };
+      }
+    }
     const trimmed = cmd.trim();
     if (!trimmed) {
       return {
