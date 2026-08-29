@@ -36,11 +36,34 @@ export const FileExplorerPanel: React.FC<FileExplorerPanelProps> = ({
     'p2-codemind': true
   });
 
-  const [selectedFile, setSelectedFile] = useState<string>('src/types/contracts.ts');
+  const [selectedFile, setSelectedFile] = useState<string>('');
   const [showProjDropdown, setShowProjDropdown] = useState(false);
+  const [realTree, setRealTree] = useState<FileNode[] | null>(null);
+  const [isLoadingTree, setIsLoadingTree] = useState(false);
+
+  // Fetch real disk tree when activeProject changes
+  React.useEffect(() => {
+    let isMounted = true;
+    const fetchTree = async () => {
+      if (!activeProject || !activeProject.path) return;
+      setIsLoadingTree(true);
+      try {
+        const res = await fetch(`/api/fs/tree?path=${encodeURIComponent(activeProject.path)}`);
+        const data = await res.json();
+        if (isMounted && data.success && Array.isArray(data.tree)) {
+          setRealTree(data.tree);
+        }
+      } catch (err) {
+      } finally {
+        if (isMounted) setIsLoadingTree(false);
+      }
+    };
+    fetchTree();
+    return () => { isMounted = false; };
+  }, [activeProject?.path]);
 
   const workspaceData = getProjectWorkspaceData(activeProject.id);
-  const fileTree = workspaceData.fileTree;
+  const fileTree = realTree || workspaceData.fileTree;
 
   const toggleDir = (dirId: string) => {
     setExpandedDirs(prev => ({ ...prev, [dirId]: !prev[dirId] }));
@@ -205,7 +228,9 @@ export const FileExplorerPanel: React.FC<FileExplorerPanelProps> = ({
 
       {/* Tree Content */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '6px 2px' }}>
-        {renderTree(fileTree)}
+        {Array.isArray(fileTree)
+          ? fileTree.map(item => renderTree(item))
+          : renderTree(fileTree)}
       </div>
     </div>
   );

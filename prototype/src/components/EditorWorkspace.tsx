@@ -32,6 +32,8 @@ interface EditorWorkspaceProps {
   isOpen: boolean;
   onClose: () => void;
   activeDiffTarget?: { fileId: string; filePath: string; targetLine: number } | null;
+  activeFile?: { path: string; name: string } | null;
+  activeProject?: { name: string; path: string; gitBranch: string } | null;
 }
 
 const INITIAL_TERMINALS_STATE: TerminalTab[] = [
@@ -42,7 +44,9 @@ const INITIAL_TERMINALS_STATE: TerminalTab[] = [
 export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
   isOpen,
   onClose,
-  activeDiffTarget
+  activeDiffTarget,
+  activeFile,
+  activeProject
 }) => {
   if (!isOpen) return null;
 
@@ -52,17 +56,69 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
   const [showInlineEdit, setShowInlineEdit] = useState(false);
   const [inlineInput, setInlineInput] = useState('');
   const [inlineToast, setInlineToast] = useState<string | null>(null);
+  const handleSaveCurrentFile = async () => {
+    const current = openedFiles.find(f => f.id === activeFileId);
+    if (!current) return;
+    try {
+      const res = await fetch('/api/fs/write', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: current.path, content: current.content })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setOpenedFiles(prev => prev.map(f => f.id === activeFileId ? { ...f, isDirty: false } : f));
+        setInlineToast(`💾 文件已实时同步写入本地磁盘: ${current.name}`);
+        setTimeout(() => setInlineToast(null), 3000);
+      }
+    } catch (e) {
+      setInlineToast(`✕ 保存失败: ${e}`);
+    }
+  };
+
   const [activeTerminalId, setActiveTerminalId] = useState<string>('term-1');
   const [terminals, setTerminals] = useState<TerminalTab[]>(INITIAL_TERMINALS_STATE);
   const [terminalLogs, setTerminalLogs] = useState<string[]>([
-    '$ npm test',
-    '✓ tests/contracts.test.ts (40 tests passed in 12ms)',
-    '[CodeMind Noise Filter]: 过滤了 42 行无用编译器转轮进度日志',
-    'All tests passed. Zero errors.'
+    `[CodeMind Sandbox Terminal] 工作区路径: ${activeProject?.path || 'e:/pro/agent-learning'}`,
+    `[Git Branch]: ${activeProject?.gitBranch || 'main'} · 沙箱保护已就绪`,
+    `$ Ready. 输入命令直接在沙箱执行，高危命令将自动提示 Sudo 放行。`
   ]);
   const [cmdInput, setCmdInput] = useState('');
   const [isCiDrawerOpen, setIsCiDrawerOpen] = useState(false);
   const [hoveredAction, setHoveredAction] = useState<string | null>(null);
+  // Real Disk File Loading
+  React.useEffect(() => {
+    if (activeFile && activeFile.path) {
+      const loadRealFile = async () => {
+        try {
+          const res = await fetch(`/api/fs/read?path=${encodeURIComponent(activeFile.path)}`);
+          const data = await res.json();
+          if (data.success && typeof data.content === 'string') {
+            const ext = activeFile.name.split('.').pop() || 'ts';
+            const lang = ext === 'py' ? 'python' : ext === 'md' ? 'markdown' : ext === 'json' ? 'json' : 'typescript';
+            const fileItem: OpenedEditorFile = {
+              id: activeFile.path,
+              path: activeFile.path,
+              name: activeFile.name,
+              language: lang,
+              content: data.content,
+              isDirty: false
+            };
+            setOpenedFiles(prev => {
+              const exists = prev.find(f => f.path === activeFile.path);
+              if (exists) return prev;
+              return [...prev, fileItem];
+            });
+            setActiveFileId(activeFile.path);
+            setInlineToast(`📄 已从磁盘载入: ${activeFile.name} (${(data.size / 1024).toFixed(1)} KB)`);
+            setTimeout(() => setInlineToast(null), 2500);
+          }
+        } catch (e) {}
+      };
+      loadRealFile();
+    }
+  }, [activeFile?.path]);
+
   // Listen for Diff Navigation Targets from ChatColumn
   React.useEffect(() => {
     if (activeDiffTarget) {

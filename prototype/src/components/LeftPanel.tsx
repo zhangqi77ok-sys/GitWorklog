@@ -512,25 +512,38 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
 
             <div style={{ marginBottom: '14px' }}>
               <button
-                onClick={() => fileInputRef.current?.click()}
+                onClick={async () => {
+                  try {
+                    const res = await fetch('/api/fs/pick_folder');
+                    const data = await res.json();
+                    if (data.success && data.path) {
+                      onOpenDirectory(data.path);
+                      setShowDirPickerModal(false);
+                      return;
+                    }
+                    if (data.cancelled) return;
+                  } catch (e) {}
+                  fileInputRef.current?.click();
+                }}
                 style={{
                   width: '100%',
-                  padding: '8px 12px',
+                  padding: '9px 12px',
                   borderRadius: '6px',
-                  background: 'var(--accent-subtle)',
-                  color: 'var(--accent)',
-                  border: '1px solid var(--accent)',
+                  background: 'var(--accent)',
+                  color: '#FFF',
+                  border: 'none',
                   fontWeight: 600,
                   fontSize: '12px',
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: '6px'
+                  gap: '6px',
+                  boxShadow: '0 2px 8px rgba(217, 107, 39, 0.25)'
                 }}
               >
-                <HardDrive size={14} />
-                <span>调用系统文件选择器 (浏览本机文件夹)...</span>
+                <FolderOpen size={15} />
+                <span>📂 浏览并打开本机工程文件夹 (原生无弹窗)</span>
               </button>
             </div>
 

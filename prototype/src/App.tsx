@@ -94,6 +94,7 @@ export const App: React.FC = () => {
   const [isDraggingLeft, setIsDraggingLeft] = useState(false);
   const [isDraggingRight, setIsDraggingRight] = useState(false);
   const [activeDiffTarget, setActiveDiffTarget] = useState<DiffNavigationTarget | null>(null);
+  const [activeFile, setActiveFile] = useState<{ path: string; name: string } | null>(null);
 
   // Global Drag Listeners
   React.useEffect(() => {
@@ -344,7 +345,7 @@ export const App: React.FC = () => {
   };
 
   const handleOpenFile = (filePath: string, fileName: string, line?: number) => {
-    // Open right workspace if closed
+    setActiveFile({ path: filePath, name: fileName });
     if (!rightWorkspaceOpen) {
       setRightWorkspaceOpen(true);
     }
