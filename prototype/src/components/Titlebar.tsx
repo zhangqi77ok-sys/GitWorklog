@@ -61,21 +61,29 @@ export const Titlebar: React.FC<TitlebarProps> = ({
           C
         </div>
         <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>CodeMind-Hub</span>
-        <span style={{ color: 'var(--text-muted)' }}>›</span>
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '4px',
-          padding: '2px 6px',
-          borderRadius: '4px',
-          background: 'var(--bg-base)',
-          border: '1px solid var(--border-subtle)',
-          cursor: 'pointer'
-        }}>
-          <span>📁 {currentProject}</span>
-          <span style={{ color: 'var(--accent)', fontSize: '11px' }}>({gitBranch})</span>
-          <ChevronDown size={12} color="var(--text-muted)" />
-        </div>
+        {currentProject ? (
+          <>
+            <span style={{ color: 'var(--text-muted)' }}>›</span>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              padding: '2px 6px',
+              borderRadius: '4px',
+              background: 'var(--bg-base)',
+              border: '1px solid var(--border-subtle)',
+              cursor: 'pointer'
+            }}>
+              <span>📁 {currentProject}</span>
+              {gitBranch && <span style={{ color: 'var(--accent)', fontSize: '11px' }}>({gitBranch})</span>}
+              <ChevronDown size={12} color="var(--text-muted)" />
+            </div>
+          </>
+        ) : (
+          <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginLeft: '2px' }}>
+            · 未打开工作区
+          </span>
+        )}
       </div>
 
       {/* Center: Current active session */}

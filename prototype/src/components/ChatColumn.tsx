@@ -234,7 +234,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
           <FolderGit2 size={13} color="var(--accent)" />
           <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
-            agent-learning <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>/ main</span>
+            {session?.projectName ? `${session.projectName} / ${session.gitBranch || 'main'}` : '全局自由对话'}
           </span>
 
           {isForkedSession && (

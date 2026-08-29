@@ -28,7 +28,9 @@ import {
   clampWorkbenchWidth,
   clampLeftPanelWithCollapse,
   DiffNavigationTarget,
-  loadSavedProviders
+  loadSavedProviders,
+  loadSavedProjects,
+  saveProjectsToStorage
 } from './types/contracts';
 
 export const App: React.FC = () => {
@@ -118,32 +120,17 @@ export const App: React.FC = () => {
     };
   }, [isDraggingLeft, isDraggingRight]);
 
-  // Multi-Project Groups
-  const [projects, setProjects] = useState<ProjectGroup[]>([
-    {
-      id: 'proj-1',
-      name: 'agent-learning',
-      path: 'e:/pro/agent-learning',
-      gitBranch: 'main',
-      isExpanded: true
-    },
-    {
-      id: 'proj-2',
-      name: 'codemind-sdk',
-      path: 'e:/pro/codemind-sdk',
-      gitBranch: 'dev',
-      isExpanded: false
-    }
-  ]);
+  // Multi-Project Groups (Clean initial state, loaded from local storage)
+  const [projects, setProjects] = useState<ProjectGroup[]>(loadSavedProjects());
 
-  // Token Stats
+  // Token Stats (Clean initial state: 0 tokens until conversation starts)
   const [tokenStats, setTokenStats] = useState<TokenStats>({
-    promptTokens: 2400,
-    completionTokens: 600,
-    cacheHitTokens: 18000,
+    promptTokens: 0,
+    completionTokens: 0,
+    cacheHitTokens: 0,
     cacheWriteTokens: 0,
-    estimatedCostUsd: 0.038,
-    contextCurrentTokens: 21000,
+    estimatedCostUsd: 0.000,
+    contextCurrentTokens: 0,
     contextMaxTokens: 128000
   });
 
@@ -234,6 +221,7 @@ export const App: React.FC = () => {
   const handleOpenDirectory = (folderPath: string) => {
     const { projects: updatedProjects, newProject } = addProjectToWorkspace(projects, folderPath, 'main');
     setProjects(updatedProjects);
+    saveProjectsToStorage(updatedProjects);
     // Create an initial session under this new project
     const newSession: SessionItem = {
       id: `session-${Date.now()}`,
@@ -254,7 +242,11 @@ export const App: React.FC = () => {
   };
 
   const handleRemoveProject = (projectId: string) => {
-    setProjects(prev => removeProjectFromWorkspace(prev, projectId));
+    setProjects(prev => {
+      const updated = removeProjectFromWorkspace(prev, projectId);
+      saveProjectsToStorage(updated);
+      return updated;
+    });
   };
 
   const handleSelectModel = (model: AIModelOption) => {
@@ -349,8 +341,8 @@ export const App: React.FC = () => {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw', overflow: 'hidden' }}>
       {/* 1. Titlebar */}
       <Titlebar
-        currentProject={activeSession.projectName || 'agent-learning'}
-        gitBranch={activeSession.gitBranch || 'main'}
+        currentProject={activeSession.projectName || (projects.length > 0 ? projects[0].name : '')}
+        gitBranch={activeSession.gitBranch || (projects.length > 0 ? projects[0].gitBranch : '')}
         sessionTitle={activeSession.title}
         tokenStats={tokenStats}
         onOpenTokenAnalytics={() => setIsTokenAnalyticsOpen(true)}

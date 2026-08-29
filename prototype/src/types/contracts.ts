@@ -2564,3 +2564,21 @@ export function saveProvidersToStorage(providers: ModelProviderItem[]): void {
   } catch (e) {}
 }
 
+
+
+export function loadSavedProjects(): ProjectGroup[] {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEYS.PROJECTS);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (e) {}
+  return [];
+}
+
+export function saveProjectsToStorage(projects: ProjectGroup[]): void {
+  try {
+    localStorage.setItem(STORAGE_KEYS.PROJECTS, JSON.stringify(projects));
+  } catch (e) {}
+}

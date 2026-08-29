@@ -359,7 +359,40 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
 
           {projectsExpanded && (
             <div style={{ paddingLeft: '8px', marginTop: '2px' }}>
-              {projects.map(proj => {
+              {projects.length === 0 ? (
+                <div style={{
+                  padding: '12px 8px',
+                  textAlign: 'center',
+                  background: 'var(--bg-surface)',
+                  borderRadius: '6px',
+                  border: '1px dashed var(--border-subtle)',
+                  margin: '4px 0 8px 0'
+                }}>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '8px' }}>
+                    暂未打开本地工程
+                  </div>
+                  <button
+                    onClick={() => setShowDirPickerModal(true)}
+                    style={{
+                      padding: '4px 10px',
+                      borderRadius: '4px',
+                      background: 'var(--accent-subtle)',
+                      border: '1px solid var(--accent)',
+                      color: 'var(--accent)',
+                      fontSize: '10.5px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}
+                  >
+                    <FolderPlus size={12} />
+                    <span>打开工程目录</span>
+                  </button>
+                </div>
+              ) : (
+                projects.map(proj => {
                 const isProjOpen = expandedProjects[proj.id] ?? true;
                 const projSessions = sessions.filter(s => s.projectId === proj.id && s.tier1 === 'project');
 
@@ -435,7 +468,8 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
                     )}
                   </div>
                 );
-              })}
+              })
+              )}
             </div>
           )}
         </div>
