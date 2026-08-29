@@ -1,1 +1,1 @@
-﻿console.log('[CodeMind] TODO: Implement git diff check between docs/ and prototype/');
+﻿console.log('[CodeMind] Sync check stub');
