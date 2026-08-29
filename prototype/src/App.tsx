@@ -251,6 +251,14 @@ export const App: React.FC = () => {
     setMessages(prev => [...prev, switchMsg]);
   };
 
+
+  const handleOpenFile = (filePath: string, fileName: string, line?: number) => {
+    // Open right workspace if closed
+    if (!rightWorkspaceOpen) {
+      setRightWorkspaceOpen(true);
+    }
+  };
+
   const handleSendMessage = (text: string) => {
     const newMsg: ChatMessage = {
       id: `msg-${Date.now()}`,
@@ -306,9 +314,11 @@ export const App: React.FC = () => {
         {/* ActivityBar (42px) */}
         <ActivityBar activeNav={activeNav} setActiveNav={setActiveNav} />
 
-        {/* LeftPanel: Hierarchical Project & Session Tree */}
+        {/* LeftPanel: Dynamic Modules (Sessions, Files, Search, Git, Gateway, Settings) */}
         <LeftPanel
           width={260}
+          activeNav={activeNav}
+          onOpenFile={handleOpenFile}
           projects={projects}
           sessions={sessions}
           currentSessionId={currentSessionId}

@@ -1,3 +1,8 @@
+import { FileExplorerPanel } from './panels/FileExplorerPanel';
+import { GlobalSearchPanel } from './panels/GlobalSearchPanel';
+import { GitSnapshotsPanel } from './panels/GitSnapshotsPanel';
+import { GatewayCockpitPanel } from './panels/GatewayCockpitPanel';
+import { SettingsPanel } from './panels/SettingsPanel';
 import React, { useState, useRef } from 'react';
 import {
   ChevronDown,
@@ -18,6 +23,8 @@ import { SessionItem, ProjectGroup } from '../types/contracts';
 
 interface LeftPanelProps {
   width: number;
+  activeNav: string;
+  onOpenFile: (filePath: string, fileName: string, line?: number) => void;
   projects: ProjectGroup[];
   sessions: SessionItem[];
   currentSessionId: string;
@@ -34,6 +41,8 @@ interface LeftPanelProps {
 
 export const LeftPanel: React.FC<LeftPanelProps> = ({
   width,
+  activeNav,
+  onOpenFile,
   projects,
   sessions,
   currentSessionId,
@@ -121,6 +130,52 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
   };
 
   const globalSessions = sessions.filter(s => s.tier1 === 'global');
+
+  // Render based on active navigation tab
+  if (activeNav === 'files') {
+    return (
+      <div style={{ width: `${width}px`, minWidth: '220px', maxWidth: '380px', height: 'calc(100vh - 38px)', background: 'var(--bg-base)', borderRight: '1px solid var(--border-subtle)' }}>
+        <FileExplorerPanel
+          currentProject={projects[0]?.name || 'agent-learning'}
+          onOpenFile={(path, name) => onOpenFile(path, name)}
+        />
+      </div>
+    );
+  }
+
+  if (activeNav === 'search') {
+    return (
+      <div style={{ width: `${width}px`, minWidth: '220px', maxWidth: '380px', height: 'calc(100vh - 38px)', background: 'var(--bg-base)', borderRight: '1px solid var(--border-subtle)' }}>
+        <GlobalSearchPanel
+          onOpenFileAndLine={(path, name, line) => onOpenFile(path, name, line)}
+        />
+      </div>
+    );
+  }
+
+  if (activeNav === 'git') {
+    return (
+      <div style={{ width: `${width}px`, minWidth: '220px', maxWidth: '380px', height: 'calc(100vh - 38px)', background: 'var(--bg-base)', borderRight: '1px solid var(--border-subtle)' }}>
+        <GitSnapshotsPanel />
+      </div>
+    );
+  }
+
+  if (activeNav === 'gateway') {
+    return (
+      <div style={{ width: `${width}px`, minWidth: '220px', maxWidth: '380px', height: 'calc(100vh - 38px)', background: 'var(--bg-base)', borderRight: '1px solid var(--border-subtle)' }}>
+        <GatewayCockpitPanel />
+      </div>
+    );
+  }
+
+  if (activeNav === 'settings') {
+    return (
+      <div style={{ width: `${width}px`, minWidth: '220px', maxWidth: '380px', height: 'calc(100vh - 38px)', background: 'var(--bg-base)', borderRight: '1px solid var(--border-subtle)' }}>
+        <SettingsPanel />
+      </div>
+    );
+  }
 
   return (
     <div style={{

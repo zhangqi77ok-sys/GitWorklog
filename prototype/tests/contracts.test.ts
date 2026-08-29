@@ -11,6 +11,7 @@ import {
   findModelById,
   createTerminalTab,
   closeTerminalTab,
+  filterFilesByQuery,
   removeProjectFromWorkspace,
   SessionItem,
   TokenStats
@@ -134,5 +135,25 @@ describe('SDD Contract - Multi-Terminal Tab Lifecycle', () => {
     // Attempt to close the last one should keep it
     const cannotCloseLast = closeTerminalTab(afterClose, 'term-2');
     expect(cannotCloseLast.length).toBe(1);
+  });
+});
+
+
+describe('SDD Contract - All Core Workspace Modules Logic', () => {
+  it('should search files accurately by query string', () => {
+    const mockFiles = [
+      { path: 'src/bus/GatewayBus.ts', content: 'export class GatewayBus {\n  dispatch() {}\n}' },
+      { path: 'src/types/contracts.ts', content: 'export type SessionTier1Type = "global" | "project";' }
+    ];
+    const results = filterFilesByQuery('GatewayBus', mockFiles);
+    expect(results.length).toBe(1);
+    expect(results[0].fileName).toBe('GatewayBus.ts');
+    expect(results[0].matches.length).toBe(1);
+    expect(results[0].matches[0].lineNumber).toBe(1);
+  });
+
+  it('should return empty array for empty search query', () => {
+    const results = filterFilesByQuery('', [{ path: 'a.ts', content: 'hello' }]);
+    expect(results).toEqual([]);
   });
 });

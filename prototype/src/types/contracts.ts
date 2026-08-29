@@ -255,3 +255,100 @@ export function closeTerminalTab(existing: TerminalTab[], tabId: string): Termin
   if (existing.length <= 1) return existing;
   return existing.filter(t => t.id !== tabId);
 }
+
+
+// File Explorer Contract
+export interface FileNode {
+  id: string;
+  name: string;
+  path: string;
+  type: 'file' | 'directory';
+  children?: FileNode[];
+  extension?: string;
+  isExpanded?: boolean;
+}
+
+// Global Search Contract
+export interface SearchMatch {
+  lineNumber: number;
+  lineContent: string;
+  matchRange: [number, number];
+}
+
+export interface SearchResultFile {
+  filePath: string;
+  fileName: string;
+  matches: SearchMatch[];
+}
+
+export function filterFilesByQuery(query: string, files: Array<{ path: string; content: string }>): SearchResultFile[] {
+  if (!query.trim()) return [];
+  const lower = query.toLowerCase();
+  const results: SearchResultFile[] = [];
+
+  for (const f of files) {
+    const lines = f.content.split('\n');
+    const matches: SearchMatch[] = [];
+    lines.forEach((line, idx) => {
+      if (line.toLowerCase().includes(lower)) {
+        matches.push({
+          lineNumber: idx + 1,
+          lineContent: line.trim(),
+          matchRange: [line.toLowerCase().indexOf(lower), line.toLowerCase().indexOf(lower) + lower.length]
+        });
+      }
+    });
+    if (matches.length > 0) {
+      results.push({
+        filePath: f.path,
+        fileName: f.path.split('/').pop() || f.path,
+        matches
+      });
+    }
+  }
+  return results;
+}
+
+// Git & Shadow Snapshot Contract
+export interface GitFileChange {
+  path: string;
+  status: 'modified' | 'added' | 'deleted' | 'untracked';
+  additions: number;
+  deletions: number;
+}
+
+export interface ShadowSnapshotItem {
+  id: string;
+  timestamp: number;
+  label: string;
+  gitCommitHash: string;
+  changedFilesCount: number;
+  isAiGenerated: boolean;
+}
+
+// Gateway & MCP Contract
+export interface ProviderHealth {
+  id: string;
+  name: string;
+  status: 'healthy' | 'degraded' | 'offline';
+  latencyMs: number;
+  endpoint: string;
+  activeModel: string;
+}
+
+export interface McpServerInfo {
+  id: string;
+  name: string;
+  status: 'connected' | 'disconnected';
+  toolsCount: number;
+  tools: string[];
+}
+
+// Settings Contract
+export interface SystemSettings {
+  airGappedMode: boolean;
+  dailyTokenLimit: number;
+  contextWarnRatio: number;
+  defaultPermission: PermissionPolicy;
+  theme: 'cream' | 'dark_charcoal' | 'system';
+}
