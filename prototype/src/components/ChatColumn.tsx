@@ -234,6 +234,25 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
 
   // DX & PM Power States: Mentions, Changeset, Pinned Files
   const [showSkillMenu, setShowSkillMenu] = useState(false);
+  // Universal ESC key support for ALL popovers & menus in ChatColumn
+  React.useEffect(() => {
+    const handleChatEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setShowSkillMenu(false);
+        setShowRulesPopover(false);
+        setShowModelMenu(false);
+        setShowModeMenu(false);
+        setShowSlashMenu(false);
+        setShowSessionMenu(false);
+        setIsShareModalOpen(false);
+        setIsCommitModalOpen(false);
+        setIsPrModalOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleChatEsc);
+    return () => window.removeEventListener('keydown', handleChatEsc);
+  }, []);
+
   const [skillQuery, setSkillQuery] = useState('');
   const [activeSkillTier, setActiveSkillTier] = useState<'capability' | 'skill' | 'mcp'>('capability');
   const [agentSkills, setAgentSkills] = useState<AgentSkillItem[]>(loadSavedSkills());
@@ -2005,6 +2024,41 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                     flexDirection: 'column',
                     overflow: 'hidden'
                   }}>
+                    {/* Top Header with Close Button */}
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '2px 4px 6px',
+                      borderBottom: '1px solid var(--border-subtle)',
+                      marginBottom: '6px'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Sparkles size={13} color="var(--accent)" />
+                        <span style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-strong)' }}>
+                          引用 Agent 专精能力与技能
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => setShowSkillMenu(false)}
+                        title="关闭 (ESC)"
+                        style={{
+                          background: 'transparent',
+                          border: 'none',
+                          color: 'var(--text-muted)',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          padding: '2px',
+                          borderRadius: '3px'
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.color = 'var(--accent)'}
+                        onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+
                     {/* 3-Tier Navigation Tabs (技能 / Skill / MCP) */}
                     <div style={{
                       display: 'flex',
@@ -2130,10 +2184,24 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                         })}
                     </div>
 
-                    {/* Footer Tip */}
-                    <div style={{ padding: '6px 4px 2px', borderTop: '1px solid var(--border-subtle)', fontSize: '10px', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between' }}>
-                      <span>💡 单选模式：点击任一能力立即装载并关闭弹窗</span>
-                      <span style={{ color: 'var(--accent)' }}>3层分类体系</span>
+                    {/* Footer Tip with Explicit Close Button */}
+                    <div style={{ padding: '6px 4px 2px', borderTop: '1px solid var(--border-subtle)', fontSize: '10px', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span>💡 单选模式：点击任一能力立即装载并关闭</span>
+                      <button
+                        onClick={() => setShowSkillMenu(false)}
+                        style={{
+                          padding: '2px 8px',
+                          borderRadius: '3px',
+                          border: '1px solid var(--border-subtle)',
+                          background: 'var(--bg-base)',
+                          color: 'var(--text-secondary)',
+                          fontSize: '10px',
+                          fontWeight: 600,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        ✕ 关闭 (ESC)
+                      </button>
                     </div>
                   </div>
                 )}
