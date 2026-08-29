@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import {
   Send,
+  Loader2,
   Coins,
   Copy,
   Share2,
@@ -1813,28 +1814,27 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                 Ctrl+↵
               </span>
 
-              {/* Primary Send or Stop Generation Button */}
+              {/* Primary Send or Spinning Red Circle Stop Button */}
               {isStreaming ? (
                 <button
                   onClick={onStopGeneration}
                   style={{
+                    width: '28px',
+                    height: '28px',
+                    borderRadius: '50%',
+                    background: '#DC2626',
+                    border: 'none',
+                    color: '#FFF',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '5px',
-                    padding: '4px 10px',
-                    borderRadius: '6px',
-                    background: '#DC2626',
-                    color: '#FFF',
-                    border: 'none',
+                    justifyContent: 'center',
                     cursor: 'pointer',
-                    fontSize: '11px',
-                    fontWeight: 600,
-                    boxShadow: '0 2px 8px rgba(220, 38, 38, 0.35)'
+                    boxShadow: '0 0 10px rgba(220, 38, 38, 0.6)',
+                    transition: 'all 0.15s ease'
                   }}
-                  title="中断大模型当前输出 (Esc)"
+                  title="正在实时流式生成中，点击中断问答 (Esc)"
                 >
-                  <Square size={10} fill="#FFF" />
-                  <span>停止</span>
+                  <Loader2 size={16} color="#FFF" className="animate-spin" />
                 </button>
               ) : (
                 <button

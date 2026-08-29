@@ -24,6 +24,7 @@ import {
   removeProjectFromWorkspace,
   AIModelOption,
   AVAILABLE_MODELS,
+  getAllAvailableModels,
   forkSessionFromMessage,
   clampLeftPanelWidth,
   clampWorkbenchWidth,
@@ -97,7 +98,10 @@ export const App: React.FC = () => {
   });
   const [rightWorkspaceOpen, setRightWorkspaceOpen] = useState<boolean>(false);
   const [workMode, setWorkMode] = useState<WorkMode>('act');
-  const [currentModel, setCurrentModel] = useState<AIModelOption>(AVAILABLE_MODELS[0]);
+  const [currentModel, setCurrentModel] = useState<AIModelOption>(() => {
+    const all = getAllAvailableModels();
+    return all.find((m: AIModelOption) => m.id === 'mimo-v2.5-free') || all[0] || AVAILABLE_MODELS[0];
+  });
   const [permissionPolicy, setPermissionPolicy] = useState<PermissionPolicy>('autonomous_agent');
 
   // Resizable Layout & Collapse States
@@ -824,6 +828,14 @@ CodeMind 已通过本地磁盘桥接将工程目录结构与核心配置自动�
         isOpen={isTokenAnalyticsOpen}
         onClose={() => setIsTokenAnalyticsOpen(false)}
         stats={tokenStats}
+      />
+
+      {/* Real-Time Live Logs Drawer Modal */}
+      <LiveLogsModal
+        isOpen={isLiveLogsOpen}
+        onClose={() => setIsLiveLogsOpen(false)}
+        logs={liveLogs}
+        onClearLogs={() => setLiveLogs([])}
       />
 
       {/* Global Settings & Preferences Modal Dialog */}

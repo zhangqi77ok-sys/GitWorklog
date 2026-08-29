@@ -259,7 +259,10 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
                 return
                 
             req = urllib.request.Request(target_url, method='GET')
-            req.add_header('User-Agent', 'CodeMind-Hub/1.0.8')
+            if 'opencode' in target_url:
+                req.add_header('User-Agent', 'opencode/1.0')
+            else:
+                req.add_header('User-Agent', 'CodeMind-Hub/1.1.5')
             if auth_header:
                 req.add_header('Authorization', auth_header)
                 
@@ -337,7 +340,12 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
 
             req = urllib.request.Request(target_url, data=body_bytes, method='POST')
             req.add_header('Content-Type', 'application/json')
-            req.add_header('User-Agent', 'CodeMind-Hub/1.0.8')
+            # OpenCode requires User-Agent: opencode/1.0 to bypass Cloudflare protection
+            if 'opencode' in target_url:
+                req.add_header('User-Agent', 'opencode/1.0')
+            else:
+                req.add_header('User-Agent', 'CodeMind-Hub/1.1.5')
+
             if auth_header:
                 req.add_header('Authorization', auth_header)
             
@@ -350,11 +358,12 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
                             self.send_header(h, v)
                     self.end_headers()
                     
+                    # True Line-by-Line SSE Real-Time Streaming (Zero 1KB buffer lag)
                     while True:
-                        chunk = resp.read(1024)
-                        if not chunk:
+                        line = resp.readline()
+                        if not line:
                             break
-                        self.wfile.write(chunk)
+                        self.wfile.write(line)
                         self.wfile.flush()
             except urllib.error.HTTPError as e:
                 self.send_response(e.code)

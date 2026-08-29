@@ -210,6 +210,27 @@ export const AVAILABLE_MODELS: AIModelOption[] = [
     description: '极速响应与超低延迟高吞吐，适配星海大模型平台'
   },
   {
+    id: 'mimo-v2.5-free',
+    name: 'OpenCode Mimo v2.5 (极速流式)',
+    provider: 'DeepSeek',
+    contextLimit: 128000,
+    inputPricePerM: 0.00,
+    outputPricePerM: 0.00,
+    badge: 'OpenCode Zen',
+    description: 'OpenCode Zen 官方高速流式大模型，支持思维链推理与代码架构分析。'
+  },
+  {
+    id: 'claude-sonnet-4-6',
+    name: 'Claude 3.7 Sonnet (OpenCode)',
+    provider: 'Anthropic',
+    contextLimit: 200000,
+    inputPricePerM: 3.00,
+    outputPricePerM: 15.00,
+    badge: '深度思考',
+    description: 'OpenCode 平台深度混合架构思考模型'
+  },
+
+  {
     id: 'deepseek-r1',
     name: 'DeepSeek-R1',
     provider: 'DeepSeek',
