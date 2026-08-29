@@ -63,6 +63,7 @@ import {
 import { OptionsCard } from './OptionsCard';
 import { SemanticCommitModal } from './SemanticCommitModal';
 import { PullRequestModal } from './PullRequestModal';
+import { TrajectorySnapshotModal } from './TrajectorySnapshotModal';
 import { GitPullRequest } from 'lucide-react';
 
 interface ChatColumnProps {
@@ -1326,6 +1327,22 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
           <span>💡 提示：按 <strong>Enter</strong> 发送，<strong>Shift+Enter</strong> 换行 · 剪贴板文件或截图支持 <strong>Ctrl+V</strong> 粘贴挂载</span>
           <span>已自动先行注入项目级三大铁律与活跃 Rule 规则</span>
         </div>
+        {/* Trajectory Snapshot Time Travel Modal */}
+        <TrajectorySnapshotModal
+          isOpen={!!selectedTrajectoryStep}
+          onClose={() => setSelectedTrajectoryStep(null)}
+          step={selectedTrajectoryStep}
+          onForkStep={(stepIdx) => {
+            if (onForkMessage) onForkMessage('msg-2');
+            setChangesetToast(`🌿 已从 Step ${stepIdx} 派生出新探索分支会话！`);
+            setTimeout(() => setChangesetToast(null), 3500);
+          }}
+          onRollbackStep={(stepIdx) => {
+            setChangesetToast(`↩️ 工作区代码已成功回滚至 Step ${stepIdx} 历史快照点！`);
+            setTimeout(() => setChangesetToast(null), 3500);
+          }}
+        />
+
         <PullRequestModal
           isOpen={isPrModalOpen}
           onClose={() => setIsPrModalOpen(false)}
