@@ -28,4 +28,5 @@ _*
 _*/
 .idea/
 .vscode/
+*.tsbuildinfo
 
