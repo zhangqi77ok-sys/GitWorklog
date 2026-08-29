@@ -855,6 +855,28 @@ export interface ModelProviderItem {
 }
 
 export const INITIAL_PROVIDERS: ModelProviderItem[] = [
+  // 0. OpenCode Zen Official Gateway
+  {
+    id: 'provider-opencode',
+    name: 'OpenCode (Zen 官方网关)',
+    icon: '⚡',
+    category: 'aggregator',
+    enabled: true,
+    protocol: 'openai',
+    baseUrl: 'https://opencode.ai/zen/v1',
+    defaultBaseUrl: 'https://opencode.ai/zen/v1',
+    apiKey: 'sk-REVOKED_PLACEHOLDER',
+    status: 'healthy',
+    latencyMs: 65,
+    docUrl: 'https://opencode.ai',
+    models: [
+      { id: 'mimo-v2.5-free', name: 'OpenCode Mimo v2.5 (极速免费流式)', enabled: true, contextLimit: 131072, capabilities: ['fast', 'code', 'stream'] },
+      { id: 'claude-sonnet-4-6', name: 'Claude 3.7 Sonnet (OpenCode)', enabled: true, contextLimit: 200000, capabilities: ['reasoning', 'code'] },
+      { id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash (OpenCode)', enabled: true, contextLimit: 65536, capabilities: ['fast', 'code'] },
+      { id: 'nemotron-3.5-lightning-free', name: 'Nemotron 3.5 Lightning (免费)', enabled: true, contextLimit: 65536, capabilities: ['code', 'stream'] },
+      { id: 'gpt-5.4', name: 'GPT-5.4 (OpenCode)', enabled: true, contextLimit: 128000, capabilities: ['flagship', 'code'] }
+    ]
+  },
   // 1. Domestic Chinese Models (国内顶流)
   {
     id: 'provider-deepseek',
@@ -2778,7 +2800,15 @@ export function loadSavedProviders(): ModelProviderItem[] {
     const saved = localStorage.getItem(STORAGE_KEYS.PROVIDERS);
     if (saved) {
       const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        const hasOpenCode = parsed.some((p: any) => p.id === 'provider-opencode');
+        if (!hasOpenCode) {
+          const merged = [INITIAL_PROVIDERS[0], ...parsed];
+          saveProvidersToStorage(merged);
+          return merged;
+        }
+        return parsed;
+      }
     }
   } catch (e) {}
   return INITIAL_PROVIDERS;
