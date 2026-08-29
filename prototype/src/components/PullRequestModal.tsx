@@ -17,6 +17,12 @@ export const PullRequestModal: React.FC<PullRequestModalProps> = ({
   sessionTitle = '重构三栏自适应流体布局',
   onSuccess
 }) => {
+  const draft = generatePullRequestDraft(branchName, sessionTitle, '扩展现有全局 Store (单例状态源)');
+  const [prTitle, setPrTitle] = useState(draft.title);
+  const [prMotivation, setPrMotivation] = useState(draft.motivation);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submittedPrUrl, setSubmittedPrUrl] = useState<string | null>(null);
+
   // Universal ESC key support
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -29,13 +35,7 @@ export const PullRequestModal: React.FC<PullRequestModalProps> = ({
   }, [isOpen, onClose]);
 
   if (!isOpen) return null;
-
-  const draft = generatePullRequestDraft(branchName, sessionTitle, '扩展现有全局 Store (单例状态源)');
-  const [prTitle, setPrTitle] = useState(draft.title);
-  const [prMotivation, setPrMotivation] = useState(draft.motivation);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submittedPrUrl, setSubmittedPrUrl] = useState<string | null>(null);
-
+        
   const handleSubmit = () => {
     setIsSubmitting(true);
     setTimeout(() => {

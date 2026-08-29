@@ -17,6 +17,7 @@ import {
   Square,
   X,
   Shield,
+  AlertTriangle,
   Paperclip,
   ScrollText,
   X as XIcon,
@@ -871,6 +872,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                         content={parsed.cleanContent || (isLastAssistant ? '正在推演并分析工程结构...' : msg.content)}
                         isStreaming={isLastAssistant && isStreaming}
                         autoExecute={workMode === 'act'}
+                        permissionPolicy={permissionPolicy}
                       />
                     </div>
                   )}
@@ -2301,6 +2303,59 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
             {/* Right Tools Group: Permission, Shortcut Hint, Send Button */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
 
+
+                            {/* 3-State Dynamic Permission Policy Pill */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  padding: '2px 8px',
+                  borderRadius: '12px',
+                  background: permissionPolicy === 'strict_approval'
+                    ? 'rgba(100, 116, 139, 0.12)'
+                    : permissionPolicy === 'autonomous_agent'
+                    ? 'rgba(217, 107, 39, 0.14)'
+                    : 'rgba(234, 88, 12, 0.14)',
+                  border: permissionPolicy === 'strict_approval'
+                    ? '1px solid rgba(100, 116, 139, 0.3)'
+                    : permissionPolicy === 'autonomous_agent'
+                    ? '1px solid var(--accent)'
+                    : '1px solid #EA580C',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  color: permissionPolicy === 'strict_approval'
+                    ? '#64748B'
+                    : permissionPolicy === 'autonomous_agent'
+                    ? 'var(--accent)'
+                    : '#EA580C',
+                  transition: 'all 0.15s ease'
+                }}
+                onClick={() => {
+                  if (permissionPolicy === 'strict_approval') {
+                    setPermissionPolicy('autonomous_agent');
+                    setChangesetToast('⚡ 已切换至: 智能自决模式 (生成完毕自动写盘与执行)');
+                  } else if (permissionPolicy === 'autonomous_agent') {
+                    setPermissionPolicy('risk_adaptive');
+                    setChangesetToast('⚠️ 已切换至: 风险熔断模式 (常规自决，高危动作强制拦截)');
+                  } else {
+                    setPermissionPolicy('strict_approval');
+                    setChangesetToast('🛡️ 已切换至: 逐次审核模式 (所有写盘与命令需人工确认)');
+                  }
+                  setTimeout(() => setChangesetToast(null), 3000);
+                }}
+                title="点击切换 AI 动作权限策略：逐次审核 / 智能自决 / 风险熔断"
+              >
+                {permissionPolicy === 'strict_approval' && <Shield size={12} color="#64748B" />}
+                {permissionPolicy === 'autonomous_agent' && <Shield size={12} color="var(--accent)" />}
+                {permissionPolicy === 'risk_adaptive' && <AlertTriangle size={12} color="#EA580C" />}
+                <span>
+                  {permissionPolicy === 'strict_approval' && '逐次审核'}
+                  {permissionPolicy === 'autonomous_agent' && '智能自决'}
+                  {permissionPolicy === 'risk_adaptive' && '风险熔断'}
+                </span>
+              </div>
 
               {/* Keyboard Shortcut Hint */}
               <span style={{

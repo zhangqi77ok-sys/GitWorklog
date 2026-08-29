@@ -1142,3 +1142,20 @@ To github.com:zhangqi77ok-sys/agent-learning.git
    - 彻底修复消息卡片与底部输入框在不同分辨率下左右不对齐、留白断层的问题；
    - 消息流容器与底部输入工作台全面封装至统一的响应式约束容器 (`max-width: 960px; width: 100%`)；
    - 顶部面包屑、消息气泡、代码块卡片与底部输入 Deck 的左右边距（Gutter）严格保持 `20px` 水平垂直绝对对齐。
+
+### 12.21 三态权限策略决策引擎 (逐次审核 / 智能自决 / 风险熔断) 与日志弹窗崩溃修复
+1. **三态权限策略深度联动对话与落地执行 (Three-Tier Permission Decision Engine)**：
+   - **`🛡️ 逐次审核 (strict_approval)`**：
+     - 大模型生成的写盘 (`write_file`) 与终端命令 (`run_command`) 绝不自动执行；
+     - 必须停留在界面等待人工审核，点击 `[ 💾 立即写盘应用 ]` / `[ ▶️ 立即在终端运行 ]` 后方可落盘；
+     - Prompt 注入指示：“逐次审核模式：开发者要求逐一审核，不可假定命令已自动运行”。
+   - **`⚡ 智能自决 (autonomous_agent)`**：
+     - 大模型生成的常规文件写盘与终端命令在回答完毕后全自动写盘和执行；
+     - Prompt 注入指示：“智能自决模式：具备全自主落地执行权，系统自动执行闭环”。
+   - **`⚠️ 风险熔断 (risk_adaptive)`**：
+     - 常规安全修改与测试自动执行；
+     - 遇到高危操作（如包含 `git push`、`git reset --hard`、`Remove-Item`、删除、修改敏感配置）自动熔断拦截，卡片提示 `⚠️ 高危操作已拦截，需您手动确认执行`；
+     - Prompt 注入指示：“风险熔断模式：常规自决，高危动作系统将触发安全熔断拦截需人工确认”。
+2. **彻底根治日志与所有弹窗 React Error #310 崩溃问题**：
+   - 全面重构 `LiveLogsModal`、`CommandPaletteModal`、`PreFlightCiDrawer`、`PullRequestModal`、`SemanticCommitModal` 和 `EditorWorkspace`；
+   - 彻底修复 `if (!isOpen) return null;` 在 `useState` / `useEffect` 前返回导致的 React Hook 规则违规问题，全量消除运行时崩溃。

@@ -26,12 +26,13 @@ export const SemanticCommitModal: React.FC<SemanticCommitModalProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
 
-  if (!isOpen) return null;
-
-  const [commits, setCommits] = useState<SemanticCommitItem[]>(() => splitChangesetIntoSemanticCommits(files));
+    const [commits, setCommits] = useState<SemanticCommitItem[]>(() => splitChangesetIntoSemanticCommits(files));
   const [isExecuting, setIsExecuting] = useState(false);
   const [success, setSuccess] = useState(false);
 
+  if (!isOpen) return null;
+
+      
   const handleRun = () => {
     setIsExecuting(true);
     setTimeout(() => {

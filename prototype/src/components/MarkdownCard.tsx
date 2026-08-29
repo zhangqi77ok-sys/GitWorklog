@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
-import { Copy, Check, Terminal, Code2, FileCode, Play, Save, CheckCircle2, AlertCircle, RefreshCw } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Copy, Check, Terminal, Code2, FileCode, Play, Save, CheckCircle2, AlertCircle, RefreshCw, Shield, AlertTriangle } from 'lucide-react';
+import { PermissionPolicy } from '../types/contracts';
 
 interface MarkdownCardProps {
   content: string;
   isStreaming?: boolean;
   autoExecute?: boolean;
+  permissionPolicy?: PermissionPolicy;
 }
 
 interface CodeBlockCardProps {
@@ -12,33 +14,33 @@ interface CodeBlockCardProps {
   code: string;
   autoExecute?: boolean;
   isStreaming?: boolean;
+  permissionPolicy?: PermissionPolicy;
 }
 
-const CodeBlockCard: React.FC<CodeBlockCardProps> = ({ language, code, autoExecute, isStreaming }) => {
-  const [hasAutoExecuted, setHasAutoExecuted] = useState(false);
+const CodeBlockCard: React.FC<CodeBlockCardProps> = ({
+  language,
+  code,
+  autoExecute = false,
+  isStreaming = false,
+  permissionPolicy = 'autonomous_agent'
+}) => {
   const [copied, setCopied] = useState(false);
   const [isExecuting, setIsExecuting] = useState(false);
   const [execResult, setExecResult] = useState<{ success: boolean; stdout?: string; stderr?: string; exitCode?: number; error?: string } | null>(null);
   const [isWritingFile, setIsWritingFile] = useState(false);
   const [writeResult, setWriteResult] = useState<{ success: boolean; path?: string; size?: number; error?: string } | null>(null);
+  const [hasAutoExecuted, setHasAutoExecuted] = useState(false);
 
   const cleanLang = (language || '').trim();
   const isWriteFile = cleanLang.startsWith('write_file:') || cleanLang.startsWith('file:') || cleanLang.startsWith('create_file:');
   const targetFilePath = isWriteFile ? cleanLang.replace(/^(write_file:|file:|create_file:)/, '').trim() : '';
 
   const isCommandLang = ['run_command', 'bash', 'sh', 'powershell', 'pwsh', 'cmd', 'shell', 'zsh', 'terminal'].includes(cleanLang.toLowerCase()) || code.startsWith('git ') || code.startsWith('npm ') || code.startsWith('python ') || code.startsWith('cargo ') || code.startsWith('New-Item') || code.startsWith('Set-Content') || code.includes('Test-Path');
-  // Autonomous Act Mode: Automatically execute file writing and terminal commands when generation completes
-  React.useEffect(() => {
-    if (autoExecute && !isStreaming && !hasAutoExecuted && code && code.trim()) {
-      setHasAutoExecuted(true);
-      if (isWriteFile && targetFilePath) {
-        handleWriteFileToDisk();
-      } else if (isCommandLang) {
-        handleRunCommand();
-      }
-    }
-  }, [autoExecute, isStreaming, hasAutoExecuted, isWriteFile, isCommandLang, targetFilePath, code]);
 
+  // Risk Detection for Risk-Adaptive Policy
+  const isHighRisk =
+    /(\b(git\s+push|git\s+reset\s+--hard|git\s+clean|rm\s+-rf|Remove-Item|del\s+\/f|Drop-Table|Format-Volume)\b)/i.test(code) ||
+    (isWriteFile && (targetFilePath.includes('package.json') || targetFilePath.includes('.env') || targetFilePath.includes('.git')));
 
   const handleCopy = () => {
     navigator.clipboard.writeText(code);
@@ -100,6 +102,32 @@ const CodeBlockCard: React.FC<CodeBlockCardProps> = ({ language, code, autoExecu
     }
   };
 
+  // Permission-Driven Auto Execution Logic:
+  // - strict_approval: NEVER auto execute (requires manual user click)
+  // - autonomous_agent: ALWAYS auto execute when generation ends
+  // - risk_adaptive: AUTO execute low-risk changes; FUSE/INTERCEPT high-risk commands
+  useEffect(() => {
+    if (!autoExecute || isStreaming || hasAutoExecuted || !code || !code.trim()) return;
+
+    if (permissionPolicy === 'strict_approval') {
+      // Manual approval only
+      return;
+    }
+
+    if (permissionPolicy === 'risk_adaptive' && isHighRisk) {
+      // Risk fused - pause and require manual approval
+      return;
+    }
+
+    // Auto execute approved tasks
+    setHasAutoExecuted(true);
+    if (isWriteFile && targetFilePath) {
+      handleWriteFileToDisk();
+    } else if (isCommandLang) {
+      handleRunCommand();
+    }
+  }, [autoExecute, isStreaming, hasAutoExecuted, isWriteFile, isCommandLang, targetFilePath, code, permissionPolicy, isHighRisk]);
+
   // 1. Specialized File Write Card
   if (isWriteFile && targetFilePath) {
     return (
@@ -111,7 +139,7 @@ const CodeBlockCard: React.FC<CodeBlockCardProps> = ({ language, code, autoExecu
         background: '#0F172A',
         boxShadow: '0 4px 16px rgba(217, 107, 39, 0.15)'
       }}>
-        {/* Header with Save Button */}
+        {/* Header with Save Button & Policy Badge */}
         <div style={{
           display: 'flex',
           alignItems: 'center',
@@ -124,6 +152,16 @@ const CodeBlockCard: React.FC<CodeBlockCardProps> = ({ language, code, autoExecu
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700, color: 'var(--accent)' }}>
             <FileCode size={14} />
             <span>📁 目标文件: {targetFilePath}</span>
+            {permissionPolicy === 'strict_approval' && (
+              <span style={{ fontSize: '9.5px', padding: '1px 5px', borderRadius: '3px', background: 'rgba(100, 116, 139, 0.3)', color: '#CBD5E1' }}>
+                🛡️ 逐次审核
+              </span>
+            )}
+            {permissionPolicy === 'risk_adaptive' && isHighRisk && (
+              <span style={{ fontSize: '9.5px', padding: '1px 5px', borderRadius: '3px', background: 'rgba(239, 68, 68, 0.3)', color: '#FCA5A5', fontWeight: 700 }}>
+                ⚠️ 风险熔断拦截
+              </span>
+            )}
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -206,7 +244,7 @@ const CodeBlockCard: React.FC<CodeBlockCardProps> = ({ language, code, autoExecu
     );
   }
 
-  // 2. Standard or Command Code Card with 1-Click Run in Terminal
+  // 2. Standard or Command Code Card with Permission Policy Guard
   return (
     <div style={{
       margin: '12px 0',
@@ -232,6 +270,16 @@ const CodeBlockCard: React.FC<CodeBlockCardProps> = ({ language, code, autoExecu
           <span style={{ textTransform: 'uppercase', letterSpacing: '0.5px', color: '#E2E8F0' }}>
             {cleanLang || (isCommandLang ? 'POWERSHELL' : 'PLAINTEXT')}
           </span>
+          {isCommandLang && permissionPolicy === 'strict_approval' && (
+            <span style={{ fontSize: '9.5px', padding: '1px 5px', borderRadius: '3px', background: 'rgba(100, 116, 139, 0.3)', color: '#CBD5E1' }}>
+              🛡️ 逐次审核
+            </span>
+          )}
+          {isCommandLang && permissionPolicy === 'risk_adaptive' && isHighRisk && (
+            <span style={{ fontSize: '9.5px', padding: '1px 5px', borderRadius: '3px', background: 'rgba(239, 68, 68, 0.3)', color: '#FCA5A5', fontWeight: 700 }}>
+              ⚠️ 高危操作已拦截
+            </span>
+          )}
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -266,7 +314,7 @@ const CodeBlockCard: React.FC<CodeBlockCardProps> = ({ language, code, autoExecu
                 gap: '4px',
                 padding: '3px 10px',
                 borderRadius: '4px',
-                background: execResult?.success ? '#16A34A' : '#0284C7',
+                background: execResult?.success ? '#16A34A' : (isHighRisk && permissionPolicy === 'risk_adaptive' ? '#DC2626' : '#0284C7'),
                 color: '#FFF',
                 border: 'none',
                 fontSize: '11px',
@@ -277,7 +325,7 @@ const CodeBlockCard: React.FC<CodeBlockCardProps> = ({ language, code, autoExecu
               title="直接在宿主系统 PowerShell 终端执行此脚本"
             >
               {isExecuting ? <RefreshCw size={12} className="animate-spin" /> : <Play size={12} />}
-              <span>{isExecuting ? '执行中...' : execResult?.success ? '✓ 重新执行' : '▶️ 立即在宿主终端执行'}</span>
+              <span>{isExecuting ? '执行中...' : execResult?.success ? '✓ 重新执行' : (isHighRisk && permissionPolicy === 'risk_adaptive' ? '⚠️ 人工确认执行' : '▶️ 立即在宿主终端执行')}</span>
             </button>
           )}
         </div>
@@ -349,7 +397,12 @@ const CodeBlockCard: React.FC<CodeBlockCardProps> = ({ language, code, autoExecu
   );
 };
 
-export const MarkdownCard: React.FC<MarkdownCardProps> = ({ content, isStreaming, autoExecute }) => {
+export const MarkdownCard: React.FC<MarkdownCardProps> = ({
+  content,
+  isStreaming,
+  autoExecute,
+  permissionPolicy = 'autonomous_agent'
+}) => {
   if (!content) return null;
 
   // Split content into blocks: Code blocks vs Text/Markdown blocks
@@ -560,7 +613,16 @@ export const MarkdownCard: React.FC<MarkdownCardProps> = ({ content, isStreaming
     <div style={{ fontSize: '12px', lineHeight: 1.6, color: 'var(--text-primary)' }}>
       {blocks.map((b, idx) => {
         if (b.type === 'code') {
-          return <CodeBlockCard key={idx} language={b.language || ''} code={b.content} autoExecute={autoExecute} isStreaming={isStreaming} />;
+          return (
+            <CodeBlockCard
+              key={idx}
+              language={b.language || ''}
+              code={b.content}
+              autoExecute={autoExecute}
+              isStreaming={isStreaming}
+              permissionPolicy={permissionPolicy}
+            />
+          );
         }
         return renderTextParagraphs(b.content, idx);
       })}

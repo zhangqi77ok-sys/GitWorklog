@@ -27,10 +27,9 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
 
-  if (!isOpen) return null;
-
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
+  if (!isOpen) return null;
 
   const fileItems = [
     { id: 'f1', name: 'contracts.ts', path: 'prototype/src/types/contracts.ts', type: 'typescript', desc: '核心数据契约与纯函数' },

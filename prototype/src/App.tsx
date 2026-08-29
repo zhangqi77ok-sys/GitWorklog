@@ -579,6 +579,13 @@ ${activeSession.projectPath ? `【本地物理工程已挂载】
 Tcode 已通过宿主磁盘与终端桥接将工程提供给你。` : '当前处于全局自由会话模式。'}
 
 【当前工作模式】: ${workMode === 'act' ? 'Act 落地模式 (自主执行模式)' : 'Plan 规划模式'}
+【当前权限策略 (Permission Policy)】: ${
+  permissionPolicy === 'strict_approval'
+    ? '🛡️ 逐次审核模式：开发者要求逐一审核。你输出的 write_file 与 run_command 必须等待开发者手动点击确认，不可假定已自动执行。'
+    : permissionPolicy === 'autonomous_agent'
+    ? '⚡ 智能自决模式：你具备全自主落地的执行权，你的 write_file 与 run_command 将由系统在本地自动执行落盘，请直接生成修改方案并自主闭环。'
+    : '⚠️ 风险熔断模式：常规文件变更与测试命令将自动执行；但涉及删除 (rm/del)、强制重置 (git reset --hard)、或远端推送 (git push) 等高危动作系统将触发安全熔断拦截，需开发者二次确认。'
+}
 
 【Tcode 本地文件修改与终端执行工具协议 (Tool Action Protocols)】:
 你已深度接入宿主操作系统的真实文件系统与 PowerShell 终端！

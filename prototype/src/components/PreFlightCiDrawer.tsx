@@ -22,11 +22,12 @@ export const PreFlightCiDrawer: React.FC<PreFlightCiDrawerProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
 
-  if (!isOpen) return null;
-
-  const [report, setReport] = useState<PreFlightCiReport>(() => generatePreFlightCiReport(true, 88.4, 85.2));
+    const [report, setReport] = useState<PreFlightCiReport>(() => generatePreFlightCiReport(true, 88.4, 85.2));
   const [isRunning, setIsRunning] = useState(false);
 
+  if (!isOpen) return null;
+
+    
   const handleReRun = () => {
     setIsRunning(true);
     setTimeout(() => {

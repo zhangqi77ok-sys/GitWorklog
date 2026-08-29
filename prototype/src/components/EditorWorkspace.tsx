@@ -61,8 +61,6 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
 
-  if (!isOpen) return null;
-
   // Real Opened Files State (Empty by default if no file opened)
   const [openedFiles, setOpenedFiles] = useState<OpenedEditorFile[]>([]);
   const [activeFileId, setActiveFileId] = useState<string>('');
