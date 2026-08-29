@@ -3326,14 +3326,3 @@ export function calculateKVCacheMetrics(
     latencySpeedup
   };
 }
-
-export interface AgentPendingAction {
-  id: string;
-  type: 'write_file' | 'run_command';
-  target: string;
-  code: string;
-  linesCount?: number;
-  isHighRisk?: boolean;
-  messageId?: string;
-  status: 'pending' | 'executed' | 'rejected';
-}
