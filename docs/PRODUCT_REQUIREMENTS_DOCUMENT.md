@@ -1115,22 +1115,22 @@ To github.com:zhangqi77ok-sys/agent-learning.git
    - 当正在生成流式回答时，系统在发起请求时锁定当前请求的 `streamingModel` 快照；
    - 开发者在对话框底部随时切换大模型（如从 DeepSeek 切换至 Claude 3.7 或 MiMo），不会打断、污染或重置正在输出的回答，新模型设置无缝作用于下一轮提问。
 
-### 12.17 自主智能体工具调用协议与本地文件写盘/终端命令一键执行引擎
+### 12.17 自主智能体工具调用协议与 Agent Loop 调度引擎
 1. **智能体操作协议注入 (Tool Action Protocol Injection)**：
-   - 解决大模型默认处于“纯问答模式”无法自主落地修改文件的核心痛点；
-   - 在 System Prompt 中为大模型注入明确的 `write_file:path` 写盘协议与 `run_command` 终端执行协议；
-   - 严禁大模型要求用户手动复制运行，而是主动输出标准动作代码块。
-2. **消息流动作执行器与一键写盘/执行工作台 (Action Execution Card)**：
-   - **`write_file:path` 专用文件写入卡片**：直接展示目标文件路径与代码，提供 **`[ 💾 立即写盘应用此文件 ]`** 按钮，点击直接调用 `/api/fs/write` 持久化至本地磁盘；
-   - **`run_command` 终端命令执行卡片**：提供 **`[ ▶️ 立即在宿主终端执行 ]`** 按钮，点击直接调用 `/api/terminal/exec` 在本地 PowerShell 执行并实时内嵌回显 stdout/stderr。
+   - System Prompt 仅允许 `write_file:path` 与精确 `run_command` 围栏请求宿主动作；普通 `bash`、`pwsh` 等代码示例始终仅展示；
+   - 只读咨询只能输出纯文本或普通代码块；明确落地指令才可产生动作围栏。
+2. **单一 Agent Loop 控制器 (Think → Execute → Observe → Continue)**：
+   - `App` 解析动作后按策略执行或调起统一审批弹窗，将 stdout/stderr、写入状态和退出码反馈给模型下一轮；
+   - `MarkdownCard` 不执行任何动作，只提供状态徽章、复制、折叠和文件定位；
+   - 动作结果使用稳定 `actionId` 关联，禁止依赖代码块显示顺序。
 
-### 12.18 Act 落地模式全自主自动执行机制 (Fully Autonomous Act Mode Auto-Execution)
-1. **零人工干预自主落地 (Zero-Manual-Intervention Auto Execution)**：
-   - 在 **Act 落地模式 (自主执行模式)** 下，当大模型生成 `write_file:path` 写盘代码块或 `run_command` 终端指令时，系统在响应完成后**自动触发写盘与终端执行**；
-   - 彻底无需用户手动点击按钮或手动复制，自动调用宿主网关 `/api/fs/write` 与 `/api/terminal/exec`，实现类似 Cursor Composer / Claude Code 的真正自主 Agent 落地。
+### 12.18 Act 落地模式闭环与实时状态
+1. **自动化与审批协同**：
+   - 低风险 Act 动作由控制器直接进入执行态；严格审核及任何高风险动作进入统一审批浮层；
+   - 停止生成会取消待审批动作，并阻止本轮后续动作进入宿主执行。
 2. **实时执行状态内嵌回显**：
-   - 自动写盘成功后实时在卡片顶部呈现 `✨ 成功将代码落地写入至: xxx (xxx 字节)`；
-   - 终端命令自动执行完成后实时展开 `stdout / stderr / Exit Code` 回显。
+   - 文件和终端动作依次显示 `等待审批`、`正在执行`、`已执行`、`执行失败` 或 `已拒绝`；
+   - 失败命令支持查看受限长度的 stdout、stderr 与 Exit Code，执行结果自动进入下一轮模型上下文。
 
 ### 12.19 输入栏精简与移除冗余【智能自决】权限胶囊
 1. **输入工具栏极简规范**：
@@ -1146,12 +1146,12 @@ To github.com:zhangqi77ok-sys/agent-learning.git
 ### 12.21 三态权限策略决策引擎 (逐次审核 / 智能自决 / 风险熔断) 与日志弹窗崩溃修复
 1. **三态权限策略深度联动对话与落地执行 (Three-Tier Permission Decision Engine)**：
    - **`🛡️ 逐次审核 (strict_approval)`**：
-     - 大模型生成的写盘 (`write_file`) 与终端命令 (`run_command`) 绝不自动执行；
-     - 必须停留在界面等待人工审核，点击 `[ 💾 立即写盘应用 ]` / `[ ▶️ 立即在终端运行 ]` 后方可落盘；
+     - 大模型生成的写盘 (`write_file`) 与终端命令 (`run_command`) 均由统一审批弹窗逐项决定；
+     - 代码块只显示 `⏳ 等待审批` 状态，不提供任何直接写盘或直接执行按钮；
      - Prompt 注入指示：“逐次审核模式：开发者要求逐一审核，不可假定命令已自动运行”。
    - **`⚡ 智能自决 (autonomous_agent)`**：
-     - 大模型生成的常规文件写盘与终端命令在回答完毕后全自动写盘和执行；
-     - Prompt 注入指示：“智能自决模式：具备全自主落地执行权，系统自动执行闭环”。
+     - 低风险写盘与终端命令由 Agent Loop 自动执行；任何高风险动作仍需统一审批；
+     - Prompt 注入指示：“智能自决模式：低风险动作自动执行并将结果反馈给模型，高风险动作必须等待审批”。
    - **`⚠️ 风险熔断 (risk_adaptive)`**：
      - 常规安全修改与测试自动执行；
      - 遇到高危操作（如包含 `git push`、`git reset --hard`、`Remove-Item`、删除、修改敏感配置）自动熔断拦截，卡片提示 `⚠️ 高危操作已拦截，需您手动确认执行`；
@@ -1197,7 +1197,7 @@ To github.com:zhangqi77ok-sys/agent-learning.git
 2. **三大权限决策按钮组合 (3-Tier Human-in-the-Loop Action Trio)**：
    - **`[ ▶️ 确认执行 (Allow Once) ]`**（快捷键 `Enter`）：执行当前落地动作，落盘成功后若大模型回答中还有后续动作，**自动流畅切换弹出下一个待确认动作**；
    - **`[ 🛑 不执行 (Reject / Skip) ]`**（快捷键 `Esc`）：跳过本次操作，不写入磁盘，并继续推进会话或切换下一项；
-   - **`[ ⚡ 当前对话所有都执行 (Always Allow in Session) ]`**（快捷键 `Shift+Enter`）：临时为当前会话开启全自主权限，**将当前及后续产生的所有写盘/命令全自动批量执行完毕**，无需用户再次逐个点击！
+   - **`[ ⚡ 记录会话偏好 (Shift+Enter) ]`**：记录当前会话的低风险自动化偏好；严格审核与任何高危动作仍始终逐项审批，不会批量绕过安全策略。
 
 ### 12.27 会话模型选择持久化记忆与全局区块拖拽交互强化 (v1.4.4)
 1. **当前会话模型选择持久化记忆 (Session-Aware Model Persistence)**：
@@ -1210,12 +1210,12 @@ To github.com:zhangqi77ok-sys/agent-learning.git
 ### 12.28 历史消息权限与执行状态免疫隔离 (Historic Message Policy Immunity) (v1.4.5)
 1. **历史消息快照隔离与权限切换免疫 (Historic Message Permission Snapshotting)**：
    - 彻底修复当用户在底部工作台切换权限模式（如切换为逐次审核 / 智能自决）时，历史已经完成的对话消息卡片被动重新渲染、徽标突变以及被动触发写盘状态的问题；
-   - 消息在生成时自动对当时的 `permissionPolicy` 进行快照封装，历史卡片自动处于只读静止状态（`autoExecute: false`），无论后续如何切换全局权限，历史消息状态均 100% 保持稳定独立、绝不发生回溯污染！
+   - 消息在生成时自动对当时的 `permissionPolicy` 与 `actionResults` 进行快照封装，历史卡片自动处于只读静止状态（`executionStatus: idle` 或已记录的终态），无论后续如何切换全局权限，历史消息状态均 100% 保持稳定独立、绝不发生回溯污染！
 
 ### 12.29 人机协同审批弹窗挂载激活与动态连续响应引擎 (v1.4.6)
 1. **人机协同审批弹窗挂载激活 (ActionApprovalModal Engine Active Wiring)**：
    - 彻底修复 `ActionApprovalModal` 在主聊天流树中未挂载渲染的问题；
-   - 当大模型在会话中生成 `write_file` 物理写盘或 `run_command` 终端命令，且处于【逐次审核】或【风险熔断】策略时，屏幕正下方立即高保真弹出悬浮交互审批窗口，支持【执行】、【不执行】与【当前对话所有都执行】，并具备连续队列自动弹出与 Enter/Esc/Shift+Enter 全键盘盲操能力！
+   - 当大模型在会话中生成 `write_file` 物理写盘或 `run_command` 终端命令，且当前策略要求审批时，屏幕正下方立即高保真弹出悬浮交互审批窗口，支持【执行】、【不执行】与会话偏好记录；审批通过或拒绝后，结果由 App Agent Loop 回注下一轮模型上下文，并支持 Enter/Esc/Shift+Enter 全键盘操作。
 
 ### 12.30 全局 React Hook 顶层严谨排序与零崩溃启动保障 (v1.4.7)
 1. **React Hook 顶层顺序重构与零崩溃保障 (Strict React Hooks Ordering)**：
@@ -1226,6 +1226,62 @@ To github.com:zhangqi77ok-sys/agent-learning.git
 1. **模型选择全对象持久化 (Full Model Object Persistence)**：
    - 修复因动态 Provider 返回模型 ID 与静态列表不一致，导致重启后模型回退到默认值的问题；
    - 选择模型时同步序列化完整模型对象 (`codemind_current_model_obj`)，重启时优先反序列化对象匹配，其次 ID 匹配，再次名称模糊匹配，保证 100% 精准复原。
-2. **智能自决模式自动执行引擎修复 (Autonomous Auto-Execution Engine Fix)**：
-   - 修复 `autoExecute` 属性受 `isStreaming` 条件死锁的根因：流式生成中 `isStreaming=true` 时 MarkdownCard 内部 useEffect 等待流结束，但流结束后 `isStreaming=false` 导致 `autoExecute` 也变 `false`，形成执行死锁；
-   - 参考业界标准（Cursor/Windsurf/Claude Code）：在 Act + 智能自决模式下，动作在生成完成后**自动无感执行**，无需用户手动点击任何按钮。
+2. **智能自决模式 Agent Loop 修复 (Autonomous Agent Loop Fix)**：
+   - 移除展示层内的旧自动执行副作用，避免流式状态与渲染状态相互死锁；
+   - 由 App Agent Loop 在模型响应完成后统一解析、授权、执行、观察并回注执行结果；代码块始终仅用于展示。
+
+
+---
+
+## 4.40 Agent Loop 闭环执行规约 (Think → Execute → Observe → Continue)
+
+### 1. 目标与边界
+Act 模式中的工具调用采用单一 Agent Loop 控制器完成“思考 → 执行 → 观察 → 继续”闭环，替代逐个代码块的手动执行入口。系统逐轮接收模型回复，识别 `write_file:<path>` 与 `run_command` 围栏代码块，按权限策略执行并把结构化结果作为下一轮上下文返回模型。模型输出不含可执行动作时，循环以纯文本总结结束。
+
+本阶段不改变 Plan、Minimal、Creator 模式的只读语义；仅 Act 模式能产生并调度动作。默认每个请求最多 10 轮；第 10 轮产生动作后停止继续调度并在对话中明确提示，以防止无限循环。历史消息不会重新执行任何动作。
+
+### 2. 权限与状态体验
+- `autonomous_agent`：低风险动作自动执行，高风险动作始终转入审批；
+- `strict_approval`：每项动作均先显示 `⏳ 等待审批`，会话内任何选择都不跳过后续逐项审核；
+- `risk_adaptive`：低风险动作自动执行，高风险动作逐项审批；
+- “本会话全部允许”仅作为当前审批意图的显式记录；它不绕过严格审核或任何高风险操作。
+
+对话内的动作代码块仅用于展示，保留复制、展开/折叠与文件跳转，不提供写盘、运行或重试按钮。状态徽章按稳定动作标识绑定：`pending`（等待审批）、`executing`（正在执行）、`success`（已执行）、`failed`（执行失败）、`rejected`（已拒绝）、`idle`（普通或历史代码块）。失败动作可展开 stdout/stderr；历史无法对应执行记录时无徽章。
+
+### 3. Agent 与宿主契约
+模型仅可通过下列围栏协议请求动作：
+
+```text
+```write_file:relative/path.ts
+<完整文件内容>
+```
+
+```run_command
+<PowerShell 命令>
+```
+```
+
+控制器向模型返回如下反馈，且反馈仅作为下一轮模型上下文，不作为用户可编辑指令：
+
+```text
+[Tcode Agent 执行引擎反馈]
+✅ write_file:src/example.ts — 写入成功 (123 字节)
+❌ run_command: npm test — 执行失败 (Exit Code: 1)
+  stderr: <截断后的错误输出>
+请根据以上执行结果决定下一步操作。如果所有任务已完成，请总结变更。
+```
+
+解析器必须是执行层和渲染层共用的唯一事实来源，为每个动作生成稳定 `actionId`。宿主执行返回必须携带相同 `actionId`、状态、退出码和受限长度的输出；非零退出码必须表示失败。执行器必须在宿主侧持续实施工作区边界、命令安全策略、超时和审计，前端审批不是安全边界。
+
+### 4. 可验收条件
+1. 智能自决 + Act：创建文件动作自动执行、显示 `✅ 已执行`，并使模型收到写入结果后完成总结；
+2. 逐次审核 + Act：命令动作显示待审批，批准或拒绝后状态和下一轮反馈一致；
+3. 风险熔断：低风险动作自动执行，高风险动作仍要求审批，即使先前选择了会话自动允许；
+4. 纯问答 / 非 Act：不调度动作，单轮纯文本结束；
+5. 上限：第 10 轮后不再发起模型请求，保留已执行状态并给出可恢复提示。
+
+
+### 4.41 Windows 安装包构建与离线探活规约
+1. 每次原型或桌面宿主代码完成后，必须运行 `npm run build:installer`（或 `python build_installer.py`），生成根目录 `dist/CodeMind-Studio-Setup.exe`；历史 `release/` EXE 不可替代当前构建产物。
+2. 构建链路固定为：前端构建 → 前端测试 → PyInstaller 核心宿主（嵌入 `prototype/dist`）→ PyInstaller 单文件安装向导。任一步失败即失败，不得以 Web 静态构建冒充安装包。
+3. 安装后启动程序必须监听 `127.0.0.1:8010`，`GET /health` 返回 200，`GET /` 返回完整 HTML；验证必须在脱离源码目录的安装位置执行。

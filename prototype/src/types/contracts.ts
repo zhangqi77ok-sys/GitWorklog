@@ -96,6 +96,8 @@ export interface ChatMessageTokens {
   totalTokens: number;
 }
 
+export type ActionExecutionStatus = 'idle' | 'pending' | 'executing' | 'success' | 'failed' | 'rejected';
+
 export interface AgentPendingAction {
   id: string;
   type: 'write_file' | 'run_command';
@@ -104,7 +106,19 @@ export interface AgentPendingAction {
   linesCount?: number;
   isHighRisk?: boolean;
   messageId?: string;
-  status: 'pending' | 'executed' | 'rejected';
+  status: ActionExecutionStatus;
+}
+
+// Agent Loop execution result. actionId is the stable link from a rendered action block to its host result.
+export interface ActionResult {
+  actionId: string;
+  type: 'write_file' | 'run_command';
+  target: string;           // file path or first line of command
+  status: ActionExecutionStatus;
+  output?: string;          // stdout for run_command
+  error?: string;           // stderr or error message
+  exitCode?: number;        // for run_command
+  fileSize?: number;        // for write_file
 }
 
 export interface AgentSkillItem {
@@ -294,6 +308,8 @@ export interface ChatMessage {
   tokensDetail?: ChatMessageTokens;
   durationSeconds?: number;
   permissionPolicy?: PermissionPolicy;
+  actionResults?: ActionResult[];     // Agent Loop execution results for action blocks in this message
+  isAgentFeedback?: boolean;          // True for Agent Loop feedback messages (shown as compact system cards)
 }
 
 export interface LiveLogItem {

@@ -279,10 +279,10 @@ export const ActionApprovalModal: React.FC<ActionApprovalModalProps> = ({
               cursor: isExecuting ? 'default' : 'pointer',
               boxShadow: '0 2px 8px rgba(217, 107, 39, 0.12)'
             }}
-            title="将当前会话设为全部自动执行，当前及后续操作全部直接执行 (Shift+Enter)"
+            title="仅允许当前 Agent Loop 中后续低风险操作自动执行；高危操作仍逐项审批 (Shift+Enter)"
           >
             <Zap size={14} color="var(--accent)" />
-            <span>⚡ 当前对话所有都执行 (Shift+↵)</span>
+            <span>⚡ 后续低风险自动执行 (Shift+↵)</span>
           </button>
 
           {/* Allow Once Button (Enter) */}

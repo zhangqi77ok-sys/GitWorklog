@@ -4,6 +4,10 @@ import sys
 import json
 import subprocess
 CREATE_NO_WINDOW = 0x08000000
+APP_NAME = 'CodeMind Studio'
+APP_STORAGE_KEY = 'CodeMind-Studio'
+HOST = '127.0.0.1'
+PORT = 8010
 
 def get_silent_startupinfo():
     if os.name == 'nt':
@@ -65,7 +69,7 @@ from pathlib import Path
 
 def get_storage_dir():
     appdata = os.environ.get('LOCALAPPDATA', os.path.expanduser('~'))
-    base = Path(appdata) / 'Tcode' / 'storage'
+    base = Path(appdata) / APP_STORAGE_KEY / 'storage'
     base.mkdir(parents=True, exist_ok=True)
     return base
 
@@ -149,6 +153,14 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
         
+        if parsed.path == '/health':
+            self.send_response(200)
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({'status': 'ok', 'service': 'codemind-studio'}).encode('utf-8'))
+            return
+
         # 1. Native Folder Picker
         if parsed.path == '/api/fs/pick_folder':
             folder_path = pick_folder_native()
@@ -601,22 +613,22 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
             
         return super().do_POST()
 
-def start_local_server(port=49152):
-    while True:
-        try:
-            httpd = socketserver.TCPServer(("127.0.0.1", port), QuietHandler)
-            t = threading.Thread(target=httpd.serve_forever, daemon=True)
-            t.start()
-            return port
-        except Exception:
-            port += 1
+def start_local_server(port=PORT):
+    try:
+        httpd = socketserver.TCPServer((HOST, port), QuietHandler)
+    except OSError as error:
+        raise RuntimeError(f'无法绑定 {HOST}:{port}，请释放端口后重试') from error
+
+    t = threading.Thread(target=httpd.serve_forever, daemon=True)
+    t.start()
+    return port
 
 if __name__ == '__main__':
     port = start_local_server()
     url = f"http://127.0.0.1:{port}/"
     
     window = webview.create_window(
-        title="Tcode - Enterprise AI Agentic IDE",
+        title=f"{APP_NAME} - Enterprise AI Agentic IDE",
         url=url,
         width=1440,
         height=900,
@@ -628,6 +640,6 @@ if __name__ == '__main__':
     )
     global_window = window
     appdata = os.environ.get('LOCALAPPDATA', os.path.expanduser('~'))
-    webview_data = os.path.join(appdata, 'Tcode', 'webview_profile')
+    webview_data = os.path.join(appdata, APP_STORAGE_KEY, 'webview_profile')
     os.makedirs(webview_data, exist_ok=True)
     webview.start(debug=False, storage_path=webview_data, private_mode=False)

@@ -1,50 +1,97 @@
-import React, { useState, useEffect } from 'react';
-import { Copy, Check, Terminal, Code2, FileCode, Play, Save, CheckCircle2, AlertCircle, RefreshCw, Shield, AlertTriangle, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react';
-import { PermissionPolicy } from '../types/contracts';
+import React, { useState } from 'react';
+import { Copy, Check, Terminal, Code2, FileCode, ChevronDown, ChevronUp, ExternalLink, CheckCircle2, AlertCircle, XCircle, Loader2, Clock } from 'lucide-react';
+import { ActionResult } from '../types/contracts';
+import { getActionResultForId, parseAgentActions } from '../services/agentLoop';
 
 interface MarkdownCardProps {
   content: string;
   isStreaming?: boolean;
-  autoExecute?: boolean;
-  permissionPolicy?: PermissionPolicy;
+  actionResults?: ActionResult[];
   onOpenFile?: (filePath: string) => void;
 }
 
 interface CodeBlockCardProps {
   language: string;
   code: string;
-  autoExecute?: boolean;
-  isStreaming?: boolean;
-  permissionPolicy?: PermissionPolicy;
+  executionResult?: ActionResult;
+  executionStatus?: ActionResult['status'];
   onOpenFile?: (filePath: string) => void;
 }
 
+// ── Status Badge Component ──────────────────────────────────
+const StatusBadge: React.FC<{ status?: ActionResult['status'] }> = ({ status }) => {
+  if (!status) return null;
+
+  const styles: Record<string, { bg: string; color: string; icon: React.ReactNode; text: string }> = {
+    pending: {
+      bg: 'rgba(59, 130, 246, 0.2)',
+      color: '#60A5FA',
+      icon: <Clock size={11} style={{ animation: 'pulse 1.25s ease-in-out infinite' }} />,
+      text: '等待审批...'
+    },
+    executing: {
+      bg: 'rgba(234, 179, 8, 0.2)',
+      color: '#FBBF24',
+      icon: <Loader2 size={11} style={{ animation: 'spin 1s linear infinite' }} />,
+      text: '执行中...'
+    },
+    success: {
+      bg: 'rgba(34, 197, 94, 0.18)',
+      color: '#4ADE80',
+      icon: <CheckCircle2 size={11} />,
+      text: '已执行'
+    },
+    failed: {
+      bg: 'rgba(239, 68, 68, 0.18)',
+      color: '#F87171',
+      icon: <AlertCircle size={11} />,
+      text: '执行失败'
+    },
+    rejected: {
+      bg: 'rgba(148, 163, 184, 0.18)',
+      color: '#94A3B8',
+      icon: <XCircle size={11} />,
+      text: '已拒绝'
+    }
+  };
+
+  const s = styles[status];
+  if (!s) return null;
+
+  return (
+    <span style={{
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: '3px',
+      fontSize: '10px',
+      padding: '1px 6px',
+      borderRadius: '3px',
+      background: s.bg,
+      color: s.color,
+      fontWeight: 600,
+      letterSpacing: '0.3px'
+    }}>
+      {s.icon}
+      {s.text}
+    </span>
+  );
+};
+
+// ── CodeBlockCard (Display-Only) ────────────────────────────
 const CodeBlockCard: React.FC<CodeBlockCardProps> = ({
   language,
   code,
-  autoExecute = false,
-  isStreaming = false,
-  permissionPolicy = 'autonomous_agent',
+  executionResult,
+  executionStatus,
   onOpenFile
 }) => {
   const [copied, setCopied] = useState(false);
-  const [isExecuting, setIsExecuting] = useState(false);
-  const [execResult, setExecResult] = useState<{ success: boolean; stdout?: string; stderr?: string; exitCode?: number; error?: string } | null>(null);
-  const [isWritingFile, setIsWritingFile] = useState(false);
-  const [writeResult, setWriteResult] = useState<{ success: boolean; path?: string; size?: number; error?: string } | null>(null);
-  const [hasAutoExecuted, setHasAutoExecuted] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
 
   const cleanLang = (language || '').trim();
   const isWriteFile = cleanLang.startsWith('write_file:') || cleanLang.startsWith('file:') || cleanLang.startsWith('create_file:');
   const targetFilePath = isWriteFile ? cleanLang.replace(/^(write_file:|file:|create_file:)/, '').trim() : '';
-
-  const isCommandLang = ['run_command', 'bash', 'sh', 'powershell', 'pwsh', 'cmd', 'shell', 'zsh', 'terminal'].includes(cleanLang.toLowerCase()) || code.startsWith('git ') || code.startsWith('npm ') || code.startsWith('python ') || code.startsWith('cargo ') || code.startsWith('New-Item') || code.startsWith('Set-Content') || code.includes('Test-Path');
-
-  // Risk Detection for Risk-Adaptive Policy
-  const isHighRisk =
-    /(\b(git\s+push|git\s+reset\s+--hard|git\s+clean|rm\s+-rf|Remove-Item|del\s+\/f|Drop-Table|Format-Volume)\b)/i.test(code) ||
-    (isWriteFile && (targetFilePath.includes('package.json') || targetFilePath.includes('.env') || targetFilePath.includes('.git')));
+  const isCommandLang = parseAgentActions(`\`\`\`${cleanLang}\n${code}\n\`\`\``).some(action => action.type === 'run_command');
 
   const handleCopy = () => {
     navigator.clipboard.writeText(code);
@@ -52,87 +99,9 @@ const CodeBlockCard: React.FC<CodeBlockCardProps> = ({
     setTimeout(() => setCopied(false), 2000);
   };
 
-  // Real 1-Click File Write to Host Disk via /api/fs/write
-  const handleWriteFileToDisk = async () => {
-    if (!targetFilePath || isWritingFile) return;
-    setIsWritingFile(true);
-    setWriteResult(null);
+  const status = executionStatus ?? executionResult?.status;
 
-    try {
-      const res = await fetch('/api/fs/write', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          path: targetFilePath,
-          content: code
-        })
-      });
-      const data = await res.json();
-      if (data.success) {
-        setWriteResult({ success: true, path: data.path, size: data.size });
-      } else {
-        setWriteResult({ success: false, error: data.error || '写入失败' });
-      }
-    } catch (e: any) {
-      setWriteResult({ success: false, error: e.message || '网络连接异常' });
-    } finally {
-      setIsWritingFile(false);
-    }
-  };
-
-  // Real 1-Click Terminal Command Execution on Host via /api/terminal/exec
-  const handleRunCommand = async () => {
-    if (isExecuting) return;
-    setIsExecuting(true);
-    setExecResult(null);
-
-    try {
-      const res = await fetch('/api/terminal/exec', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          command: code
-        })
-      });
-      const data = await res.json();
-      setExecResult(data);
-    } catch (e: any) {
-      setExecResult({
-        success: false,
-        error: e.message || '无法连接宿主执行引擎'
-      });
-    } finally {
-      setIsExecuting(false);
-    }
-  };
-
-  // Permission-Driven Auto Execution Logic:
-  // - strict_approval: NEVER auto execute (requires manual user click)
-  // - autonomous_agent: ALWAYS auto execute when generation ends
-  // - risk_adaptive: AUTO execute low-risk changes; FUSE/INTERCEPT high-risk commands
-  useEffect(() => {
-    if (!autoExecute || isStreaming || hasAutoExecuted || !code || !code.trim()) return;
-
-    if (permissionPolicy === 'strict_approval') {
-      // Manual approval only
-      return;
-    }
-
-    if (permissionPolicy === 'risk_adaptive' && isHighRisk) {
-      // Risk fused - pause and require manual approval
-      return;
-    }
-
-    // Auto execute approved tasks
-    setHasAutoExecuted(true);
-    if (isWriteFile && targetFilePath) {
-      handleWriteFileToDisk();
-    } else if (isCommandLang) {
-      handleRunCommand();
-    }
-  }, [autoExecute, isStreaming, hasAutoExecuted, isWriteFile, isCommandLang, targetFilePath, code, permissionPolicy, isHighRisk]);
-
-  // 1. Specialized Collapsible File Write Card (Default Collapsed)
+  // ─── 1. File Write Card (Collapsible, Display-Only) ───
   if (isWriteFile && targetFilePath) {
     const codeLines = (code || '').split('\n').length;
 
@@ -141,26 +110,26 @@ const CodeBlockCard: React.FC<CodeBlockCardProps> = ({
         margin: '10px 0',
         borderRadius: '8px',
         overflow: 'hidden',
-        border: '1px solid var(--accent)',
+        border: status === 'success' ? '1px solid #22C55E' : status === 'failed' ? '1px solid #EF4444' : '1px solid var(--accent)',
         background: '#0F172A',
         boxShadow: '0 4px 16px rgba(217, 107, 39, 0.12)'
       }}>
-        {/* Header with Save Button, Clickable Path & Expand Toggle */}
+        {/* Header */}
         <div style={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
           padding: '7px 12px',
-          background: 'linear-gradient(90deg, rgba(217, 107, 39, 0.22) 0%, rgba(15, 23, 42, 0.85) 100%)',
+          background: status === 'success'
+            ? 'linear-gradient(90deg, rgba(34, 197, 94, 0.2) 0%, rgba(15, 23, 42, 0.85) 100%)'
+            : 'linear-gradient(90deg, rgba(217, 107, 39, 0.22) 0%, rgba(15, 23, 42, 0.85) 100%)',
           borderBottom: isExpanded ? '1px solid #334155' : 'none',
           fontSize: '11.5px',
           gap: '8px',
           flexWrap: 'wrap'
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
-            <FileCode size={14} color="var(--accent)" style={{ flexShrink: 0 }} />
-            
-            {/* Clickable File Path to Open in Right Workspace */}
+            <FileCode size={14} color={status === 'success' ? '#22C55E' : 'var(--accent)'} style={{ flexShrink: 0 }} />
             <div
               onClick={() => onOpenFile?.(targetFilePath)}
               style={{
@@ -170,49 +139,30 @@ const CodeBlockCard: React.FC<CodeBlockCardProps> = ({
                 gap: '4px',
                 color: '#F8FAFC',
                 fontWeight: 700,
-                textDecoration: 'none',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
                 whiteSpace: 'nowrap'
               }}
               title="点击在右侧代码工作台打开此文件"
             >
-              <span style={{ color: 'var(--accent)' }}>📁 {targetFilePath}</span>
-              <ExternalLink size={11} color="var(--accent)" style={{ opacity: 0.8 }} />
+              <span style={{ color: status === 'success' ? '#22C55E' : 'var(--accent)' }}>📁 {targetFilePath}</span>
+              <ExternalLink size={11} color={status === 'success' ? '#22C55E' : 'var(--accent)'} style={{ opacity: 0.8 }} />
               <span style={{ fontSize: '10px', color: '#94A3B8', fontWeight: 400, marginLeft: '2px' }}>
                 ({codeLines} 行)
               </span>
             </div>
-
-            {isStreaming && permissionPolicy === 'strict_approval' && (
-              <span style={{ fontSize: '9.5px', padding: '1px 5px', borderRadius: '3px', background: 'rgba(100, 116, 139, 0.3)', color: '#CBD5E1', flexShrink: 0 }}>
-                🛡️ 逐次审核
-              </span>
-            )}
-            {isStreaming && permissionPolicy === 'risk_adaptive' && isHighRisk && (
-              <span style={{ fontSize: '9.5px', padding: '1px 5px', borderRadius: '3px', background: 'rgba(239, 68, 68, 0.3)', color: '#FCA5A5', fontWeight: 700, flexShrink: 0 }}>
-                ⚠️ 风险熔断
-              </span>
-            )}
+            <StatusBadge status={status} />
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
-            {/* Expand / Collapse Toggle Button */}
             <button
               onClick={() => setIsExpanded(!isExpanded)}
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '3px',
-                padding: '3px 8px',
-                borderRadius: '4px',
-                background: 'rgba(51, 65, 85, 0.6)',
-                color: '#E2E8F0',
-                border: '1px solid #475569',
-                fontSize: '11px',
-                cursor: 'pointer'
+                display: 'flex', alignItems: 'center', gap: '3px',
+                padding: '3px 8px', borderRadius: '4px',
+                background: 'rgba(51, 65, 85, 0.6)', color: '#E2E8F0',
+                border: '1px solid #475569', fontSize: '11px', cursor: 'pointer'
               }}
-              title={isExpanded ? '折叠代码预览' : '展开代码预览'}
             >
               {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
               <span>{isExpanded ? '折叠代码' : '展开代码'}</span>
@@ -221,77 +171,45 @@ const CodeBlockCard: React.FC<CodeBlockCardProps> = ({
             <button
               onClick={handleCopy}
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px',
-                padding: '3px 8px',
-                borderRadius: '4px',
+                display: 'flex', alignItems: 'center', gap: '4px',
+                padding: '3px 8px', borderRadius: '4px',
                 background: copied ? '#15803D' : '#334155',
                 color: copied ? '#DCFCE7' : '#F1F5F9',
-                border: 'none',
-                fontSize: '11px',
-                cursor: 'pointer'
+                border: 'none', fontSize: '11px', cursor: 'pointer'
               }}
             >
               {copied ? <Check size={12} /> : <Copy size={12} />}
               <span>{copied ? '已复制' : '复制'}</span>
             </button>
-
-            <button
-              onClick={handleWriteFileToDisk}
-              disabled={isWritingFile}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px',
-                padding: '3px 10px',
-                borderRadius: '4px',
-                background: writeResult?.success ? '#16A34A' : 'var(--accent)',
-                color: '#FFF',
-                border: 'none',
-                fontSize: '11px',
-                fontWeight: 700,
-                cursor: isWritingFile ? 'default' : 'pointer',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.2)'
-              }}
-            >
-              {isWritingFile ? <RefreshCw size={12} className="animate-spin" /> : writeResult?.success ? <CheckCircle2 size={12} /> : <Save size={12} />}
-              <span>{isWritingFile ? '正在写盘...' : writeResult?.success ? '✓ 已写入本地' : '💾 立即写盘应用'}</span>
-            </button>
           </div>
         </div>
 
-        {/* Status Notification */}
-        {writeResult && (
+        {/* Execution result notification */}
+        {executionResult && (executionResult.status === 'success' || executionResult.status === 'failed') && (
           <div style={{
             padding: '6px 12px',
-            background: writeResult.success ? 'rgba(22, 163, 74, 0.15)' : 'rgba(220, 38, 38, 0.15)',
+            background: executionResult.status === 'success' ? 'rgba(22, 163, 74, 0.15)' : 'rgba(220, 38, 38, 0.15)',
             borderBottom: isExpanded ? '1px solid #334155' : 'none',
             fontSize: '11px',
-            color: writeResult.success ? '#4ADE80' : '#F87171',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px'
+            color: executionResult.status === 'success' ? '#4ADE80' : '#F87171',
+            display: 'flex', alignItems: 'center', gap: '6px'
           }}>
-            {writeResult.success ? <CheckCircle2 size={13} /> : <AlertCircle size={13} />}
-            <span>{writeResult.success ? `✨ 成功将代码落地写入至: ${writeResult.path} (${writeResult.size} 字节)` : `❌ 写入失败: ${writeResult.error}`}</span>
+            {executionResult.status === 'success' ? <CheckCircle2 size={13} /> : <AlertCircle size={13} />}
+            <span>
+              {executionResult.status === 'success'
+                ? `✨ 写入成功 → ${targetFilePath} (${executionResult.fileSize || '?'} 字节)`
+                : `❌ 写入失败: ${executionResult.error}`}
+            </span>
           </div>
         )}
 
-        {/* Code Content (Rendered only when isExpanded = true) */}
+        {/* Code content (collapsed by default) */}
         {isExpanded && (
           <pre style={{
-            margin: 0,
-            padding: '12px 14px',
-            overflowX: 'auto',
-            maxHeight: '480px',
-            fontSize: '12px',
-            lineHeight: 1.6,
+            margin: 0, padding: '12px 14px', overflowX: 'auto', maxHeight: '480px',
+            fontSize: '12px', lineHeight: 1.6,
             fontFamily: 'Consolas, "Fira Code", Monaco, monospace',
-            color: '#F8FAFC',
-            background: '#0B1120',
-            whiteSpace: 'pre',
-            wordBreak: 'normal'
+            color: '#F8FAFC', background: '#0B1120', whiteSpace: 'pre', wordBreak: 'normal'
           }}>
             <code>{code}</code>
           </pre>
@@ -300,111 +218,63 @@ const CodeBlockCard: React.FC<CodeBlockCardProps> = ({
     );
   }
 
-  // 2. Standard or Command Code Card with Permission Policy Guard
+  // ─── 2. Command / Standard Code Block (Display-Only) ───
+  const isAction = isCommandLang;
+
   return (
     <div style={{
       margin: '12px 0',
       borderRadius: '8px',
       overflow: 'hidden',
-      border: '1px solid #334155',
+      border: status === 'success' ? '1px solid #22C55E' : status === 'failed' ? '1px solid #EF4444' : '1px solid #334155',
       background: '#0F172A',
       boxShadow: '0 4px 14px rgba(0, 0, 0, 0.25)'
     }}>
       {/* Header */}
       <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: '6px 12px',
-        background: '#1E293B',
+        background: status === 'success' ? 'rgba(34, 197, 94, 0.1)' : '#1E293B',
         borderBottom: '1px solid #334155',
-        fontSize: '11px',
-        color: '#94A3B8'
+        fontSize: '11px', color: '#94A3B8'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600 }}>
           {isCommandLang ? <Terminal size={13} color="#38BDF8" /> : <Code2 size={13} color="#F59E0B" />}
           <span style={{ textTransform: 'uppercase', letterSpacing: '0.5px', color: '#E2E8F0' }}>
             {cleanLang || (isCommandLang ? 'POWERSHELL' : 'PLAINTEXT')}
           </span>
-          {isCommandLang && permissionPolicy === 'strict_approval' && (
-            <span style={{ fontSize: '9.5px', padding: '1px 5px', borderRadius: '3px', background: 'rgba(100, 116, 139, 0.3)', color: '#CBD5E1' }}>
-              🛡️ 逐次审核
-            </span>
-          )}
-          {isCommandLang && permissionPolicy === 'risk_adaptive' && isHighRisk && (
-            <span style={{ fontSize: '9.5px', padding: '1px 5px', borderRadius: '3px', background: 'rgba(239, 68, 68, 0.3)', color: '#FCA5A5', fontWeight: 700 }}>
-              ⚠️ 高危操作已拦截
-            </span>
-          )}
+          {isAction && <StatusBadge status={status} />}
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
           <button
             onClick={handleCopy}
             style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-              padding: '3px 8px',
-              borderRadius: '4px',
+              display: 'flex', alignItems: 'center', gap: '4px',
+              padding: '3px 8px', borderRadius: '4px',
               background: copied ? '#15803D' : '#334155',
               color: copied ? '#DCFCE7' : '#F1F5F9',
-              border: 'none',
-              fontSize: '11px',
-              cursor: 'pointer',
-              transition: 'all 0.15s ease'
+              border: 'none', fontSize: '11px', cursor: 'pointer'
             }}
-            title="复制代码内容"
           >
             {copied ? <Check size={12} /> : <Copy size={12} />}
             <span>{copied ? '已复制' : '复制'}</span>
           </button>
-
-          {isCommandLang && (
-            <button
-              onClick={handleRunCommand}
-              disabled={isExecuting}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px',
-                padding: '3px 10px',
-                borderRadius: '4px',
-                background: execResult?.success ? '#16A34A' : (isHighRisk && permissionPolicy === 'risk_adaptive' ? '#DC2626' : '#0284C7'),
-                color: '#FFF',
-                border: 'none',
-                fontSize: '11px',
-                fontWeight: 700,
-                cursor: isExecuting ? 'default' : 'pointer',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.2)'
-              }}
-              title="直接在宿主系统 PowerShell 终端执行此脚本"
-            >
-              {isExecuting ? <RefreshCw size={12} className="animate-spin" /> : <Play size={12} />}
-              <span>{isExecuting ? '执行中...' : execResult?.success ? '✓ 重新执行' : (isHighRisk && permissionPolicy === 'risk_adaptive' ? '⚠️ 人工确认执行' : '▶️ 立即在宿主终端执行')}</span>
-            </button>
-          )}
         </div>
       </div>
 
       {/* Code Body */}
       <pre style={{
-        margin: 0,
-        padding: '12px 14px',
-        overflowX: 'auto',
-        fontSize: '12px',
-        lineHeight: 1.6,
+        margin: 0, padding: '12px 14px', overflowX: 'auto',
+        fontSize: '12px', lineHeight: 1.6,
         fontFamily: 'Consolas, "Fira Code", Monaco, "Courier New", monospace',
-        color: '#F8FAFC',
-        background: '#0B1120',
-        whiteSpace: 'pre',
-        wordBreak: 'normal'
+        color: '#F8FAFC', background: '#0B1120', whiteSpace: 'pre', wordBreak: 'normal'
       }}>
         <code>{code}</code>
       </pre>
 
-      {/* Inline Execution Output Log */}
-      {execResult && (
+      {/* Inline Execution Output (from Agent Loop results) */}
+      {executionResult && (executionResult.status === 'success' || executionResult.status === 'failed') && isAction && (
         <div style={{
           borderTop: '1px solid #334155',
           background: '#030712',
@@ -414,37 +284,27 @@ const CodeBlockCard: React.FC<CodeBlockCardProps> = ({
           color: '#E5E7EB'
         }}>
           <div style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
             marginBottom: '4px',
-            color: execResult.success ? '#4ADE80' : '#F87171',
+            color: executionResult.status === 'success' ? '#4ADE80' : '#F87171',
             fontWeight: 700
           }}>
-            <span>{execResult.success ? `✓ 执行完成 (Exit Code: ${execResult.exitCode ?? 0})` : `❌ 执行失败 (Exit Code: ${execResult.exitCode ?? 1})`}</span>
-            <button
-              onClick={() => setExecResult(null)}
-              style={{ background: 'transparent', border: 'none', color: '#9CA3AF', cursor: 'pointer', fontSize: '10px' }}
-            >
-              关闭输出
-            </button>
+            <span>
+              {executionResult.status === 'success'
+                ? `✓ 执行完成 (Exit Code: ${executionResult.exitCode ?? 0})`
+                : `❌ 执行失败 (Exit Code: ${executionResult.exitCode ?? 1})`}
+            </span>
           </div>
 
-          {execResult.stdout && (
+          {executionResult.output && (
             <div style={{ color: '#A7F3D0', whiteSpace: 'pre-wrap', maxHeight: '180px', overflowY: 'auto' }}>
-              {execResult.stdout}
+              {executionResult.output}
             </div>
           )}
 
-          {execResult.stderr && (
+          {executionResult.error && (
             <div style={{ color: '#FCA5A5', whiteSpace: 'pre-wrap', maxHeight: '120px', overflowY: 'auto', marginTop: '4px' }}>
-              {execResult.stderr}
-            </div>
-          )}
-
-          {execResult.error && (
-            <div style={{ color: '#F87171', marginTop: '4px' }}>
-              {execResult.error}
+              {executionResult.error}
             </div>
           )}
         </div>
@@ -453,11 +313,11 @@ const CodeBlockCard: React.FC<CodeBlockCardProps> = ({
   );
 };
 
+// ── MarkdownCard Main Component ─────────────────────────────
 export const MarkdownCard: React.FC<MarkdownCardProps> = ({
   content,
   isStreaming,
-  autoExecute,
-  permissionPolicy = 'autonomous_agent',
+  actionResults = [],
   onOpenFile
 }) => {
   if (!content) return null;
@@ -475,22 +335,13 @@ export const MarkdownCard: React.FC<MarkdownCardProps> = ({
 
     if (trimmed.startsWith('```')) {
       if (inCode) {
-        // End of code block
-        blocks.push({
-          type: 'code',
-          language: codeLang,
-          content: currentBlock.join('\n')
-        });
+        blocks.push({ type: 'code', language: codeLang, content: currentBlock.join('\n') });
         currentBlock = [];
         inCode = false;
         codeLang = '';
       } else {
-        // Start of code block
         if (currentBlock.length > 0) {
-          blocks.push({
-            type: 'text',
-            content: currentBlock.join('\n')
-          });
+          blocks.push({ type: 'text', content: currentBlock.join('\n') });
           currentBlock = [];
         }
         inCode = true;
@@ -501,21 +352,17 @@ export const MarkdownCard: React.FC<MarkdownCardProps> = ({
     }
   }
 
-  // Flush remaining block
   if (currentBlock.length > 0) {
     if (inCode) {
-      blocks.push({
-        type: 'code',
-        language: codeLang,
-        content: currentBlock.join('\n')
-      });
+      blocks.push({ type: 'code', language: codeLang, content: currentBlock.join('\n') });
     } else {
-      blocks.push({
-        type: 'text',
-        content: currentBlock.join('\n')
-      });
+      blocks.push({ type: 'text', content: currentBlock.join('\n') });
     }
   }
+
+  // Action blocks share the same parser as the execution controller, so display and execution cannot drift.
+  const parsedActions = parseAgentActions(content);
+  let actionIndex = 0;
 
   const renderInlineText = (text: string) => {
     const parts: React.ReactNode[] = [];
@@ -612,7 +459,6 @@ export const MarkdownCard: React.FC<MarkdownCardProps> = ({
         continue;
       }
 
-      // Headers
       if (trimmed.startsWith('### ')) {
         flushList();
         elements.push(
@@ -634,25 +480,19 @@ export const MarkdownCard: React.FC<MarkdownCardProps> = ({
             {renderInlineText(trimmed.slice(2))}
           </h1>
         );
-      }
-      // Unordered list
-      else if (trimmed.startsWith('- ') || trimmed.startsWith('* ') || trimmed.startsWith('● ')) {
+      } else if (trimmed.startsWith('- ') || trimmed.startsWith('* ') || trimmed.startsWith('● ')) {
         if (!listBuffer || listBuffer.type !== 'ul') {
           flushList();
           listBuffer = { type: 'ul', items: [] };
         }
         listBuffer.items.push(trimmed.replace(/^[-*●]\s+/, ''));
-      }
-      // Ordered list
-      else if (/^\d+\.\s+/.test(trimmed)) {
+      } else if (/^\d+\.\s+/.test(trimmed)) {
         if (!listBuffer || listBuffer.type !== 'ol') {
           flushList();
           listBuffer = { type: 'ol', items: [] };
         }
         listBuffer.items.push(trimmed.replace(/^\d+\.\s+/, ''));
-      }
-      // Normal paragraph
-      else {
+      } else {
         flushList();
         elements.push(
           <p key={i} style={{ margin: '4px 0', lineHeight: '1.6' }}>
@@ -670,14 +510,18 @@ export const MarkdownCard: React.FC<MarkdownCardProps> = ({
     <div style={{ fontSize: '12px', lineHeight: 1.6, color: 'var(--text-primary)' }}>
       {blocks.map((b, idx) => {
         if (b.type === 'code') {
+          const lang = (b.language || '').trim();
+          const blockAction = parseAgentActions(`\`\`\`${lang}\n${b.content}\n\`\`\``)[0];
+          const action = blockAction ? parsedActions[actionIndex++] : undefined;
+          const result = action ? getActionResultForId(action.id, actionResults) : undefined;
+
           return (
             <CodeBlockCard
               key={idx}
               language={b.language || ''}
               code={b.content}
-              autoExecute={autoExecute}
-              isStreaming={isStreaming}
-              permissionPolicy={permissionPolicy}
+              executionResult={result}
+              executionStatus={result?.status || 'idle'}
               onOpenFile={onOpenFile}
             />
           );

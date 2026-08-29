@@ -162,3 +162,58 @@ sequenceDiagram
                                              ├── 支持 [🗑️ 撤回] (注销移出队列)
                                              └── 当前回答完成后自动 FIFO 顺延调用
 ```
+
+
+---
+
+## 9. Agent Loop Controller：可观察的 Think → Execute → Observe → Continue
+
+`App` 是当前原型的编排器；`ChatColumn` 仅负责承载审批模态框与渲染消息，`MarkdownCard` 是无副作用展示层。解析、授权判定、执行反馈和结果查找收敛在 `src/services/agentLoop.ts`，防止“视觉上是动作而执行器不识别”的双重语义。
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant Controller as App AgentLoop Controller
+    participant Model as LLM SSE
+    participant Approval as Approval Modal
+    participant Host as Host Executor
+    participant View as MarkdownCard
+
+    User->>Controller: Act prompt
+    loop 至无动作或达到 10 轮
+        Controller->>Model: messages + 前轮执行反馈
+        Model-->>Controller: 流式内容
+        Controller->>Controller: parseAgentActions(content)
+        Controller->>View: actionId + pending/executing 状态
+        alt 需要审核
+            Controller->>Approval: Promise<ActionApprovalDecision>
+            Approval-->>Controller: allow / reject / allow-all
+        end
+        Controller->>Host: write / command
+        Host-->>Controller: ActionResult(actionId, status, output)
+        Controller->>View: 按 actionId 更新状态
+        Controller->>Model: [Tcode 执行引擎反馈]
+    end
+```
+
+### 9.1 前端契约
+- `AgentAction`：`id`、`type`、`target`、`code`、`isHighRisk`；由围栏块顺序和内容生成确定性标识；
+- `ActionResult`：追加 `actionId`，与动作一对一关联，状态覆盖 `pending | executing | success | failed | rejected`；
+- `shouldRequireActionApproval(policy, action, allowLowRiskInSession)`：唯一权限判定入口；`allow-all` 不绕过高风险审核；
+- `formatExecutionFeedback(actions, results)`：仅输出执行事实，截断宿主输出，供下一轮决策；
+- SSE 流使用显式完成标识与尾缓冲解析；对话历史由局部快照维护，禁止借 React `setState` 回读历史。
+
+### 9.2 组件边界
+`ActionApprovalModal` 只产生决策，不执行宿主请求；`App` 将其转化为 Promise 并串行执行动作。`MarkdownCard` 通过 `actionId` 查找结果，只提供复制、代码展开和文件定位。`ChatColumn` 不维护第二套动作队列、自动授权或执行回调。
+
+### 9.3 测试治具
+纯函数测试覆盖围栏解析、多动作稳定标识、策略、反馈及状态匹配；其中必须包含空/未闭合代码块、拒绝、失败、风险自适应和会话授权不跨越高风险动作。SSE/宿主集成测试属于下一阶段，须以 mock stream 覆盖 `[DONE]` 和尾缓冲行为。
+
+
+---
+
+## 10. Windows Installer Pipeline（当前 PyInstaller 宿主）
+
+构建入口为根 `build_installer.py` 与 `npm run build:installer`。该入口先构建和验证 `prototype`，再将 `prototype/dist` 作为数据资源嵌入窗口化 Python 宿主 `CodeMind-Studio.exe`，最后将核心 EXE 嵌入窗口化单文件安装向导 `CodeMind-Studio-Setup.exe`。
+
+安装后宿主固定监听 `127.0.0.1:8010`：`/health` 供进程探活，`/` 提供已嵌入的静态前端。构建和验证都使用当前源码，绝不拷贝 `release/` 内的历史二进制。Tauri 链路保留为后续主轴迁移目标；在其完整构建脚本落地前，当前受支持的 Windows 安装器采用这一可复现的 Python 宿主链路。

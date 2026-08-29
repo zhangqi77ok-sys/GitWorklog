@@ -1,1 +1,1 @@
-{"name":"agent-learning","private":true,"workspaces":["prototype","src-desktop"],"scripts":{"sync:check":"node scripts/check-sync.js"}}
+{"name":"agent-learning","private":true,"workspaces":["prototype","src-desktop"],"scripts":{"sync:check":"node scripts/check-sync.js","build:installer":"python build_installer.py"}}

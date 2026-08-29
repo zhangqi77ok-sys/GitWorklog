@@ -45,8 +45,17 @@ import {
   MentionContextItem,
   LiveLogItem,
   appendLiveLog,
-  loadSavedAccentColor
+  loadSavedAccentColor,
+  AgentPendingAction,
+  ActionResult
 } from './types/contracts';
+import {
+  AgentAction,
+  createActionResult,
+  formatExecutionFeedback as formatAgentExecutionFeedback,
+  parseAgentActions,
+  shouldRequireActionApproval
+} from './services/agentLoop';
 
 export const App: React.FC = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -174,6 +183,12 @@ export const App: React.FC = () => {
   });
   const [permissionPolicy, setPermissionPolicy] = useState<PermissionPolicy>('autonomous_agent');
 
+  // Agent Loop: Promise-based approval modal state
+  const [pendingApproval, setPendingApproval] = useState<{
+    action: AgentPendingAction;
+    resolve: (decision: 'allow_once' | 'reject_once' | 'allow_all_session') => void;
+  } | null>(null);
+
   // Resizable Layout & Collapse States
   const [leftPanelWidth, setLeftPanelWidth] = useState<number>(260);
   const [isLeftDrawerCollapsed, setIsLeftDrawerCollapsed] = useState<boolean>(false);
@@ -247,11 +262,17 @@ export const App: React.FC = () => {
   promptQueueRef.current = promptQueue;
 
   const abortControllerRef = React.useRef<AbortController | null>(null);
+  const agentLoopCancelledRef = React.useRef(false);
 
   const handleStopGeneration = () => {
+    agentLoopCancelledRef.current = true;
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
+    }
+    if (pendingApproval) {
+      pendingApproval.resolve('reject_once');
+      setPendingApproval(null);
     }
     setIsStreaming(false);
   };
@@ -562,12 +583,88 @@ export const App: React.FC = () => {
     }, 150);
   };
 
+
+  // ══════════════════════════════════════════════════════════════════
+  // Agent Loop Engine — Think → Execute → Observe → Continue
+  // ══════════════════════════════════════════════════════════════════
+
+  const parseActionsFromContent = parseAgentActions;
+
+  // Execute one parsed action on the host. A non-zero command exit code is always failure.
+  const executeActionOnHost = async (action: AgentAction): Promise<ActionResult> => {
+    if (action.type === 'write_file') {
+      try {
+        const res = await fetch('/api/fs/write', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: action.target, content: action.code })
+        });
+        const data = await res.json();
+        return data.success
+          ? createActionResult(action, 'success', { fileSize: data.size })
+          : createActionResult(action, 'failed', { error: data.error || '写入失败' });
+      } catch (e: any) {
+        return createActionResult(action, 'failed', { error: e.message || '网络连接异常' });
+      }
+    }
+
+    try {
+      const res = await fetch('/api/terminal/exec', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ command: action.code })
+      });
+      const data = await res.json();
+      const succeeded = Boolean(data.success) && (typeof data.exitCode !== 'number' || data.exitCode === 0);
+      return createActionResult(action, succeeded ? 'success' : 'failed', {
+        output: data.stdout,
+        error: data.stderr || data.error,
+        exitCode: data.exitCode
+      });
+    } catch (e: any) {
+      return createActionResult(action, 'failed', { error: e.message || '无法连接宿主执行引擎' });
+    }
+  };
+
+  const formatExecutionFeedback = formatAgentExecutionFeedback;
+
+  // The modal provides a decision only; execution remains owned by this controller.
+  const requestApproval = (action: AgentAction): Promise<'allow_once' | 'reject_once' | 'allow_all_session'> => {
+    return new Promise((resolve) => {
+      setPendingApproval({
+        action: {
+          id: action.id,
+          type: action.type,
+          target: action.target,
+          code: action.code,
+          isHighRisk: action.isHighRisk,
+          status: 'pending'
+        },
+        resolve
+      });
+    });
+  };
+
+  const handleApprovalDecision = (decision: 'allow_once' | 'reject_once' | 'allow_all_session') => {
+    if (pendingApproval) {
+      pendingApproval.resolve(decision);
+      setPendingApproval(null);
+    }
+  };
+
+
   const handleSendMessage = async (text: string, mentions?: MentionContextItem[]) => {
     if (!text.trim()) return;
     if (isStreaming) {
       handleEnqueuePrompt(text, mentions);
       return;
     }
+
+    const MAX_AGENT_LOOPS = 10;
+    let loopCount = 0;
+    let completedWithText = false;
+    agentLoopCancelledRef.current = false;
+    let allowLowRiskInSession = false;
 
     const userMsg: ChatMessage = {
       id: `msg-${Date.now()}`,
@@ -577,46 +674,22 @@ export const App: React.FC = () => {
       permissionPolicy
     };
 
-    // Snapshot active model & permission policy at call initiation to guarantee total immunity for historic messages
     const streamingModel = { ...currentModel };
-    const assistantId = `reply-${Date.now()}`;
-    const assistantMsg: ChatMessage = {
-      id: assistantId,
-      role: 'assistant',
-      content: '',
-      timestamp: Date.now(),
-      auditTag: `⚡ ${streamingModel.name} 真实流式响应`,
-      permissionPolicy
-    };
+    const activeSession = sessions.find(s => s.id === currentSessionId) || sessions[0];
 
-    // Append both to current session in memory
+    // Keep a synchronous loop-local history; React state is display/persistence only.
+    const conversationSnapshot: ChatMessage[] = [...(sessionMessages[currentSessionId] || []), userMsg];
     setSessionMessages(prev => ({
       ...prev,
-      [currentSessionId]: [...(prev[currentSessionId] || []), userMsg, assistantMsg]
+      [currentSessionId]: [...(prev[currentSessionId] || []), userMsg]
     }));
     setIsStreaming(true);
 
     const callStartTime = performance.now();
+
+    // Build contextualized user content (mentions + auto-inspection)
+    let contextualizedUserContent = text;
     try {
-      addLog('INFO', 'GatewayBus', `[发送指令] 正在调度模型 [${streamingModel.name}] (${streamingModel.id})`);
-      const savedProviders = loadSavedProviders();
-      // Intelligent Provider matching for selected model
-      let provider = savedProviders.find(p => p.enabled && p.models?.some(m => m.id === streamingModel.id));
-      if (!provider && (streamingModel.id.includes('mimo') || streamingModel.name.includes('OpenCode') || streamingModel.id.includes('free'))) {
-        provider = savedProviders.find(p => p.id === 'provider-opencode');
-      }
-      if (!provider) {
-        provider = savedProviders.find(p => p.enabled && p.apiKey && p.baseUrl) || savedProviders[0];
-      }
-
-      let baseUrl = provider?.baseUrl?.trim() || 'https://opencode.ai/zen/v1';
-      if (baseUrl.endsWith('/')) baseUrl = baseUrl.slice(0, -1);
-      const apiKey = provider?.apiKey?.trim() || 'sk-REVOKED_PLACEHOLDER';
-      // Use the exact model ID selected by user without hardcoding
-      const targetModel = streamingModel.id;
-
-      // Pack Agent Workspace & Mentioned Files Context
-      let contextualizedUserContent = text;
       if (mentions && mentions.length > 0) {
         let mentionContextStr = '';
         for (const item of mentions) {
@@ -643,26 +716,21 @@ export const App: React.FC = () => {
         }
       }
 
-      // Auto Project Context Inspection: Read real files from disk if user asks about project/architecture
+      // Auto Project Context Inspection
       const isAskingAboutProject = /项目|工程|架构|代码|优化|审查|文件|分析/i.test(text);
       let autoInspectedFiles = '';
       if (isAskingAboutProject && activeSession.projectPath) {
         try {
-          // 1. Fetch file tree
           const treeRes = await fetch(`/api/fs/tree?path=${encodeURIComponent(activeSession.projectPath)}`);
           const treeData = await treeRes.json();
           if (treeData.success && treeData.tree) {
             autoInspectedFiles += `\n[工程实时目录拓扑]:\n${JSON.stringify(treeData.tree.map((n: any) => ({ name: n.name, type: n.type })), null, 2)}`;
           }
-
-          // 2. Fetch package.json if available
           const pkgRes = await fetch(`/api/fs/read?path=${encodeURIComponent(activeSession.projectPath + '/package.json')}`);
           const pkgData = await pkgRes.json();
           if (pkgData.success && pkgData.content) {
             autoInspectedFiles += `\n\n[工程核心配置 package.json]:\n\`\`\`json\n${pkgData.content.slice(0, 3000)}\n\`\`\``;
           }
-
-          // 3. Fetch README.md if available
           const readmeRes = await fetch(`/api/fs/read?path=${encodeURIComponent(activeSession.projectPath + '/README.md')}`);
           const readmeData = await readmeRes.json();
           if (readmeData.success && readmeData.content) {
@@ -670,8 +738,12 @@ export const App: React.FC = () => {
           }
         } catch (e) {}
       }
+      if (autoInspectedFiles && !contextualizedUserContent.includes('--- 上下文工程数据 ---')) {
+        contextualizedUserContent = `${text}\n\n--- 自动探查的本地工程上下文 ---${autoInspectedFiles}`;
+      }
+    } catch (e) {}
 
-      const systemPrompt = `你是 Tcode (AI Agentic Desktop IDE) 接入的生产级自主 AI Agent 架构师。
+    const systemPrompt = `你是 Tcode (AI Agentic Desktop IDE) 接入的生产级自主 AI Agent 架构师。
 ${activeSession.projectPath ? `【本地物理工程已挂载】
 - 项目名称: ${activeSession.projectName}
 - 物理路径: ${activeSession.projectPath}
@@ -679,214 +751,345 @@ ${activeSession.projectPath ? `【本地物理工程已挂载】
 Tcode 已通过宿主磁盘与终端桥接将工程提供给你。` : '当前处于全局自由会话模式。'}
 
 【当前工作模式】: ${workMode === 'act' ? 'Act 落地模式 (自主执行模式)' : 'Plan 规划模式'}
-【当前权限策略 (Permission Policy)】: ${
-  permissionPolicy === 'strict_approval'
-    ? '🛡️ 逐次审核模式：开发者要求逐一审核。你输出的 write_file 与 run_command 必须等待开发者手动点击确认，不可假定已自动执行。'
-    : permissionPolicy === 'autonomous_agent'
-    ? '⚡ 智能自决模式：你具备全自主落地的执行权，你的 write_file 与 run_command 将由系统在本地自动执行落盘，请直接生成修改方案并自主闭环。'
-    : '⚠️ 风险熔断模式：常规文件变更与测试命令将自动执行；但涉及删除 (rm/del)、强制重置 (git reset --hard)、或远端推送 (git push) 等高危动作系统将触发安全熔断拦截，需开发者二次确认。'
-}
 
-【Tcode 本地文件修改与终端执行工具协议 (Tool Action Protocols)】:
-你深度接入了宿主操作系统的真实文件系统与 PowerShell 终端。
+【Tcode Agent Loop 协议】:
+你是 Tcode Agent Loop 中的 AI 决策核心。你深度接入了宿主操作系统的文件系统与 PowerShell 终端。
 
-🚨【核心铁律：严格根据开发者意图区分“只读咨询/分析”与“物理落地修改”】:
-1. 💡【只读分析与咨询场景】（必须严格遵守）:
-   - 当开发者向你提问、咨询优化建议、探讨方案、代码审查、探讨概念，或询问“有哪些可以优化的/怎么看/分析一下”时：
-   - 你必须且只能输出纯 Markdown 文本、分析论述、架构解释或普通只读代码块供用户预览！
-   - 严禁擅自使用 \`\`\`write_file:... 或 \`\`\`run_command 指令块！严禁在用户未明确要求修改时自作主张创建/修改文件或执行命令！
+1. 每一轮你可以：
+   - 输出 write_file:路径 代码块来修改/创建文件
+   - 输出 run_command 代码块来执行终端命令
+   - 输出纯文本来分析、回复用户
 
-2. ⚡【明确落地与写盘场景】:
-   - 只有当开发者明确发出落地指令（例如：“帮我修改/创建 xxx 文件”、“重构并应用代码”、“运行测试/执行 git commit/push”）时：
-   - 你才可以输出以下结构化动作块，Tcode 宿主执行引擎将为你落地：
+2. Tcode 宿主引擎会自动执行你的 write_file 与 run_command 动作，并将执行结果反馈给你。
+3. 你根据执行结果决定是否需要继续操作（修复错误、运行测试、继续下一步），直到任务完成。
+4. 单次任务最多执行 10 轮；达到上限时停止调度并提示用户检查当前结果。任务完成后，请输出纯文本总结（不要再输出动作块）。
 
-   - 写入或修改文件:
-   \`\`\`write_file:相对路径或绝对路径
-   文件完整内容
-   \`\`\`
+🚨【核心铁律】:
+- 当用户只是在提问、咨询、分析、讨论时，你只输出纯文本和普通代码块供用户参考！不要输出 write_file/run_command！
+- 只有当用户明确要求你修改代码、创建文件、执行命令时，你才输出 write_file/run_command 动作块。
 
-   - 执行系统终端命令 (PowerShell / Git / npm / cargo 等，注意：Windows 环境下多条命令请分行写或用分号 ';' 分隔，严禁使用 '&&'):
-   \`\`\`run_command
-   具体的终端指令
-   \`\`\`
+文件修改格式：
+\`\`\`write_file:相对路径或绝对路径
+文件完整内容
+\`\`\`
 
-【总结铁律】: 问答/咨询时纯文字分析，绝不输出 write_file/run_command；明确要求修改/执行时才输出 write_file/run_command！`;
+终端命令格式 (Windows PowerShell，多条命令用分号分隔，严禁使用 &&)：
+\`\`\`run_command
+具体的终端指令
+\`\`\``;
 
-      if (autoInspectedFiles && !contextualizedUserContent.includes('--- 上下文工程数据 ---')) {
-        contextualizedUserContent = `${text}\n\n--- 自动探查的本地工程上下文 ---${autoInspectedFiles}`;
-      }
+    try {
+      // ── Agent Loop: Think → Execute → Observe → Continue ──
+      while (loopCount < MAX_AGENT_LOOPS && !agentLoopCancelledRef.current) {
+        loopCount++;
 
-      // Filter clean history without empty placeholders or self
-      const cleanHistory = (sessionMessages[currentSessionId] || [])
-        .filter(m => m.content && m.content.trim() && m.id !== assistantId && m.id !== userMsg.id)
-        .slice(-6)
-        .map(m => ({ role: m.role, content: m.content }));
+        const assistantId = `reply-${Date.now()}-loop${loopCount}`;
+        const assistantMsg: ChatMessage = {
+          id: assistantId,
+          role: 'assistant',
+          content: '',
+          timestamp: Date.now(),
+          auditTag: loopCount === 1 ? `⚡ ${streamingModel.name} 真实流式响应` : `🔄 Agent Loop 第${loopCount}轮`,
+          permissionPolicy
+        };
 
-      const apiMessages = [
-        { role: 'system', content: systemPrompt },
-        ...cleanHistory,
-        { role: 'user', content: contextualizedUserContent }
-      ];
+        conversationSnapshot.push(assistantMsg);
+        setSessionMessages(prev => ({
+          ...prev,
+          [currentSessionId]: [...(prev[currentSessionId] || []), assistantMsg]
+        }));
 
-      const { url: requestUrl, headers: proxyHeaders } = resolveApiEndpoint(`${baseUrl}/chat/completions`);
+        const currentMsgs = conversationSnapshot;
 
-      const controller = new AbortController();
-      abortControllerRef.current = controller;
+        const cleanHistory = currentMsgs
+          .filter(m => m.content && m.content.trim() && m.id !== assistantId)
+          .slice(-12)
+          .map(m => ({
+            role: m.isAgentFeedback ? 'user' : m.role,
+            content: m.id === userMsg.id && loopCount === 1 ? contextualizedUserContent : m.content
+          }));
 
-      const response = await fetch(requestUrl, {
-        method: 'POST',
-        signal: controller.signal,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`,
-          ...proxyHeaders
-        },
-        body: JSON.stringify({
-          model: targetModel,
-          messages: apiMessages,
-          stream: true
-        })
-      });
+        const apiMessages = [
+          { role: 'system', content: systemPrompt },
+          ...cleanHistory
+        ];
 
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
+        // Resolve API endpoint
+        const savedProviders = loadSavedProviders();
+        let provider = savedProviders.find(p => p.enabled && p.models?.some(m => m.id === streamingModel.id));
+        if (!provider && (streamingModel.id.includes('mimo') || streamingModel.name.includes('OpenCode') || streamingModel.id.includes('free'))) {
+          provider = savedProviders.find(p => p.id === 'provider-opencode');
+        }
+        if (!provider) {
+          provider = savedProviders.find(p => p.enabled && p.apiKey && p.baseUrl) || savedProviders[0];
+        }
 
-      const reader = response.body?.getReader();
-      const decoder = new TextDecoder('utf-8');
-      let accumulatedContent = '';
-      let accumulatedThinking = '';
-      let buffer = '';
+        let baseUrl = provider?.baseUrl?.trim() || 'https://opencode.ai/zen/v1';
+        if (baseUrl.endsWith('/')) baseUrl = baseUrl.slice(0, -1);
+        const apiKey = provider?.apiKey?.trim() || 'sk-REVOKED_PLACEHOLDER';
+        const targetModel = streamingModel.id;
 
-      if (reader) {
-        let isFirstChunk = true;
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
+        const { url: requestUrl, headers: proxyHeaders } = resolveApiEndpoint(`${baseUrl}/chat/completions`);
+        const controller = new AbortController();
+        abortControllerRef.current = controller;
 
-          // GatewayBus: Inspect first chunk for upstream plain-text errors (e.g. 'no channel is currently available')
-          if (isFirstChunk && buffer.trim()) {
-            isFirstChunk = false;
-            if (!buffer.includes('data: ') && !buffer.includes('{')) {
-              const upstreamError = buffer.trim();
-              addLog('ERROR', 'GatewayBus', `上游模型网关错误: "${upstreamError}"`);
-              throw new Error(`上游大模型服务商提示: "${upstreamError}"。当前模型通道不可用，请切换至 DeepSeek V4 Flash 等可用模型。`);
+        addLog('INFO', 'AgentLoop', `[Loop #${loopCount}] 正在调度模型 [${streamingModel.name}]`);
+
+        // ── Stream LLM Response ──
+        let accumulatedContent = '';
+        let accumulatedThinking = '';
+
+        const response = await fetch(requestUrl, {
+          method: 'POST',
+          signal: controller.signal,
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`,
+            ...proxyHeaders
+          },
+          body: JSON.stringify({
+            model: targetModel,
+            messages: apiMessages,
+            stream: true
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        const reader = response.body?.getReader();
+        const decoder = new TextDecoder('utf-8');
+        let buffer = '';
+
+        if (reader) {
+          let isFirstChunk = true;
+          let streamFinished = false;
+          while (!streamFinished) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+
+            if (isFirstChunk && buffer.trim()) {
+              isFirstChunk = false;
+              if (!buffer.includes('data: ') && !buffer.includes('{')) {
+                const upstreamError = buffer.trim();
+                addLog('ERROR', 'GatewayBus', `上游模型网关错误: "${upstreamError}"`);
+                throw new Error(`上游大模型服务商提示: "${upstreamError}"。当前模型通道不可用。`);
+              }
             }
-          }
 
-          const lines = buffer.split('\n');
-          buffer = lines.pop() || '';
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
 
-          for (const line of lines) {
-            const trimmed = line.trim();
-            if (trimmed.startsWith('data: ')) {
-              const dataStr = trimmed.slice(6);
-              if (dataStr === '[DONE]') break;
-              try {
-                const parsed = JSON.parse(dataStr);
-                const choice = parsed.choices?.[0];
-                const deltaContent = choice?.delta?.content || '';
-                const deltaReasoning = choice?.delta?.reasoning_content || '';
-
-                if (deltaReasoning) {
-                  accumulatedThinking += deltaReasoning;
+            for (const line of lines) {
+              const trimmed = line.trim();
+              if (trimmed.startsWith('data: ')) {
+                const dataStr = trimmed.slice(6);
+                if (dataStr === '[DONE]') {
+                  streamFinished = true;
+                  break;
                 }
-                if (deltaContent) {
-                  accumulatedContent += deltaContent;
-                }
+                try {
+                  const parsed = JSON.parse(dataStr);
+                  const choice = parsed.choices?.[0];
+                  const deltaContent = choice?.delta?.content || '';
+                  const deltaReasoning = choice?.delta?.reasoning_content || '';
 
-                if (deltaReasoning || deltaContent) {
-                  let currentDisplay = '';
-                  if (accumulatedThinking && !accumulatedContent) {
-                    currentDisplay = `<think>\n${accumulatedThinking}\n</think>\n\n*正在深入推演与分析代码架构...*`;
-                  } else if (accumulatedThinking && accumulatedContent) {
-                    currentDisplay = `<think>\n${accumulatedThinking}\n</think>\n\n${accumulatedContent}`;
-                  } else {
-                    currentDisplay = accumulatedContent;
+                  if (deltaReasoning) accumulatedThinking += deltaReasoning;
+                  if (deltaContent) accumulatedContent += deltaContent;
+
+                  if (deltaReasoning || deltaContent) {
+                    let currentDisplay = '';
+                    if (accumulatedThinking && !accumulatedContent) {
+                      currentDisplay = `<think>\n${accumulatedThinking}\n</think>\n\n*正在深入推演与分析代码架构...*`;
+                    } else if (accumulatedThinking && accumulatedContent) {
+                      currentDisplay = `<think>\n${accumulatedThinking}\n</think>\n\n${accumulatedContent}`;
+                    } else {
+                      currentDisplay = accumulatedContent;
+                    }
+
+                    setSessionMessages(prev => {
+                      const list = prev[currentSessionId] || [];
+                      const updated = list.map(m => m.id === assistantId ? { ...m, content: currentDisplay } : m);
+                      return { ...prev, [currentSessionId]: updated };
+                    });
                   }
-
-                  setSessionMessages(prev => {
-                    const list = prev[currentSessionId] || [];
-                    const updated = list.map(m => m.id === assistantId ? { ...m, content: currentDisplay } : m);
-                    return { ...prev, [currentSessionId]: updated };
-                  });
-                }
-              } catch (e) {}
+                } catch (e) {}
+              }
             }
           }
         }
+
+        // Finalize content
+        let finalContent = '';
+        if (accumulatedThinking && !accumulatedContent) {
+          finalContent = `<think>\n${accumulatedThinking}\n</think>\n\n${accumulatedThinking}`;
+        } else if (accumulatedThinking && accumulatedContent) {
+          finalContent = `<think>\n${accumulatedThinking}\n</think>\n\n${accumulatedContent}`;
+        } else {
+          finalContent = accumulatedContent;
+        }
+        if (!finalContent.trim()) {
+          finalContent = '已完成分析。请继续提出具体指令。';
+        }
+
+        assistantMsg.content = finalContent;
+
+        // ── Parse actions from AI response ──
+        const actions = workMode === 'act' ? parseActionsFromContent(finalContent) : [];
+
+        if (actions.length === 0) {
+          // No actions → pure text reply, Agent Loop ends
+          const durationSec = parseFloat(((performance.now() - callStartTime) / 1000).toFixed(1));
+          const addedPrompt = Math.round(text.length * 0.75);
+          const addedComp = Math.round(finalContent.length * 0.75);
+
+          setSessionMessages(prev => {
+            const list = prev[currentSessionId] || [];
+            const updated = list.map(m => m.id === assistantId ? {
+              ...m,
+              content: finalContent,
+              tokensDetail: { promptTokens: addedPrompt, completionTokens: addedComp, totalTokens: addedPrompt + addedComp },
+              durationSeconds: durationSec
+            } : m);
+            return { ...prev, [currentSessionId]: updated };
+          });
+
+          setTokenStats(prev => ({
+            ...prev,
+            promptTokens: prev.promptTokens + addedPrompt,
+            completionTokens: prev.completionTokens + addedComp,
+            estimatedCostUsd: prev.estimatedCostUsd + ((addedPrompt + addedComp) * 0.0000002)
+          }));
+
+          completedWithText = true;
+          addLog('INFO', 'AgentLoop', `[Loop #${loopCount}] 纯文本回复，Agent Loop 结束 (${durationSec}s)`);
+          break; // Exit Agent Loop
+        }
+
+        // ── Execute actions with permission policy ──
+        addLog('INFO', 'AgentLoop', `[Loop #${loopCount}] 检测到 ${actions.length} 个动作，开始执行...`);
+        const results: ActionResult[] = [];
+        const publishActionResult = (nextResult: ActionResult) => {
+          setSessionMessages(prev => {
+            const list = prev[currentSessionId] || [];
+            const updated = list.map(message => {
+              if (message.id !== assistantId) return message;
+              const actionResults = (message.actionResults || []).filter(result => result.actionId !== nextResult.actionId);
+              return { ...message, content: finalContent, actionResults: [...actionResults, nextResult] };
+            });
+            return { ...prev, [currentSessionId]: updated };
+          });
+        };
+
+        for (const action of actions) {
+          if (agentLoopCancelledRef.current) break;
+          const needsApproval = shouldRequireActionApproval(permissionPolicy, action, allowLowRiskInSession);
+          let result: ActionResult;
+
+          if (needsApproval) {
+            publishActionResult(createActionResult(action, 'pending'));
+            const decision = await requestApproval(action);
+            if (decision === 'allow_all_session') {
+              allowLowRiskInSession = true;
+              publishActionResult(createActionResult(action, 'executing'));
+              result = await executeActionOnHost(action);
+            } else if (decision === 'allow_once') {
+              publishActionResult(createActionResult(action, 'executing'));
+              result = await executeActionOnHost(action);
+            } else {
+              result = createActionResult(action, 'rejected');
+            }
+          } else {
+            publishActionResult(createActionResult(action, 'executing'));
+            result = await executeActionOnHost(action);
+          }
+
+          results.push(result);
+          publishActionResult(result);
+        }
+
+        // Update assistant message with action results
+        setSessionMessages(prev => {
+          const list = prev[currentSessionId] || [];
+          const updated = list.map(m => m.id === assistantId ? {
+            ...m,
+            content: finalContent,
+            actionResults: results
+          } : m);
+          return { ...prev, [currentSessionId]: updated };
+        });
+
+        // Append feedback message for AI
+        const feedbackContent = formatExecutionFeedback(actions, results);
+        const feedbackMsg: ChatMessage = {
+          id: `feedback-${Date.now()}`,
+          role: 'user',
+          content: feedbackContent,
+          timestamp: Date.now(),
+          isAgentFeedback: true,
+          auditTag: `🔄 Agent Loop #${loopCount} 执行反馈`
+        };
+
+        conversationSnapshot.push(feedbackMsg);
+        setSessionMessages(prev => ({
+          ...prev,
+          [currentSessionId]: [...(prev[currentSessionId] || []), feedbackMsg]
+        }));
+
+        addLog('INFO', 'AgentLoop', `[Loop #${loopCount}] 执行完成 (${results.filter(r => r.status === 'success').length}/${results.length} 成功)，继续下一轮...`);
+
+        // Continue loop → AI will see execution results and decide next step
       }
 
-      let finalAccumulated = '';
-      if (accumulatedThinking && !accumulatedContent) {
-        finalAccumulated = `<think>\n${accumulatedThinking}\n</think>\n\n${accumulatedThinking}`;
-      } else if (accumulatedThinking && accumulatedContent) {
-        finalAccumulated = `<think>\n${accumulatedThinking}\n</think>\n\n${accumulatedContent}`;
-      } else {
-        finalAccumulated = accumulatedContent;
+      if (!completedWithText && loopCount >= MAX_AGENT_LOOPS) {
+        const limitMessage: ChatMessage = {
+          id: `loop-limit-${Date.now()}`,
+          role: 'assistant',
+          content: `⚠️ Agent Loop 已达到 ${MAX_AGENT_LOOPS} 轮安全上限，已暂停后续自动调度。请检查当前执行结果后继续。`,
+          timestamp: Date.now(),
+          auditTag: '⚠️ Agent Loop 安全熔断'
+        };
+        setSessionMessages(prev => ({
+          ...prev,
+          [currentSessionId]: [...(prev[currentSessionId] || []), limitMessage]
+        }));
+        addLog('WARN', 'AgentLoop', `已达到 ${MAX_AGENT_LOOPS} 轮上限，停止自动调度`);
       }
 
-      if (!finalAccumulated.trim()) {
-        finalAccumulated = '已完成对当前工程上下文的推演与分析。请继续提出具体修改或重构指令。';
-      }
-
-      const durationSec = parseFloat(((performance.now() - callStartTime) / 1000).toFixed(1));
-      const addedPrompt = Math.round(text.length * 0.75);
-      const addedComp = Math.round(finalAccumulated.length * 0.75);
-      const tokenDetail = {
-        promptTokens: addedPrompt,
-        completionTokens: addedComp,
-        totalTokens: addedPrompt + addedComp
-      };
-
-      addLog('NET', 'GatewayBus', `[调用完成] 模型: ${streamingModel.name} · 耗时: ${durationSec}s · Token消耗: ${tokenDetail.totalTokens}`);
-
-      setSessionMessages(prev => {
-        const list = prev[currentSessionId] || [];
-        const updated = list.map(m => m.id === assistantId ? {
-          ...m,
-          content: finalAccumulated,
-          tokensDetail: tokenDetail,
-          durationSeconds: durationSec
-        } : m);
-        return { ...prev, [currentSessionId]: updated };
-      });
-
-      // Realistic Token increment
-      setTokenStats(prev => ({
-        ...prev,
-        promptTokens: prev.promptTokens + addedPrompt,
-        completionTokens: prev.completionTokens + addedComp,
-        estimatedCostUsd: prev.estimatedCostUsd + ((addedPrompt + addedComp) * 0.0000002)
-      }));
-
-      // Update session messageCount and tokens
+      // Save session state
       setSessions(prev => {
+        const durationSec = parseFloat(((performance.now() - callStartTime) / 1000).toFixed(1));
         const updated = prev.map(s => s.id === currentSessionId ? {
           ...s,
           messagesCount: s.messagesCount + 2,
-          totalTokens: s.totalTokens + addedPrompt + addedComp,
           updatedAt: Date.now()
         } : s);
         saveSessionsToStorage(updated);
         return updated;
       });
 
-      // Save complete session messages to localStorage ONCE at end of stream
       setSessionMessages(latest => {
         saveSessionMessagesToStorage(latest);
         return latest;
       });
 
     } catch (err: any) {
+      if (agentLoopCancelledRef.current) {
+        addLog('INFO', 'AgentLoop', '用户已停止 Agent Loop，已取消待审批与后续调度');
+        return;
+      }
       setSessionMessages(prev => {
         const list = prev[currentSessionId] || [];
-        const updated = list.map(m => m.id === assistantId ? {
-          ...m,
+        const errorMsg: ChatMessage = {
+          id: `error-${Date.now()}`,
+          role: 'assistant',
           content: `✕ 大模型连接异常: ${err.message}。请在左侧系统设置中检查服务商 Base URL 与 API Key 凭据。`,
+          timestamp: Date.now(),
           auditTag: '⚠️ 网络或鉴权异常'
-        } : m);
+        };
+        const updated = [...list, errorMsg];
         saveSessionMessagesToStorage({ ...prev, [currentSessionId]: updated });
         return { ...prev, [currentSessionId]: updated };
       });
@@ -1064,6 +1267,8 @@ Tcode 已通过宿主磁盘与终端桥接将工程提供给你。` : '当前处
           currentModel={currentModel}
           onSelectModel={handleSelectModel}
           permissionPolicy={permissionPolicy}
+          pendingApproval={pendingApproval}
+          onApprovalDecision={handleApprovalDecision}
           setPermissionPolicy={setPermissionPolicy}
           isStreaming={isStreaming}
           onStopGeneration={handleStopGeneration}
