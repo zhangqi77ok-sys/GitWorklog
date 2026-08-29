@@ -407,11 +407,18 @@ export const App: React.FC = () => {
     try {
       addLog('INFO', 'GatewayBus', `[发送指令] 正在调度模型 [${currentModel.name}] (${currentModel.id})`);
       const savedProviders = loadSavedProviders();
-      const provider = savedProviders.find(p => p.enabled && p.apiKey && p.baseUrl) || savedProviders[0];
+      // Intelligent Provider matching for selected model
+      let provider = savedProviders.find(p => p.enabled && p.models?.some(m => m.id === currentModel.id));
+      if (!provider && (currentModel.id.includes('mimo') || currentModel.name.includes('OpenCode') || currentModel.id.includes('free'))) {
+        provider = savedProviders.find(p => p.id === 'provider-opencode');
+      }
+      if (!provider) {
+        provider = savedProviders.find(p => p.enabled && p.apiKey && p.baseUrl) || savedProviders[0];
+      }
 
-      let baseUrl = provider?.baseUrl?.trim() || 'https://platform.ai.hixinghai.com/api/v1';
+      let baseUrl = provider?.baseUrl?.trim() || 'https://opencode.ai/zen/v1';
       if (baseUrl.endsWith('/')) baseUrl = baseUrl.slice(0, -1);
-      const apiKey = provider?.apiKey?.trim() || 'sk-xh-ZVKvOZcvzLKxUSWECPQ3mUKfP9q9sxrz14NQmtoQ000';
+      const apiKey = provider?.apiKey?.trim() || 'sk-REVOKED_PLACEHOLDER';
       // Use the exact model ID selected by user without hardcoding
       const targetModel = currentModel.id;
 
