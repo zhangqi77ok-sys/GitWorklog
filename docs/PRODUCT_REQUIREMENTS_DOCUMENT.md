@@ -1165,3 +1165,10 @@ To github.com:zhangqi77ok-sys/agent-learning.git
    - 彻底解决 Windows 11 下因为默认终端宿主导致启动工程、Git 分支查询或终端执行时频繁弹黑框（CMD / Windows Terminal）的体验问题；
    - 宿主所有 `subprocess.run` 与 `subprocess.Popen` 调用全面注入 `CREATE_NO_WINDOW = 0x08000000` 与 `STARTUPINFO.wShowWindow = SW_HIDE`；
    - 终端命令与脚本执行完全在后台静默完成，执行结果平滑流转回前端内嵌卡片回显，实现 100% 纯净的原生应用体验。
+
+### 12.23 意图驱动动作边界与严禁未授权写盘铁律 (Intent-Driven Action Boundary)
+1. **严格区分“只读咨询/分析”与“落地修改”两大场景**：
+   - 彻底修复大模型在日常问答、方案咨询或代码审查时擅自输出 `write_file` 导致自作主张修改文件的架构缺陷；
+   - **【只读分析与咨询】**：开发者进行概念讨论、优化咨询、架构探讨时，大模型**必须且只能**输出纯文本 Markdown 论述与只读代码块供预览，严禁输出动作指令块；
+   - **【明确落地指令】**：只有当开发者明确发出“帮我修改/创建/重构/执行”指令时，大模型才允许输出 `write_file` 与 `run_command`；
+   - 结合三态权限策略（逐次审核/智能自决/风险熔断），实现严密无死角的意图与权限双重安全锁。
