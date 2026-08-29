@@ -8,7 +8,9 @@ import {
   RotateCcw,
   Sparkles,
   Plus,
-  ShieldCheck
+  ShieldCheck,
+  Boxes,
+  Camera
 } from 'lucide-react';
 import {
   TerminalTab,
@@ -56,6 +58,7 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
   ]);
   const [cmdInput, setCmdInput] = useState('');
   const [isCiDrawerOpen, setIsCiDrawerOpen] = useState(false);
+  const [hoveredAction, setHoveredAction] = useState<string | null>(null);
   // Listen for Diff Navigation Targets from ChatColumn
   React.useEffect(() => {
     if (activeDiffTarget) {
@@ -194,92 +197,150 @@ export const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({
           })}
         </div>
 
-        {/* Monorepo Blast Radius Badge */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '4px',
-          padding: '2px 7px',
-          borderRadius: '4px',
-          background: 'rgba(37, 99, 235, 0.1)',
-          border: '1px solid rgba(37, 99, 235, 0.25)',
-          color: '#2563EB',
-          fontSize: '10.5px',
-          fontWeight: 600
-        }} title="Monorepo 跨包波及分析：packages/core 变更波及 apps/web 与 apps/api">
-          <span>📦 core ➔ web (3处波及)</span>
-          <span style={{ textDecoration: 'underline', cursor: 'pointer' }}>级联修复</span>
-        </div>
+        {/* Compact Icon-Only Action Group with Rich Hover Tooltips */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', position: 'relative' }}>
+          {/* 1. Monorepo Blast Radius Icon */}
+          <div
+            onMouseEnter={() => setHoveredAction('blast-radius')}
+            onMouseLeave={() => setHoveredAction(null)}
+            onClick={() => {
+              setInlineToast('📦 已触发 Monorepo core ➔ web (3处) 跨包级联自动修复！');
+              setTimeout(() => setInlineToast(null), 3000);
+            }}
+            style={{
+              position: 'relative',
+              width: '26px',
+              height: '26px',
+              borderRadius: '5px',
+              background: 'rgba(37, 99, 235, 0.1)',
+              border: '1px solid rgba(37, 99, 235, 0.25)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              color: '#2563EB'
+            }}
+          >
+            <Boxes size={13} />
+            <span style={{
+              position: 'absolute',
+              top: '-2px',
+              right: '-2px',
+              width: '6px',
+              height: '6px',
+              borderRadius: '50%',
+              background: '#2563EB'
+            }} />
+          </div>
 
-        {/* Right Action Buttons */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <button
+          {/* 2. Pre-Flight CI Icon */}
+          <div
+            onMouseEnter={() => setHoveredAction('preflight-ci')}
+            onMouseLeave={() => setHoveredAction(null)}
             onClick={() => setIsCiDrawerOpen(true)}
             style={{
+              width: '26px',
+              height: '26px',
+              borderRadius: '5px',
+              background: 'rgba(22, 163, 74, 0.1)',
+              border: '1px solid rgba(22, 163, 74, 0.3)',
               display: 'flex',
               alignItems: 'center',
-              gap: '4px',
-              padding: '2px 7px',
-              borderRadius: '4px',
-              background: 'rgba(22, 163, 74, 0.1)',
-              color: '#16A34A',
-              border: '1px solid #16A34A',
-              fontSize: '11px',
-              fontWeight: 600,
-              cursor: 'pointer'
+              justifyContent: 'center',
+              cursor: 'pointer',
+              color: '#16A34A'
             }}
-            title="运行本地 CI 预检门禁与覆盖率分析"
           >
-            <ShieldCheck size={11} />
-            <span>🚀 本地 CI 预检</span>
-          </button>
-          <button
+            <ShieldCheck size={13} />
+          </div>
+
+          {/* 3. Inline Refactor Icon */}
+          <div
+            onMouseEnter={() => setHoveredAction('inline-refactor')}
+            onMouseLeave={() => setHoveredAction(null)}
             onClick={() => setShowInlineEdit(!showInlineEdit)}
             style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-              padding: '2px 7px',
-              borderRadius: '4px',
-              background: showInlineEdit ? 'rgba(147, 51, 234, 0.15)' : 'var(--bg-base)',
-              color: showInlineEdit ? '#9333EA' : 'var(--text-secondary)',
+              width: '26px',
+              height: '26px',
+              borderRadius: '5px',
+              background: showInlineEdit ? 'rgba(147, 51, 234, 0.2)' : 'var(--bg-base)',
               border: showInlineEdit ? '1px solid #9333EA' : '1px solid var(--border-subtle)',
-              fontSize: '11px',
-              fontWeight: 600,
-              cursor: 'pointer'
-            }}
-            title="行内重构 (Ctrl+K)"
-          >
-            <Sparkles size={11} color={showInlineEdit ? '#9333EA' : 'var(--accent)'} />
-            <span>⚡ 行内重构</span>
-          </button>
-
-          <button
-            title="一键还原至上个影子快照"
-            style={{
               display: 'flex',
               alignItems: 'center',
-              gap: '4px',
-              padding: '2px 6px',
-              borderRadius: '4px',
-              background: 'rgba(217, 107, 39, 0.08)',
-              color: 'var(--accent)',
-              border: '1px solid rgba(217, 107, 39, 0.25)',
-              fontSize: '11px',
-              fontWeight: 600,
-              cursor: 'pointer'
+              justifyContent: 'center',
+              cursor: 'pointer',
+              color: showInlineEdit ? '#9333EA' : 'var(--accent)'
             }}
           >
-            <RotateCcw size={11} />
-            <span>↩️ 影子快照</span>
-          </button>
+            <Sparkles size={13} />
+          </div>
 
+          {/* 4. Shadow Snapshot Icon */}
+          <div
+            onMouseEnter={() => setHoveredAction('shadow-snapshot')}
+            onMouseLeave={() => setHoveredAction(null)}
+            onClick={() => {
+              setInlineToast('📷 已捕获当前工作区代码影子快照 (安全点已同步)');
+              setTimeout(() => setInlineToast(null), 3000);
+            }}
+            style={{
+              width: '26px',
+              height: '26px',
+              borderRadius: '5px',
+              background: 'rgba(217, 107, 39, 0.08)',
+              border: '1px solid rgba(217, 107, 39, 0.25)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              color: 'var(--accent)'
+            }}
+          >
+            <Camera size={13} />
+          </div>
+
+          {/* Close Workbench Button */}
           <button
             onClick={onClose}
-            style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
+            style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', marginLeft: '4px' }}
           >
             <X size={14} />
           </button>
+
+          {/* Floating Rich Tooltip Bubble on Hover */}
+          {hoveredAction && (
+            <div style={{
+              position: 'absolute',
+              top: '32px',
+              right: 0,
+              padding: '6px 10px',
+              borderRadius: '6px',
+              background: '#18181B',
+              color: '#F4F4F5',
+              boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
+              fontSize: '11px',
+              zIndex: 100,
+              whiteSpace: 'nowrap',
+              pointerEvents: 'none',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '2px',
+              border: '1px solid rgba(255,255,255,0.1)'
+            }}>
+              <div style={{ fontWeight: 700, color: 'var(--accent)' }}>
+                {hoveredAction === 'blast-radius' && '📦 Monorepo 跨包波及分析'}
+                {hoveredAction === 'preflight-ci' && '🚀 本地 CI 门禁与覆盖率'}
+                {hoveredAction === 'inline-refactor' && '⚡ 行内智能重构 (Alt+Enter)'}
+                {hoveredAction === 'shadow-snapshot' && '📷 影子快照历史时光机'}
+              </div>
+              <div style={{ fontSize: '10px', color: '#A1A1AA' }}>
+                {hoveredAction === 'blast-radius' && 'core ➔ web (3处影响)，点击执行级联修复'}
+                {hoveredAction === 'preflight-ci' && '并行跑测 TypeScript + ESLint + Vitest (覆盖率 88.4%)'}
+                {hoveredAction === 'inline-refactor' && '对当前文件选区生成 AST 级精准重构方案'}
+                {hoveredAction === 'shadow-snapshot' && '已自动捕获 4 个本地安全还原点，可随时一键回溯'}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

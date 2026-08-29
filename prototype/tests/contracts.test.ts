@@ -74,7 +74,8 @@ import {
   calculateBlastRadius,
   clampLeftPanelWithCollapse,
   createDiffNavigationTarget,
-  clampChangesetHeight
+  clampChangesetHeight,
+  WORKBENCH_ICON_ACTIONS
 } from '../src/types/contracts';
 
 describe('SDD Contract - Token Telemetry & Gauge Algorithm', () => {
@@ -644,5 +645,15 @@ describe('SDD Contract - Changeset Resizable & Collapsible Card', () => {
     expect(clampChangesetHeight(40)).toBe(80);
     expect(clampChangesetHeight(150)).toBe(150);
     expect(clampChangesetHeight(600)).toBe(450);
+  });
+});
+
+
+describe('SDD Contract - Workbench Icon-Only Toolbar', () => {
+  it('should define exactly 4 compact icon actions with rich tooltips', () => {
+    expect(WORKBENCH_ICON_ACTIONS.length).toBe(4);
+    const blast = WORKBENCH_ICON_ACTIONS.find(a => a.id === 'blast-radius');
+    expect(blast?.tooltipTitle).toContain('波及分析');
+    expect(blast?.badgeText).toBe('3');
   });
 });

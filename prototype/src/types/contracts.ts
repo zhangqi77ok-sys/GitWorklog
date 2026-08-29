@@ -1814,3 +1814,45 @@ export function createDiffNavigationTarget(
 export function clampChangesetHeight(height: number): number {
   return Math.min(Math.max(height, 80), 450);
 }
+
+
+export interface WorkbenchIconAction {
+  id: 'blast-radius' | 'preflight-ci' | 'inline-refactor' | 'shadow-snapshot';
+  icon: string;
+  label: string;
+  tooltipTitle: string;
+  tooltipDesc: string;
+  badgeText?: string;
+}
+
+export const WORKBENCH_ICON_ACTIONS: WorkbenchIconAction[] = [
+  {
+    id: 'blast-radius',
+    icon: 'Boxes',
+    label: '波及分析',
+    tooltipTitle: '📦 Monorepo 跨包波及分析',
+    tooltipDesc: 'core ➔ web (3处影响)，点击执行级联修复',
+    badgeText: '3'
+  },
+  {
+    id: 'preflight-ci',
+    icon: 'Rocket',
+    label: '本地 CI 预检',
+    tooltipTitle: '🚀 本地 CI 门禁与覆盖率',
+    tooltipDesc: '并行跑测 TypeScript + Vitest (覆盖率 88.4%)'
+  },
+  {
+    id: 'inline-refactor',
+    icon: 'Zap',
+    label: '行内重构',
+    tooltipTitle: '⚡ 行内智能重构',
+    tooltipDesc: '快捷键: Alt+Enter，快速生成局部优化'
+  },
+  {
+    id: 'shadow-snapshot',
+    icon: 'Camera',
+    label: '影子快照',
+    tooltipTitle: '📷 影子快照历史',
+    tooltipDesc: '已自动生成 4 个安全代码还原点'
+  }
+];
