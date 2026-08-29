@@ -92,6 +92,23 @@ export const Titlebar: React.FC<TitlebarProps> = ({
 
       {/* Right: Token Telemetry HUD Capsule & Window controls */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        {/* Air-gapped PII Shield Capsule */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '4px',
+          padding: '3px 8px',
+          borderRadius: '12px',
+          background: 'rgba(22, 163, 74, 0.08)',
+          border: '1px solid rgba(22, 163, 74, 0.25)',
+          color: '#16A34A',
+          fontSize: '11px',
+          fontWeight: 600
+        }} title="金融级离线脱敏盾牌：API Key 与数据库密码已内存虚拟化脱敏">
+          <ShieldCheck size={12} />
+          <span>离线脱敏盾牌</span>
+        </div>
+
         {/* Token Capsule */}
         <div style={{ position: 'relative' }}>
           <div

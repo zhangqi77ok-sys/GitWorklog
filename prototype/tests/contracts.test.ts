@@ -57,7 +57,13 @@ import {
   togglePinnedFile,
   calculateTokenRoi,
   INITIAL_CHANGESET,
-  PinnedFileItem
+  PinnedFileItem,
+  mergeForkSessionToMain,
+  evaluateCommandSafety,
+  INITIAL_SWARM_STAGES,
+  queryRepoGraphDependencies,
+  maskSensitiveText,
+  unmaskSensitiveText
 } from '../src/types/contracts';
 
 describe('SDD Contract - Token Telemetry & Gauge Algorithm', () => {
@@ -478,5 +484,56 @@ describe('SDD Contract - DX & PM Power Features (@Mentions, Changeset, Pinned, R
     expect(roi.cacheHitRatePercent).toBe(85.7);
     expect(roi.savedCostUsd).toBeGreaterThan(0.04);
     expect(roi.linesGeneratedApprox).toBe(50);
+  });
+});
+
+
+describe('SDD Contract - Advanced 5-Killer Features (Fork Merge, Sandbox, Swarm, Graph, PII)', () => {
+  it('should merge forked session cleanly into main session memory', () => {
+    const sessions: SessionItem[] = [];
+    const messages: ChatMessage[] = [];
+    const result = mergeForkSessionToMain(sessions, messages, 'fork-001', 'session-main', '完成泛型重构并通过全部测试');
+    expect(result.targetSessionId).toBe('session-main');
+    expect(result.updatedMessages.length).toBe(1);
+    expect(result.updatedMessages[0].content).toContain('已成功合并分叉分支 [fork-001]');
+  });
+
+  it('should evaluate command safety and block hazardous commands', () => {
+    const safeRes = evaluateCommandSafety('npm test');
+    expect(safeRes.level).toBe('safe');
+
+    const warnRes = evaluateCommandSafety('npm install -g pnpm');
+    expect(warnRes.level).toBe('warning');
+
+    const blockedRes = evaluateCommandSafety('rm -rf /var/data');
+    expect(blockedRes.level).toBe('blocked');
+    expect(blockedRes.reason).toBeDefined();
+  });
+
+  it('should verify Multi-Agent Swarm stages sequence and roles', () => {
+    expect(INITIAL_SWARM_STAGES.length).toBe(3);
+    expect(INITIAL_SWARM_STAGES[0].role).toBe('architect');
+    expect(INITIAL_SWARM_STAGES[1].role).toBe('coder');
+    expect(INITIAL_SWARM_STAGES[2].role).toBe('tester');
+  });
+
+  it('should query repo graph dependency topology accurately', () => {
+    const deps = queryRepoGraphDependencies('UserService');
+    expect(deps.length).toBeGreaterThan(0);
+    const names = deps.map(d => d.name);
+    expect(names).toContain('UserService');
+    expect(names).toContain('UserController');
+  });
+
+  it('should mask and unmask sensitive PII tokens cleanly', () => {
+    const raw = 'Connect to postgres://root:supersecret123@db.com with key sk-abcdef1234567890xyz';
+    const { maskedText, mapping } = maskSensitiveText(raw);
+    expect(maskedText).toContain('[SEC_DB_PASS_2]');
+    expect(maskedText).toContain('[SEC_API_KEY_1]');
+    expect(maskedText).not.toContain('supersecret123');
+    expect(maskedText).not.toContain('sk-abcdef1234567890xyz');
+
+    const restored = unmaskSensitiveText(maskedText, mapping);
+    expect(restored).toBe(raw);
   });
 });

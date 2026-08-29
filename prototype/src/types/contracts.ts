@@ -1434,3 +1434,138 @@ export function calculateTokenRoi(stats: TokenStats): TokenRoiStats {
     linesGeneratedApprox: linesGenerated
   };
 }
+
+
+// ============================================================================
+// 12. ADVANCED 5-KILLER FEATURES CONTRACTS (Merge Fork, Sandbox, Swarm, Graph, PII)
+// ============================================================================
+
+// 1. Fork Branch Merging
+export function mergeForkSessionToMain(
+  sessions: SessionItem[],
+  messages: ChatMessage[],
+  forkSessionId: string,
+  mainSessionId: string,
+  summary: string
+): { updatedMessages: ChatMessage[]; targetSessionId: string } {
+  const mergedEventMessage: ChatMessage = {
+    id: `msg-merge-${Date.now()}`,
+    role: 'assistant',
+    timestamp: Date.now(),
+    content: `🔀 **已成功合并分叉分支 [${forkSessionId}] 的成果**：\n\n${summary}\n\n✓ 核心变更集与决策已固化为主会话工程记忆。`
+  };
+
+  return {
+    updatedMessages: [...messages, mergedEventMessage],
+    targetSessionId: mainSessionId
+  };
+}
+
+// 2. Terminal Security Sandbox
+export type CommandSecurityLevel = 'safe' | 'warning' | 'blocked';
+
+export interface CommandSafetyResult {
+  level: CommandSecurityLevel;
+  reason?: string;
+  command: string;
+}
+
+export function evaluateCommandSafety(command: string): CommandSafetyResult {
+  const cmd = command.trim().toLowerCase();
+
+  const blockedPatterns = [
+    { pattern: /rm\s+-rf\s+[\/\*]/, reason: '危险的根路径全量递归删除' },
+    { pattern: /drop\s+(database|table|schema)/i, reason: '不可逆的数据库或表结构销毁' },
+    { pattern: /format\s+[a-z]:/i, reason: '磁盘驱动器格式化指令' },
+    { pattern: /git\s+push\s+.*--force.*main/, reason: '强推覆盖生产主分支' }
+  ];
+
+  const warningPatterns = [
+    { pattern: /npm\s+install\s+-g/, reason: '全局系统级依赖安装' },
+    { pattern: /docker\s+run\s+.*--privileged/, reason: '特权容器执行' },
+    { pattern: /chmod\s+(-r\s+)?777/, reason: '开放全部文件执行与读写权限' }
+  ];
+
+  for (const b of blockedPatterns) {
+    if (b.pattern.test(cmd)) {
+      return { level: 'blocked', reason: b.reason, command };
+    }
+  }
+
+  for (const w of warningPatterns) {
+    if (w.pattern.test(cmd)) {
+      return { level: 'warning', reason: w.reason, command };
+    }
+  }
+
+  return { level: 'safe', command };
+}
+
+// 3. Multi-Agent Swarm Mode
+export interface SwarmPipelineStage {
+  id: string;
+  role: 'architect' | 'coder' | 'tester';
+  name: string;
+  model: string;
+  task: string;
+  status: 'idle' | 'running' | 'completed' | 'failed';
+}
+
+export const INITIAL_SWARM_STAGES: SwarmPipelineStage[] = [
+  { id: 'swarm-1', role: 'architect', name: 'Architect 架构师', model: 'DeepSeek R1 (Reasoning)', task: '任务拆解与 SDD 接口契约定义', status: 'completed' },
+  { id: 'swarm-2', role: 'coder', name: 'Coder 编码员', model: 'Claude 3.5 Sonnet', task: '多文件并发编码与 AST 校验落盘', status: 'running' },
+  { id: 'swarm-3', role: 'tester', name: 'Tester 测试员', model: 'GLM-4-Plus (Fast Test)', task: '后台终端单测执行与报错自纠', status: 'idle' }
+];
+
+// 4. Local Semantic Repo Graph
+export interface RepoGraphNode {
+  id: string;
+  name: string;
+  type: 'interface' | 'class' | 'function' | 'module';
+  file: string;
+  dependencies: string[];
+}
+
+export const MOCK_REPO_GRAPH: RepoGraphNode[] = [
+  { id: 'node-dto', name: 'UserDto', type: 'interface', file: 'src/types/user.ts', dependencies: [] },
+  { id: 'node-service', name: 'UserService', type: 'class', file: 'src/services/user.service.ts', dependencies: ['UserDto', 'GatewayBus'] },
+  { id: 'node-controller', name: 'UserController', type: 'class', file: 'src/controllers/user.controller.ts', dependencies: ['UserService'] },
+  { id: 'node-bus', name: 'GatewayBus', type: 'class', file: 'src/types/contracts.ts', dependencies: [] }
+];
+
+export function queryRepoGraphDependencies(symbolName: string, graph: RepoGraphNode[] = MOCK_REPO_GRAPH): RepoGraphNode[] {
+  return graph.filter(node =>
+    node.name.toLowerCase() === symbolName.toLowerCase() ||
+    node.dependencies.some(d => d.toLowerCase() === symbolName.toLowerCase())
+  );
+}
+
+// 5. PII Masking Engine
+export function maskSensitiveText(text: string): { maskedText: string; mapping: Record<string, string> } {
+  const mapping: Record<string, string> = {};
+  let counter = 1;
+
+  // Mask API Keys (e.g. sk-xxxx, gsk_xxxx)
+  let masked = text.replace(/(sk-[a-zA-Z0-9]{16,}|gsk_[a-zA-Z0-9]{16,})/g, (match) => {
+    const placeholder = `[SEC_API_KEY_${counter++}]`;
+    mapping[placeholder] = match;
+    return placeholder;
+  });
+
+  // Mask Database Passwords (e.g. postgres://user:password@)
+  masked = masked.replace(/(:\/\/[a-zA-Z0-9_-]+:)([^@]+)(@)/g, (match, prefix, pass, suffix) => {
+    const placeholder = `[SEC_DB_PASS_${counter++}]`;
+    mapping[placeholder] = pass;
+    return `${prefix}${placeholder}${suffix}`;
+  });
+
+  return { maskedText: masked, mapping };
+}
+
+export function unmaskSensitiveText(maskedText: string, mapping: Record<string, string>): string {
+  let restored = maskedText;
+  for (const [placeholder, original] of Object.entries(mapping)) {
+    restored = restored.replace(placeholder, original);
+  }
+  return restored;
+}

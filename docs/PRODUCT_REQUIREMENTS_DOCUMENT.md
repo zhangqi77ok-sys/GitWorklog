@@ -449,6 +449,49 @@
    - **KV Cache 降本效益**：缓存命中率（88.2%）、通过确定性前置缓存累计节省的 Token 数量与折合金额（如 `已通过缓存节省 $4.20`）；
    - **模型分布与单行代码成本 (ROI)**：展示 DeepSeek、Claude、GLM 等各模型调用的占比分布，以及平均每行有效生成代码的 Token 成本。
 
+
+### 4.18 会话分支合并与决策闭环规约 (Visual Fork Merge to Main Session)
+为解决开发者在分叉会话（`Fork-1`）中多路径试错后的成果回流问题，系统建立无损合并闭环：
+1. **分叉分支状态感知**：
+   - 当用户处于派生的子会话分支中时，聊天流顶部常驻高亮提示栏：`[ ⑂ 当前处于分叉分支 (fork-xxx) | 🔀 一键合并成果回主会话 (Merge to Main) ]`；
+2. **决策与代码 Diff 智能提炼**：
+   - 点击合并时，系统提取该分支的所有有效代码变更（Changeset）与关键决策卡片结果，作为高浓度的不可变事件合并回主会话；
+   - 避免将分支中的冗余报错过程污染主会话历史，保持主线工程记忆的极度纯净。
+
+### 4.19 终端命令安全策略沙箱与高危拦截规约 (Terminal Execution Sandbox & Policy Guard)
+针对 Agent 自动执行终端命令时的误操作与安全破坏风险，建立三级安全防御机制：
+1. **三级安全策略矩阵 (Security Level Policy)**：
+   - 🟢 **Safe (安全命令)**：如 `npm test`、`git status`、`ls`，自动静默执行；
+   - 🟡 **Warning (警示命令)**：如 `npm install -g`、`docker run --privileged`、`chmod 777`，需人工一键确认；
+   - 🔴 **Blocked (阻断命令)**：如 `rm -rf /`、`drop database`、`format c:`、`git push --force origin main`，系统硬核阻断并报警。
+2. **图形化沙箱防护指示**：
+   - 终端抽屉顶部常驻展示 `[ 🛡️ 终端安全沙箱卫士: 实时监控高危操作 ]`；
+   - 触发警示或阻断时，弹出浮动确认气泡并展示安全演练提示（Dry-run Preview）。
+
+### 4.20 多智能体异构协同蜂群规约 (Multi-Agent Swarm Mode)
+为了发挥不同大模型在不同研发阶段的长板，系统支持一键激活“三智能体接力协同模式”：
+1. **三员分工与模型路由**：
+   - 🧠 **Architect Agent (深度推理模型，如 DeepSeek R1 / o1)**：负责需求拆解、边界推演与 SDD 接口契约定义；
+   - ⚡ **Coder Agent (代码生成模型，如 Claude 3.5 Sonnet / V4-Pro)**：负责多文件并发编码、实现落盘与重构；
+   - 🧪 **Tester Agent (轻量快速模型，如 GLM-4 / 本地 Qwen)**：负责后台集成终端单测执行、AST 校验与自纠反馈。
+2. **可视化协同泳道 (Swarm Swimlane)**：
+   - 聊天区顶部动态呈现三员协同接力流转状态与当前主导智能体标识。
+
+### 4.21 本地语义代码图谱与 AST 依赖拓扑规约 (Local Semantic Repo Graph)
+针对大型仓库跨模块依赖难以精准召回的痛点，构建本地化代码依赖拓扑：
+1. **轻量级依赖图谱构建**：
+   - 自动基于 AST 分析模块间的 `import`、`export`、类继承与函数调用关系，生成内存依赖拓扑网；
+2. **上下游自动召回 (Graph-based Context Recall)**：
+   - 当开发者发起修改指令时，系统沿拓扑网自动召回受影响的上下游核心契约（如 `UserDto ➔ UserService ➔ UserController`），并以徽章形式呈现于推理流中。
+
+### 4.22 金融级离线脱敏盾牌与虚拟 Token 映射规约 (Air-Gapped Mode & PII Shield)
+为满足企业级客户与金融开发者对代码资产零泄露的极致诉求：
+1. **纯血离线模式 (Air-Gapped Local Mode)**：
+   - 一键切断所有公网出站流量，强制将所有推理与分析路由至本地 Ollama / vLLM 实例；
+2. **内存级实时 PII 掩码映射 (Virtual Token Masking)**：
+   - 请求外发前，正则引擎自动捕获 API Key、数据库连接串、私有域名等敏感信息并替换为虚拟标记（如 `[SEC_KEY_01]`）；
+   - 收到模型响应后，在本地安全边界内无缝还原，确保商业机密不出内网。
+
 ## 五、人机协同动态交互选择体系 (Dynamic Human-in-the-Loop)
 
 当 Agent 在推理过程中遇到技术分叉或歧义时，**严禁盲猜代劳**，主动触发结构化微型卡片挂起：
