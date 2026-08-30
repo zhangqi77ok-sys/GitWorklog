@@ -57,6 +57,70 @@ export const GitSnapshotsPanel: React.FC<GitSnapshotsPanelProps> = ({
   const [isStagedExpanded, setIsStagedExpanded] = useState(true);
   const [isAgentSnapshotsExpanded, setIsAgentSnapshotsExpanded] = useState(false);
   const [showProjDropdown, setShowProjDropdown] = useState(false);
+  // Resizable Partitions (Changes, Checkpoints, Commit Log)
+  const [changesPercent, setChangesPercent] = useState<number>(50);
+  const [checkpointsPercent, setCheckpointsPercent] = useState<number>(20);
+  const [commitsPercent, setCommitsPercent] = useState<number>(30);
+  const isDraggingDivider1Ref = React.useRef(false);
+  const isDraggingDivider2Ref = React.useRef(false);
+  const containerRef = React.useRef<HTMLDivElement>(null);
+
+  const handleStartDragDivider1 = (e: React.MouseEvent) => {
+    e.preventDefault();
+    isDraggingDivider1Ref.current = true;
+    const startY = e.clientY;
+    const initialChanges = changesPercent;
+    const initialCheckpoints = checkpointsPercent;
+
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      if (!isDraggingDivider1Ref.current || !containerRef.current) return;
+      const rect = containerRef.current.getBoundingClientRect();
+      const deltaPercent = ((moveEvent.clientY - startY) / rect.height) * 100;
+      const newChanges = Math.max(15, Math.min(70, initialChanges + deltaPercent));
+      const diff = newChanges - initialChanges;
+      const newCheckpoints = Math.max(10, initialCheckpoints - diff);
+      setChangesPercent(Math.round(newChanges));
+      setCheckpointsPercent(Math.round(newCheckpoints));
+    };
+
+    const onMouseUp = () => {
+      isDraggingDivider1Ref.current = false;
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+    };
+
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+  };
+
+  const handleStartDragDivider2 = (e: React.MouseEvent) => {
+    e.preventDefault();
+    isDraggingDivider2Ref.current = true;
+    const startY = e.clientY;
+    const initialCheckpoints = checkpointsPercent;
+    const initialCommits = commitsPercent;
+
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      if (!isDraggingDivider2Ref.current || !containerRef.current) return;
+      const rect = containerRef.current.getBoundingClientRect();
+      const deltaPercent = ((moveEvent.clientY - startY) / rect.height) * 100;
+      const newCheckpoints = Math.max(10, Math.min(60, initialCheckpoints + deltaPercent));
+      const diff = newCheckpoints - initialCheckpoints;
+      const newCommits = Math.max(10, initialCommits - diff);
+      setCheckpointsPercent(Math.round(newCheckpoints));
+      setCommitsPercent(Math.round(newCommits));
+    };
+
+    const onMouseUp = () => {
+      isDraggingDivider2Ref.current = false;
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+    };
+
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+  };
+
 
   const targetPath = activeProject?.path || 'e:/pro/agent-learning';
 
@@ -443,8 +507,11 @@ export const GitSnapshotsPanel: React.FC<GitSnapshotsPanelProps> = ({
         </div>
       </div>
 
-      {/* Main File Changes Tree */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+      {/* Main File Changes Tree with 3 Resizable Partitions */}
+      <div ref={containerRef} style={{ flex: 1, overflow: 'hidden', padding: '4px 8px', display: 'flex', flexDirection: 'column' }}>
+        
+        {/* PARTITION 1: Changes Section */}
+        <div style={{ height: `${changesPercent}%`, minHeight: '60px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px', paddingBottom: '4px' }}>
         
         {/* 1. Staged Changes Section */}
         {stagedChanges.length > 0 && (
@@ -610,8 +677,29 @@ export const GitSnapshotsPanel: React.FC<GitSnapshotsPanelProps> = ({
           )}
         </div>
 
-        {/* 3. Tcode Agent Security Checkpoint & Rollback Section */}
-        <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '6px', marginTop: '4px' }}>
+        </div>
+
+        {/* ↕ RESIZE DIVIDER 1 */}
+        <div
+          onMouseDown={handleStartDragDivider1}
+          style={{
+            height: '6px',
+            margin: '2px 0',
+            cursor: 'row-resize',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'transparent',
+            borderTop: '1px solid var(--border-subtle)'
+          }}
+          title="上下拖动调整【更改】与【安全快照】分区比例"
+        >
+          <div style={{ width: '24px', height: '2px', borderRadius: '1px', background: 'rgba(255,255,255,0.2)' }} />
+        </div>
+
+        {/* PARTITION 2: Checkpoints Section */}
+        <div style={{ height: `${checkpointsPercent}%`, minHeight: '40px', overflowY: 'auto', display: 'flex', flexDirection: 'column', paddingBottom: '4px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '2px 4px' }}>
           <div
             onClick={() => setIsAgentSnapshotsExpanded(!isAgentSnapshotsExpanded)}
             style={{
@@ -640,10 +728,35 @@ export const GitSnapshotsPanel: React.FC<GitSnapshotsPanelProps> = ({
           )}
         </div>
 
-        {/* 4. Git Commits Log */}
-        <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '6px' }}>
-          <div style={{ fontSize: '10.5px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '4px' }}>
-            提交历史 (Commit Log)
+        </div>
+
+        {/* ↕ RESIZE DIVIDER 2 */}
+        <div
+          onMouseDown={handleStartDragDivider2}
+          style={{
+            height: '6px',
+            margin: '2px 0',
+            cursor: 'row-resize',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'transparent',
+            borderTop: '1px solid var(--border-subtle)'
+          }}
+          title="上下拖动调整【安全快照】与【提交历史】分区比例"
+        >
+          <div style={{ width: '24px', height: '2px', borderRadius: '1px', background: 'rgba(255,255,255,0.2)' }} />
+        </div>
+
+        {/* PARTITION 3: Commit Log Section */}
+        <div style={{ height: `${commitsPercent}%`, minHeight: '60px', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+            <span style={{ fontSize: '10.5px', fontWeight: 700, color: 'var(--text-muted)' }}>
+              提交历史 (Commit Log)
+            </span>
+            <span style={{ fontSize: '9px', color: 'var(--text-muted)', padding: '1px 4px', borderRadius: '3px', background: 'var(--bg-surface)' }}>
+              {commitsPercent}%
+            </span>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>

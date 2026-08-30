@@ -112,11 +112,11 @@ export const TokenAnalyticsModal: React.FC<TokenAnalyticsModalProps> = ({
             </div>
 
             <div style={{ padding: '12px', borderRadius: '8px', background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)' }}>
-              <div style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>折算已节省费用</div>
+              <div style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>累计节约 Token</div>
               <div style={{ fontSize: '16px', fontWeight: 800, color: '#16A34A', marginTop: '4px' }}>
-                ¥{kv.savedCostYuan.toFixed(4)}
+                {(tokenStats.cacheHitTokens / 1000).toFixed(1)}k
               </div>
-              <div style={{ fontSize: '9.5px', color: 'var(--text-muted)', marginTop: '2px' }}>实付仅 ${tokenStats.estimatedCostUsd.toFixed(3)}</div>
+              <div style={{ fontSize: '9.5px', color: 'var(--text-muted)', marginTop: '2px' }}>避免服务端重复计算</div>
             </div>
           </div>
 

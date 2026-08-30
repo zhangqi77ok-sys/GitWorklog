@@ -1,3 +1,4 @@
+import { getActiveWorkflow, setActiveWorkflowId, loadSavedWorkflows, ModularWorkflow, NORMAL_WORKFLOW } from '../services/workflowStore';
 import { TargetStepProgressCard } from './TargetStepProgressCard';
 import { ActionApprovalModal } from './ActionApprovalModal';
 import { ShareCardModal } from './ShareCardModal';
@@ -76,6 +77,10 @@ import {
   getAllAvailableModels,
   flattenFileTreeToMentions,
   loadSavedProviders,
+  loadSavedChannels,
+  saveChannelsToStorage,
+  getPresetForChannelType,
+  ChannelItem,
   saveProvidersToStorage,
   resolveApiEndpoint,
   MentionContextItem,
@@ -98,6 +103,7 @@ import { SemanticCommitModal } from './SemanticCommitModal';
 import { PullRequestModal } from './PullRequestModal';
 import { TrajectorySnapshotModal } from './TrajectorySnapshotModal';
 import { ThinkingBlock } from './ThinkingBlock';
+import { SwarmSubagentContainer } from './SwarmSubagentContainer';
 import { extractThinkingFromText, SLASH_COMMANDS, SlashCommandItem, loadSavedProfile, DeveloperProfile } from '../types/contracts';
 import { GitPullRequest, RotateCcw } from 'lucide-react';
 import type { AgentAction } from '../services/agentLoop';
@@ -105,12 +111,11 @@ import { ManagedRule } from '../types/contracts';
 import { loadSavedRules } from '../services/rulesStore';
 import { loadSavedOfficialSkills, getTier2SkillBody, SkillMetadata } from '../services/skillsEngine';
 import { getContextBudget, ContextBudget, compressModelContext } from '../services/contextTelemetry';
-import { WorkflowProviderPicker } from './WorkflowProviderPicker';
-import type { WorkflowSelection } from '../services/workflowProviderDiscovery';
 import {
   createPipelineState,
   selectPipelineMode,
   startPipelineRun,
+  savePipelineModeToStorage,
   PipelineMode,
   PipelineState
 } from '../services/pipelineMode';
@@ -328,10 +333,10 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
   React.useEffect(() => {
     const handleChatEsc = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        setShowWorkflowMenu(false);
         setShowSkillMenu(false);
         setShowRulesPopover(false);
         setShowModelMenu(false);
-        setShowModeMenu(false);
         setShowSlashMenu(false);
         setShowSessionMenu(false);
         setIsShareModalOpen(false);
@@ -346,7 +351,24 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
   const [skillQuery, setSkillQuery] = useState('');
   const [officialSkillsList, setOfficialSkillsList] = useState<SkillMetadata[]>(() => loadSavedOfficialSkills());
   const [selectedSkill, setSelectedSkill] = useState<SkillMetadata | null>(null);
-  const [activeWorkflowSelection, setActiveWorkflowSelection] = useState<WorkflowSelection>({ mode: 'normal', state: 'normal' });
+  const [activeModularWorkflow, setActiveModularWorkflow] = useState<ModularWorkflow>(() => getActiveWorkflow());
+  const [showWorkflowMenu, setShowWorkflowMenu] = useState(false);
+  const [workflowSearchQuery, setWorkflowSearchQuery] = useState('');
+  const [savedWorkflowsList, setSavedWorkflowsList] = useState<ModularWorkflow[]>(() => loadSavedWorkflows());
+
+  useEffect(() => {
+    const handleWfChange = () => {
+      setActiveModularWorkflow(getActiveWorkflow());
+      setSavedWorkflowsList(loadSavedWorkflows());
+    };
+    window.addEventListener('tcode_active_workflow_changed', handleWfChange);
+    window.addEventListener('tcode_workflows_updated', handleWfChange);
+    return () => {
+      window.removeEventListener('tcode_active_workflow_changed', handleWfChange);
+      window.removeEventListener('tcode_workflows_updated', handleWfChange);
+    };
+  }, []);
+
   const [shareTargetMessage, setShareTargetMessage] = useState<ChatMessage | null>(null);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
 
@@ -395,22 +417,37 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
     }
   }, [messages, isStreaming, promptQueue]);
   const [availableModelList, setAvailableModelList] = useState<AIModelOption[]>(() => [...getAllAvailableModels(), ...getGatewayModelOptions()]);
-  const [activeProviderTab, setActiveProviderTab] = useState<string>('opencode');
+  const [activeProviderTab, setActiveProviderTab] = useState<string>(() => loadSavedChannels()[0]?.id || 'chan-opencode-go');
+  const [scenarioFilter, setScenarioFilter] = useState<'all' | 'code' | 'thinking' | 'offline'>('all');
   const [modelSearchQuery, setModelSearchQuery] = useState('');
   const [isSyncingModels, setIsSyncingModels] = useState(false);
 
-  // Reactive synchronization of available models when Settings or Providers change
+  // Global Alt+M shortcut to toggle model switcher dropdown
   React.useEffect(() => {
-    const handleProvidersUpdated = () => {
+    const handleModelShortcut = (e: KeyboardEvent) => {
+      if (e.altKey && (e.key === 'm' || e.key === 'M')) {
+        e.preventDefault();
+        setShowModelMenu(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleModelShortcut);
+    return () => window.removeEventListener('keydown', handleModelShortcut);
+  }, []);
+
+  // Reactive synchronization of available models when Channels or Settings change
+  React.useEffect(() => {
+    const handleChannelsUpdated = () => {
       setAvailableModelList([...getAllAvailableModels(), ...getGatewayModelOptions()]);
     };
-    window.addEventListener('tcode_providers_updated', handleProvidersUpdated);
-    window.addEventListener('storage', handleProvidersUpdated);
-    window.addEventListener('focus', handleProvidersUpdated);
+    window.addEventListener('tcode_channels_updated', handleChannelsUpdated);
+    window.addEventListener('tcode_providers_updated', handleChannelsUpdated);
+    window.addEventListener('storage', handleChannelsUpdated);
+    window.addEventListener('focus', handleChannelsUpdated);
     return () => {
-      window.removeEventListener('tcode_providers_updated', handleProvidersUpdated);
-      window.removeEventListener('storage', handleProvidersUpdated);
-      window.removeEventListener('focus', handleProvidersUpdated);
+      window.removeEventListener('tcode_channels_updated', handleChannelsUpdated);
+      window.removeEventListener('tcode_providers_updated', handleChannelsUpdated);
+      window.removeEventListener('storage', handleChannelsUpdated);
+      window.removeEventListener('focus', handleChannelsUpdated);
     };
   }, []);
 
@@ -419,43 +456,33 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
   const handleSyncOnlineModels = async () => {
     setIsSyncingModels(true);
     try {
-      const savedProviders = loadSavedProviders();
-      const providerId = resolveProviderIdForModelTab(activeProviderTab, savedProviders);
-      const p = providerId
-        ? savedProviders.find((item: any) => item.id === providerId)
-        : undefined;
-      if (!p) throw new Error(`当前模型服务商未配置: ${activeProviderTab}`);
-      assertProviderCredentials(p);
-      let base = p.baseUrl.trim();
+      const savedChannels = loadSavedChannels();
+      const channel = savedChannels.find(c => c.id === activeProviderTab) || savedChannels[0];
+      if (!channel) throw new Error(`当前渠道未配置: ${activeProviderTab}`);
+
+      let base = channel.baseUrl.trim();
       if (base.endsWith('/')) base = base.slice(0, -1);
-      const { url: requestUrl, headers: proxyHeaders } = resolveApiEndpoint(`${base}/models`);
-      const res = await fetch(requestUrl, {
-        headers: {
-          'Authorization': `Bearer ${p.apiKey.trim()}`,
-          ...proxyHeaders
-        }
-      });
+      const urlWithEndpoint = base.endsWith('/models') ? base : `${base}/models`;
+      const { url: requestUrl, headers: proxyHeaders } = resolveApiEndpoint(urlWithEndpoint);
+      const headers: Record<string, string> = { ...proxyHeaders };
+      if (channel.key?.trim()) {
+        headers['Authorization'] = `Bearer ${channel.key.trim().split('\n')[0].trim()}`;
+      }
+
+      const res = await fetch(requestUrl, { headers });
+      if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
       const data = await res.json();
-      const list = data.data || [];
-      if (Array.isArray(list) && list.length > 0) {
-        const fetchedModels = list.map((m: any) => ({
-          id: m.id,
-          name: m.name || m.id,
-          enabled: true,
-          contextLimit: m.contextLimit || m.context_length || 128000,
-          outputLimit: m.outputLimit || m.max_output_tokens,
-          endpointPath: m.endpointPath || m.endpoint || m.endpoint_path,
-          adapter: m.adapter || m.sdk || m.adapterId,
-          protocol: m.protocol || m.protocolType,
-          capabilities: Array.isArray(m.capabilities) ? m.capabilities : ['code', 'stream'],
-          description: m.description
-        }));
-        const updatedProviders = savedProviders.map(provider =>
-          provider.id === p.id ? { ...provider, models: fetchedModels } : provider
-        );
-        saveProvidersToStorage(updatedProviders);
+      const list: any[] = data.data || data.models || (Array.isArray(data) ? data : []);
+      if (list.length > 0) {
+        const fetchedIds: string[] = list.map((m: any) => (typeof m === 'string' ? m : m.id || m.name)).filter(Boolean);
+        const mergedModels = Array.from(new Set([...channel.models, ...fetchedIds]));
+        const updatedChannels = savedChannels.map(c => (c.id === channel.id ? { ...c, models: mergedModels } : c));
+        saveChannelsToStorage(updatedChannels);
         setAvailableModelList([...getAllAvailableModels(), ...getGatewayModelOptions()]);
-        setChangesetToast(`✓ 成功同步并写入 ${fetchedModels.length} 个模型；对话框模型列表已刷新`);
+        setChangesetToast(`✓ 成功从渠道 [${channel.name}] 同步并写入 ${fetchedIds.length} 个模型；对话框模型列表已刷新`);
+        setTimeout(() => setChangesetToast(null), 3000);
+      } else {
+        setChangesetToast(`✓ 接口连通正常，但返回模型列表为空`);
         setTimeout(() => setChangesetToast(null), 3000);
       }
     } catch (e: any) {
@@ -472,6 +499,16 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
   const [changesetToast, setChangesetToast] = useState<string | null>(null);
   const [pipelineState, setPipelineState] = useState<PipelineState>(() => createPipelineState());
   const pipelineMode: PipelineMode = pipelineState.mode;
+
+  useEffect(() => {
+    const handleModeUpdate = (e: any) => {
+      if (e.detail === 'swarm' || e.detail === 'harness') {
+        setPipelineState(prev => ({ ...prev, mode: e.detail }));
+      }
+    };
+    window.addEventListener('tcode_pipeline_mode_updated', handleModeUpdate);
+    return () => window.removeEventListener('tcode_pipeline_mode_updated', handleModeUpdate);
+  }, []);
   const [swarmGoal, setSwarmGoal] = useState<string>('');
   const [activeRunId, setActiveRunId] = useState<string | undefined>(undefined);
   const [swarmStartError, setSwarmStartError] = useState<string | null>(null);
@@ -555,8 +592,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
 
   const [planExpanded, setPlanExpanded] = useState(workMode === 'plan');
 
-  // Popover states for unified mode button and model selector button
-  const [showModeMenu, setShowModeMenu] = useState(false);
+  // Popover states for unified model selector button
   const [showModelMenu, setShowModelMenu] = useState(false);
 
 
@@ -706,6 +742,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
 
   const handlePipelineModeSelect = (mode: PipelineMode) => {
     setPipelineState(current => selectPipelineMode(current, mode));
+    savePipelineModeToStorage(mode);
     setSwarmStartError(null);
     if (mode === 'harness') {
       setChangesetToast('🛡️ 已选择 Harness：下一条消息将沿主 Agent Loop 执行');
@@ -767,11 +804,16 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
       fullPrompt = `[用户显式激活 Skill: @${selectedSkill.name}]\n${fullSkillBody || selectedSkill.description}\n\n${fullPrompt}`;
     }
 
-    if (activeWorkflowSelection.state === 'active' && activeWorkflowSelection.providerId) {
-      const executionNote = activeWorkflowSelection.mode === 'custom'
-        ? '该 Provider 当前只在发现/确认范围内，不得执行未知外部命令。'
-        : '仅在本次任务中启用，仍需遵守 Tcode 宿主审批与安全边界。';
-      fullPrompt = `[用户已确认启用工作流 Provider: ${activeWorkflowSelection.providerId}]\n${executionNote}\n\n${fullPrompt}`;
+    if (activeModularWorkflow && activeModularWorkflow.id !== 'normal') {
+      const currentBlock = activeModularWorkflow.blocks[0];
+      const executionNote = `【当前生效工作流】: 【${activeModularWorkflow.name}】(${activeModularWorkflow.blocks.length} 阶段积木)\n【阶段 1 初始约束】: ${currentBlock ? currentBlock.promptTemplate : ''}`;
+      fullPrompt = `[用户已确认启用积木工作流: ${activeModularWorkflow.name}]\n${executionNote}\n\n${fullPrompt}`;
+    }
+
+    if (pipelineMode === 'swarm') {
+      fullPrompt = `[Swarm 协同多智能体模式]\n${fullPrompt}`;
+    } else {
+      fullPrompt = `[Harness 闭环模式]\n${fullPrompt}`;
     }
 
     onSendMessage(fullPrompt);
@@ -851,6 +893,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
             <button
               onClick={() => {
                 setPipelineState(prev => ({ ...prev, mode: 'harness' }));
+                savePipelineModeToStorage('harness');
                 setChangesetToast('🛡️ 已切换至 Harness 单智能体闭环模式');
                 setTimeout(() => setChangesetToast(null), 2500);
               }}
@@ -876,6 +919,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
             <button
               onClick={() => {
                 setPipelineState(prev => ({ ...prev, mode: 'swarm' }));
+                savePipelineModeToStorage('swarm');
                 setChangesetToast('🐝 已切换至 Swarm 多智能体异构协同模式');
                 setTimeout(() => setChangesetToast(null), 2500);
               }}
@@ -1314,7 +1358,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                       // Default state: latest round expanded, historical rounds collapsed
                       const roundKey = `${msg.id}-round-${round.roundId}`;
                       const isManuallyToggled = userToggledRounds[roundKey] !== undefined;
-                      const isRoundExpanded = isManuallyToggled ? userToggledRounds[roundKey] : isLatestRound;
+                      const isRoundExpanded = isManuallyToggled ? userToggledRounds[roundKey] : true;
 
                       const roundParsed = parseAgentMessage(round.content || '');
                       const isCurrentlyStreaming = isLastAssistant && isLatestRound;
@@ -1612,15 +1656,39 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                       WebkitUserSelect: 'text',
                       cursor: 'text'
                     }}>
-                      <MarkdownCard
-                        content={parsed.cleanContent || (isLastAssistant ? '正在推演并分析工程结构...' : msg.content)}
-                        isStreaming={isLastAssistant && isStreaming}
-                        actionResults={msg.actionResults}
-                        onOpenFile={(path) => {
-                          if (onOpenFile) onOpenFile(path);
-                          else if (onNavigateDiff) onNavigateDiff({ fileId: path, filePath: path, targetLine: 1 });
-                        }}
-                      />
+                      {msg.role === 'assistant' ? (
+                        (msg.auditTag?.includes('Swarm') || pipelineMode === 'swarm') ? (
+                          <SwarmSubagentContainer
+                            content={parsed.cleanContent || (isLastAssistant ? '正在推演并分析工程结构...' : msg.content)}
+                            isStreaming={isLastAssistant && isStreaming}
+                            actionResults={msg.actionResults}
+                            onOpenFile={(path) => {
+                              if (onOpenFile) onOpenFile(path);
+                              else if (onNavigateDiff) onNavigateDiff({ fileId: path, filePath: path, targetLine: 1 });
+                            }}
+                          />
+                        ) : (
+                          <MarkdownCard
+                            content={parsed.cleanContent || (isLastAssistant ? '正在推演并分析工程结构...' : msg.content)}
+                            isStreaming={isLastAssistant && isStreaming}
+                            actionResults={msg.actionResults}
+                            onOpenFile={(path) => {
+                              if (onOpenFile) onOpenFile(path);
+                              else if (onNavigateDiff) onNavigateDiff({ fileId: path, filePath: path, targetLine: 1 });
+                            }}
+                          />
+                        )
+                      ) : (
+                        <MarkdownCard
+                          content={parsed.cleanContent || msg.content}
+                          isStreaming={false}
+                          actionResults={msg.actionResults}
+                          onOpenFile={(path) => {
+                            if (onOpenFile) onOpenFile(path);
+                            else if (onNavigateDiff) onNavigateDiff({ fileId: path, filePath: path, targetLine: 1 });
+                          }}
+                        />
+                      )}
                     </div>
                   )}
 
@@ -2343,183 +2411,13 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
             borderTop: '1px solid var(--border-subtle)',
             background: 'rgba(0, 0, 0, 0.015)'
           }}>
-            {/* Left Tools Group: Mode, Model, Attachments, Rules */}
+            {/* Left Tools Group: Model, Attachments, Rules */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-              {/* Mode Switcher Pill (DeepSeek Harness 4 Modes) */}
-              <div style={{ position: 'relative' }}>
-                <button
-                  onClick={() => {
-                    setShowModeMenu(!showModeMenu);
-                    setShowModelMenu(false);
-                    setShowRulesPopover(false);
-                  }}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    padding: '2px 8px',
-                    borderRadius: '4px',
-                    background: workMode === 'act'
-                      ? 'rgba(217, 107, 39, 0.12)'
-                      : workMode === 'plan'
-                      ? 'rgba(147, 51, 234, 0.12)'
-                      : workMode === 'minimal'
-                      ? 'rgba(16, 185, 129, 0.12)'
-                      : 'rgba(37, 99, 235, 0.12)',
-                    color: workMode === 'act'
-                      ? 'var(--accent)'
-                      : workMode === 'plan'
-                      ? '#9333EA'
-                      : workMode === 'minimal'
-                      ? '#10B981'
-                      : '#2563EB',
-                    border: workMode === 'act'
-                      ? '1px solid rgba(217, 107, 39, 0.3)'
-                      : workMode === 'plan'
-                      ? '1px solid rgba(147, 51, 234, 0.3)'
-                      : workMode === 'minimal'
-                      ? '1px solid rgba(16, 185, 129, 0.3)'
-                      : '1px solid rgba(37, 99, 235, 0.3)',
-                    fontSize: '11px',
-                    fontWeight: 700,
-                    cursor: 'pointer'
-                  }}
-                >
-                  {workMode === 'act' && <Zap size={11} />}
-                  {workMode === 'plan' && <Compass size={11} />}
-                  {workMode === 'minimal' && <Leaf size={11} />}
-                  {workMode === 'creator' && <Wrench size={11} />}
-                  <span>{WORK_MODE_CONFIGS[workMode].label}</span>
-                  <ChevronDown size={10} />
-                </button>
-
-                {/* Production-Grade Mode Dropdown Popover (Upward Floating without covering input box) */}
-                {showModeMenu && (
-                  <div style={{
-                    position: 'absolute',
-                    bottom: '38px',
-                    left: '0',
-                    width: 'min(380px, calc(100vw - 48px))',
-                    maxWidth: 'calc(100vw - 48px)',
-                    maxHeight: 'min(440px, 65vh)',
-                    overflowY: 'auto',
-                    background: 'var(--bg-surface-elevated)',
-                    border: '1px solid var(--border-strong)',
-                    borderRadius: '8px',
-                    boxShadow: '0 12px 36px rgba(0,0,0,0.28)',
-                    padding: '8px',
-                    zIndex: 9999
-                  }}>
-                    <div style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: '2px 4px 6px',
-                      borderBottom: '1px solid var(--border-subtle)',
-                      marginBottom: '6px'
-                    }}>
-                      <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                        运行时模态策略 (Runtime Policy)
-                      </span>
-                      <span style={{ fontSize: '9.5px', color: 'var(--text-muted)' }}>
-                        宿主级安全策略管控
-                      </span>
-                    </div>
-
-                    {[
-                      {
-                        id: 'act',
-                        name: '⚡ Act 落地执行',
-                        badge: '生产可用',
-                        color: 'var(--accent)',
-                        desc: '允许修改代码与执行验证，高危破坏性操作受宿主强制拦截。',
-                        allowed: '读写代码、执行构建、运行测试自愈',
-                        forbidden: '高危破坏性系统指令'
-                      },
-                      {
-                        id: 'plan',
-                        name: '📐 Plan 架构推演',
-                        badge: '生产可用',
-                        color: '#9333EA',
-                        desc: '只读探索工程依赖并生成 TaskPlan 计划，严禁写盘与命令。',
-                        allowed: '读取工程、符号搜索、AST 分析、生成计划',
-                        forbidden: '写盘与执行终端命令 (宿主物理拦截)'
-                      },
-                      {
-                        id: 'minimal',
-                        name: '🍃 Minimal 极简低噪',
-                        badge: '实验预览',
-                        color: '#10B981',
-                        desc: '聚焦目标文件，大幅降低中间冗余转轮与输出噪声，仍执行必要验证。',
-                        allowed: '目标文件修改、相关测试验证',
-                        forbidden: '全量工程盲目扫描'
-                      },
-                      {
-                        id: 'creator',
-                        name: '🛠️ Creator 实验室',
-                        badge: '实验预览',
-                        color: '#2563EB',
-                        desc: '用于独立调试 Prompt、编写 Rule 与测试 MCP，与业务工程物理隔离。',
-                        allowed: 'Prompt / Rule 调试、写入 .codemind/lab',
-                        forbidden: '直接修改正式业务代码'
-                      }
-                    ].map(modeItem => {
-                      const isSelected = workMode === modeItem.id;
-                      return (
-                        <div
-                          key={modeItem.id}
-                          onClick={() => { setWorkMode(modeItem.id as WorkMode); setShowModeMenu(false); }}
-                          style={{
-                            padding: '8px 10px',
-                            borderRadius: '6px',
-                            background: isSelected ? 'var(--accent-subtle)' : 'var(--bg-surface)',
-                            border: isSelected ? '1px solid var(--accent)' : '1px solid var(--border-subtle)',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: '4px',
-                            marginBottom: '6px',
-                            transition: 'all 0.12s ease'
-                          }}
-                          onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = 'var(--bg-surface-elevated)'; }}
-                          onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = 'var(--bg-surface)'; }}
-                        >
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                              <span style={{ fontWeight: 700, fontSize: '11.5px', color: modeItem.color }}>{modeItem.name}</span>
-                              <span style={{
-                                fontSize: '9px',
-                                padding: '1px 5px',
-                                borderRadius: '3px',
-                                background: isSelected ? 'var(--accent)' : 'rgba(0,0,0,0.06)',
-                                color: isSelected ? '#FFF' : 'var(--text-muted)',
-                                fontWeight: 600
-                              }}>
-                                {modeItem.badge}
-                              </span>
-                            </div>
-                            {isSelected && <Check size={13} color="var(--accent)" />}
-                          </div>
-                          <div style={{ fontSize: '10.5px', color: 'var(--text-secondary)', lineHeight: '1.4' }}>
-                            {modeItem.desc}
-                          </div>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '9.5px', marginTop: '2px', color: 'var(--text-muted)' }}>
-                            <div><span style={{ color: '#16A34A', fontWeight: 600 }}>✓ 允许:</span> {modeItem.allowed}</div>
-                            <div><span style={{ color: '#DC2626', fontWeight: 600 }}>✕ 禁止:</span> {modeItem.forbidden}</div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
               {/* Model Selector & Smart Router Pill */}
               <div style={{ position: 'relative' }}>
                 <button
                   onClick={() => {
                     setShowModelMenu(!showModelMenu);
-                    setShowModeMenu(false);
                     setShowSkillMenu(false);
                     setShowRulesPopover(false);
                   }}
@@ -2586,63 +2484,117 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                     flexDirection: 'column',
                     overflow: 'hidden'
                   }}>
-                    {/* Top Bar: Search Input & Sync Action */}
+                    {/* Top Bar: Search Input, Scenario Filter & Sync Action */}
                     <div style={{
-                      padding: '8px 12px',
+                      padding: '8px 12px 6px 12px',
                       background: 'var(--bg-surface)',
                       borderBottom: '1px solid var(--border-subtle)',
                       display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px'
+                      flexDirection: 'column',
+                      gap: '6px'
                     }}>
-                      <div style={{ position: 'relative', flex: 1 }}>
-                        <Search size={13} style={{ position: 'absolute', left: '8px', top: '7px', color: 'var(--text-muted)' }} />
-                        <input
-                          type="text"
-                          placeholder="过滤模型名称、厂商或 ID (例如: mimo, sonnet, r1)..."
-                          value={modelSearchQuery}
-                          onChange={e => setModelSearchQuery(e.target.value)}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{ position: 'relative', flex: 1 }}>
+                          <Search size={13} style={{ position: 'absolute', left: '8px', top: '7px', color: 'var(--text-muted)' }} />
+                          <input
+                            type="text"
+                            placeholder="过滤模型名称、厂商或 ID (例如: mimo, flash, r1, claude)..."
+                            value={modelSearchQuery}
+                            onChange={e => setModelSearchQuery(e.target.value)}
+                            style={{
+                              width: '100%',
+                              padding: '4px 8px 4px 26px',
+                              fontSize: '11px',
+                              borderRadius: '4px',
+                              border: '1px solid var(--border-subtle)',
+                              background: 'var(--bg-base)',
+                              color: 'var(--text-primary)',
+                              outline: 'none'
+                            }}
+                            autoFocus
+                          />
+                        </div>
+                        <button
+                          onClick={e => { e.stopPropagation(); handleSyncOnlineModels(); }}
                           style={{
-                            width: '100%',
-                            padding: '4px 8px 4px 26px',
-                            fontSize: '11px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            padding: '4px 8px',
                             borderRadius: '4px',
-                            border: '1px solid var(--border-subtle)',
-                            background: 'var(--bg-base)',
-                            color: 'var(--text-primary)',
-                            outline: 'none'
+                            background: 'var(--accent)',
+                            color: '#FFF',
+                            border: 'none',
+                            fontSize: '10.5px',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            whiteSpace: 'nowrap'
                           }}
-                          autoFocus
-                        />
+                          title="立即从网关实时拉取所有在线模型"
+                        >
+                          <RefreshCw size={11} className={isSyncingModels ? 'animate-spin' : ''} />
+                          <span>{isSyncingModels ? '同步中...' : '同步网关'}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowModelMenu(false)}
+                          aria-label="关闭模型选择器"
+                          style={{
+                            border: 0,
+                            background: 'transparent',
+                            color: 'var(--text-muted)',
+                            cursor: 'pointer',
+                            padding: '4px',
+                            borderRadius: '4px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}
+                          onMouseEnter={e => { e.currentTarget.style.color = 'var(--text-primary)'; e.currentTarget.style.background = 'var(--bg-base)'; }}
+                          onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.background = 'transparent'; }}
+                          title="关闭 (ESC)"
+                        >
+                          <X size={15} />
+                        </button>
                       </div>
-                      <button
-                        onClick={e => { e.stopPropagation(); handleSyncOnlineModels(); }}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '4px',
-                          padding: '4px 8px',
-                          borderRadius: '4px',
-                          background: 'var(--accent)',
-                          color: '#FFF',
-                          border: 'none',
-                          fontSize: '10.5px',
-                          fontWeight: 600,
-                          cursor: 'pointer',
-                          whiteSpace: 'nowrap'
-                        }}
-                        title="立即从网关实时拉取所有在线模型"
-                      >
-                        <RefreshCw size={11} className={isSyncingModels ? 'animate-spin' : ''} />
-                        <span>{isSyncingModels ? '同步中...' : '同步网关'}</span>
-                      </button>
+
+                      {/* Scenario Quick Filter Pills */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        {[
+                          { id: 'all', label: '全部' },
+                          { id: 'code', label: '💻 极速代码' },
+                          { id: 'thinking', label: '🧠 深度思考' },
+                          { id: 'offline', label: '🛡️ 纯离线' }
+                        ].map(sc => {
+                          const isActive = scenarioFilter === sc.id;
+                          return (
+                            <button
+                              key={sc.id}
+                              onClick={() => setScenarioFilter(sc.id as any)}
+                              style={{
+                                padding: '2px 7px',
+                                borderRadius: '4px',
+                                fontSize: '10px',
+                                fontWeight: isActive ? 700 : 500,
+                                background: isActive ? 'var(--accent)' : 'var(--bg-base)',
+                                color: isActive ? '#FFF' : 'var(--text-secondary)',
+                                border: isActive ? '1px solid var(--accent)' : '1px solid var(--border-subtle)',
+                                cursor: 'pointer',
+                                transition: 'all 0.12s ease'
+                              }}
+                            >
+                              {sc.label}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
 
-                    {/* Master-Detail Body: Left (Providers) + Right (Models) */}
+                    {/* Master-Detail Body: Left (Channels) + Right (Models) */}
                     <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-                      {/* Left Column: Model Providers (模型厂商) */}
+                      {/* Left Column: Channels List from New-API */}
                       <div style={{
-                        width: '170px',
+                        width: '180px',
                         background: 'var(--bg-surface)',
                         borderRight: '1px solid var(--border-subtle)',
                         display: 'flex',
@@ -2651,56 +2603,60 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                         padding: '4px'
                       }}>
                         <div style={{ fontSize: '10px', color: 'var(--text-muted)', padding: '4px 6px', fontWeight: 700 }}>
-                          模型服务商 / 厂商
+                          模型服务商渠道 (New-API)
                         </div>
-                        {[
-                          { id: 'opencode', name: 'OpenCode (Zen 官方)', icon: '⚡', count: availableModelList.filter(m => m.providerId === 'provider-opencode' || m.badge === 'OpenCode' || m.description?.includes('OpenCode')).length },
-                          { id: 'deepseek', name: 'DeepSeek / 星海', icon: '🔵', count: availableModelList.filter(m => m.providerId === 'provider-deepseek' || (m.provider === 'DeepSeek' && m.providerId !== 'provider-opencode' && !m.description?.includes('OpenCode'))).length },
-                          { id: 'anthropic', name: 'Anthropic (Claude)', icon: '🟣', count: availableModelList.filter(m => m.providerId === 'provider-anthropic' || (m.provider === 'Anthropic' && m.providerId !== 'provider-opencode')).length },
-                          { id: 'openai', name: 'OpenAI (GPT 系列)', icon: '🟢', count: availableModelList.filter(m => m.providerId === 'provider-openai' || (m.provider === 'OpenAI' && m.providerId !== 'provider-opencode')).length },
-                          { id: 'local', name: '本地 Ollama (离线)', icon: '💻', count: availableModelList.filter(m => m.providerId === 'provider-ollama' || m.providerId === 'provider-lmstudio' || m.provider === 'Local').length },
-                          { id: 'auto-router', name: '智能自适应路由', icon: '🧠', count: 4 },
-                          { id: 'gateway-v2', name: '网关 v2 多账号', icon: '🧭', count: availableModelList.filter(m => (m as any).uniqueKey?.startsWith('gateway:')).length }
-                        ].map(prov => {
-                          const isActive = activeProviderTab === prov.id;
-                          return (
-                            <div
-                              key={prov.id}
-                              onClick={() => setActiveProviderTab(prov.id)}
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'space-between',
-                                padding: '6px 8px',
-                                borderRadius: '4px',
-                                margin: '1px 0',
-                                cursor: 'pointer',
-                                background: isActive ? 'var(--accent-subtle)' : 'transparent',
-                                borderLeft: isActive ? '3px solid var(--accent)' : '3px solid transparent',
-                                fontSize: '11px',
-                                fontWeight: isActive ? 700 : 500,
-                                color: isActive ? 'var(--accent)' : 'var(--text-primary)'
-                              }}
-                            >
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '5px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                <span>{prov.icon}</span>
-                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{prov.name}</span>
+                        {(() => {
+                          const activeChannels = loadSavedChannels().filter(c => c.status !== 'disabled');
+                          const channelTabs = [
+                            ...activeChannels.map(c => {
+                              const preset = getPresetForChannelType(c.type);
+                              const count = availableModelList.filter(m => m.providerId === c.id || (m as any).uniqueKey?.startsWith(`${c.id}:`)).length;
+                              return { id: c.id, name: c.name, icon: preset.icon, count, priority: c.priority };
+                            }),
+                            { id: 'auto-router', name: '智能自适应路由', icon: '🧠', count: 4, priority: 999 }
+                          ];
+
+                          return channelTabs.map(prov => {
+                            const isActive = activeProviderTab === prov.id;
+                            return (
+                              <div
+                                key={prov.id}
+                                onClick={() => setActiveProviderTab(prov.id)}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  padding: '6px 8px',
+                                  borderRadius: '4px',
+                                  margin: '1px 0',
+                                  cursor: 'pointer',
+                                  background: isActive ? 'var(--accent-subtle)' : 'transparent',
+                                  borderLeft: isActive ? '3px solid var(--accent)' : '3px solid transparent',
+                                  fontSize: '11px',
+                                  fontWeight: isActive ? 700 : 500,
+                                  color: isActive ? 'var(--accent)' : 'var(--text-primary)'
+                                }}
+                              >
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '5px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  <span>{prov.icon}</span>
+                                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{prov.name.split(' ')[0]}</span>
+                                </div>
+                                <span style={{
+                                  fontSize: '9px',
+                                  padding: '1px 4px',
+                                  borderRadius: '8px',
+                                  background: isActive ? 'var(--accent)' : 'var(--border-subtle)',
+                                  color: isActive ? '#FFF' : 'var(--text-muted)'
+                                }}>
+                                  {prov.count}
+                                </span>
                               </div>
-                              <span style={{
-                                fontSize: '9px',
-                                padding: '1px 4px',
-                                borderRadius: '8px',
-                                background: isActive ? 'var(--accent)' : 'var(--border-subtle)',
-                                color: isActive ? '#FFF' : 'var(--text-muted)'
-                              }}>
-                                {prov.count}
-                              </span>
-                            </div>
-                          );
-                        })}
+                            );
+                          });
+                        })()}
                       </div>
 
-                      {/* Right Column: Model List for Selected Provider */}
+                      {/* Right Column: Model List for Selected Channel */}
                       <div style={{ flex: 1, overflowY: 'auto', padding: '8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                         {activeProviderTab === 'auto-router' ? (
                           <>
@@ -2746,11 +2702,12 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                           <>
                             <div style={{ fontSize: '10.5px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '4px', display: 'flex', justifyContent: 'space-between' }}>
                               <span>
-                                {activeProviderTab === 'opencode' && '⚡ OpenCode Zen 官方网关模型'}
-                                {activeProviderTab === 'deepseek' && '🔵 DeepSeek / 星海网关模型'}
-                                {activeProviderTab === 'anthropic' && '🟣 Anthropic Claude 系列模型'}
-                                {activeProviderTab === 'openai' && '🟢 OpenAI GPT 系列模型'}
-                                {activeProviderTab === 'local' && '💻 本地 Ollama 离线模型'}
+                                {(() => {
+                                  const c = loadSavedChannels().find(item => item.id === activeProviderTab);
+                                  if (!c) return '渠道模型列表';
+                                  const preset = getPresetForChannelType(c.type);
+                                  return `${preset.icon} ${c.name} · P${c.priority}`;
+                                })()}
                               </span>
                               <span>共 {
                                 availableModelList.filter(m => {
@@ -2759,13 +2716,13 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                                     const matchText = (m.name + ' ' + m.id + ' ' + (m.badge || '') + ' ' + (m.description || '')).toLowerCase();
                                     if (!matchText.includes(q)) return false;
                                   }
-                                  if (activeProviderTab === 'opencode') return m.providerId === 'provider-opencode' || m.badge === 'OpenCode' || m.description?.includes('OpenCode');
-                                  if (activeProviderTab === 'deepseek') return m.providerId === 'provider-deepseek' || (m.provider === 'DeepSeek' && m.providerId !== 'provider-opencode' && !m.description?.includes('OpenCode'));
-                                  if (activeProviderTab === 'anthropic') return m.providerId === 'provider-anthropic' || (m.provider === 'Anthropic' && m.providerId !== 'provider-opencode');
-                                  if (activeProviderTab === 'openai') return m.providerId === 'provider-openai' || (m.provider === 'OpenAI' && m.providerId !== 'provider-opencode');
-                                  if (activeProviderTab === 'local') return m.providerId === 'provider-ollama' || m.providerId === 'provider-lmstudio' || m.provider === 'Local';
-                                  if (activeProviderTab === 'gateway-v2') return (m as any).uniqueKey?.startsWith('gateway:');
-                                  return true;
+                                  if (scenarioFilter !== 'all') {
+                                    const text = (m.name + ' ' + m.id + ' ' + (m.badge || '') + ' ' + (m.description || '')).toLowerCase();
+                                    if (scenarioFilter === 'code' && !text.includes('code') && !text.includes('flash') && !text.includes('coder') && !text.includes('lightning') && !text.includes('fast')) return false;
+                                    if (scenarioFilter === 'thinking' && !text.includes('r1') && !text.includes('reasoner') && !text.includes('thinking') && !text.includes('sonnet') && !text.includes('mimo') && !text.includes('推理')) return false;
+                                    if (scenarioFilter === 'offline' && !text.includes('local') && !text.includes('ollama') && !text.includes('lmstudio') && m.provider !== 'Local' && !m.providerId?.includes('ollama')) return false;
+                                  }
+                                  return m.providerId === activeProviderTab || (m as any).uniqueKey?.startsWith(`${activeProviderTab}:`);
                                 }).length
                               } 个</span>
                             </div>
@@ -2777,13 +2734,13 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                                   const matchText = (m.name + ' ' + m.id + ' ' + (m.badge || '') + ' ' + (m.description || '')).toLowerCase();
                                   if (!matchText.includes(q)) return false;
                                 }
-                                if (activeProviderTab === 'opencode') return m.providerId === 'provider-opencode' || m.badge === 'OpenCode' || m.description?.includes('OpenCode');
-                                if (activeProviderTab === 'deepseek') return m.providerId === 'provider-deepseek' || (m.provider === 'DeepSeek' && m.providerId !== 'provider-opencode' && !m.description?.includes('OpenCode'));
-                                if (activeProviderTab === 'anthropic') return m.providerId === 'provider-anthropic' || (m.provider === 'Anthropic' && m.providerId !== 'provider-opencode');
-                                if (activeProviderTab === 'openai') return m.providerId === 'provider-openai' || (m.provider === 'OpenAI' && m.providerId !== 'provider-opencode');
-                                if (activeProviderTab === 'local') return m.providerId === 'provider-ollama' || m.providerId === 'provider-lmstudio' || m.provider === 'Local';
-                                if (activeProviderTab === 'gateway-v2') return (m as any).uniqueKey?.startsWith('gateway:');
-                                return true;
+                                if (scenarioFilter !== 'all') {
+                                  const text = (m.name + ' ' + m.id + ' ' + (m.badge || '') + ' ' + (m.description || '')).toLowerCase();
+                                  if (scenarioFilter === 'code' && !text.includes('code') && !text.includes('flash') && !text.includes('coder') && !text.includes('lightning') && !text.includes('fast')) return false;
+                                  if (scenarioFilter === 'thinking' && !text.includes('r1') && !text.includes('reasoner') && !text.includes('thinking') && !text.includes('sonnet') && !text.includes('mimo') && !text.includes('推理')) return false;
+                                  if (scenarioFilter === 'offline' && !text.includes('local') && !text.includes('ollama') && !text.includes('lmstudio') && m.provider !== 'Local' && !m.providerId?.includes('ollama')) return false;
+                                }
+                                return m.providerId === activeProviderTab || (m as any).uniqueKey?.startsWith(`${activeProviderTab}:`);
                               })
                               .map(m => {
                                 const currentKey = (currentModel as any).uniqueKey || ((currentModel as any).providerId ? `${(currentModel as any).providerId}:${currentModel.id}` : currentModel.id);
@@ -2845,22 +2802,242 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                         )}
                       </div>
                     </div>
+
+                    {/* Bottom Footer: Protocol Notice & Settings Entry */}
+                    <div style={{
+                      padding: '6px 12px',
+                      background: 'var(--bg-surface)',
+                      borderTop: '1px solid var(--border-subtle)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      fontSize: '10px'
+                    }}>
+                      <span style={{ color: 'var(--text-muted)' }}>
+                        🛡️ 复合主键单选消歧已开启 · 绝不多选 (Alt+M)
+                      </span>
+                      <button
+                        onClick={() => {
+                          setShowModelMenu(false);
+                          window.dispatchEvent(new CustomEvent('tcode_open_settings'));
+                        }}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: 'var(--accent)',
+                          fontSize: '10.5px',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          textDecoration: 'underline'
+                        }}
+                      >
+                        前往服务商设置 ⚙️
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
 
-              {/* Workflow Provider discovery and explicit activation */}
-              <WorkflowProviderPicker
-                inputText={inputText}
-                onSelectionChange={setActiveWorkflowSelection}
-              />
+                            {/* Active Modular Workflow Interactive Capsule + Popover Modal */}
+              <div style={{ position: 'relative' }}>
+                <div
+                  onClick={() => setShowWorkflowMenu(!showWorkflowMenu)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    padding: '2px 8px',
+                    borderRadius: '10px',
+                    background: activeModularWorkflow.id !== 'normal'
+                      ? (showWorkflowMenu ? 'rgba(249, 115, 22, 0.22)' : 'rgba(249, 115, 22, 0.12)')
+                      : (showWorkflowMenu ? 'var(--bg-surface-elevated)' : 'var(--bg-base)'),
+                    border: `1px solid ${
+                      activeModularWorkflow.id !== 'normal'
+                        ? (showWorkflowMenu ? 'var(--accent, #F97316)' : 'rgba(249, 115, 22, 0.3)')
+                        : 'var(--border-subtle)'
+                    }`,
+                    color: activeModularWorkflow.id !== 'normal' ? 'var(--accent, #F97316)' : 'var(--text-secondary)',
+                    fontSize: '10.5px',
+                    fontWeight: activeModularWorkflow.id !== 'normal' ? 700 : 500,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s'
+                  }}
+                  title={activeModularWorkflow.id !== 'normal' ? '已启用工作流 (点击可切换或再次点击取消选中)' : '未启用工作流 (点击可选择工作流)'}
+                >
+                  <span>{activeModularWorkflow.id !== 'normal' ? `${activeModularWorkflow.icon} ${activeModularWorkflow.name}` : '💬 普通任务模式'}</span>
+                  <span style={{ fontSize: '9px', color: 'var(--text-muted)' }}>
+                    {activeModularWorkflow.id !== 'normal' ? `(${activeModularWorkflow.blocks.length} 阶段)` : '(未指定)'}
+                  </span>
+                  <ChevronDown size={11} style={{ transform: showWorkflowMenu ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }} />
+                </div>
+
+                {/* Workflow Quick-Selection Popover Modal */}
+                {showWorkflowMenu && (
+                  <div style={{
+                    position: 'absolute',
+                    bottom: '36px',
+                    left: '0',
+                    width: 'min(420px, calc(100vw - 48px))',
+                    maxHeight: 'min(500px, 68vh)',
+                    background: 'var(--bg-surface-elevated, #1A1D24)',
+                    border: '1px solid var(--border-strong, rgba(255,255,255,0.18))',
+                    borderRadius: '10px',
+                    boxShadow: '0 16px 48px rgba(0,0,0,0.45)',
+                    padding: '12px',
+                    zIndex: 350,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '10px'
+                  }}>
+                    {/* Header with Title and explicit Close [X] button */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ fontSize: '14px' }}>🧩</span>
+                        <strong style={{ fontSize: '12px', color: 'var(--text-primary)' }}>选择会话工作流 (单选即生效)</strong>
+                        <span style={{ fontSize: '9.5px', color: 'var(--text-muted)' }}>ESC 可关闭</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowWorkflowMenu(false)}
+                        style={{
+                          border: 'none',
+                          background: 'transparent',
+                          color: 'var(--text-muted)',
+                          cursor: 'pointer',
+                          padding: '2px 4px',
+                          borderRadius: '4px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}
+                        title="关闭 (ESC)"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+
+                    {/* Search Input */}
+                    <div style={{ position: 'relative' }}>
+                      <Search size={12} color="var(--text-muted)" style={{ position: 'absolute', left: '8px', top: '7px' }} />
+                      <input
+                        type="text"
+                        placeholder="搜索工作流 (如 SDD, TDD, SpecKit)..."
+                        value={workflowSearchQuery}
+                        onChange={(e) => setWorkflowSearchQuery(e.target.value)}
+                        style={{
+                          width: '100%',
+                          padding: '5px 8px 5px 26px',
+                          borderRadius: '6px',
+                          background: 'var(--bg-base, #101216)',
+                          border: '1px solid var(--border-subtle)',
+                          color: 'var(--text-primary)',
+                          fontSize: '11px',
+                          outline: 'none'
+                        }}
+                        autoFocus
+                      />
+                    </div>
+
+                    {/* Workflows List */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', overflowY: 'auto', maxHeight: '280px', paddingRight: '2px' }}>
+                      {savedWorkflowsList
+                        .filter(w => !workflowSearchQuery || w.name.toLowerCase().includes(workflowSearchQuery.toLowerCase()) || w.description.toLowerCase().includes(workflowSearchQuery.toLowerCase()))
+                        .map(w => {
+                          const isSelected = w.id === activeModularWorkflow.id;
+                          return (
+                            <div
+                              key={w.id}
+                              onClick={() => {
+                                if (isSelected) {
+                                  // Click again to deselect back to normal/none mode!
+                                  setActiveWorkflowId('normal');
+                                  setActiveModularWorkflow(NORMAL_WORKFLOW);
+                                } else {
+                                  setActiveWorkflowId(w.id);
+                                  setActiveModularWorkflow(w);
+                                }
+                                setShowWorkflowMenu(false);
+                              }}
+                              style={{
+                                padding: '8px 10px',
+                                borderRadius: '8px',
+                                background: isSelected ? 'rgba(249, 115, 22, 0.12)' : 'var(--bg-surface, #14161C)',
+                                border: isSelected ? '1.5px solid var(--accent, #F97316)' : '1px solid var(--border-subtle)',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '4px',
+                                transition: 'all 0.15s'
+                              }}
+                            >
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <span style={{ fontSize: '13px' }}>{w.icon}</span>
+                                  <span style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-primary)' }}>{w.name}</span>
+                                  <span style={{ fontSize: '9.5px', padding: '1px 5px', borderRadius: '4px', background: 'rgba(255,255,255,0.06)', color: 'var(--text-muted)' }}>
+                                    {w.blocks.length} 阶段
+                                  </span>
+                                </div>
+                                {isSelected ? (
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--accent, #F97316)', fontSize: '11px', fontWeight: 700 }} title="再次点击即可取消选中">
+                                    <Check size={12} />
+                                    <span>生效中 (再点取消)</span>
+                                  </div>
+                                ) : (
+                                  <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>点击选中</span>
+                                )}
+                              </div>
+                              <div style={{ fontSize: '10.5px', color: 'var(--text-secondary)' }}>
+                                {w.description}
+                              </div>
+                            </div>
+                          );
+                        })}
+                    </div>
+
+                    {/* Footer: Jump to Block Studio */}
+                    <div style={{
+                      borderTop: '1px solid var(--border-subtle)',
+                      paddingTop: '8px',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center'
+                    }}>
+                      <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                        📁 独立存储: .codemind/workflows.json
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowWorkflowMenu(false);
+                          window.dispatchEvent(new CustomEvent('tcode_open_settings_tab', { detail: 'workflows' }));
+                        }}
+                        style={{
+                          border: 'none',
+                          background: 'transparent',
+                          color: 'var(--accent, #F97316)',
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}
+                      >
+                        <span>🧩 积木拼装工作台 (深度编排) ➔</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+
 
               {/* @ Agent Skills Reference Trigger Button */}
               <div style={{ position: 'relative' }}>
                 <button
                   onClick={() => {
                     setShowSkillMenu(!showSkillMenu);
-                    setShowModeMenu(false);
                     setShowModelMenu(false);
                     setShowRulesPopover(false);
                   }}
@@ -3116,8 +3293,32 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                     fontSize: '11px'
                   }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '4px' }}>
-                      <span style={{ fontWeight: 700, color: 'var(--accent)' }}>已注入 Agent 请求的生效规则</span>
-                      <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>实时快照</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <ScrollText size={12} color="var(--accent)" />
+                        <span style={{ fontWeight: 700, color: 'var(--accent)' }}>已注入生效规则</span>
+                        <span style={{ fontSize: '9.5px', color: 'var(--text-muted)' }}>实时快照</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowRulesPopover(false)}
+                        aria-label="关闭规则列表"
+                        style={{
+                          border: 0,
+                          background: 'transparent',
+                          color: 'var(--text-muted)',
+                          cursor: 'pointer',
+                          padding: '2px 4px',
+                          borderRadius: '4px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.color = 'var(--text-primary)'; e.currentTarget.style.background = 'var(--bg-surface)'; }}
+                        onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.background = 'transparent'; }}
+                        title="关闭 (ESC)"
+                      >
+                        <X size={14} />
+                      </button>
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                       {activeRules.map(r => (

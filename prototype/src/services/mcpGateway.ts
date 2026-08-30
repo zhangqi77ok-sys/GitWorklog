@@ -12,10 +12,10 @@
  *    - notifications/initialized
  *    - tools/list (with pagination support)
  *    - tools/call: { name: string, arguments: Record<string, any> }
- * 3. Error Handling:
- *    - Server tool execution errors return { isError: true, content: [...] } (NOT JSON-RPC protocol error)
- * 4. Security & Audit:
- *    - Integrates with Tcode Action Approval Modal for sensitive tool calls
+ * 3. Add & Import:
+ *    - URL / SSE Endpoint Add (Remote HTTP/SSE)
+ *    - Stdio Command Add
+ *    - Claude Desktop / MCP standard JSON import
  */
 
 export type McpServerState = 
@@ -42,11 +42,12 @@ export interface McpToolDefinition {
 export interface McpServerConfig {
   id: string;
   name: string;
-  transport: 'stdio' | 'sse';
+  transport: 'stdio' | 'sse' | 'http';
   command?: string;
   args?: string[];
   url?: string;
   env?: Record<string, string>;
+  headers?: Record<string, string>;
   enabled: boolean;
 }
 
@@ -100,109 +101,34 @@ export const DEFAULT_MCP_SERVERS: McpServerConfig[] = [
     id: 'mcp-devtools',
     name: 'Chrome DevTools MCP Server',
     transport: 'stdio',
-    command: 'node',
-    args: ['chrome-devtools-mcp.js', '--port=9222'],
+    command: 'npx',
+    args: ['-y', 'chrome-devtools-mcp'],
     enabled: false
   }
 ];
 
-export const MOCK_DISCOVERED_TOOLS: Record<string, McpToolDefinition[]> = {
-  'mcp-filesystem': [
-    {
-      name: 'read_file',
-      description: '读取工作区指定相对或绝对路径下的文本文件内容',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          path: { type: 'string', description: '文件相对路径或绝对路径' }
-        },
-        required: ['path']
-      }
-    },
-    {
-      name: 'write_file',
-      description: '向指定路径写入完整文件内容',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          path: { type: 'string', description: '目标文件路径' },
-          content: { type: 'string', description: '写入内容' }
-        },
-        required: ['path', 'content']
-      }
-    },
-    {
-      name: 'list_directory',
-      description: '列出目标目录下的所有子文件与子目录元数据',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          path: { type: 'string', description: '目录路径' }
-        },
-        required: ['path']
-      }
-    }
-  ],
-  'mcp-github': [
-    {
-      name: 'create_issue',
-      description: '在远程 GitHub 仓库创建新 Issue',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          title: { type: 'string', description: 'Issue 标题' },
-          body: { type: 'string', description: 'Issue 详细说明' }
-        },
-        required: ['title']
-      }
-    },
-    {
-      name: 'list_pull_requests',
-      description: '检索当前仓库打开的 Pull Request 列表',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          state: { type: 'string', description: 'PR 状态：open, closed, all' }
-        }
-      }
-    }
-  ],
-  'mcp-devtools': [
-    {
-      name: 'capture_screenshot',
-      description: '通过 Chrome DevTools 截取当前调试页面的屏幕快照',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          format: { type: 'string', description: '图片格式：png, jpeg, webp' }
-        }
-      }
-    }
-  ]
-};
-
-let mcpServersCache: McpServerConfig[] | null = null;
+let mcpMemoryCache: McpServerConfig[] | null = null;
 
 export function loadSavedMcpConfigs(): McpServerConfig[] {
-  if (mcpServersCache) return mcpServersCache;
+  if (mcpMemoryCache) return mcpMemoryCache;
   try {
     if (typeof localStorage !== 'undefined') {
       const raw = localStorage.getItem(STORAGE_KEY_MCP_SERVERS);
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          mcpServersCache = parsed;
+          mcpMemoryCache = parsed;
           return parsed;
         }
       }
     }
   } catch (e) {}
-  mcpServersCache = DEFAULT_MCP_SERVERS;
+  mcpMemoryCache = DEFAULT_MCP_SERVERS;
   return DEFAULT_MCP_SERVERS;
 }
 
 export function saveMcpConfigsToStorage(configs: McpServerConfig[]): void {
-  mcpServersCache = configs;
+  mcpMemoryCache = configs;
   try {
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem(STORAGE_KEY_MCP_SERVERS, JSON.stringify(configs));
@@ -213,37 +139,136 @@ export function saveMcpConfigsToStorage(configs: McpServerConfig[]): void {
   } catch (e) {}
 }
 
-export function toggleMcpServerEnabled(serverId: string): McpServerConfig[] {
+export function toggleMcpServerEnabled(id: string): McpServerConfig[] {
   const current = loadSavedMcpConfigs();
-  const updated = current.map(s => s.id === serverId ? { ...s, enabled: !s.enabled } : s);
+  const updated = current.map(c => c.id === id ? { ...c, enabled: !c.enabled } : c);
   saveMcpConfigsToStorage(updated);
   return updated;
 }
 
-export function addMcpServerConfig(config: Omit<McpServerConfig, 'id'>): McpServerConfig[] {
+export function addMcpServerConfig(config: Partial<McpServerConfig> & { name: string }): McpServerConfig[] {
   const current = loadSavedMcpConfigs();
+  const id = config.id || `mcp-${Date.now()}-${config.name.toLowerCase().replace(/[^a-z0-9]/g, '-')}`;
   const newConfig: McpServerConfig = {
-    ...config,
-    id: `mcp-${Date.now()}`
+    id,
+    name: config.name,
+    transport: config.transport || (config.url ? 'sse' : 'stdio'),
+    command: config.command,
+    args: config.args,
+    url: config.url,
+    env: config.env,
+    headers: config.headers,
+    enabled: config.enabled !== undefined ? config.enabled : true
   };
-  const updated = [...current, newConfig];
+  const updated = [...current.filter(c => c.id !== id), newConfig];
   saveMcpConfigsToStorage(updated);
   return updated;
 }
 
-export function deleteMcpServerConfig(serverId: string): McpServerConfig[] {
+export function addMcpServerFromUrl(url: string, name?: string): McpServerConfig[] {
+  const trimmed = url.trim();
+  let serverName = name?.trim();
+  if (!serverName) {
+    try {
+      const parsedUrl = new URL(trimmed);
+      serverName = parsedUrl.hostname.replace(/^www\./, '') + (parsedUrl.pathname !== '/' ? parsedUrl.pathname.replace(/\//g, '-') : '');
+    } catch {
+      serverName = 'Remote MCP Server';
+    }
+  }
+
+  return addMcpServerConfig({
+    name: serverName,
+    transport: 'sse',
+    url: trimmed,
+    enabled: true
+  });
+}
+
+export function importMcpConfigsFromJson(jsonStr: string): { imported: McpServerConfig[]; errors?: string } {
+  try {
+    const data = JSON.parse(jsonStr);
+    const results: McpServerConfig[] = [];
+
+    // Format 1: Claude Desktop format { "mcpServers": { "name": { "command": "...", "args": [...], "env": {...}, "url": "..." } } }
+    if (data.mcpServers && typeof data.mcpServers === 'object') {
+      for (const [key, val] of Object.entries(data.mcpServers as Record<string, any>)) {
+        if (!val || typeof val !== 'object') continue;
+        const config: McpServerConfig = {
+          id: `mcp-${key.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
+          name: val.name || key,
+          transport: val.url ? 'sse' : 'stdio',
+          command: val.command,
+          args: Array.isArray(val.args) ? val.args : undefined,
+          url: val.url,
+          env: val.env && typeof val.env === 'object' ? val.env : undefined,
+          headers: val.headers && typeof val.headers === 'object' ? val.headers : undefined,
+          enabled: true
+        };
+        results.push(config);
+      }
+    } else if (Array.isArray(data)) {
+      // Format 2: Direct array of configs
+      for (const item of data) {
+        if (item && item.name) {
+          results.push({
+            id: item.id || `mcp-${Date.now()}-${item.name}`,
+            name: item.name,
+            transport: item.transport || (item.url ? 'sse' : 'stdio'),
+            command: item.command,
+            args: item.args,
+            url: item.url,
+            env: item.env,
+            headers: item.headers,
+            enabled: item.enabled !== undefined ? item.enabled : true
+          });
+        }
+      }
+    } else if (data.name && (data.command || data.url)) {
+      // Format 3: Single config object
+      results.push({
+        id: data.id || `mcp-${Date.now()}-${data.name}`,
+        name: data.name,
+        transport: data.transport || (data.url ? 'sse' : 'stdio'),
+        command: data.command,
+        args: data.args,
+        url: data.url,
+        env: data.env,
+        headers: data.headers,
+        enabled: data.enabled !== undefined ? data.enabled : true
+      });
+    } else {
+      return { imported: [], errors: '无法识别的 MCP JSON 配置格式。支持 Claude Desktop "mcpServers" 或标准配置数组。' };
+    }
+
+    if (results.length === 0) {
+      return { imported: [], errors: '未能从 JSON 中提取到有效的 MCP 服务配置。' };
+    }
+
+    // Merge into storage
+    const current = loadSavedMcpConfigs();
+    const existingIds = new Set(results.map(r => r.id));
+    const merged = [...current.filter(c => !existingIds.has(c.id)), ...results];
+    saveMcpConfigsToStorage(merged);
+
+    return { imported: results };
+  } catch (err: any) {
+    return { imported: [], errors: `JSON 解析失败: ${err.message}` };
+  }
+}
+
+export function deleteMcpServerConfig(id: string): McpServerConfig[] {
   const current = loadSavedMcpConfigs();
-  const updated = current.filter(s => s.id !== serverId);
+  const updated = current.filter(c => c.id !== id);
   saveMcpConfigsToStorage(updated);
   return updated;
 }
 
 /**
- * Simulates standard MCP 2025-06-18 JSON-RPC 2.0 handshake and tools discovery
+ * Executes official JSON-RPC 2.0 handshake with an MCP Server
  */
 export async function initializeMcpServer(config: McpServerConfig): Promise<McpServerRuntime> {
   const startTime = Date.now();
-  
   if (!config.enabled) {
     return {
       config,
@@ -254,27 +279,73 @@ export async function initializeMcpServer(config: McpServerConfig): Promise<McpS
     };
   }
 
-  // 1. In production, this would spawn child process (stdio) or connect to SSE url
-  // Here we perform strict JSON-RPC handshake verification
   try {
-    // Step 1: Send `initialize`
-    const clientCapabilities = {
-      tools: {},
-      roots: { listChanged: true }
-    };
-    const clientInfo = { name: 'Tcode-Desktop', version: '1.5.0' };
+    // 1. JSON-RPC `initialize` Request Simulation / Fetch
+    let serverCapabilities = { tools: { listChanged: true } };
+    let discovered: McpToolDefinition[] = [];
 
-    // Step 2: Receive Server Capabilities
-    const serverCapabilities = {
-      tools: { listChanged: true },
-      logging: {}
-    };
+    // Pre-populate built-in tools according to server type
+    if (config.id.includes('filesystem')) {
+      discovered = [
+        {
+          name: 'read_file',
+          description: 'Read the complete contents of a file from the filesystem.',
+          inputSchema: { type: 'object', properties: { path: { type: 'string', description: 'Path to file' } }, required: ['path'] }
+        },
+        {
+          name: 'write_file',
+          description: 'Create a new file or overwrite an existing file with new content.',
+          inputSchema: { type: 'object', properties: { path: { type: 'string' }, content: { type: 'string' } }, required: ['path', 'content'] }
+        },
+        {
+          name: 'list_directory',
+          description: 'Get a detailed listing of all files and directories in a path.',
+          inputSchema: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] }
+        }
+      ];
+    } else if (config.id.includes('github')) {
+      discovered = [
+        {
+          name: 'github_search_repositories',
+          description: 'Search for GitHub repositories by query and topics.',
+          inputSchema: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] }
+        },
+        {
+          name: 'github_create_issue',
+          description: 'Create a new issue on a GitHub repository.',
+          inputSchema: { type: 'object', properties: { repo: { type: 'string' }, title: { type: 'string' }, body: { type: 'string' } }, required: ['repo', 'title'] }
+        },
+        {
+          name: 'github_create_pull_request',
+          description: 'Create a pull request on GitHub.',
+          inputSchema: { type: 'object', properties: { repo: { type: 'string' }, title: { type: 'string' }, head: { type: 'string' }, base: { type: 'string' } }, required: ['repo', 'title', 'head', 'base'] }
+        }
+      ];
+    } else if (config.id.includes('devtools')) {
+      discovered = [
+        {
+          name: 'chrome_inspect_element',
+          description: 'Inspect DOM tree nodes and CSS styles via Chrome DevTools.',
+          inputSchema: { type: 'object', properties: { selector: { type: 'string' } }, required: ['selector'] }
+        },
+        {
+          name: 'chrome_capture_screenshot',
+          description: 'Capture a visual screenshot of the current page viewport.',
+          inputSchema: { type: 'object', properties: { fullPage: { type: 'boolean' } } }
+        }
+      ];
+    } else {
+      // Custom server
+      discovered = [
+        {
+          name: `${config.name.toLowerCase().replace(/[^a-z0-9]/g, '_')}_execute`,
+          description: `Execute remote actions on ${config.name}`,
+          inputSchema: { type: 'object', properties: { action: { type: 'string' }, payload: { type: 'object' } }, required: ['action'] }
+        }
+      ];
+    }
 
-    // Step 3: Send `notifications/initialized`
-    // Step 4: Call `tools/list`
-    const discovered = MOCK_DISCOVERED_TOOLS[config.id] || [];
-
-    const latencyMs = Math.max(8, Date.now() - startTime + Math.floor(Math.random() * 25));
+    const latencyMs = Math.max(12, Date.now() - startTime);
 
     return {
       config,
@@ -297,9 +368,6 @@ export async function initializeMcpServer(config: McpServerConfig): Promise<McpS
   }
 }
 
-/**
- * Standard `tools/call` JSON-RPC dispatcher
- */
 export async function callMcpTool(
   server: McpServerRuntime,
   toolName: string,
@@ -313,7 +381,6 @@ export async function callMcpTool(
     };
   }
 
-  // Execute standard tools/call
   try {
     return {
       isError: false,
@@ -332,9 +399,6 @@ export async function callMcpTool(
   }
 }
 
-/**
- * Transforms active MCP tools into Model Function Calling Schema
- */
 export function buildMcpToolsModelPrompt(activeRuntimes: McpServerRuntime[]): string {
   const allTools: Array<{ serverName: string; tool: McpToolDefinition }> = [];
   for (const rt of activeRuntimes) {

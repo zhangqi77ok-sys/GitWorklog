@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { getCachedTelemetryStats, CacheTelemetryStats } from '../services/cacheEngine';
 import { Layers, ChevronDown, ShieldCheck, Zap, X, Minus, Square, Info, TrendingUp } from 'lucide-react';
 import { TokenStats, calculateTokenSavingsPercent, getContextGaugeLevel } from '../types/contracts';
 
@@ -18,6 +19,17 @@ export const Titlebar: React.FC<TitlebarProps> = ({
   onOpenTokenAnalytics
 }) => {
   const [showTokenPopover, setShowTokenPopover] = useState(false);
+  const [cacheStats, setCacheStats] = useState<CacheTelemetryStats>(() => getCachedTelemetryStats());
+  const [showCachePopover, setShowCachePopover] = useState(false);
+
+  useEffect(() => {
+    const handleCacheUpdate = (e: any) => {
+      if (e.detail) setCacheStats(e.detail);
+    };
+    window.addEventListener('tcode_cache_telemetry_updated', handleCacheUpdate);
+    return () => window.removeEventListener('tcode_cache_telemetry_updated', handleCacheUpdate);
+  }, []);
+
   const savings = calculateTokenSavingsPercent(tokenStats);
   const gaugeLevel = getContextGaugeLevel(tokenStats.contextCurrentTokens, tokenStats.contextMaxTokens);
 
@@ -52,21 +64,17 @@ export const Titlebar: React.FC<TitlebarProps> = ({
     >
       {/* Left: Brand & Breadcrumb */}
       <div className="pywebview-no-drag" style={{ display: 'flex', alignItems: 'center', gap: '8px', WebkitAppRegion: 'no-drag' } as any}>
-        <div style={{
-          width: '18px',
-          height: '18px',
-          borderRadius: '4px',
-          background: 'var(--accent)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: '#FFF',
-          fontWeight: 'bold',
-          fontSize: '11px'
-        }}>
-          C
-        </div>
-        <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Tcode</span>
+        <img
+          src="/logo.svg"
+          alt="Tcode Logo"
+          style={{
+            width: '18px',
+            height: '18px',
+            borderRadius: '4px',
+            display: 'block'
+          }}
+        />
+        <span style={{ fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.2px' }}>Tcode</span>
         {currentProject ? (
           <>
             <span style={{ color: 'var(--text-muted)' }}>›</span>
@@ -148,8 +156,6 @@ export const Titlebar: React.FC<TitlebarProps> = ({
             <span style={{ fontWeight: 600 }}>📊 {totalTokensK}k tokens</span>
             <span style={{ color: 'var(--text-muted)' }}>·</span>
             <span style={{ color: 'var(--status-safe)' }}>Cache {savings}%</span>
-            <span style={{ color: 'var(--text-muted)' }}>·</span>
-            <span style={{ color: 'var(--accent)' }}>${tokenStats.estimatedCostUsd.toFixed(3)}</span>
           </div>
 
           {/* Token Dropdown Breakdown Popover */}

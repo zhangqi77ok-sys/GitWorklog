@@ -1,4 +1,4 @@
-﻿import type { AccountQuota, GatewayAccount, GatewayPlatform, UpstreamCredential } from './types';
+import type { AccountQuota, GatewayAccount, GatewayPlatform, UpstreamCredential } from './types';
 
 export interface AccountInput {
   platform: GatewayPlatform;
@@ -11,6 +11,11 @@ export interface AccountInput {
   stickySessionTtlMs?: number;
 }
 
+export const OPENCODE_PACKAGE_URLS = {
+  go: 'https://opencode.ai/zen/go/v1',
+  zen: 'https://opencode.ai/zen/v1'
+} as const;
+
 export const DEFAULT_BASE_URLS: Record<GatewayPlatform, string> = {
   codex: 'https://chatgpt.com/backend-api/codex',
   claude: 'https://api.anthropic.com/v1',
@@ -18,8 +23,8 @@ export const DEFAULT_BASE_URLS: Record<GatewayPlatform, string> = {
   gemini: 'https://generativelanguage.googleapis.com',
   openai: 'https://api.openai.com/v1',
   deepseek: 'https://api.deepseek.com/v1',
-  opencode: 'https://opencode.ai/zen/v1',
-  'openai-compatible': 'https://opencode.ai/zen/v1',
+  opencode: OPENCODE_PACKAGE_URLS.go,
+  'openai-compatible': OPENCODE_PACKAGE_URLS.go,
   local: 'http://127.0.0.1:11434/v1'
 };
 

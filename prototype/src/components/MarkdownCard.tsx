@@ -89,9 +89,13 @@ const CodeBlockCard: React.FC<CodeBlockCardProps> = ({
   const [isExpanded, setIsExpanded] = useState(false);
 
   const cleanLang = (language || '').trim();
-  const isWriteFile = cleanLang.startsWith('write_file:') || cleanLang.startsWith('file:') || cleanLang.startsWith('create_file:');
-  const targetFilePath = isWriteFile ? cleanLang.replace(/^(write_file:|file:|create_file:)/, '').trim() : '';
-  const isCommandLang = parseAgentActions(`\`\`\`${cleanLang}\n${code}\n\`\`\``).some(action => action.type === 'run_command');
+  const parsedActions = parseAgentActions(`\`\`\`${cleanLang}\n${code}\n\`\`\``);
+  const matchedAction = parsedActions[0];
+
+  const isReadFile = matchedAction?.type === 'read_file';
+  const isWriteFile = matchedAction?.type === 'write_file' || cleanLang.startsWith('write_file:') || cleanLang.startsWith('file:') || cleanLang.startsWith('create_file:');
+  const targetFilePath = matchedAction?.target || (isWriteFile ? cleanLang.replace(/^(write_file:|file:|create_file:)/, '').trim() : '');
+  const isCommandLang = matchedAction?.type === 'run_command';
 
   const handleCopy = () => {
     navigator.clipboard.writeText(code);
@@ -100,6 +104,124 @@ const CodeBlockCard: React.FC<CodeBlockCardProps> = ({
   };
 
   const status = executionStatus ?? executionResult?.status;
+
+  // ─── 1.5 File Read Card (Collapsible, Display-Only) ───
+  if (isReadFile && targetFilePath) {
+    return (
+      <div style={{
+        margin: '10px 0',
+        borderRadius: '8px',
+        overflow: 'hidden',
+        border: status === 'success' ? '1px solid #38BDF8' : status === 'failed' ? '1px solid #EF4444' : '1px solid #0284C7',
+        background: '#0F172A',
+        boxShadow: '0 4px 16px rgba(56, 189, 248, 0.12)'
+      }}>
+        {/* Header */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '7px 12px',
+          background: status === 'success'
+            ? 'linear-gradient(90deg, rgba(56, 189, 248, 0.2) 0%, rgba(15, 23, 42, 0.85) 100%)'
+            : 'linear-gradient(90deg, rgba(14, 165, 233, 0.22) 0%, rgba(15, 23, 42, 0.85) 100%)',
+          borderBottom: isExpanded ? '1px solid #334155' : 'none',
+          fontSize: '11.5px',
+          gap: '8px',
+          flexWrap: 'wrap'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
+            <FileCode size={14} color={status === 'success' ? '#38BDF8' : '#0EA5E9'} style={{ flexShrink: 0 }} />
+            <div
+              onClick={() => onOpenFile?.(targetFilePath)}
+              style={{
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                color: '#F8FAFC',
+                fontWeight: 700,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap'
+              }}
+              title="点击在右侧代码工作台打开此文件"
+            >
+              <span style={{ color: '#38BDF8' }}>📖 读取: {targetFilePath}</span>
+              <ExternalLink size={11} color="#38BDF8" style={{ opacity: 0.8 }} />
+            </div>
+            <StatusBadge status={status} />
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+            {executionResult?.output && (
+              <button
+                onClick={() => setIsExpanded(!isExpanded)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '3px',
+                  padding: '3px 8px', borderRadius: '4px',
+                  background: 'rgba(51, 65, 85, 0.6)', color: '#E2E8F0',
+                  border: '1px solid #475569', fontSize: '11px', cursor: 'pointer'
+                }}
+              >
+                {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                <span>{isExpanded ? '收起内容' : '展开内容'}</span>
+              </button>
+            )}
+
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(executionResult?.output || targetFilePath);
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+              }}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '4px',
+                padding: '3px 8px', borderRadius: '4px',
+                background: copied ? '#15803D' : '#334155',
+                color: copied ? '#DCFCE7' : '#F1F5F9',
+                border: 'none', fontSize: '11px', cursor: 'pointer'
+              }}
+            >
+              {copied ? <Check size={12} /> : <Copy size={12} />}
+              <span>{copied ? '已复制' : '复制'}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Result */}
+        {executionResult && (
+          <div style={{
+            padding: '6px 12px',
+            background: executionResult.status === 'success' ? 'rgba(56, 189, 248, 0.1)' : 'rgba(220, 38, 38, 0.15)',
+            borderBottom: isExpanded ? '1px solid #334155' : 'none',
+            fontSize: '11px',
+            color: executionResult.status === 'success' ? '#38BDF8' : '#F87171',
+            display: 'flex', alignItems: 'center', gap: '6px'
+          }}>
+            {executionResult.status === 'success' ? <CheckCircle2 size={13} /> : <AlertCircle size={13} />}
+            <span>
+              {executionResult.status === 'success'
+                ? `✨ 文件读取完成 (${executionResult.fileSize || executionResult.output?.length || '?'} 字符) · 已注入下一轮思考上下文`
+                : `❌ 读取失败: ${executionResult.error}`}
+            </span>
+          </div>
+        )}
+
+        {/* Read content */}
+        {isExpanded && executionResult?.output && (
+          <pre style={{
+            margin: 0, padding: '12px 14px', overflowX: 'auto', maxHeight: '480px',
+            fontSize: '12px', lineHeight: 1.6,
+            fontFamily: 'Consolas, "Fira Code", Monaco, monospace',
+            color: '#F8FAFC', background: '#0B1120', whiteSpace: 'pre', wordBreak: 'normal'
+          }}>
+            <code>{executionResult.output}</code>
+          </pre>
+        )}
+      </div>
+    );
+  }
 
   // ─── 1. File Write Card (Collapsible, Display-Only) ───
   if (isWriteFile && targetFilePath) {

@@ -74,6 +74,7 @@ def build() -> Path:
 
     # 2. Build Tcode-Core.exe
     print(f"\n[3/5] Compiling {CORE_EXE_NAME}...")
+    icon_path = ROOT / "src-desktop" / "icon.ico"
     core_cmd = [
         *pyinstaller_base_cmd(),
         "--noconfirm",
@@ -81,6 +82,7 @@ def build() -> Path:
         "--windowed",
         "--onefile",
         "--name=Tcode-Core",
+        f"--icon={icon_path}",
         f"--add-data={FRONTEND_DIST}{os.pathsep}dist",
         f"--distpath={CORE_DIST_DIR}",
         f"--workpath={WORK_CORE_DIR}",
@@ -93,6 +95,8 @@ def build() -> Path:
 
     # 3. Inject payload
     shutil.copy2(CORE_OUTPUT, PAYLOAD_DIR / CORE_EXE_NAME)
+    if (ROOT / "src-desktop" / "app.ico").is_file():
+        shutil.copy2(ROOT / "src-desktop" / "app.ico", PAYLOAD_DIR / "app.ico")
 
     # 4. Build Tcode-Setup-v1.5.0.exe
     print(f"\n[4/5] Compiling {SETUP_EXE_NAME} in {RELEASE_DIR}...")
@@ -103,6 +107,7 @@ def build() -> Path:
         "--windowed",
         "--onefile",
         f"--name=Tcode-Setup-v{VERSION}",
+        f"--icon={icon_path}",
         f"--add-data={PAYLOAD_DIR}{os.pathsep}payload",
         f"--distpath={RELEASE_DIR}",
         f"--workpath={WORK_SETUP_DIR}",
@@ -120,10 +125,11 @@ def build() -> Path:
 
     # 5. Create zip distribution package
     print(f"\n[5/5] Creating {ZIP_NAME}...")
-    subprocess.run([
-        "powershell.exe", "-NoProfile", "-Command",
-        f"Compress-Archive -Path '{INSTALLER_OUTPUT}' -DestinationPath '{ZIP_OUTPUT}' -Force"
-    ], check=True)
+    import zipfile
+    import time
+    time.sleep(1.0)
+    with zipfile.ZipFile(ZIP_OUTPUT, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        zf.write(INSTALLER_OUTPUT, arcname=INSTALLER_OUTPUT.name)
 
     print(f"\n✨ Successfully generated Windows installer: {INSTALLER_OUTPUT} ({INSTALLER_OUTPUT.stat().st_size:,} bytes)")
     print(f"✨ Successfully generated Zip archive: {ZIP_OUTPUT} ({ZIP_OUTPUT.stat().st_size:,} bytes)")

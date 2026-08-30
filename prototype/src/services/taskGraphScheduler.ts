@@ -332,9 +332,9 @@ export class TaskGraphScheduler {
         continue;
       }
 
-      // Execute ready tasks
-      for (const task of readyTasks) {
-        if (abortController.signal.aborted) break;
+      // Execute all ready tasks concurrently in parallel
+      await Promise.all(readyTasks.map(async task => {
+        if (abortController.signal.aborted) return;
 
         task.status = 'running';
         task.startedAt = Date.now();
@@ -409,7 +409,7 @@ export class TaskGraphScheduler {
             payload: task
           });
         }
-      }
+      }));
     }
   }
 

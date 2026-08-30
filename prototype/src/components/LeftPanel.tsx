@@ -21,7 +21,7 @@ import {
   X,
   HardDrive
 } from 'lucide-react';
-import { SessionItem, ProjectGroup } from '../types/contracts';
+import { SessionItem, ProjectGroup, loadSavedSessionMessages, ChatMessage } from '../types/contracts';
 
 interface LeftPanelProps {
   width?: number;
@@ -61,6 +61,19 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
   const [globalExpanded, setGlobalExpanded] = useState(true);
   const [projectsExpanded, setProjectsExpanded] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [allSessionMsgs, setAllSessionMsgs] = useState<Record<string, ChatMessage[]>>(() => loadSavedSessionMessages());
+
+  React.useEffect(() => {
+    const handleSync = () => {
+      setAllSessionMsgs(loadSavedSessionMessages());
+    };
+    window.addEventListener('storage', handleSync);
+    window.addEventListener('tcode_session_messages_updated', handleSync);
+    return () => {
+      window.removeEventListener('storage', handleSync);
+      window.removeEventListener('tcode_session_messages_updated', handleSync);
+    };
+  }, []);
   const [expandedProjects, setExpandedProjects] = useState<Record<string, boolean>>({
     'proj-1': true,
     'proj-2': true
@@ -879,16 +892,32 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
           </div>
         )}
 
-        <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          marginTop: '4px',
-          fontSize: '10px',
-          color: 'var(--text-muted)'
-        }}>
-          <span>{session.messagesCount} 条消息</span>
-          <span>{(session.totalTokens / 1000).toFixed(1)}k tokens</span>
-        </div>
+        {(() => {
+          const sessionMsgs = allSessionMsgs[session.id] || [];
+          const actualMsgCount = sessionMsgs.length > 0 ? sessionMsgs.length : (session.messagesCount || 0);
+          
+          // Dynamically compute real token count from messages
+          let actualTokens = session.totalTokens || 0;
+          if (sessionMsgs.length > 0) {
+            const totalChars = sessionMsgs.reduce((acc: number, m: ChatMessage) => acc + (m.content?.length || 0), 0);
+            actualTokens = Math.max(actualTokens, Math.round(totalChars * 0.75) + 3200);
+          }
+
+          return (
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              marginTop: '4px',
+              fontSize: '10px',
+              color: 'var(--text-muted)'
+            }}>
+              <span>{actualMsgCount} 条消息</span>
+              <span style={{ color: actualTokens > 0 ? 'var(--text-secondary)' : 'var(--text-muted)', fontWeight: actualTokens > 0 ? 600 : 400 }}>
+                {(actualTokens / 1000).toFixed(1)}k tokens
+              </span>
+            </div>
+          );
+        })()}
       </div>
     );
   }

@@ -29,8 +29,8 @@ describe('OpenCode platform contract', () => {
     expect(platformForProvider('opencode', 'deepseek-v4-flash')).toBe('opencode');
   });
 
-  it('DEFAULT_BASE_URLS.opencode points to OpenCode Zen v1', () => {
-    expect(DEFAULT_BASE_URLS.opencode).toBe('https://opencode.ai/zen/v1');
+  it('DEFAULT_BASE_URLS.opencode points to OpenCode Go v1', () => {
+    expect(DEFAULT_BASE_URLS.opencode).toBe('https://opencode.ai/zen/go/v1');
   });
 
   it('adapterFor(opencode) uses the OpenAI-compatible chat adapter', () => {
@@ -39,7 +39,7 @@ describe('OpenCode platform contract', () => {
 
   it('buildUpstreamRequest targets {base}/chat/completions with Bearer auth', () => {
     const spec = buildUpstreamRequest(opencodeAccount, {});
-    expect(spec.url).toBe('https://opencode.ai/zen/v1/chat/completions');
+    expect(spec.url).toBe('https://opencode.ai/zen/go/v1/chat/completions');
     expect(spec.headers.Authorization).toBe('Bearer sk-opencode-test');
   });
 

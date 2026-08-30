@@ -1,6 +1,6 @@
 import type { ActionResult, PermissionPolicy, TargetAcceptanceItem, EvidenceItem } from '../types/contracts';
 
-export type AgentActionType = 'write_file' | 'run_command';
+export type AgentActionType = 'write_file' | 'run_command' | 'read_file';
 export type ActionExecutionTier = 'silent' | 'notify_after' | 'blocking_approval';
 
 export interface ActionScopeTrust {
@@ -57,17 +57,72 @@ function actionContentHash(value: string): string {
   return hash.toString(36);
 }
 
+function extractTargetFromSuffixOrCode(suffix: string, code: string): string {
+  const cleanSuffix = suffix.trim();
+  if (cleanSuffix.startsWith('{') && cleanSuffix.endsWith('}')) {
+    try {
+      const obj = JSON.parse(cleanSuffix);
+      const val = obj.path || obj.PATH || obj.filePath || obj.file_path || obj.target || obj.TARGET;
+      if (val && typeof val === 'string') return val.trim();
+    } catch {
+      const m = /["']?(?:path|PATH|filePath|file_path)["']?\s*:\s*["']([^"']+)["']/i.exec(cleanSuffix);
+      if (m) return m[1].trim();
+    }
+  } else if (cleanSuffix) {
+    return cleanSuffix;
+  }
+
+  const cleanCode = code.trim();
+  if (cleanCode.startsWith('{') && cleanCode.endsWith('}')) {
+    try {
+      const obj = JSON.parse(cleanCode);
+      const val = obj.path || obj.PATH || obj.filePath || obj.file_path || obj.target || obj.TARGET;
+      if (val && typeof val === 'string') return val.trim();
+    } catch {
+      const m = /["']?(?:path|PATH|filePath|file_path)["']?\s*:\s*["']([^"']+)["']/i.exec(cleanCode);
+      if (m) return m[1].trim();
+    }
+  } else if (cleanCode) {
+    return cleanCode.split('\n')[0].trim();
+  }
+
+  return '';
+}
+
 function getFenceAction(language: string, code: string, index: number): AgentAction | null {
   const normalizedLanguage = language.trim();
-  const isWrite = /^(write_file:|file:|create_file:)/i.test(normalizedLanguage);
 
+  // 1. READ_FILE Action (e.g. ```read_file:path```, ```READ_FILE:{"PATH":"..."}```, ```read_file```)
+  if (/^(read_file|read|view_file|cat|get_file|READ_FILE)[:\s]?/i.test(normalizedLanguage)) {
+    const colonIdx = normalizedLanguage.indexOf(':');
+    const suffix = colonIdx !== -1 ? normalizedLanguage.slice(colonIdx + 1) : '';
+    const target = extractTargetFromSuffixOrCode(suffix, code);
+    if (!target) return null;
+
+    return {
+      id: `action-${index}-read_file-${actionContentHash(`${target}\u0000${index}`)}`,
+      type: 'read_file',
+      target,
+      code: target,
+      isHighRisk: false,
+      tier: 'silent'
+    };
+  }
+
+  // 2. WRITE_FILE Action (e.g. ```write_file:path```, ```WRITE_FILE:{"PATH":"..."}```)
+  const isWrite = /^(write_file|file|create_file|WRITE_FILE)[:\s]?/i.test(normalizedLanguage);
   if (isWrite) {
-    const target = normalizedLanguage.replace(/^(write_file:|file:|create_file:)/i, '').trim();
+    const colonIdx = normalizedLanguage.indexOf(':');
+    const suffix = colonIdx !== -1 ? normalizedLanguage.slice(colonIdx + 1) : '';
+    let target = extractTargetFromSuffixOrCode(suffix, '');
+    if (!target && code.trim()) {
+      target = normalizedLanguage.replace(/^(write_file|file|create_file|WRITE_FILE)[:\s]?/i, '').trim();
+    }
     if (!target || !code.trim()) return null;
     const isHighRisk = HIGH_RISK_FILE.test(target);
     const riskReason = getRiskReason('write_file', target, code);
     return {
-      id: `action-${index}-write_file-${actionContentHash(`${normalizedLanguage}\u0000${code}`)}`,
+      id: `action-${index}-write_file-${actionContentHash(`${target}\u0000${code}`)}`,
       type: 'write_file',
       target,
       code,
@@ -77,19 +132,24 @@ function getFenceAction(language: string, code: string, index: number): AgentAct
     };
   }
 
-  if (normalizedLanguage.toLowerCase() !== COMMAND_FENCE_LANGUAGE || !code.trim()) return null;
-  const firstLine = code.trim().split('\n')[0].slice(0, 80);
-  const isHighRisk = HIGH_RISK_COMMAND.test(code);
-  const riskReason = getRiskReason('run_command', firstLine, code);
-  return {
-    id: `action-${index}-run_command-${actionContentHash(`${normalizedLanguage}\u0000${code}`)}`,
-    type: 'run_command',
-    target: firstLine,
-    code,
-    isHighRisk,
-    riskReason,
-    tier: getActionTier('run_command', firstLine, isHighRisk)
-  };
+  // 3. RUN_COMMAND Action (only explicit run_command fences are executed as actions)
+  const isCommand = normalizedLanguage.toLowerCase() === COMMAND_FENCE_LANGUAGE;
+  if (isCommand && code.trim()) {
+    const firstLine = code.trim().split('\n')[0].slice(0, 80);
+    const isHighRisk = HIGH_RISK_COMMAND.test(code);
+    const riskReason = getRiskReason('run_command', firstLine, code);
+    return {
+      id: `action-${index}-run_command-${actionContentHash(`${firstLine}\u0000${code}`)}`,
+      type: 'run_command',
+      target: firstLine,
+      code,
+      isHighRisk,
+      riskReason,
+      tier: getActionTier('run_command', firstLine, isHighRisk)
+    };
+  }
+
+  return null;
 }
 
 /** Parses supported fenced blocks AND XML tool_call blocks into normalized Agent Actions. */
@@ -369,6 +429,34 @@ export function parseAcceptanceCriteria(content: string): TargetAcceptanceItem[]
   return items;
 }
 
+/**
+ * Checks if a command is specifically an inspection or file-read command.
+ * Commands like Get-Content, cat, type, ls, dir, head, tail, Write-Host must NEVER be treated as test runners.
+ */
+export function isInspectionOrReadCommand(code: string): boolean {
+  const clean = code.trim();
+  if (/^(?:Get-Content|cat|type|head|tail|more|less|ls|dir|find|grep|Select-String|echo|Write-Host)\b/i.test(clean)) {
+    return true;
+  }
+  if (/\|\s*(?:Select-Object|grep|head|tail|Out-String)/i.test(clean)) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Checks if a command is an actual test runner or type checker suite execution.
+ */
+export function isActualTestRunnerCommand(code: string): boolean {
+  if (isInspectionOrReadCommand(code)) {
+    if (!/\b(?:pytest|vitest|jest|cargo\s+test|go\s+test|npm\s+test|pnpm\s+test|yarn\s+test)\b/i.test(code)) {
+      return false;
+    }
+  }
+
+  return /\b(?:pytest|vitest|jest|cargo\s+test|go\s+test|npm\s+test|pnpm\s+test|yarn\s+test|python(?:\.exe)?\s+(?:-m\s+pytest|-m\s+unittest)|dotnet\s+test|mvn\s+test|gradle\s+test|tsc\s+--noEmit|npm\s+run\s+test|npm\s+run\s+typecheck)\b/i.test(code);
+}
+
 /** Evaluates progress vector across steps to detect repetition loops or progress stalls. */
 export function detectProgressStall(history: ProgressVector[]): boolean {
   if (history.length < 3) return false;
@@ -395,7 +483,12 @@ export function verifyTargetAcceptance(
   const updatedItems = items.map(item => ({ ...item }));
   const evidenceList: string[] = [];
 
-  const testResults = latestResults.filter(r => r.type === 'run_command' && /test|vitest|pytest|tsc|typecheck|python/i.test(r.target));
+  const testResults = latestResults.filter(r => {
+    if (r.type !== 'run_command') return false;
+    const action = latestActions.find(a => a.id === r.actionId);
+    const code = action?.code || r.target;
+    return isActualTestRunnerCommand(code);
+  });
   const writeResults = latestResults.filter(r => r.type === 'write_file');
 
   testResults.forEach(tr => {
@@ -520,7 +613,12 @@ export function formatExecutionFeedback(
     if (!result) continue;
 
     if (result.status === 'success') {
-      if (action.type === 'write_file') {
+      if (action.type === 'read_file') {
+        lines.push(`✅ read_file: ${action.target} — 读取成功 (${result.fileSize ?? '?'} 字节)`);
+        if (result.output) {
+          lines.push(`\`\`\`\n${result.output.slice(0, 12000)}\n\`\`\``);
+        }
+      } else if (action.type === 'write_file') {
         lines.push(`✅ write_file:${action.target} — 写入成功 (${result.fileSize ?? '?'} 字节)`);
       } else {
         lines.push(`✅ run_command: ${action.target} — 执行完成 (Exit Code: ${result.exitCode ?? 0})`);

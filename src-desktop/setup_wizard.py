@@ -100,17 +100,34 @@ def get_bundle_dir():
     return os.path.dirname(os.path.abspath(__file__))
 
 def create_windows_shortcut(target_path, shortcut_path, description="Tcode Enterprise AI Agentic IDE"):
+    target_dir = os.path.dirname(os.path.abspath(target_path)).replace('/', '\\')
+    target_exe = os.path.abspath(target_path).replace('/', '\\')
+    shortcut_file = os.path.abspath(shortcut_path).replace('/', '\\')
+    ico_file = os.path.join(target_dir, "app.ico").replace('/', '\\')
+    
     ps_cmd = f"""
     $WshShell = New-Object -comObject WScript.Shell
-    $Shortcut = $WshShell.CreateShortcut('{shortcut_path}')
-    $Shortcut.TargetPath = '{target_path}'
-    $Shortcut.WorkingDirectory = '{os.path.dirname(target_path)}'
+    $Shortcut = $WshShell.CreateShortcut('{shortcut_file}')
+    $Shortcut.TargetPath = '{target_exe}'
+    $Shortcut.WorkingDirectory = '{target_dir}'
+    if (Test-Path '{ico_file}') {{
+        $Shortcut.IconLocation = '{ico_file},0'
+    }} else {{
+        $Shortcut.IconLocation = '{target_exe},0'
+    }}
     $Shortcut.Description = '{description}'
     $Shortcut.Save()
+    
+    # Trigger Windows Shell Icon Refresh
+    try {{
+        $code = '[DllImport("shell32.dll")] public static extern void SHChangeNotify(int eventId, int flags, IntPtr item1, IntPtr item2);'
+        $type = Add-Type -MemberDefinition $code -Name ShellNotify -Namespace Win32 -PassThru
+        $type::SHChangeNotify(0x08000000, 0x0000, [IntPtr]::Zero, [IntPtr]::Zero)
+    }} catch {{}}
     """
     try:
         CREATE_NO_WINDOW = 0x08000000
-        subprocess.run(["powershell.exe", "-NoProfile", "-Command", ps_cmd], check=True, creationflags=CREATE_NO_WINDOW)
+        subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", ps_cmd], check=True, creationflags=CREATE_NO_WINDOW)
     except Exception as e:
         print("Shortcut error:", e)
 
@@ -120,6 +137,7 @@ def install_payload_to(target_dir):
     target_path = Path(target_dir).expanduser().resolve()
     bundle_dir = Path(get_bundle_dir())
     payload_src = bundle_dir / "payload" / "Tcode-Core.exe"
+    payload_ico = bundle_dir / "payload" / "app.ico"
     if not payload_src.is_file():
         raise FileNotFoundError(f"Installer payload not found: {payload_src}")
 
@@ -127,6 +145,8 @@ def install_payload_to(target_dir):
     target_path.mkdir(parents=True, exist_ok=True)
     target_exe = target_path / "Tcode.exe"
     shutil.copyfile(payload_src, target_exe)
+    if payload_ico.is_file():
+        shutil.copyfile(payload_ico, target_path / "app.ico")
     save_installed_dir(str(target_path))
     return target_exe
 
@@ -318,8 +338,11 @@ class SetupWizard(tk.Tk):
             payload_src = os.path.join(bundle_dir, "payload", "Tcode-Core.exe")
             target_exe = os.path.join(target_dir, "Tcode.exe")
             
-            # Copy executable
+            # Copy executable and app icon
             shutil.copyfile(payload_src, target_exe)
+            payload_ico = os.path.join(bundle_dir, "payload", "app.ico")
+            if os.path.exists(payload_ico):
+                shutil.copyfile(payload_ico, os.path.join(target_dir, "app.ico"))
             self.progress['value'] = 60
             self.status_label.config(text="正在注册快捷方式与安装路径记录...")
             self.update_idletasks()

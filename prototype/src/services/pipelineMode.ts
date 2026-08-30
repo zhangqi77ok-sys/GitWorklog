@@ -1,3 +1,5 @@
+import { saveToDiskStorageAsync } from '../types/contracts';
+
 export type PipelineMode = 'harness' | 'swarm';
 
 export type PipelineExecutionStatus =
@@ -19,10 +21,35 @@ export interface PipelineStartResult {
 
 export const DEFAULT_PIPELINE_MODE: PipelineMode = 'harness';
 
-export function createPipelineState(): PipelineState {
+export function loadSavedPipelineMode(): PipelineMode {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      const saved = localStorage.getItem('tcode_pipeline_mode');
+      if (saved === 'swarm' || saved === 'harness') {
+        return saved;
+      }
+    }
+  } catch (e) {}
+  return DEFAULT_PIPELINE_MODE;
+}
+
+export function savePipelineModeToStorage(mode: PipelineMode): void {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('tcode_pipeline_mode', mode);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('tcode_pipeline_mode_updated', { detail: mode }));
+      }
+    }
+    saveToDiskStorageAsync('tcode_pipeline_mode', { mode });
+  } catch (e) {}
+}
+
+export function createPipelineState(initialMode?: PipelineMode): PipelineState {
+  const mode = initialMode || loadSavedPipelineMode();
   return {
-    mode: DEFAULT_PIPELINE_MODE,
-    status: 'ready'
+    mode,
+    status: mode === 'swarm' ? 'awaiting_start' : 'ready'
   };
 }
 

@@ -10,6 +10,9 @@
  *    - Tier 1 (Startup / System Prompt): name + description (~100 tokens total)
  *    - Tier 2 (Active Inspection): Complete SKILL.md body (<5000 tokens)
  *    - Tier 3 (On-Demand Execution): scripts/, references/, assets/
+ * 4. Package Import:
+ *    - .zip Archive Import & Local extraction
+ *    - Online Git / URL Import
  */
 
 export interface SkillMetadata {
@@ -23,6 +26,7 @@ export interface SkillMetadata {
   icon?: string;             // UI icon decoration
   enabled: boolean;          // Enabled toggle
   bodyContent?: string;      // Loaded on-demand in Tier 2
+  files?: Record<string, string>; // Optional scripts or reference files
 }
 
 const STORAGE_KEY_SKILLS = 'tcode_agent_skills_v2';
@@ -165,6 +169,238 @@ export function deleteOfficialSkill(skillName: string): SkillMetadata[] {
   const updated = current.filter(s => s.name !== skillName);
   saveOfficialSkillsToStorage(updated);
   return updated;
+}
+
+/**
+ * Parses YAML Frontmatter from a SKILL.md markdown file.
+ */
+export function parseSkillMarkdown(rawContent: string, fallbackName = 'custom-skill'): {
+  name: string;
+  description: string;
+  icon?: string;
+  license?: string;
+  allowedTools?: string[];
+  bodyContent: string;
+} {
+  const frontmatterRegex = /^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/;
+  const match = rawContent.match(frontmatterRegex);
+
+  let name = fallbackName;
+  let description = '';
+  let icon = '📦';
+  let license: string | undefined = undefined;
+  let allowedTools: string[] | undefined = undefined;
+  let bodyContent = rawContent;
+
+  if (match) {
+    const yamlBlock = match[1];
+    bodyContent = match[2].trim();
+
+    // Parse simple key-values in YAML
+    const nameMatch = yamlBlock.match(/^name:\s*(.+)$/m);
+    if (nameMatch) name = nameMatch[1].trim().replace(/['"]/g, '');
+
+    const descMatch = yamlBlock.match(/^description:\s*(.+)$/m);
+    if (descMatch) description = descMatch[1].trim().replace(/['"]/g, '');
+
+    const iconMatch = yamlBlock.match(/^icon:\s*(.+)$/m);
+    if (iconMatch) icon = iconMatch[1].trim().replace(/['"]/g, '');
+
+    const licMatch = yamlBlock.match(/^license:\s*(.+)$/m);
+    if (licMatch) license = licMatch[1].trim().replace(/['"]/g, '');
+  }
+
+  // Fallbacks if frontmatter was missing or partial
+  if (!description) {
+    const firstLine = bodyContent.split('\n').find(l => l.trim().length > 0 && !l.startsWith('#'));
+    description = firstLine ? firstLine.trim().slice(0, 300) : `Agent Skill: ${name}`;
+  }
+
+  const normalizedName = name.toLowerCase().replace(/[^a-z0-9-]/g, '-').slice(0, 64);
+
+  return {
+    name: normalizedName,
+    description: description.slice(0, 1024),
+    icon,
+    license,
+    allowedTools,
+    bodyContent
+  };
+}
+
+/**
+ * Lightweight browser-compatible ZIP archive reader using Web Standard DecompressionStream.
+ */
+export async function unpackSkillFromZip(buffer: ArrayBuffer, fallbackName?: string): Promise<{
+  name: string;
+  description: string;
+  bodyContent: string;
+  icon?: string;
+  files: Record<string, string>;
+}> {
+  const bytes = new Uint8Array(buffer);
+  const view = new DataView(buffer);
+  const textDecoder = new TextDecoder('utf-8');
+  const files: Record<string, string> = {};
+
+  let offset = 0;
+  while (offset + 30 <= bytes.length) {
+    // Check Local File Header signature: 0x04034b50 (PK\x03\x04)
+    if (view.getUint32(offset, true) !== 0x04034b50) {
+      break;
+    }
+
+    const compression = view.getUint16(offset + 8, true);
+    const compressedSize = view.getUint32(offset + 18, true);
+    const uncompressedSize = view.getUint32(offset + 22, true);
+    const nameLen = view.getUint16(offset + 26, true);
+    const extraLen = view.getUint16(offset + 28, true);
+
+    const fileNameBytes = bytes.subarray(offset + 30, offset + 30 + nameLen);
+    const fileName = textDecoder.decode(fileNameBytes);
+
+    const dataStart = offset + 30 + nameLen + extraLen;
+    const dataEnd = dataStart + compressedSize;
+
+    if (dataEnd <= bytes.length && !fileName.endsWith('/')) {
+      const fileDataBytes = bytes.subarray(dataStart, dataEnd);
+      let content = '';
+
+      if (compression === 0) {
+        // Uncompressed / Stored
+        content = textDecoder.decode(fileDataBytes);
+      } else if (compression === 8) {
+        // Deflate compression
+        try {
+          if (typeof DecompressionStream !== 'undefined') {
+            const ds = new DecompressionStream('deflate-raw');
+            const writer = ds.writable.getWriter();
+            writer.write(fileDataBytes);
+            writer.close();
+            const response = new Response(ds.readable);
+            const decompressedBuf = await response.arrayBuffer();
+            content = textDecoder.decode(decompressedBuf);
+          } else {
+            content = textDecoder.decode(fileDataBytes);
+          }
+        } catch (e) {
+          content = textDecoder.decode(fileDataBytes);
+        }
+      }
+      files[fileName] = content;
+    }
+
+    offset = dataEnd;
+  }
+
+  // Find SKILL.md or main markdown file
+  let mainSkillMd = '';
+  let detectedName = fallbackName || 'imported-skill';
+
+  for (const [path, content] of Object.entries(files)) {
+    const lower = path.toLowerCase();
+    if (lower.endsWith('skill.md') || lower.endsWith('readme.md')) {
+      mainSkillMd = content;
+      const parts = path.split('/');
+      if (parts.length > 1 && parts[parts.length - 2]) {
+        detectedName = parts[parts.length - 2];
+      }
+      break;
+    }
+  }
+
+  if (!mainSkillMd && Object.keys(files).length > 0) {
+    const firstMd = Object.keys(files).find(k => k.toLowerCase().endsWith('.md'));
+    if (firstMd) mainSkillMd = files[firstMd];
+  }
+
+  const parsed = parseSkillMarkdown(mainSkillMd || `# ${detectedName}\n\nImported Skill Package`, detectedName);
+
+  return {
+    name: parsed.name,
+    description: parsed.description,
+    bodyContent: parsed.bodyContent,
+    icon: parsed.icon,
+    files
+  };
+}
+
+/**
+ * Imports a skill from an uploaded .zip File.
+ */
+export async function importSkillFromZipFile(file: File): Promise<SkillMetadata> {
+  const buffer = await file.arrayBuffer();
+  const rawFileName = file.name.replace(/\.zip$/i, '');
+  const unpacked = await unpackSkillFromZip(buffer, rawFileName);
+
+  const newSkill: SkillMetadata = {
+    name: unpacked.name,
+    description: unpacked.description,
+    path: `.agents/skills/${unpacked.name}/SKILL.md`,
+    icon: unpacked.icon || '📦',
+    enabled: true,
+    bodyContent: unpacked.bodyContent,
+    files: unpacked.files,
+    metadata: { importedAt: new Date().toISOString(), source: file.name }
+  };
+
+  addOfficialSkill(newSkill);
+  return newSkill;
+}
+
+/**
+ * Imports a skill from an online URL or GitHub repository raw link.
+ */
+export async function importSkillFromUrl(url: string): Promise<SkillMetadata> {
+  let targetUrl = url.trim();
+  // Handle GitHub repo URLs by transforming to raw SKILL.md
+  if (targetUrl.includes('github.com') && !targetUrl.includes('raw.githubusercontent.com') && !targetUrl.endsWith('.zip')) {
+    targetUrl = targetUrl
+      .replace('github.com', 'raw.githubusercontent.com')
+      .replace('/blob/', '/')
+      .replace('/tree/', '/');
+    if (!targetUrl.endsWith('SKILL.md') && !targetUrl.endsWith('.md')) {
+      targetUrl = `${targetUrl.replace(/\/$/, '')}/main/SKILL.md`;
+    }
+  }
+
+  const response = await fetch(targetUrl);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch skill from URL: HTTP ${response.status}`);
+  }
+
+  if (targetUrl.endsWith('.zip')) {
+    const buffer = await response.arrayBuffer();
+    const unpacked = await unpackSkillFromZip(buffer, 'url-imported-skill');
+    const skill: SkillMetadata = {
+      name: unpacked.name,
+      description: unpacked.description,
+      path: `.agents/skills/${unpacked.name}/SKILL.md`,
+      icon: unpacked.icon || '🌐',
+      enabled: true,
+      bodyContent: unpacked.bodyContent,
+      files: unpacked.files,
+      metadata: { importedAt: new Date().toISOString(), sourceUrl: url }
+    };
+    addOfficialSkill(skill);
+    return skill;
+  } else {
+    const text = await response.text();
+    const urlParts = targetUrl.split('/');
+    const fallbackName = urlParts[urlParts.length - 2] || 'remote-skill';
+    const parsed = parseSkillMarkdown(text, fallbackName);
+    const skill: SkillMetadata = {
+      name: parsed.name,
+      description: parsed.description,
+      path: `.agents/skills/${parsed.name}/SKILL.md`,
+      icon: parsed.icon || '🌐',
+      enabled: true,
+      bodyContent: parsed.bodyContent,
+      metadata: { importedAt: new Date().toISOString(), sourceUrl: url }
+    };
+    addOfficialSkill(skill);
+    return skill;
+  }
 }
 
 /**
