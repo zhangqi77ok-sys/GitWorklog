@@ -165,6 +165,7 @@ export type LoopTerminationStatus =
   | 'needs_decision'      // ⏸ 需要用户在备选方案间决策
   | 'blocked'             // ⚠ 任务被外部条件阻塞（如缺少凭据）
   | 'no_progress'         // ⚠ 连续无进展/死循环熔断
+  | 'strikeout'           // ?? ??????? 3 ???????????? + ???
   | 'resource_limit';     // ⚠ 达到时间/费用/安全预算熔断
 
 export interface InternalStepTag {
