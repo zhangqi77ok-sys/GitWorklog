@@ -1229,5 +1229,123 @@ describe('Event-Driven Agent Runtime & Truth-First Execution Contract', () => {
   });
 });
 
+import { TaskGraphValidator, globalArtifactStore } from '../src/services/swarmScheduler';
+import { SwarmTask, Artifact } from '../src/types/agentRuntimeTypes';
+
+describe('Swarm TaskGraph & Shared Artifacts Contract', () => {
+  it('validates acyclic DAG task dependencies and calculates ready queue', () => {
+    const tasks: SwarmTask[] = [
+      {
+        id: 'task-plan',
+        runId: 'swarm-01',
+        title: '需求拆解与架构设计',
+        description: '生成 TaskGraph 与设计说明',
+        role: 'planner',
+        status: 'passed',
+        dependsOn: [],
+        inputArtifactIds: [],
+        outputArtifactIds: ['art-plan'],
+        acceptanceIds: ['acc-1'],
+        attempt: 1,
+        createdAt: Date.now()
+      },
+      {
+        id: 'task-code',
+        runId: 'swarm-01',
+        title: '编写核心逻辑',
+        description: '落盘文件修改',
+        role: 'coder',
+        status: 'pending',
+        dependsOn: ['task-plan'],
+        inputArtifactIds: ['art-plan'],
+        outputArtifactIds: ['art-changeset'],
+        acceptanceIds: ['acc-2'],
+        attempt: 1,
+        createdAt: Date.now()
+      },
+      {
+        id: 'task-test',
+        runId: 'swarm-01',
+        title: '执行单测验证',
+        description: '运行测试用例',
+        role: 'tester',
+        status: 'pending',
+        dependsOn: ['task-code'],
+        inputArtifactIds: ['art-changeset'],
+        outputArtifactIds: ['art-test-report'],
+        acceptanceIds: ['acc-3'],
+        attempt: 1,
+        createdAt: Date.now()
+      }
+    ];
+
+    // 1. Validate DAG acyclic property
+    const validation = TaskGraphValidator.validateAcyclic(tasks);
+    expect(validation.isValid).toBe(true);
+
+    // 2. Since task-plan is passed, task-code should be ready, but task-test should NOT be ready yet
+    const readyTasks = TaskGraphValidator.getReadyTasks(tasks);
+    expect(readyTasks.length).toBe(1);
+    expect(readyTasks[0].id).toBe('task-code');
+  });
+
+  it('detects cyclical dependency errors accurately', () => {
+    const cyclicTasks: SwarmTask[] = [
+      {
+        id: 'task-a',
+        runId: 'swarm-02',
+        title: 'Task A',
+        description: 'depends on B',
+        role: 'coder',
+        status: 'pending',
+        dependsOn: ['task-b'],
+        inputArtifactIds: [],
+        outputArtifactIds: [],
+        acceptanceIds: [],
+        attempt: 1,
+        createdAt: Date.now()
+      },
+      {
+        id: 'task-b',
+        runId: 'swarm-02',
+        title: 'Task B',
+        description: 'depends on A',
+        role: 'tester',
+        status: 'pending',
+        dependsOn: ['task-a'],
+        inputArtifactIds: [],
+        outputArtifactIds: [],
+        acceptanceIds: [],
+        attempt: 1,
+        createdAt: Date.now()
+      }
+    ];
+
+    const validation = TaskGraphValidator.validateAcyclic(cyclicTasks);
+    expect(validation.isValid).toBe(false);
+    expect(validation.error).toContain('cyclical dependency');
+  });
+
+  it('stores and retrieves structured artifacts across agent roles', () => {
+    globalArtifactStore.clear();
+    const artifact: Artifact = {
+      id: 'art-arch-001',
+      runId: 'swarm-01',
+      taskId: 'task-plan',
+      type: 'architecture',
+      title: '日志模块重构设计方案',
+      content: '# Architecture Spec\n- Unified logger entry point',
+      version: 1,
+      createdAt: Date.now()
+    };
+
+    globalArtifactStore.saveArtifact(artifact);
+    const retrieved = globalArtifactStore.getArtifact('art-arch-001');
+    expect(retrieved).toBeDefined();
+    expect(retrieved?.title).toBe('日志模块重构设计方案');
+  });
+});
+
+
 
 

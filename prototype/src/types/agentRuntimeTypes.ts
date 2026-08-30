@@ -226,3 +226,116 @@ export interface PermissionRule {
   sessionId?: string;
   createdAt: number;
 }
+
+// ────────────────────────────────────────────────────────────
+// 🐝 SWARM MULTI-AGENT TASKGRAPH & ARTIFACT CONTRACTS
+// ────────────────────────────────────────────────────────────
+
+export type AgentRole =
+  | 'planner'
+  | 'analyst'
+  | 'architect'
+  | 'coder'
+  | 'tester'
+  | 'reviewer'
+  | 'fixer'
+  | 'summarizer';
+
+export type SwarmTaskStatus =
+  | 'pending'
+  | 'ready'
+  | 'running'
+  | 'waiting_approval'
+  | 'blocked'
+  | 'reviewing'
+  | 'passed'
+  | 'failed'
+  | 'cancelled';
+
+export interface AgentDefinition {
+  id: string;
+  role: AgentRole;
+  modelId: string;
+  providerId: string;
+  systemPrompt: string;
+  allowedTools: string[];
+  readScopes: string[];
+  writeScopes: string[];
+  maxConcurrency: number;
+  canDelegate: boolean;
+}
+
+export type ArtifactType =
+  | 'plan'
+  | 'analysis'
+  | 'architecture'
+  | 'patch'
+  | 'changeset'
+  | 'test_result'
+  | 'review'
+  | 'summary';
+
+export interface Artifact {
+  id: string;
+  runId: string;
+  taskId: string;
+  type: ArtifactType;
+  title: string;
+  content: string;
+  metadata?: Record<string, unknown>;
+  version: number;
+  createdAt: number;
+}
+
+export interface SwarmTask {
+  id: string;
+  runId: string;
+  title: string;
+  description: string;
+  role: AgentRole;
+  status: SwarmTaskStatus;
+  dependsOn: string[];
+  inputArtifactIds: string[];
+  outputArtifactIds: string[];
+  acceptanceIds: string[];
+  attempt: number;
+  assignedAgentId?: string;
+  createdAt: number;
+  startedAt?: number;
+  finishedAt?: number;
+  error?: string;
+}
+
+export interface TaskGraph {
+  runId: string;
+  tasks: SwarmTask[];
+  dependencies: Array<{ fromTaskId: string; toTaskId: string }>;
+  createdAt: number;
+}
+
+export interface SwarmRun {
+  id: string;
+  sessionId: string;
+  userMessageId: string;
+  mode: 'harness' | 'swarm';
+  status:
+    | 'created'
+    | 'planning'
+    | 'running'
+    | 'waiting_approval'
+    | 'waiting_user'
+    | 'blocked'
+    | 'reviewing'
+    | 'completed'
+    | 'failed'
+    | 'cancelled';
+  rootTaskId?: string;
+  taskIds: string[];
+  agentIds: string[];
+  configSnapshotId: string;
+  checkpointRef?: string;
+  startedAt: number;
+  updatedAt: number;
+  finishedAt?: number;
+}
+
