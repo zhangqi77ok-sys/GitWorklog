@@ -76,6 +76,7 @@ import {
   getAllAvailableModels,
   flattenFileTreeToMentions,
   loadSavedProviders,
+  saveProvidersToStorage,
   resolveApiEndpoint,
   MentionContextItem,
   DEFAULT_MENTION_ITEMS,
@@ -106,6 +107,16 @@ import { loadSavedOfficialSkills, getTier2SkillBody, SkillMetadata } from '../se
 import { getContextBudget, ContextBudget, compressModelContext } from '../services/contextTelemetry';
 import { WorkflowProviderPicker } from './WorkflowProviderPicker';
 import type { WorkflowSelection } from '../services/workflowProviderDiscovery';
+import {
+  createPipelineState,
+  selectPipelineMode,
+  startPipelineRun,
+  PipelineMode,
+  PipelineState
+} from '../services/pipelineMode';
+import { RuntimeConfigResolver } from '../services/runtimeConfigResolver';
+import { resolveProviderIdForModelTab, assertProviderCredentials } from '../services/modelGateway';
+import { taskGraphScheduler } from '../services/taskGraphScheduler';
 
 interface ChatColumnProps {
   rightWorkspaceOpen: boolean;
@@ -387,14 +398,33 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
   const [modelSearchQuery, setModelSearchQuery] = useState('');
   const [isSyncingModels, setIsSyncingModels] = useState(false);
 
+  // Reactive synchronization of available models when Settings or Providers change
+  React.useEffect(() => {
+    const handleProvidersUpdated = () => {
+      setAvailableModelList(getAllAvailableModels());
+    };
+    window.addEventListener('tcode_providers_updated', handleProvidersUpdated);
+    window.addEventListener('storage', handleProvidersUpdated);
+    window.addEventListener('focus', handleProvidersUpdated);
+    return () => {
+      window.removeEventListener('tcode_providers_updated', handleProvidersUpdated);
+      window.removeEventListener('storage', handleProvidersUpdated);
+      window.removeEventListener('focus', handleProvidersUpdated);
+    };
+  }, []);
+
 
 
   const handleSyncOnlineModels = async () => {
     setIsSyncingModels(true);
     try {
       const savedProviders = loadSavedProviders();
-      const p = savedProviders.find((item: any) => item.enabled && item.apiKey && item.baseUrl) || savedProviders[0];
-      if (!p) throw new Error('未配置服务商');
+      const providerId = resolveProviderIdForModelTab(activeProviderTab, savedProviders);
+      const p = providerId
+        ? savedProviders.find((item: any) => item.id === providerId)
+        : undefined;
+      if (!p) throw new Error(`当前模型服务商未配置: ${activeProviderTab}`);
+      assertProviderCredentials(p);
       let base = p.baseUrl.trim();
       if (base.endsWith('/')) base = base.slice(0, -1);
       const { url: requestUrl, headers: proxyHeaders } = resolveApiEndpoint(`${base}/models`);
@@ -407,18 +437,24 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
       const data = await res.json();
       const list = data.data || [];
       if (Array.isArray(list) && list.length > 0) {
-        const synched: AIModelOption[] = list.map((m: any) => ({
+        const fetchedModels = list.map((m: any) => ({
           id: m.id,
-          name: m.id,
-          provider: (p.name.includes('Anthropic') ? 'Anthropic' : p.name.includes('OpenAI') ? 'OpenAI' : 'DeepSeek') as any,
-          contextLimit: 128000,
-          inputPricePerM: 0.1,
-          outputPricePerM: 0.2,
-          badge: '已同步',
-          description: `在线网关可用模型 (${m.id})`
+          name: m.name || m.id,
+          enabled: true,
+          contextLimit: m.contextLimit || m.context_length || 128000,
+          outputLimit: m.outputLimit || m.max_output_tokens,
+          endpointPath: m.endpointPath || m.endpoint || m.endpoint_path,
+          adapter: m.adapter || m.sdk || m.adapterId,
+          protocol: m.protocol || m.protocolType,
+          capabilities: Array.isArray(m.capabilities) ? m.capabilities : ['code', 'stream'],
+          description: m.description
         }));
-        setAvailableModelList(synched);
-        setChangesetToast(`✓ 成功同步 ${synched.length} 个真实大模型！`);
+        const updatedProviders = savedProviders.map(provider =>
+          provider.id === p.id ? { ...provider, models: fetchedModels } : provider
+        );
+        saveProvidersToStorage(updatedProviders);
+        setAvailableModelList(getAllAvailableModels());
+        setChangesetToast(`✓ 成功同步并写入 ${fetchedModels.length} 个模型；对话框模型列表已刷新`);
         setTimeout(() => setChangesetToast(null), 3000);
       }
     } catch (e: any) {
@@ -433,7 +469,12 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
   ]);
   const [changeset, setChangeset] = useState<ChangesetReviewPayload | null>(null);
   const [changesetToast, setChangesetToast] = useState<string | null>(null);
-  const [pipelineMode, setPipelineMode] = useState<'harness' | 'swarm'>('swarm');
+  const [pipelineState, setPipelineState] = useState<PipelineState>(() => createPipelineState());
+  const pipelineMode: PipelineMode = pipelineState.mode;
+  const [swarmGoal, setSwarmGoal] = useState<string>('');
+  const [activeRunId, setActiveRunId] = useState<string | undefined>(undefined);
+  const [swarmStartError, setSwarmStartError] = useState<string | null>(null);
+  const [isStartingSwarm, setIsStartingSwarm] = useState<boolean>(false);
   const [isForkedSession, setIsForkedSession] = useState<boolean>(false);
   const [swarmStages, setSwarmStages] = useState<SwarmPipelineStage[]>(INITIAL_SWARM_STAGES);
   const [isCommitModalOpen, setIsCommitModalOpen] = useState<boolean>(false);
@@ -662,6 +703,52 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
     setTimeout(() => setChangesetToast(null), 3500);
   };
 
+  const handlePipelineModeSelect = (mode: PipelineMode) => {
+    setPipelineState(current => selectPipelineMode(current, mode));
+    setSwarmStartError(null);
+    if (mode === 'harness') {
+      setChangesetToast('🛡️ 已选择 Harness：下一条消息将沿主 Agent Loop 执行');
+    } else {
+      setChangesetToast('🐝 已选择 Swarm：尚未启动，请先确认目标并点击“启动 Swarm Run”');
+    }
+    setTimeout(() => setChangesetToast(null), 3000);
+  };
+
+  const handleStartSwarm = async () => {
+    if (!swarmGoal.trim() || isStartingSwarm || activeRunId) return;
+
+    setIsStartingSwarm(true);
+    setSwarmStartError(null);
+
+    try {
+      const configSnapshot = await RuntimeConfigResolver.resolveCurrentConfig(
+        currentModel.provider,
+        currentModel.id,
+        workMode,
+        permissionPolicy,
+        session.projectPath || ''
+      );
+      const run = await taskGraphScheduler.startSwarmRun({
+        sessionId: session.id,
+        userMessageId: `user-${Date.now()}`,
+        goal: swarmGoal,
+        configSnapshot
+      });
+      setActiveRunId(run.id);
+      setPipelineState(current => startPipelineRun(current, { accepted: true, runId: run.id }));
+      setChangesetToast(`🐝 Swarm Run 已启动：${run.id}`);
+      setTimeout(() => setChangesetToast(null), 3500);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '未知启动错误';
+      setSwarmStartError(message);
+      setPipelineState(current => startPipelineRun(current, { accepted: false }));
+      setChangesetToast('⚠️ Swarm 未启动，当前没有运行中的任务');
+      setTimeout(() => setChangesetToast(null), 3500);
+    } finally {
+      setIsStartingSwarm(false);
+    }
+  };
+
   const handleSend = () => {
     if (!inputText.trim()) return;
     let fullPrompt = inputText;
@@ -762,7 +849,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
           >
             <button
               onClick={() => {
-                setPipelineMode('harness');
+                setPipelineState(prev => ({ ...prev, mode: 'harness' }));
                 setChangesetToast('🛡️ 已切换至 Harness 单智能体闭环模式');
                 setTimeout(() => setChangesetToast(null), 2500);
               }}
@@ -787,7 +874,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
 
             <button
               onClick={() => {
-                setPipelineMode('swarm');
+                setPipelineState(prev => ({ ...prev, mode: 'swarm' }));
                 setChangesetToast('🐝 已切换至 Swarm 多智能体异构协同模式');
                 setTimeout(() => setChangesetToast(null), 2500);
               }}
@@ -2566,11 +2653,11 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                           模型服务商 / 厂商
                         </div>
                         {[
-                          { id: 'opencode', name: 'OpenCode (Zen 官方)', icon: '⚡', count: availableModelList.filter(m => m.id.includes('mimo') || m.id.includes('nemotron') || m.id.includes('hy3') || m.id.includes('ling') || m.name.includes('OpenCode')).length || 7 },
-                          { id: 'deepseek', name: 'DeepSeek / 星海', icon: '🔵', count: availableModelList.filter(m => m.provider === 'DeepSeek' && !m.name.includes('OpenCode')).length || 4 },
-                          { id: 'anthropic', name: 'Anthropic (Claude)', icon: '🟣', count: availableModelList.filter(m => m.provider === 'Anthropic' || m.id.includes('claude')).length || 3 },
-                          { id: 'openai', name: 'OpenAI (GPT 系列)', icon: '🟢', count: availableModelList.filter(m => m.provider === 'OpenAI' || m.id.includes('gpt')).length || 4 },
-                          { id: 'local', name: '本地 Ollama (离线)', icon: '💻', count: 1 },
+                          { id: 'opencode', name: 'OpenCode (Zen 官方)', icon: '⚡', count: availableModelList.filter(m => m.providerId === 'provider-opencode' || m.badge === 'OpenCode' || m.description?.includes('OpenCode')).length },
+                          { id: 'deepseek', name: 'DeepSeek / 星海', icon: '🔵', count: availableModelList.filter(m => m.providerId === 'provider-deepseek' || (m.provider === 'DeepSeek' && m.providerId !== 'provider-opencode' && !m.description?.includes('OpenCode'))).length },
+                          { id: 'anthropic', name: 'Anthropic (Claude)', icon: '🟣', count: availableModelList.filter(m => m.providerId === 'provider-anthropic' || (m.provider === 'Anthropic' && m.providerId !== 'provider-opencode')).length },
+                          { id: 'openai', name: 'OpenAI (GPT 系列)', icon: '🟢', count: availableModelList.filter(m => m.providerId === 'provider-openai' || (m.provider === 'OpenAI' && m.providerId !== 'provider-opencode')).length },
+                          { id: 'local', name: '本地 Ollama (离线)', icon: '💻', count: availableModelList.filter(m => m.providerId === 'provider-ollama' || m.providerId === 'provider-lmstudio' || m.provider === 'Local').length },
                           { id: 'auto-router', name: '智能自适应路由', icon: '🧠', count: 4 }
                         ].map(prov => {
                           const isActive = activeProviderTab === prov.id;
@@ -2666,13 +2753,15 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                               <span>共 {
                                 availableModelList.filter(m => {
                                   if (modelSearchQuery) {
-                                    return m.name.toLowerCase().includes(modelSearchQuery.toLowerCase()) || m.id.toLowerCase().includes(modelSearchQuery.toLowerCase());
+                                    const q = modelSearchQuery.toLowerCase();
+                                    const matchText = (m.name + ' ' + m.id + ' ' + (m.badge || '') + ' ' + (m.description || '')).toLowerCase();
+                                    if (!matchText.includes(q)) return false;
                                   }
-                                  if (activeProviderTab === 'opencode') return m.id.includes('mimo') || m.id.includes('nemotron') || m.id.includes('hy3') || m.id.includes('ling') || m.name.includes('OpenCode') || m.description?.includes('OpenCode');
-                                  if (activeProviderTab === 'deepseek') return m.provider === 'DeepSeek' && !m.name.includes('OpenCode') && !m.description?.includes('OpenCode');
-                                  if (activeProviderTab === 'anthropic') return m.provider === 'Anthropic' || m.id.includes('claude');
-                                  if (activeProviderTab === 'openai') return m.provider === 'OpenAI' || m.id.includes('gpt');
-                                  if (activeProviderTab === 'local') return m.provider === 'Local' || m.id.includes('ollama');
+                                  if (activeProviderTab === 'opencode') return m.providerId === 'provider-opencode' || m.badge === 'OpenCode' || m.description?.includes('OpenCode');
+                                  if (activeProviderTab === 'deepseek') return m.providerId === 'provider-deepseek' || (m.provider === 'DeepSeek' && m.providerId !== 'provider-opencode' && !m.description?.includes('OpenCode'));
+                                  if (activeProviderTab === 'anthropic') return m.providerId === 'provider-anthropic' || (m.provider === 'Anthropic' && m.providerId !== 'provider-opencode');
+                                  if (activeProviderTab === 'openai') return m.providerId === 'provider-openai' || (m.provider === 'OpenAI' && m.providerId !== 'provider-opencode');
+                                  if (activeProviderTab === 'local') return m.providerId === 'provider-ollama' || m.providerId === 'provider-lmstudio' || m.provider === 'Local';
                                   return true;
                                 }).length
                               } 个</span>
@@ -2681,20 +2770,24 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                             {availableModelList
                               .filter(m => {
                                 if (modelSearchQuery) {
-                                  return m.name.toLowerCase().includes(modelSearchQuery.toLowerCase()) || m.id.toLowerCase().includes(modelSearchQuery.toLowerCase());
+                                  const q = modelSearchQuery.toLowerCase();
+                                  const matchText = (m.name + ' ' + m.id + ' ' + (m.badge || '') + ' ' + (m.description || '')).toLowerCase();
+                                  if (!matchText.includes(q)) return false;
                                 }
-                                if (activeProviderTab === 'opencode') return m.id.includes('mimo') || m.id.includes('nemotron') || m.id.includes('hy3') || m.id.includes('ling') || m.name.includes('OpenCode') || m.description?.includes('OpenCode');
-                                if (activeProviderTab === 'deepseek') return m.provider === 'DeepSeek' && !m.name.includes('OpenCode') && !m.description?.includes('OpenCode');
-                                if (activeProviderTab === 'anthropic') return m.provider === 'Anthropic' || m.id.includes('claude');
-                                if (activeProviderTab === 'openai') return m.provider === 'OpenAI' || m.id.includes('gpt');
-                                if (activeProviderTab === 'local') return m.provider === 'Local' || m.id.includes('ollama');
+                                if (activeProviderTab === 'opencode') return m.providerId === 'provider-opencode' || m.badge === 'OpenCode' || m.description?.includes('OpenCode');
+                                if (activeProviderTab === 'deepseek') return m.providerId === 'provider-deepseek' || (m.provider === 'DeepSeek' && m.providerId !== 'provider-opencode' && !m.description?.includes('OpenCode'));
+                                if (activeProviderTab === 'anthropic') return m.providerId === 'provider-anthropic' || (m.provider === 'Anthropic' && m.providerId !== 'provider-opencode');
+                                if (activeProviderTab === 'openai') return m.providerId === 'provider-openai' || (m.provider === 'OpenAI' && m.providerId !== 'provider-opencode');
+                                if (activeProviderTab === 'local') return m.providerId === 'provider-ollama' || m.providerId === 'provider-lmstudio' || m.provider === 'Local';
                                 return true;
                               })
                               .map(m => {
-                                const isSelected = !isAutoRouting && currentModel.id === m.id;
+                                const currentKey = (currentModel as any).uniqueKey || ((currentModel as any).providerId ? `${(currentModel as any).providerId}:${currentModel.id}` : currentModel.id);
+                                const itemKey = (m as any).uniqueKey || ((m as any).providerId ? `${(m as any).providerId}:${m.id}` : m.id);
+                                const isSelected = !isAutoRouting && (currentKey === itemKey || (currentModel.id === m.id && (!m.providerId || !(currentModel as any).providerId || m.providerId === (currentModel as any).providerId)));
                                 return (
                                   <div
-                                    key={m.id}
+                                    key={itemKey}
                                     onClick={() => {
                                       onSelectModel(m);
                                       setIsAutoRouting(false);

@@ -92,9 +92,11 @@ function getFenceAction(language: string, code: string, index: number): AgentAct
   };
 }
 
-/** Parses only completed supported fenced blocks into the single Agent Loop action model. */
+/** Parses supported fenced blocks AND XML tool_call blocks into normalized Agent Actions. */
 export function parseAgentActions(content: string): AgentAction[] {
   const actions: AgentAction[] = [];
+
+  // 1. Parse markdown fenced blocks (```write_file:path ... ``` and ```run_command ... ```)
   const lines = content.split('\n');
   let activeLanguage: string | null = null;
   let codeLines: string[] = [];
@@ -116,6 +118,69 @@ export function parseAgentActions(content: string): AgentAction[] {
     if (action) actions.push(action);
     activeLanguage = null;
     codeLines = [];
+  }
+
+  // 2. Parse XML tool_call blocks (<tool_call><read_file> / <write_file> / <run_command>)
+  const toolCallRegex = /<tool_call>\s*<([a-zA-Z0-9_\-]+)>([\s\S]*?)<\/\1>\s*<\/tool_call>/gi;
+  let match: RegExpExecArray | null;
+
+  while ((match = toolCallRegex.exec(content)) !== null) {
+    const toolName = match[1].toLowerCase();
+    const toolBody = match[2];
+
+    // Extract args (supports <arg_key>key</arg_key><arg_value>val</arg_value> or direct <path>...</path>)
+    let target = '';
+    let code = '';
+
+    const pathMatch = /<(?:arg_key>path<\/arg_key>\s*<arg_value>|path>)([\s\S]*?)<\/(?:arg_value|path)>/i.exec(toolBody);
+    if (pathMatch) target = pathMatch[1].trim();
+
+    const cmdMatch = /<(?:arg_key>command<\/arg_key>\s*<arg_value>|command>)([\s\S]*?)<\/(?:arg_value|command)>/i.exec(toolBody);
+    if (cmdMatch) {
+      code = cmdMatch[1].trim();
+      target = code.split('\n')[0].slice(0, 80);
+    }
+
+    const contentMatch = /<(?:arg_key>content<\/arg_key>\s*<arg_value>|content>)([\s\S]*?)<\/(?:arg_value|content)>/i.exec(toolBody);
+    if (contentMatch) code = contentMatch[1];
+
+    if (toolName === 'write_file' || toolName === 'create_file') {
+      if (target && code) {
+        const isHighRisk = HIGH_RISK_FILE.test(target);
+        actions.push({
+          id: `action-${actions.length}-write_file-${actionContentHash(target + code)}`,
+          type: 'write_file',
+          target,
+          code,
+          isHighRisk,
+          riskReason: getRiskReason('write_file', target, code),
+          tier: getActionTier('write_file', target, isHighRisk)
+        });
+      }
+    } else if (toolName === 'run_command' || toolName === 'exec_command' || toolName === 'bash') {
+      if (code) {
+        const isHighRisk = HIGH_RISK_COMMAND.test(code);
+        actions.push({
+          id: `action-${actions.length}-run_command-${actionContentHash(code)}`,
+          type: 'run_command',
+          target,
+          code,
+          isHighRisk,
+          riskReason: getRiskReason('run_command', target, code),
+          tier: getActionTier('run_command', target, isHighRisk)
+        });
+      }
+    } else if (toolName === 'read_file' && target) {
+      // Convert read_file into a safe non-blocking inspect command
+      actions.push({
+        id: `action-${actions.length}-read_file-${actionContentHash(target)}`,
+        type: 'run_command',
+        target: `查看文件内容: ${target}`,
+        code: typeof process !== 'undefined' && process.platform === 'win32' ? `Get-Content "${target}" -TotalCount 200` : `cat "${target}"`,
+        isHighRisk: false,
+        tier: 'silent'
+      });
+    }
   }
 
   return actions;
@@ -467,4 +532,95 @@ export function formatExecutionFeedback(
 
   lines.push('', '请根据以上验收状态与验证证据继续执行下一步。若所有验收项均通过(✓)，请总结交付成果。');
   return lines.join('\n');
+}
+
+
+export interface NativeToolCallInput {
+  id: string;
+  name?: string;
+  arguments?: string | Record<string, unknown>;
+}
+
+/** Converts complete or streamed native provider tool calls into AgentAction objects. */
+export function parseNativeToolCalls(toolCalls: NativeToolCallInput[]): AgentAction[] {
+  const grouped = new Map<string, { name: string; arguments: string }>();
+  for (const call of toolCalls) {
+    const name = call.name?.trim().toLowerCase();
+    if (!name) continue;
+    const current = grouped.get(call.id) || { name, arguments: '' };
+    current.name = name;
+    current.arguments += typeof call.arguments === 'string'
+      ? call.arguments
+      : call.arguments ? JSON.stringify(call.arguments) : '';
+    grouped.set(call.id, current);
+  }
+
+  const actions: AgentAction[] = [];
+  for (const [id, call] of grouped) {
+    let args: Record<string, any>;
+    try {
+      args = JSON.parse(call.arguments || '{}');
+    } catch {
+      continue;
+    }
+
+    if (call.name === 'write_file' || call.name === 'create_file') {
+      const target = String(args.path || args.file_path || '').trim();
+      const code = String(args.content ?? args.code ?? '');
+      if (!target || !code) continue;
+      const isHighRisk = HIGH_RISK_FILE.test(target);
+      actions.push({
+        id: `native-${id}-write_file-${actionContentHash(target + code)}`,
+        type: 'write_file',
+        target,
+        code,
+        isHighRisk,
+        riskReason: getRiskReason('write_file', target, code),
+        tier: getActionTier('write_file', target, isHighRisk)
+      });
+      continue;
+    }
+
+    if (call.name === 'read_file') {
+      const target = String(args.path || args.file_path || '').trim();
+      if (!target) continue;
+      actions.push({
+        id: `native-${id}-read_file-${actionContentHash(target)}`,
+        type: 'run_command',
+        target: `查看文件内容: ${target}`,
+        code: typeof process !== 'undefined' && process.platform === 'win32' ? `Get-Content "${target}" -TotalCount 200` : `cat "${target}"`,
+        isHighRisk: false,
+        tier: 'silent'
+      });
+      continue;
+    }
+
+    if (call.name === 'run_command' || call.name === 'exec_command' || call.name === 'bash') {
+      const code = String(args.command || args.cmd || args.script || '').trim();
+      if (!code) continue;
+      const isHighRisk = HIGH_RISK_COMMAND.test(code);
+      actions.push({
+        id: `native-${id}-run_command-${actionContentHash(code)}`,
+        type: 'run_command',
+        target: code.split('\\n')[0].slice(0, 80),
+        code,
+        isHighRisk,
+        riskReason: getRiskReason('run_command', code, code),
+        tier: getActionTier('run_command', code, isHighRisk)
+      });
+    }
+  }
+  return actions;
+}
+
+/** Keeps a no-action round honest: explicit unfinished criteria cannot be marked completed. */
+export function resolveNoActionLoopStatus(
+  verifierStatus: LoopTerminationStatus,
+  hasExplicitAcceptanceCriteria: boolean
+): LoopTerminationStatus {
+  if (verifierStatus === 'completed') return 'completed';
+  if (hasExplicitAcceptanceCriteria) {
+    return verifierStatus === 'blocked' ? 'blocked' : 'needs_decision';
+  }
+  return 'completed';
 }

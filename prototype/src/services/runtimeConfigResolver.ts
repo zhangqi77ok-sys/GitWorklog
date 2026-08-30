@@ -1,16 +1,19 @@
-import { WorkMode, PermissionPolicy } from '../types/contracts';
+import { WorkMode, PermissionPolicy, loadSavedProviders } from '../types/contracts';
 import { loadSavedGlobalSettings } from './settingsStore';
 import { loadSavedRules, buildPromptRulesSnapshot } from './rulesStore';
 import { loadSavedOfficialSkills, buildTier1SkillsSystemPrompt } from './skillsEngine';
 import { loadSavedMcpConfigs, initializeMcpServer, buildMcpToolsModelPrompt } from './mcpGateway';
 import { ContextSnapshot, ContextSource } from '../types/agentRuntimeTypes';
+import { buildModelCatalogEntry, type ModelAdapter, type ModelProtocol } from './modelGateway';
 
 export interface RuntimeConfigSnapshot {
   id: string;
   createdAt: number;
   providerId: string;
   modelId: string;
-  protocol: 'responses' | 'chat_completions';
+  adapter: ModelAdapter;
+  protocol: ModelProtocol;
+  endpointPath: string;
   workMode: WorkMode;
   permissionPolicy: PermissionPolicy;
   isAirGapped: boolean;
@@ -106,12 +109,27 @@ export class RuntimeConfigResolver {
       createdAt: Date.now()
     };
 
+    const providers = loadSavedProviders();
+    const provider = providers.find(item => item.id === providerId) || providers[0];
+    const model = provider?.models?.find(item => item.id === modelId) || {
+      id: modelId,
+      name: modelId,
+      enabled: true,
+      contextLimit: 128000,
+      capabilities: []
+    };
+    const modelEntry = provider
+      ? buildModelCatalogEntry(provider, model)
+      : buildModelCatalogEntry({ id: providerId, name: providerId, enabled: true, baseUrl: '', apiKey: '' }, model);
+
     return {
       id: `rc-snap-${Date.now()}`,
       createdAt: Date.now(),
       providerId,
       modelId,
-      protocol: 'chat_completions',
+      adapter: modelEntry.adapter,
+      protocol: modelEntry.protocol,
+      endpointPath: modelEntry.endpointPath,
       workMode: globalSettings.defaultWorkMode || workMode,
       permissionPolicy: globalSettings.defaultPermissionPolicy || permissionPolicy,
       isAirGapped: globalSettings.isAirGapped,

@@ -1,4 +1,9 @@
-import { extractThinkingFromText, ThinkingBlockPayload, OpenAiProtocolType, DEFAULT_OPENAI_PROTOCOL, buildOpenAiRequestPayload } from '../types/contracts';
+import { extractThinkingFromText, ThinkingBlockPayload } from '../types/contracts';
+import {
+  buildGatewayRequestBody,
+  parseGatewayEvent,
+  ModelAdapter
+} from './modelGateway';
 
 export interface StreamEventCallbacks {
   onChunk: (chunkText: string, fullText: string, thinkingPayload: ThinkingBlockPayload) => void;
@@ -12,7 +17,7 @@ export interface StreamRequestConfig {
   model: string;
   prompt: string;
   temperature?: number;
-  openaiProtocol?: OpenAiProtocolType;
+  adapter?: ModelAdapter;
 }
 
 export class LlmStreamingClient {
@@ -25,7 +30,6 @@ export class LlmStreamingClient {
     this.abortController = new AbortController();
     const startTime = Date.now();
 
-    // If no real API key is provided, execute deterministic high-fidelity mock stream simulation
     if (!config.apiKey && !config.endpointUrl?.includes('11434')) {
       const mockStreamChunks = [
         '<think>\n',
@@ -40,36 +44,35 @@ export class LlmStreamingClient {
       ];
 
       let fullAccumulated = '';
-      for (let i = 0; i < mockStreamChunks.length; i++) {
-        if (this.abortController.signal.aborted) break;
-        await new Promise(r => setTimeout(r, 60));
-        fullAccumulated += mockStreamChunks[i];
+      for (const chunk of mockStreamChunks) {
+        if (this.abortController.signal.aborted) return;
+        await new Promise(resolve => setTimeout(resolve, 60));
+        fullAccumulated += chunk;
         const elapsed = Number(((Date.now() - startTime) / 1000).toFixed(1));
-        const payload = extractThinkingFromText(fullAccumulated, elapsed);
-        callbacks.onChunk(mockStreamChunks[i], fullAccumulated, payload);
+        callbacks.onChunk(chunk, fullAccumulated, extractThinkingFromText(fullAccumulated, elapsed));
       }
-
       const totalElapsed = Number(((Date.now() - startTime) / 1000).toFixed(1));
-      const finalPayload = extractThinkingFromText(fullAccumulated, totalElapsed);
-      callbacks.onDone(fullAccumulated, finalPayload);
+      callbacks.onDone(fullAccumulated, extractThinkingFromText(fullAccumulated, totalElapsed));
       return;
     }
 
-    // Real SSE Network Request (OpenAI / DeepSeek / Ollama compatible endpoint)
     try {
-      const endpoint = config.endpointUrl || 'https://api.deepseek.com/chat/completions';
+      const endpoint = config.endpointUrl || 'https://api.deepseek.com/v1/chat/completions';
+      const adapter = config.adapter || 'openai-compatible-chat';
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           ...(config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {})
         },
-        body: JSON.stringify({
-          model: config.model,
-          messages: [{ role: 'user', content: config.prompt }],
-          stream: true,
-          temperature: config.temperature ?? 0.3
-        }),
+        body: JSON.stringify(buildGatewayRequestBody({
+          providerId: 'runtime',
+          modelId: config.model,
+          endpointUrl: endpoint,
+          adapter,
+          protocol: adapter === 'openai-responses' ? 'responses' : adapter === 'anthropic-messages' ? 'anthropic_messages' : adapter === 'google-generative-language' ? 'google_native' : 'chat_completions',
+          apiKey: config.apiKey || ''
+        }, [{ role: 'user', content: config.prompt }], true, config.temperature ?? 0.3)),
         signal: this.abortController.signal
       });
 
@@ -80,47 +83,56 @@ export class LlmStreamingClient {
       const reader = response.body.getReader();
       const decoder = new TextDecoder('utf-8');
       let fullAccumulated = '';
+      let buffer = '';
+      let sawDoneSentinel = false;
+      let sawFinishReason = false;
+      let readerDone = false;
 
-      while (true) {
+      while (!sawDoneSentinel && !sawFinishReason) {
         const { done, value } = await reader.read();
-        if (done) break;
-
-        const textChunk = decoder.decode(value, { stream: true });
-        const lines = textChunk.split('\n').filter(l => l.startsWith('data: '));
-
+        if (done) {
+          readerDone = true;
+          break;
+        }
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
         for (const line of lines) {
-          const rawJson = line.replace('data: ', '').trim();
-          if (rawJson === '[DONE]') break;
+          const trimmed = line.trim();
+          if (!trimmed.startsWith('data: ')) continue;
+          const rawJson = trimmed.slice(6).trim();
+          if (rawJson === '[DONE]') {
+            sawDoneSentinel = true;
+            break;
+          }
           try {
-            const parsed = JSON.parse(rawJson);
-            const content = parsed.choices?.[0]?.delta?.content || parsed.message?.content || '';
-            if (content) {
-              fullAccumulated += content;
+            const normalized = parseGatewayEvent(adapter, JSON.parse(rawJson));
+            if (normalized.content || normalized.reasoning) {
+              const chunk = `${normalized.reasoning}${normalized.content}`;
+              fullAccumulated += chunk;
               const elapsed = Number(((Date.now() - startTime) / 1000).toFixed(1));
-              const payload = extractThinkingFromText(fullAccumulated, elapsed);
-              callbacks.onChunk(content, fullAccumulated, payload);
+              callbacks.onChunk(chunk, fullAccumulated, extractThinkingFromText(fullAccumulated, elapsed));
             }
-          } catch {
-            // Ignore partial SSE chunk parse error
+            if (normalized.finished) sawFinishReason = true;
+          } catch (error) {
+            throw new Error(`流事件解析失败: ${error instanceof Error ? error.message : String(error)}`);
           }
         }
       }
 
-      const totalElapsed = Number(((Date.now() - startTime) / 1000).toFixed(1));
-      const finalPayload = extractThinkingFromText(fullAccumulated, totalElapsed);
-      callbacks.onDone(fullAccumulated, finalPayload);
-    } catch (err: unknown) {
-      if ((err as Error).name !== 'AbortError') {
-        callbacks.onError(err as Error);
+      if (!sawDoneSentinel && !sawFinishReason) {
+        throw new Error(readerDone ? '模型流在正常完成信号前结束' : '模型流未返回正常完成信号');
       }
+      const totalElapsed = Number(((Date.now() - startTime) / 1000).toFixed(1));
+      callbacks.onDone(fullAccumulated, extractThinkingFromText(fullAccumulated, totalElapsed));
+    } catch (err: unknown) {
+      if ((err as Error).name !== 'AbortError') callbacks.onError(err as Error);
     }
   }
 
   public abort(): void {
-    if (this.abortController) {
-      this.abortController.abort();
-      this.abortController = null;
-    }
+    this.abortController?.abort();
+    this.abortController = null;
   }
 }
 

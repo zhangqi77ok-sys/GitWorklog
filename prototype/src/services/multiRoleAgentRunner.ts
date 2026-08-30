@@ -10,6 +10,8 @@ import { persistentArtifactStore } from './artifactStore';
 import { agentEventStore } from './agentEventStore';
 import { agentRuntimeController } from './agentRuntimeController';
 import { hostGateway } from './hostGateway';
+import { buildGatewayRequestBody, buildModelCatalogEntry, extractGatewayResponseText, resolveModelRoute } from './modelGateway';
+import { loadSavedProviders } from '../types/contracts';
 
 export interface AgentTaskInput {
   runId: string;
@@ -249,37 +251,31 @@ export class MultiRoleAgentRunner {
     modelId: string;
     signal?: AbortSignal;
   }): Promise<string> {
-    let baseUrl = 'https://opencode.ai/zen/v1';
-    let apiKey = 'sk-REVOKED_PLACEHOLDER';
+    const providers = loadSavedProviders();
+    const provider = providers.find(item => item.enabled && item.models?.some(model => model.id === params.modelId))
+      || providers.find(item => item.id === 'provider-opencode' && item.enabled)
+      || providers.find(item => item.enabled && item.baseUrl);
+    if (!provider) throw new Error('没有可用的模型 Provider');
 
-    try {
-      const rawProviders = localStorage.getItem('codemind_custom_providers');
-      if (rawProviders) {
-        const providers: any[] = JSON.parse(rawProviders);
-        const p = providers.find((item: any) => item.enabled && item.apiKey && item.baseUrl);
-        if (p) {
-          baseUrl = p.baseUrl.trim();
-          if (baseUrl.endsWith('/')) baseUrl = baseUrl.slice(0, -1);
-          apiKey = p.apiKey.trim();
-        }
-      }
-    } catch {}
-
-    const response = await fetch(`${baseUrl}/chat/completions`, {
+    const catalogModel = provider.models?.find(model => model.id === params.modelId) || {
+      id: params.modelId,
+      name: params.modelId,
+      enabled: true,
+      contextLimit: 128000,
+      capabilities: []
+    };
+    const route = resolveModelRoute(provider, buildModelCatalogEntry(provider, catalogModel));
+    const response = await fetch(route.endpointUrl, {
       method: 'POST',
       signal: params.signal,
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
+        ...(route.apiKey ? { 'Authorization': `Bearer ${route.apiKey}` } : {})
       },
-      body: JSON.stringify({
-        model: params.modelId || 'opencode/mimo-v2-omni',
-        messages: [
-          { role: 'system', content: params.systemPrompt },
-          { role: 'user', content: params.userPrompt }
-        ],
-        stream: false
-      })
+      body: JSON.stringify(buildGatewayRequestBody(route, [
+        { role: 'system', content: params.systemPrompt },
+        { role: 'user', content: params.userPrompt }
+      ], false))
     });
 
     if (!response.ok) {
@@ -287,7 +283,7 @@ export class MultiRoleAgentRunner {
     }
 
     const data = await response.json();
-    return data.choices?.[0]?.message?.content || 'Task completed successfully.';
+    return extractGatewayResponseText(route.adapter, data) || 'Task completed successfully.';
   }
 }
 

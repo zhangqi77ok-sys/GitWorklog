@@ -11,6 +11,16 @@ from pathlib import Path
 
 VERSION = "1.5.0"
 APP_NAME = "Tcode"
+SILENT_INSTALL_FLAG = "--silent-install-dir"
+
+
+def parse_silent_install_dir(argv):
+    if SILENT_INSTALL_FLAG not in argv:
+        return None
+    index = argv.index(SILENT_INSTALL_FLAG) + 1
+    if index >= len(argv) or not argv[index].strip():
+        raise ValueError(f"{SILENT_INSTALL_FLAG} requires a target directory")
+    return Path(argv[index]).expanduser().resolve()
 
 def get_detected_installed_dir():
     # 1. Check Windows Registry HKCU\Software\Tcode\InstallPath
@@ -103,6 +113,23 @@ def create_windows_shortcut(target_path, shortcut_path, description="Tcode Enter
         subprocess.run(["powershell.exe", "-NoProfile", "-Command", ps_cmd], check=True, creationflags=CREATE_NO_WINDOW)
     except Exception as e:
         print("Shortcut error:", e)
+
+
+def install_payload_to(target_dir):
+    """Install the bundled core executable without opening the interactive wizard."""
+    target_path = Path(target_dir).expanduser().resolve()
+    bundle_dir = Path(get_bundle_dir())
+    payload_src = bundle_dir / "payload" / "Tcode-Core.exe"
+    if not payload_src.is_file():
+        raise FileNotFoundError(f"Installer payload not found: {payload_src}")
+
+    close_running_instances()
+    target_path.mkdir(parents=True, exist_ok=True)
+    target_exe = target_path / "Tcode.exe"
+    shutil.copyfile(payload_src, target_exe)
+    save_installed_dir(str(target_path))
+    return target_exe
+
 
 class SetupWizard(tk.Tk):
     def __init__(self):
@@ -365,5 +392,14 @@ class SetupWizard(tk.Tk):
         self.show_step(self.current_step - 1)
 
 if __name__ == "__main__":
+    try:
+        silent_install_dir = parse_silent_install_dir(sys.argv)
+        if silent_install_dir is not None:
+            install_payload_to(silent_install_dir)
+            sys.exit(0)
+    except Exception as e:
+        print(f"Silent installation failed: {e}", file=sys.stderr)
+        sys.exit(1)
+
     app = SetupWizard()
     app.mainloop()

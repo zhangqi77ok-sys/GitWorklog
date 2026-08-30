@@ -89,8 +89,8 @@ import {
   addProjectToWorkspace,
   removeProjectFromWorkspace,
   AIModelOption,
-  AVAILABLE_MODELS,
   getAllAvailableModels,
+  resolveInitialModel,
   forkSessionFromMessage,
   clampLeftPanelWidth,
   clampWorkbenchWidth,
@@ -124,6 +124,8 @@ import {
   mergeAcceptanceCriteria,
   normalizeCriteriaKey,
   verifyTargetAcceptance,
+  resolveNoActionLoopStatus,
+  parseNativeToolCalls,
   TargetAcceptanceItem,
   ProgressVector,
   InternalStepTag,
@@ -132,6 +134,13 @@ import {
 import { buildPromptRulesSnapshot } from './services/rulesStore';
 import { buildTier1SkillsSystemPrompt } from './services/skillsEngine';
 import { buildMcpToolsModelPrompt, loadSavedMcpConfigs, initializeMcpServer } from './services/mcpGateway';
+import { classifyStreamTermination } from './services/streamProtocol';
+import {
+  buildGatewayRequestBody,
+  buildModelCatalogEntry,
+  parseGatewayEvent,
+  resolveModelRoute
+} from './services/modelGateway';
 
 export const App: React.FC = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -214,49 +223,30 @@ export const App: React.FC = () => {
     }
   });
 
-  const [currentModel, setCurrentModel] = useState<AIModelOption>(() => {
-    const all = getAllAvailableModels();
+  const [currentModel, setCurrentModel] = useState<AIModelOption>(() =>
+    resolveInitialModel(getAllAvailableModels())
+  );
+  React.useEffect(() => {
+    const syncAvailableModel = () => {
+      const all = getAllAvailableModels();
+      setCurrentModel(previous => {
+        const same = all.find(model => model.uniqueKey === previous.uniqueKey)
+          || all.find(model => model.providerId === previous.providerId && model.id === previous.id);
+        const next = same || all[0] || previous;
+        if (next.contextLimit !== previous.contextLimit) {
+          setTokenStats(stats => ({ ...stats, contextMaxTokens: next.contextLimit }));
+        }
+        return next;
+      });
+    };
+    window.addEventListener('tcode_providers_updated', syncAvailableModel);
+    window.addEventListener('storage', syncAvailableModel);
+    return () => {
+      window.removeEventListener('tcode_providers_updated', syncAvailableModel);
+      window.removeEventListener('storage', syncAvailableModel);
+    };
+  }, []);
 
-    // Priority 1: Try to restore the full serialized model object
-    try {
-      const savedObj = localStorage.getItem('codemind_current_model_obj');
-      if (savedObj) {
-        const parsed = JSON.parse(savedObj) as AIModelOption;
-        // Verify it's still a valid model in the available list
-        const exactMatch = all.find((m: AIModelOption) => m.id === parsed.id);
-        if (exactMatch) return exactMatch;
-        // If the id changed (dynamic providers), try matching by name
-        const nameMatch = all.find((m: AIModelOption) => m.name === parsed.name);
-        if (nameMatch) return nameMatch;
-        // If it's a full valid object with endpoint info, use it directly
-        if (parsed.id && parsed.name) return parsed;
-      }
-    } catch (e) {}
-
-    // Priority 2: Fall back to id-based lookup from session map
-    let savedId = '';
-    try {
-      const savedSessionId = localStorage.getItem('codemind_current_session_id');
-      const raw = localStorage.getItem('codemind_session_models_map');
-      const map = raw ? JSON.parse(raw) : {};
-      if (savedSessionId && map[savedSessionId]) {
-        savedId = map[savedSessionId];
-      } else {
-        savedId = localStorage.getItem('codemind_current_model_id') || '';
-      }
-    } catch (e) {}
-
-    if (savedId) {
-      const found = all.find((m: AIModelOption) => m.id === savedId);
-      if (found) return found;
-      // Also try partial match (e.g. saved 'hunyuan-t1-latest' matches model containing 'hunyuan')
-      const partial = all.find((m: AIModelOption) => m.id.includes(savedId) || savedId.includes(m.id));
-      if (partial) return partial;
-    }
-    const hunyuan = all.find((m: AIModelOption) => m.id.includes('hy3') || m.id.includes('hunyuan'));
-    if (hunyuan) return hunyuan;
-    return all[0] || AVAILABLE_MODELS[0];
-  });
   const [permissionPolicy, setPermissionPolicy] = useState<PermissionPolicy>('autonomous_agent');
 
   // Agent Loop: Promise-based batch approval modal state & Scoped Trust map
@@ -611,7 +601,7 @@ export const App: React.FC = () => {
       const boundModelId = map[id] || localStorage.getItem('codemind_current_model_id');
       if (boundModelId) {
         const all = getAllAvailableModels();
-        let targetModel = all.find((m: AIModelOption) => m.id === boundModelId);
+        let targetModel = all.find((m: AIModelOption) => m.uniqueKey === boundModelId || m.id === boundModelId);
         // Fallback: try partial id match or name match
         if (!targetModel) {
           targetModel = all.find((m: AIModelOption) => m.id.includes(boundModelId) || boundModelId.includes(m.id));
@@ -631,10 +621,10 @@ export const App: React.FC = () => {
   const handleSelectModel = (model: AIModelOption) => {
     setCurrentModel(model);
     try {
-      localStorage.setItem('codemind_current_model_id', model.id);
+      localStorage.setItem('codemind_current_model_id', model.uniqueKey || model.id);
       localStorage.setItem('codemind_current_model_obj', JSON.stringify(model));
       setSessionModelMap(prev => {
-        const updated = { ...prev, [currentSessionId]: model.id };
+        const updated = { ...prev, [currentSessionId]: model.uniqueKey || model.id };
         localStorage.setItem('codemind_session_models_map', JSON.stringify(updated));
         return updated;
       });
@@ -1076,44 +1066,59 @@ ${mcpToolsPromptSnippet}
           ...cleanHistory
         ];
 
-        // Resolve API endpoint
+        // Resolve the route from the selected model catalog entry. OpenCode Zen is
+        // one Provider; its model metadata chooses the adapter and endpoint.
         const savedProviders = loadSavedProviders();
-        let provider = savedProviders.find(p => p.enabled && p.models?.some(m => m.id === streamingModel.id));
-        if (!provider && (streamingModel.id.includes('mimo') || streamingModel.name.includes('OpenCode') || streamingModel.id.includes('free'))) {
-          provider = savedProviders.find(p => p.id === 'provider-opencode');
+        let provider: any = null;
+
+        if (streamingModel.providerId) {
+          provider = savedProviders.find(p => p.id === streamingModel.providerId);
+        }
+        if (!provider) {
+          provider = savedProviders.find(p => p.enabled && p.models?.some(m => m.id === streamingModel.id));
         }
         if (!provider) {
           provider = savedProviders.find(p => p.enabled && p.apiKey && p.baseUrl) || savedProviders[0];
         }
+        if (!provider) throw new Error('没有可用的模型 Provider');
 
-        let baseUrl = provider?.baseUrl?.trim() || 'https://opencode.ai/zen/v1';
-        if (baseUrl.endsWith('/')) baseUrl = baseUrl.slice(0, -1);
-        const apiKey = provider?.apiKey?.trim() || 'sk-REVOKED_PLACEHOLDER';
         const targetModel = streamingModel.id;
-
-        const { url: requestUrl, headers: proxyHeaders } = resolveApiEndpoint(`${baseUrl}/chat/completions`);
+        const catalogModel = provider.models?.find((model: any) => model.id === targetModel) || {
+          id: targetModel,
+          name: streamingModel.name,
+          enabled: true,
+          contextLimit: streamingModel.contextLimit,
+          adapter: streamingModel.adapter,
+          endpointPath: streamingModel.endpointPath,
+          protocol: streamingModel.protocol,
+          capabilities: []
+        };
+        const catalogEntry = buildModelCatalogEntry(provider, catalogModel);
+        const route = resolveModelRoute(provider, catalogEntry);
+        const { url: requestUrl, headers: proxyHeaders } = resolveApiEndpoint(route.endpointUrl);
         const controller = new AbortController();
         abortControllerRef.current = controller;
 
-        addLog('INFO', 'AgentLoop', `[Loop #${loopCount}] 正在调度模型 [${streamingModel.name}]`);
+        addLog('INFO', 'AgentLoop', `[Loop #${loopCount}] 调度模型 [${streamingModel.name}] · ${route.adapter} · ${route.endpointUrl}`);
 
         // ── Stream LLM Response ──
         let accumulatedContent = '';
         let accumulatedThinking = '';
+        const nativeToolCalls: Array<{ id: string; name?: string; arguments?: string }> = [];
 
         const response = await fetch(requestUrl, {
           method: 'POST',
           signal: controller.signal,
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${apiKey}`,
+            'Authorization': `Bearer ${route.apiKey}`,
             ...proxyHeaders
           },
-          body: JSON.stringify({
-            model: targetModel,
-            messages: apiMessages,
-            stream: true
-          })
+          body: JSON.stringify(buildGatewayRequestBody(
+            route,
+            apiMessages as Array<{ role: 'system' | 'user' | 'assistant' | 'tool'; content: string }>,
+            true
+          ))
         });
 
         if (!response.ok) {
@@ -1127,9 +1132,16 @@ ${mcpToolsPromptSnippet}
         if (reader) {
           let isFirstChunk = true;
           let streamFinished = false;
+          let sawDoneSentinel = false;
+          let sawFinishReason = false;
+          let readerDone = false;
+
           while (!streamFinished) {
             const { done, value } = await reader.read();
-            if (done) break;
+            if (done) {
+              readerDone = true;
+              break;
+            }
             buffer += decoder.decode(value, { stream: true });
 
             if (isFirstChunk && buffer.trim()) {
@@ -1146,41 +1158,57 @@ ${mcpToolsPromptSnippet}
 
             for (const line of lines) {
               const trimmed = line.trim();
-              if (trimmed.startsWith('data: ')) {
-                const dataStr = trimmed.slice(6);
-                if (dataStr === '[DONE]') {
+              if (!trimmed.startsWith('data: ')) continue;
+              const dataStr = trimmed.slice(6).trim();
+              if (dataStr === '[DONE]') {
+                sawDoneSentinel = true;
+                streamFinished = true;
+                break;
+              }
+              try {
+                const parsed = JSON.parse(dataStr);
+                const normalized = parseGatewayEvent(route.adapter, parsed);
+                if (normalized.toolCalls.length > 0) nativeToolCalls.push(...normalized.toolCalls);
+                if (normalized.reasoning) accumulatedThinking += normalized.reasoning;
+                if (normalized.content) accumulatedContent += normalized.content;
+                if (normalized.finished) {
+                  sawFinishReason = true;
                   streamFinished = true;
-                  break;
                 }
-                try {
-                  const parsed = JSON.parse(dataStr);
-                  const choice = parsed.choices?.[0];
-                  const deltaContent = choice?.delta?.content || '';
-                  const deltaReasoning = choice?.delta?.reasoning_content || '';
 
-                  if (deltaReasoning) accumulatedThinking += deltaReasoning;
-                  if (deltaContent) accumulatedContent += deltaContent;
-
-                  if (deltaReasoning || deltaContent) {
-                    let currentDisplay = '';
-                    if (accumulatedThinking && !accumulatedContent) {
-                      currentDisplay = `<think>\n${accumulatedThinking}\n</think>\n\n*正在深入推演与分析代码架构...*`;
-                    } else if (accumulatedThinking && accumulatedContent) {
-                      currentDisplay = `<think>\n${accumulatedThinking}\n</think>\n\n${accumulatedContent}`;
-                    } else {
-                      currentDisplay = accumulatedContent;
-                    }
-
-                    setSessionMessages(prev => {
-                      const list = prev[currentSessionId] || [];
-                      const updated = list.map(m => m.id === assistantId ? { ...m, content: currentDisplay } : m);
-                      return { ...prev, [currentSessionId]: updated };
-                    });
+                if (normalized.reasoning || normalized.content) {
+                  let currentDisplay = '';
+                  if (accumulatedThinking && !accumulatedContent) {
+                    currentDisplay = `<think>\n${accumulatedThinking}\n</think>\n\n*正在深入推演与分析代码架构...*`;
+                  } else if (accumulatedThinking && accumulatedContent) {
+                    currentDisplay = `<think>\n${accumulatedThinking}\n</think>\n\n${accumulatedContent}`;
+                  } else {
+                    currentDisplay = accumulatedContent;
                   }
-                } catch (e) {}
+
+                  setSessionMessages(prev => {
+                    const list = prev[currentSessionId] || [];
+                    const updated = list.map(m => m.id === assistantId ? { ...m, content: currentDisplay } : m);
+                    return { ...prev, [currentSessionId]: updated };
+                  });
+                }
+              } catch (error) {
+                addLog('WARN', 'StreamParser', `忽略无法解析的流事件: ${error instanceof Error ? error.message : String(error)}`);
               }
             }
           }
+
+          const termination = classifyStreamTermination({
+            readerDone,
+            sawDoneSentinel,
+            sawFinishReason,
+            aborted: controller.signal.aborted
+          });
+          if (termination !== 'completed') {
+            throw new Error(termination === 'cancelled' ? '用户已取消本次模型响应' : '模型流在未收到正常完成信号前中断');
+          }
+        } else {
+          throw new Error('模型响应缺少可读取的流体内容');
         }
 
         // Finalize content
@@ -1200,6 +1228,8 @@ ${mcpToolsPromptSnippet}
 
         // ── Parse target acceptance criteria and deduplicate/merge at Run level ──
         const incomingCriteria = parseAcceptanceCriteria(finalContent);
+        // Preserve whether the model explicitly declared acceptance criteria before adding defaults.
+        const hadExplicitAcceptanceCriteria = incomingCriteria.length > 0 || activeAcceptanceItems.length > 0;
         if (incomingCriteria.length > 0) {
           activeAcceptanceItems = mergeAcceptanceCriteria(activeAcceptanceItems, incomingCriteria);
         } else if (activeAcceptanceItems.length === 0) {
@@ -1210,7 +1240,9 @@ ${mcpToolsPromptSnippet}
           ];
         }
 
-        const actions = (frozenRunMode === 'act' || frozenRunMode === 'minimal') ? parseActionsFromContent(finalContent) : [];
+        const actions = (frozenRunMode === 'act' || frozenRunMode === 'minimal')
+          ? [...parseActionsFromContent(finalContent), ...parseNativeToolCalls(nativeToolCalls)]
+          : [];
 
         // Record Step Tag & Append Round Item without overwriting history
         const currentPhase: InternalStepTag['phase'] = actions.some(a => a.type === 'write_file')
@@ -1239,19 +1271,21 @@ ${mcpToolsPromptSnippet}
         });
 
         if (actions.length === 0) {
-          // No actions → pure text reply, Verifier assesses if target is complete
+          // A plain answer may complete a conversational turn, but an explicit unfinished
+          // acceptance checklist must remain visible as needs_decision instead of completed.
           const durationSec = parseFloat(((performance.now() - callStartTime) / 1000).toFixed(1));
           const addedPrompt = Math.round(text.length * 0.75);
           const addedComp = Math.round(finalContent.length * 0.75);
 
           const verifierResult = verifyTargetAcceptance(activeAcceptanceItems, [], [], progressHistory);
           activeAcceptanceItems = verifierResult.items;
-          currentLoopStatus = verifierResult.status === 'running' ? 'completed' : verifierResult.status;
-          terminationSummaryText = verifierResult.summary;
+          currentLoopStatus = resolveNoActionLoopStatus(verifierResult.status, hadExplicitAcceptanceCriteria);
+          terminationSummaryText = currentLoopStatus === 'needs_decision'
+            ? '本轮没有识别到可执行动作，验收项尚未全部通过，等待用户决策或补充指令。'
+            : verifierResult.summary;
 
-          stepTags[stepTags.length - 1].status = 'passed';
-
-          currentRoundItem.status = currentLoopStatus === 'completed' ? 'passed' : currentLoopStatus === 'blocked' ? 'blocked' : 'failed';
+          stepTags[stepTags.length - 1].status = currentLoopStatus === 'completed' ? 'passed' : currentLoopStatus === 'blocked' ? 'blocked' : 'running';
+          currentRoundItem.status = currentLoopStatus === 'completed' ? 'passed' : currentLoopStatus === 'blocked' ? 'blocked' : 'running';
           setSessionMessages(prev => {
             const list = prev[currentSessionId] || [];
             const updated = list.map(m => m.id === assistantId ? {
@@ -1276,9 +1310,10 @@ ${mcpToolsPromptSnippet}
             estimatedCostUsd: prev.estimatedCostUsd + ((addedPrompt + addedComp) * 0.0000002)
           }));
 
-          completedWithTarget = true;
-          addLog('INFO', 'AgentLoop', `[Loop #${loopCount}] 目标完成，Agent Loop 闭环退出 (${durationSec}s)`);
-          break; // Exit Target-Driven Agent Loop
+          completedWithTarget = currentLoopStatus === 'completed';
+          addLog(currentLoopStatus === 'completed' ? 'INFO' : 'WARN', 'AgentLoop',
+            `[Loop #${loopCount}] ${terminationSummaryText} (${durationSec}s)`);
+          break;
         }
 
         // ── Execute actions with Batch Decision & Scoped Trust ──

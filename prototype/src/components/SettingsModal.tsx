@@ -28,7 +28,6 @@ import {
   Trash2,
   Code,
   ChevronDown,
-  Sparkles,
   Save
 } from 'lucide-react';
 import {
@@ -65,6 +64,7 @@ import {
   resolveApiEndpoint
 } from '../types/contracts';
 import { hostGateway } from '../services/hostGateway';
+import { assertProviderCredentials } from '../services/modelGateway';
 import { loadSavedRules, saveRulesToStorage, addManagedRule, toggleRuleState, deleteManagedRule } from '../services/rulesStore';
 import { loadSavedOfficialSkills, toggleOfficialSkillState, addOfficialSkill, deleteOfficialSkill, SkillMetadata } from '../services/skillsEngine';
 import { loadSavedMcpConfigs, saveMcpConfigsToStorage, toggleMcpServerEnabled, addMcpServerConfig, deleteMcpServerConfig, initializeMcpServer, McpServerConfig, McpServerRuntime, OFFICIAL_PROTOCOL_VERSION } from '../services/mcpGateway';
@@ -82,7 +82,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   currentAccentHex,
   onSelectAccentHex
 }) => {
-  const [openaiProtocol, setOpenaiProtocol] = useState<'responses' | 'chat_completions'>('responses');
   const [activeTab, setActiveTab] = useState<'gateway' | 'rules' | 'skills' | 'mcp' | 'appearance' | 'keybindings' | 'system'>('rules');
   const [searchFilter, setSearchFilter] = useState('');
   const [rules, setRules] = useState<ManagedRule[]>(loadSavedRules());
@@ -167,9 +166,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const handleTestProvider = async (p: ModelProviderItem) => {
     const draft = draftConfigMap[p.id] || { baseUrl: p.baseUrl, apiKey: p.apiKey };
     setTestingProviderId(p.id);
-    setProviderToast(`🔄 正在向 ${draft.baseUrl} 发起真实连通性探测...`);
     const start = Date.now();
     try {
+      assertProviderCredentials({ ...p, baseUrl: draft.baseUrl.trim(), apiKey: draft.apiKey.trim() });
       let url = draft.baseUrl.trim();
       if (url.endsWith('/')) url = url.slice(0, -1);
       const { url: testEndpoint, headers: proxyHeaders } = resolveApiEndpoint(`${url}/models`);
@@ -208,6 +207,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     const draft = draftConfigMap[p.id] || { baseUrl: p.baseUrl, apiKey: p.apiKey };
     setProviderToast(`🔄 正在从 ${draft.baseUrl}/models 真实拉取最新模型列表...`);
     try {
+      assertProviderCredentials({ ...p, baseUrl: draft.baseUrl.trim(), apiKey: draft.apiKey.trim() });
       let url = draft.baseUrl.trim();
       if (url.endsWith('/')) url = url.slice(0, -1);
       const { url: modelsEndpoint, headers: proxyHeaders } = resolveApiEndpoint(`${url}/models`);
@@ -223,10 +223,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       if (rawModels.length > 0) {
         const fetchedModels: ModelItem[] = rawModels.map((m: any) => ({
           id: m.id,
-          name: m.id,
+          name: m.name || m.id,
           enabled: true,
-          contextLimit: 128000,
-          capabilities: ['code', 'fast']
+          contextLimit: m.contextLimit || m.context_length || 128000,
+          outputLimit: m.outputLimit || m.max_output_tokens,
+          endpointPath: m.endpointPath || m.endpoint || m.endpoint_path,
+          adapter: m.adapter || m.sdk || m.adapterId,
+          protocol: m.protocol || m.protocolType,
+          capabilities: Array.isArray(m.capabilities) ? m.capabilities : ['code', 'stream'],
+          description: m.description
         }));
         const updated = providers.map(item => item.id === p.id ? { ...item, baseUrl: draft.baseUrl.trim(), apiKey: draft.apiKey.trim(), models: fetchedModels } : item);
         setProviders(updated);
@@ -244,7 +249,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const handleAddCustomModelSubmit = () => {
     if (!customModelInput.trim()) return;
-    setProviders(addCustomModelToProvider(providers, selectedProvider.id, customModelInput.trim()));
+    const updated = addCustomModelToProvider(providers, selectedProvider.id, customModelInput.trim());
+    setProviders(updated);
+    saveProvidersToStorage(updated);
     setProviderToast(`✓ 成功添加自定义模型 [${customModelInput.trim()}] 到 ${selectedProvider.name}`);
     setCustomModelInput('');
     setShowAddCustomModel(false);
@@ -1186,8 +1193,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </div>
                   </div>
 
-                  {/* OpenAI Upstream Protocol Selection Card (Responses API vs Chat Completions) */}
-                  {(selectedProvider.protocol === 'openai' || selectedProvider.id.includes('openai')) && (
+                  {/* OpenCode Zen uses model-level routing; the adapter is shown as read-only diagnostics. */}
+                  {selectedProvider.id === 'provider-opencode' && (
                     <div style={{
                       padding: '10px 14px',
                       borderRadius: '6px',
@@ -1195,77 +1202,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       border: '1px solid rgba(217, 107, 39, 0.25)',
                       display: 'flex',
                       flexDirection: 'column',
-                      gap: '8px'
+                      gap: '5px'
                     }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <Sparkles size={13} color="var(--accent)" />
-                          <span style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                            OpenAI 上游协议选择 (Upstream Protocol)
-                          </span>
-                        </div>
-                        <span style={{ fontSize: '9.5px', padding: '1px 6px', borderRadius: '3px', background: 'var(--accent)', color: '#FFF', fontWeight: 600 }}>
-                          默认: Responses API
+                        <span style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                          ⚡ OpenCode Zen 统一 Provider
+                        </span>
+                        <span style={{ fontSize: '9.5px', color: 'var(--accent)', fontWeight: 600 }}>
+                          模型目录自动路由
                         </span>
                       </div>
-
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                        <div
-                          onClick={() => {
-                            setOpenaiProtocol('responses');
-                            setProviderToast('✓ OpenAI 上游协议已切换为 Responses API (/v1/responses)');
-                            setTimeout(() => setProviderToast(null), 3000);
-                          }}
-                          style={{
-                            padding: '8px 10px',
-                            borderRadius: '5px',
-                            border: openaiProtocol === 'responses' ? '1px solid var(--accent)' : '1px solid var(--border-subtle)',
-                            background: openaiProtocol === 'responses' ? 'var(--accent-subtle)' : 'var(--bg-surface)',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: '2px'
-                          }}
-                        >
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <span style={{ fontSize: '11px', fontWeight: 600, color: openaiProtocol === 'responses' ? 'var(--accent)' : 'var(--text-primary)' }}>
-                              ⚡ Responses API (默认推荐)
-                            </span>
-                            <span style={{ fontSize: '9px', color: 'var(--text-muted)' }}>/v1/responses</span>
-                          </div>
-                          <span style={{ fontSize: '9.5px', color: 'var(--text-muted)' }}>
-                            面向 Agent 的状态化统一协议，支持原生多模态与实时工具调用
-                          </span>
-                        </div>
-
-                        <div
-                          onClick={() => {
-                            setOpenaiProtocol('chat_completions');
-                            setProviderToast('✓ OpenAI 上游协议已切换为 Chat Completions (/v1/chat/completions)');
-                            setTimeout(() => setProviderToast(null), 3000);
-                          }}
-                          style={{
-                            padding: '8px 10px',
-                            borderRadius: '5px',
-                            border: openaiProtocol === 'chat_completions' ? '1px solid var(--accent)' : '1px solid var(--border-subtle)',
-                            background: openaiProtocol === 'chat_completions' ? 'var(--accent-subtle)' : 'var(--bg-surface)',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: '2px'
-                          }}
-                        >
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <span style={{ fontSize: '11px', fontWeight: 600, color: openaiProtocol === 'chat_completions' ? 'var(--accent)' : 'var(--text-primary)' }}>
-                              💬 Chat Completions (传统兼容)
-                            </span>
-                            <span style={{ fontSize: '9px', color: 'var(--text-muted)' }}>/v1/chat/completions</span>
-                          </div>
-                          <span style={{ fontSize: '9.5px', color: 'var(--text-muted)' }}>
-                            标准 messages 数组流式协议，兼容各大聚合中转网关与 OneAPI
-                          </span>
-                        </div>
-                      </div>
+                      <span style={{ fontSize: '9.5px', color: 'var(--text-muted)', lineHeight: 1.45 }}>
+                        每个模型根据官方目录自动选择 Endpoint、协议适配器与能力。协议不作为 Provider 级别的用户切换项。
+                      </span>
                     </div>
                   )}
 
@@ -1376,7 +1325,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             <input
                               type="checkbox"
                               checked={m.enabled}
-                              onChange={() => setProviders(toggleProviderModelSwitch(providers, selectedProvider.id, m.id))}
+                              onChange={() => {
+                                const updated = toggleProviderModelSwitch(providers, selectedProvider.id, m.id);
+                                setProviders(updated);
+                                saveProvidersToStorage(updated);
+                              }}
                               style={{ cursor: 'pointer', width: '14px', height: '14px' }}
                             />
                             <div>
@@ -1402,12 +1355,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                               </div>
                               <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '2px' }}>
                                 {m.name} · 上下文上限 {Math.round(m.contextLimit / 1000)}k tokens
+                                {selectedProvider.id === 'provider-opencode' && m.adapter ? ` · Adapter ${m.adapter} · ${m.endpointPath || '目录默认 Endpoint'}` : ''}
                               </div>
                             </div>
                           </div>
 
                           <button
-                            onClick={() => setProviders(toggleProviderModelSwitch(providers, selectedProvider.id, m.id))}
+                            onClick={() => {
+                              const updated = toggleProviderModelSwitch(providers, selectedProvider.id, m.id);
+                              setProviders(updated);
+                              saveProvidersToStorage(updated);
+                            }}
                             style={{
                               padding: '3px 10px',
                               borderRadius: '10px',

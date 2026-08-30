@@ -123,6 +123,33 @@ describe('Real Production Lifecycle & Persistence Contracts', () => {
     expect(reloadedDs?.apiKey).toBe('sk-custom-real-key-12345678');
     expect(reloadedDs?.latencyMs).toBe(45);
   });
+
+  it('must not ship placeholder credentials or healthy status without a real credential', () => {
+    const providers = loadSavedProviders();
+    const placeholderPatterns = [
+      /98472918374910283749\\.zhipu/,
+      /sk-dashscope-9284719284/,
+      /sk-sf-938471928471928374/,
+      /sk-oneapi-9384719284719284/
+    ];
+
+    for (const provider of providers) {
+      expect(placeholderPatterns.some(pattern => pattern.test(provider.apiKey))).toBe(false);
+      if (!provider.apiKey) {
+        expect(provider.status).not.toBe('healthy');
+      }
+    }
+
+    const historical = providers.map(provider =>
+      provider.id === 'provider-zhipu'
+        ? { ...provider, apiKey: '98472918374910283749.zhipu', status: 'healthy' as const }
+        : provider
+    );
+    saveProvidersToStorage(historical);
+    const migrated = loadSavedProviders().find(provider => provider.id === 'provider-zhipu');
+    expect(migrated?.apiKey).toBe('');
+    expect(migrated?.status).toBe('untested');
+  });
 });
 
 describe('AST Security Sandbox & Real PII Shielding', () => {

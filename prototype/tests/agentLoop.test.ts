@@ -10,6 +10,8 @@ import {
   normalizeCriteriaKey,
   verifyTargetAcceptance,
   detectProgressStall,
+  parseNativeToolCalls,
+  resolveNoActionLoopStatus,
   TargetAcceptanceItem,
   ProgressVector
 } from '../src/services/agentLoop';
@@ -223,3 +225,28 @@ describe('Target-driven Agent Loop - Acceptance criteria & Verifier', () => {
   });
 });
 
+
+
+describe('Agent Loop contract - native tools and honest termination', () => {
+  it('converts complete native tool calls into the same AgentAction shape as fenced actions', () => {
+    const actions = parseNativeToolCalls([
+      { id: 'call-1', name: 'run_command', arguments: '{"command":"npm test"}' }
+    ]);
+    expect(actions).toHaveLength(1);
+    expect(actions[0]).toMatchObject({ type: 'run_command', code: 'npm test', target: 'npm test' });
+  });
+
+  it('joins streamed native argument fragments before parsing the action', () => {
+    const actions = parseNativeToolCalls([
+      { id: 'call-1', name: 'write_file', arguments: '{"path":"src/a.ts","con' },
+      { id: 'call-1', name: 'write_file', arguments: 'tent":"export const a = 1;"}' }
+    ]);
+    expect(actions).toHaveLength(1);
+    expect(actions[0]).toMatchObject({ type: 'write_file', target: 'src/a.ts', code: 'export const a = 1;' });
+  });
+
+  it('does not classify an explicit-criteria no-action response as completed', () => {
+    expect(resolveNoActionLoopStatus('running', true)).toBe('needs_decision');
+    expect(resolveNoActionLoopStatus('completed', true)).toBe('completed');
+  });
+});

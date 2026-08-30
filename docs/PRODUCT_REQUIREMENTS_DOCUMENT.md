@@ -1,4 +1,4 @@
-# Tcode 全景产品需求与架构设计规范 (PRD 终极精粹整合版)
+﻿# Tcode 全景产品需求与架构设计规范 (PRD 终极精粹整合版)
 
 > **产品代号**：Tcode  
 > **产品定位**：新一代企业级开源极简 AI 编程桌面工作台 (Cursor-Alternative Native Desktop IDE)  
@@ -832,22 +832,54 @@ To github.com:zhangqi77ok-sys/agent-learning.git
 
 ---
 
-## 4.43 OpenAI 上游双协议支持规约 (Responses API vs Chat Completions)
+## 4.43 OpenCode Zen 统一 Provider 与模型级 Adapter 路由规约
 
-### 4.43.1 协议背景与架构分流
-针对 OpenAI 系列大模型（GPT-4o、o1、o3 等），提供双协议上游分流支持：
-1. **Responses API (`/v1/responses`) —— 默认协议**：
-   - **定位**：OpenAI 官方主推的下一代面向 Agent 与状态化交互的统一协议；
-   - **特点**：原生支持 `input` 结构、状态延续、模态合并以及高级 Agent Tools 调用；
-   - **默认行为**：系统初始化或新增 OpenAI 渠道时，**默认锁定为 Responses API**。
-2. **Chat Completions (`/v1/chat/completions`) —— 传统兼容协议**：
-   - **定位**：兼容各大第三方中转网关、OneAPI / NewAPI 等聚合转发服务；
-   - **特点**：标准 `messages: [{ role, content }]` 数组传输。
+### 4.43.1 Provider 与模型边界
+OpenCode Zen 在产品层只作为一个统一 Provider/Gateway 管理。Provider 负责服务入口、API Key、启停和目录同步；模型目录负责保存每个模型的运行元数据：
 
-### 4.43.2 交互与切换准则
-- 在 **设置中心 (SettingsModal) ➔ 模型渠道 ➔ OpenAI 配置项** 中，提供双协议即时切换单选组件；
-- 切换后即时持久化到本地 `storageEngine`，并在下一次请求时按选定端点自动组装 Payload。
+- 稳定身份：`providerId + modelId + uniqueKey`；
+- `adapter`：Responses、Anthropic Messages、Google Native 或 OpenAI-compatible Chat；
+- `protocol`、`endpointPath`、上下文/输出上限和工具调用、推理、视觉等能力；
+- 官方目录同步失败时保留上次可用目录，不用模型名称猜测协议。
 
+同一 OpenCode Zen Provider 内允许不同模型使用不同 Adapter。产品 UI 不将 Adapter 伪装成 Provider 级别的协议配置。
+
+### 4.43.2 运行时路由
+统一 `ModelGateway` 接收 `ModelRef`，经过 `ModelCatalog` 和 `ModelAdapterResolver` 解析真实 Endpoint 与请求转换器：
+
+```text
+ModelRef
+  → ModelCatalogEntry
+  → ModelAdapterResolver
+  → ModelGateway
+  → 统一流事件
+  → Agent Loop / Harness / Swarm
+```
+
+业务层禁止硬编码 OpenCode 的 `/chat/completions`，也禁止根据 Provider 显示名称或模型名称推断协议。GPT、Claude、Gemini 与 OpenAI-compatible 模型必须以官方目录元数据自动路由。
+
+### 4.43.3 Settings 与模型选择交互
+- Settings 仅展示一个“OpenCode Zen” Provider，不展示 Responses API / Chat Completions 二选一；
+- 模型详情可以只读展示 Adapter、Endpoint 和能力诊断；
+- 点击“同步官方模型目录”后，完整模型元数据持久化至 Provider Registry，并派发 `tcode_providers_updated`；
+- ChatColumn 从同一 Model Registry 派生可选模型，无需刷新页面即可看到同步结果；
+- 模型被禁用或删除时，当前会话自动选择明确的可用 fallback；
+- 同名模型通过 `uniqueKey` 隔离，不得相互覆盖。
+
+### 4.43.4 Agent 流完成与工具协议
+- `[DONE]`、`finish_reason` 或等价的 Provider 终止事件才表示正常完成；异常 EOF 必须显示为中断或失败；
+- XML、fenced、JSON 和原生 Tool Call 统一标准化为 `AgentAction`，原始 XML 不得泄漏到助手正文；
+- `actions.length === 0` 不代表任务完成；完成状态必须有真实终止事件和验收证据；
+- HTTP、流解析、工具执行和审批错误必须向用户展示阶段、原因和可重试性。
+
+实现契约详见 [`docs/technical_reviews/opencode-provider-model-routing-contract.md`](technical_reviews/opencode-provider-model-routing-contract.md)。
+
+
+### 4.43.5 内置目录真实性与默认模型门禁
+- 内置 OpenCode 模型目录必须与官方 `/models` 快照保持一致，禁止内置官方不存在的模型（如 `hy3-free`）；
+- 默认模型选择只允许从当前可用模型列表中解析，禁止按 id 硬编码偏好，禁止恢复失效引用；
+- 升级时自动清除已保存目录中的已知失效模型 `hy3-free`，空凭据 Provider 保持 `untested`；
+- 真实远程调用验收需用户提供有效 OpenCode Zen API Key。
 
 ---
 
@@ -979,7 +1011,13 @@ To github.com:zhangqi77ok-sys/agent-learning.git
    - `🟢 OpenAI (GPT-4o, o3-mini)`
    - `💻 本地 Ollama (离线私有化)`
    - `🧠 智能自适应路由` (自适应智能 / 最强深度推理 / 极致极速 / 成本优先)
-3. **右侧模型列表卡片**：呈现完整模型 ID、上下文容量、免费/付费角标、专精领域说明与选中对勾标记。
+3. **右侧模型列表卡片**：呈现完整模型 ID、上下文容量、免费/付费角标、专精领域说明与选中对勾标记；OpenCode 模型的 Adapter/Endpoint 作为只读诊断信息展示，不提供 Provider 级协议切换。
+4. **同步与状态流转**：点击同步后显示同步中、成功或失败状态；成功结果写入全局 Model Registry，并立即广播至当前对话选择器；当前模型失效时自动选择可用 fallback。
+
+### 12.3.1 模型身份与统一数据源
+- 模型选择持久化 `providerId:modelId` 形式的 `uniqueKey`，支持不同 Provider 使用同名模型；
+- Settings、ChatColumn、普通 Agent、Harness 与 Swarm 均从同一 Model Registry 读取；
+- 模型目录保留 `adapter`、`protocol`、`endpointPath`、上下文上限和工具/推理能力，不通过 Provider 名称猜测。
 
 ### 12.4 现代化卡片式富文本渲染 (`MarkdownCard` & `CodeBlockCard`)
 1. **独立深色代码块卡片**：
@@ -1373,3 +1411,59 @@ Tcode 必须区分“环境中发现了工作流工具”和“用户选择并�
 3. “我安装了 Superspec”只触发发现提示，不等于启用 Superspec。
 4. 未适配或无法验证的 Provider 只能展示为 `discovered_only`，不得伪造执行能力。
 5. Provider 的文件、命令、网络动作必须继续通过 Tcode 宿主安全网关与人机审批。
+
+
+## 4.46 Harness / Swarm 执行引擎显式选择与启动
+
+### 产品规则
+
+1. Harness 与 Swarm 是用户可见的**执行引擎**选择，不是隐藏的自动策略；首次进入会话默认 Harness，因为当前主 Agent Loop 只有 Harness 链路已接入。
+2. 选择 Swarm 只改变“下一次任务使用的引擎”，不会自动创建 Run、不会因为任务关键词/复杂度/项目规则/已安装 Provider 而触发。
+3. Swarm 必须经过“选择 Swarm → 查看目标 → 点击启动 Swarm Run”三步。只有调度器返回真实 `runId` 后才能显示运行中。
+4. 未接入或启动失败时必须显示“未接入/不可用”或错误状态，禁止展示虚假的运行进度。
+5. 如未来增加自动建议，必须作为独立选项并在启动前等待用户确认；不得覆盖用户手动选择。
+
+### 验收标准
+
+- 顶部显示“执行引擎：Harness / Swarm”，两个选项在窄窗口下仍可感知；
+- 默认显示 Harness「已选择 · 可直接发送」；
+- Swarm「已选择 · 等待启动」时发送需求不会偷偷进入 Harness；
+- 仅点击 Swarm 工作台内的“启动 Swarm Run”才允许调用 Swarm 调度器；
+- 工作台打开但未启动时没有 `activeRunId`、没有“运行中”文案；
+- Harness/Swarm 切换不影响已运行任务；
+- Provider 发现、SDD/TDD 选择与执行引擎选择彼此独立，已安装工具不等于已启用或已执行。
+
+技术契约见：`docs/technical_reviews/harness-swarm-mode-contract.md`。
+
+
+## 4.48 本轮真实验收与配置阻塞边界（2026-08-30）
+
+本节是对 4.43 模型网关与 4.41 Agent 流状态的执行性补充，记录当前原型真实行为，不把设计目标写成已验收事实。
+
+### 4.48.1 已闭环：安装与宿主运行
+
+- 安装器构建脚本每次从当前 `prototype/dist` 和当前桌面宿主生成核心 EXE，再生成安装向导；构建成功后同时保留版本化安装器 `release/Tcode-Setup-v1.5.0.exe` 与稳定兼容入口 `dist/Tcode-Setup.exe`。
+- 安装后的 `Tcode.exe` 脱离源码目录运行时，宿主固定绑定 `127.0.0.1:8010`；只有安装目录进程实际返回 `GET /health` HTTP 200 和 `GET /` 完整 HTML，才可宣称安装/宿主运行闭环。
+
+### 4.48.2 未闭环：远程模型真实调用
+
+当前环境没有可用于远程 Provider 真实调用验收的云端 API Key 和可达 Base URL。因此：
+
+1. 云端 Provider 缺少 API Key 或 Base URL 时，路由、同步和连通性测试必须在请求前 fail-closed；
+2. 本地 Ollama/本地兼容端点可以免 API Key，但仍需有效 Base URL 和实际可达服务；
+3. 400、401、403、500、网络断开、JSON 解析失败以及空模型目录必须展示真实失败/阻塞状态，不能标记为健康、同步成功或 Agent completed；
+4. 本轮只能确认门禁和错误传播契约已接入，不能把缺少凭据时的远程调用结果写成成功。
+
+### 4.48.3 Agent Loop 与工具协议真实状态
+
+- `[DONE]`、`finish_reason` 或等价终止事件是正常完成的必要证据；异常 EOF 不是成功。
+- XML、fenced、JSON 和原生 tool call 必须进入统一动作/审批链；`read_file` 仅允许作为受控只读查看动作，不能借模型输出越权读写任意路径。
+- 没有可执行动作、验收项未全部通过、等待审批、凭据缺失、工具失败和异常中断都必须保持非 `completed` 状态，并展示原因。
+
+对应交互原型位于 `prototype/src/services/modelGateway.ts`、`prototype/src/services/agentLoop.ts`、`prototype/src/components/ChatColumn.tsx` 和 `prototype/src/components/SettingsModal.tsx`；执行契约见 [`docs/technical_reviews/opencode-provider-model-routing-contract.md`](technical_reviews/opencode-provider-model-routing-contract.md)。
+
+### 4.48.4 默认凭据与健康状态门禁
+
+- 默认 Provider 只提供端点和模型目录，禁止内置看似真实的演示 API Key；首次启动的云端 Provider 必须为空凭据、未验证状态。
+- 兼容升级时清除已知历史占位凭据，并将对应 Provider 恢复为 `untested`；用户自行保存的未知凭据不得被覆盖。
+- 真实 HTTP 400/401/403/500、网络异常或缺少凭据必须显示为阻塞/失败原因，不能伪装成健康连接。

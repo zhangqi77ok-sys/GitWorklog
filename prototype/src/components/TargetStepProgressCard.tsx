@@ -171,10 +171,13 @@ export const TargetStepProgressCard: React.FC<TargetStepProgressCardProps> = ({
           )}
 
           <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
-            {loopStatus === 'completed' && '🎯 目标驱动闭环 · 验证已全部通过'}
-            {loopStatus === 'running' && '🎯 目标驱动闭环 · 正在逐步求证与修复'}
-            {loopStatus === 'no_progress' && '⏸ 任务暂停 · 未产生新的有效进展'}
-            {loopStatus === 'blocked' && '⚠ 任务被外部条件阻塞'}
+            {loopStatus === 'completed' && passedCount === totalCount && totalCount > 0
+              ? '🎯 目标驱动闭环 · 验证已全部通过'
+              : loopStatus === 'no_progress'
+              ? '⏸ 任务暂停 · 未产生新的有效进展'
+              : loopStatus === 'blocked'
+              ? '⚠ 任务被外部条件阻塞'
+              : '🎯 目标驱动闭环 · 正在逐步求证与验证'}
           </div>
         </div>
 

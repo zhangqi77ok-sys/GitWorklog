@@ -23,11 +23,22 @@ ZIP_NAME = f"Tcode-Setup-v{VERSION}-windows-x64.zip"
 
 CORE_OUTPUT = CORE_DIST_DIR / CORE_EXE_NAME
 INSTALLER_OUTPUT = RELEASE_DIR / SETUP_EXE_NAME
+COMPAT_INSTALLER_OUTPUT = ROOT / "dist" / "Tcode-Setup.exe"
 ZIP_OUTPUT = RELEASE_DIR / ZIP_NAME
 
 PYINSTALLER_EXE = r"C:\Users\13605\AppData\Roaming\uv\python\cpython-3.12.14-windows-x86_64-none\Scripts\pyinstaller.exe"
 if not os.path.exists(PYINSTALLER_EXE):
     PYINSTALLER_EXE = sys.executable
+
+NODE_EXECUTABLE = shutil.which("node") or shutil.which("node.exe") or "node"
+NPM_CLI = Path(NODE_EXECUTABLE).resolve().parent / "node_modules" / "npm" / "bin" / "npm-cli.js"
+
+
+def frontend_npm_command(*args: str) -> list[str]:
+    """Invoke npm through Node to avoid Windows PowerShell/npm.cmd policy wrappers."""
+    if not NPM_CLI.is_file():
+        raise FileNotFoundError(f"Node npm CLI was not found at {NPM_CLI}")
+    return [NODE_EXECUTABLE, str(NPM_CLI), *args]
 
 def pyinstaller_base_cmd() -> list[str]:
     if PYINSTALLER_EXE == sys.executable:
@@ -49,9 +60,9 @@ def build() -> Path:
 
     # 1. Build & Test Frontend
     print("\n[1/5] Building prototype frontend...")
-    run(["npm.cmd" if os.name == "nt" else "npm", "run", "build"], cwd=PROTOTYPE_DIR)
+    run(frontend_npm_command("run", "build"), cwd=PROTOTYPE_DIR)
     print("\n[2/5] Running Vitest unit tests...")
-    run(["npm.cmd" if os.name == "nt" else "npm", "test"], cwd=PROTOTYPE_DIR)
+    run(frontend_npm_command("test"), cwd=PROTOTYPE_DIR)
 
     if not FRONTEND_DIST.joinpath("index.html").is_file():
         raise FileNotFoundError(f"Frontend build did not create {FRONTEND_DIST / 'index.html'}")
@@ -102,6 +113,10 @@ def build() -> Path:
 
     if not INSTALLER_OUTPUT.is_file() or INSTALLER_OUTPUT.stat().st_size == 0:
         raise FileNotFoundError(f"Failed to create installer: {INSTALLER_OUTPUT}")
+
+    # Keep the stable single-file contract used by local smoke tests and CI.
+    COMPAT_INSTALLER_OUTPUT.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(INSTALLER_OUTPUT, COMPAT_INSTALLER_OUTPUT)
 
     # 5. Create zip distribution package
     print(f"\n[5/5] Creating {ZIP_NAME}...")

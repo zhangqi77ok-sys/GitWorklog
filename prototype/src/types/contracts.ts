@@ -1,5 +1,7 @@
 // Tcode 核心接口规范契约 (SDD Contract)
 
+import { buildModelCatalogEntry, getAvailableModelOptions as getCatalogModelOptions, providerItemsToRecords } from '../services/modelGateway';
+
 export type SessionTier1Type = 'global' | 'project';
 
 export interface SessionItem {
@@ -500,11 +502,23 @@ export interface AIModelOption {
   id: string;
   name: string;
   provider: 'Anthropic' | 'DeepSeek' | 'OpenAI' | 'Local';
+  providerId?: string;       // Explicit provider parent ID (e.g. 'provider-opencode', 'provider-deepseek')
+  uniqueKey?: string;        // Fully qualified composite key (e.g. 'provider-opencode:deepseek-v4-flash')
   contextLimit: number;
   inputPricePerM: number;
   outputPricePerM: number;
   badge?: string;
   description?: string;
+  adapter?: 'openai-responses' | 'anthropic-messages' | 'google-generative-language' | 'openai-compatible-chat';
+  endpointPath?: string;
+  protocol?: 'responses' | 'anthropic_messages' | 'google_native' | 'chat_completions';
+  capabilities?: {
+    streaming: boolean;
+    toolCalling: boolean;
+    reasoning: boolean;
+    vision: boolean;
+    structuredOutput: boolean;
+  };
 }
 
 export const AVAILABLE_MODELS: AIModelOption[] = [
@@ -512,6 +526,8 @@ export const AVAILABLE_MODELS: AIModelOption[] = [
     id: 'mimo-v2.5-free',
     name: 'OpenCode MiMo v2.5 (Go套餐·深度推理)',
     provider: 'DeepSeek',
+    providerId: 'provider-opencode',
+    uniqueKey: 'provider-opencode:mimo-v2.5-free',
     contextLimit: 131072,
     inputPricePerM: 0.00,
     outputPricePerM: 0.00,
@@ -528,16 +544,7 @@ export const AVAILABLE_MODELS: AIModelOption[] = [
     badge: 'NVIDIA 极速',
     description: '英伟达代码生成专用大模型，毫秒级快速流式吐字。'
   },
-  {
-    id: 'hy3-free',
-    name: '混元 3.0 (Go套餐·中文与架构)',
-    provider: 'DeepSeek',
-    contextLimit: 131072,
-    inputPricePerM: 0.00,
-    outputPricePerM: 0.00,
-    badge: '架构专精',
-    description: '腾讯混元 3.0 大模型，适合中文需求分析与复杂系统架构设计。'
-  },
+
   {
     id: 'ling-3.0-flash-fin-free',
     name: '可灵 3.0 Flash (Go套餐·逻辑闪电)',
@@ -634,30 +641,16 @@ export const AVAILABLE_MODELS: AIModelOption[] = [
 export function getAllAvailableModels(): AIModelOption[] {
   try {
     const providers = loadSavedProviders();
-    const result: AIModelOption[] = [];
-    
-    for (const p of providers) {
-      if (p.enabled && Array.isArray(p.models) && p.models.length > 0) {
-        for (const m of p.models) {
-          if (m.enabled) {
-            result.push({
-              id: m.id,
-              name: m.name || m.id,
-              provider: (p.name.includes('Anthropic') ? 'Anthropic' : p.name.includes('OpenAI') ? 'OpenAI' : 'DeepSeek') as any,
-              contextLimit: m.contextLimit || 128000,
-              inputPricePerM: 0.1,
-              outputPricePerM: 0.2,
-              badge: p.name.includes('星海') ? '星海直通' : p.name.split(' ')[0],
-              description: `${p.name} 真实网关大模型 (${m.id})`
-            });
-          }
-        }
-      }
-    }
-    if (result.length > 0) {
-      return result;
-    }
-  } catch (e) {}
+    const records = providerItemsToRecords(providers);
+    const catalogs = Object.fromEntries(providers.map(provider => [
+      provider.id,
+      (provider.models || []).map(model => buildModelCatalogEntry(provider, model))
+    ]));
+    const result = getCatalogModelOptions({ providers: records, catalogs });
+    if (result.length > 0) return result;
+  } catch (e) {
+    // Fall through to deterministic built-ins when browser storage is unavailable.
+  }
   return AVAILABLE_MODELS;
 }
 
@@ -683,6 +676,48 @@ export function flattenFileTreeToMentions(nodes: FileNode[]): MentionContextItem
   return items;
 }
 
+/**
+ * Resolves the initial chat model strictly from the available list.
+ * A persisted selection is restored only when it still exists in `all`;
+ * stale references are never restored and no model id is hard-preferred.
+ */
+export function resolveInitialModel(all: AIModelOption[]): AIModelOption {
+  // Priority 1: restore the full serialized model object, only if still valid.
+  try {
+    const savedObj = localStorage.getItem('codemind_current_model_obj');
+    if (savedObj) {
+      const parsed = JSON.parse(savedObj) as AIModelOption;
+      const exactMatch = all.find(m =>
+        (parsed.uniqueKey && m.uniqueKey === parsed.uniqueKey) ||
+        (parsed.providerId && m.providerId === parsed.providerId && m.id === parsed.id)
+      );
+      if (exactMatch) return exactMatch;
+      const nameMatch = all.find(m => m.name === parsed.name);
+      if (nameMatch) return nameMatch;
+    }
+  } catch (e) {}
+
+  // Priority 2: saved id lookup (exact, then contained match).
+  try {
+    let savedId = '';
+    const savedSessionId = localStorage.getItem('codemind_current_session_id');
+    const raw = localStorage.getItem('codemind_session_models_map');
+    const map = raw ? JSON.parse(raw) : {};
+    if (savedSessionId && map[savedSessionId]) {
+      savedId = map[savedSessionId];
+    } else {
+      savedId = localStorage.getItem('codemind_current_model_id') || '';
+    }
+    if (savedId) {
+      const found = all.find(m => m.uniqueKey === savedId || m.id === savedId);
+      if (found) return found;
+      const partial = all.find(m => m.id.includes(savedId) || savedId.includes(m.id));
+      if (partial) return partial;
+    }
+  } catch (e) {}
+
+  return all[0] || AVAILABLE_MODELS[0];
+}
 export function findModelById(id: string): AIModelOption {
   return AVAILABLE_MODELS.find(m => m.id === id) || AVAILABLE_MODELS.find(m => m.id === 'deepseek-v4-flash') || AVAILABLE_MODELS[0];
 }
@@ -1201,6 +1236,11 @@ export interface ModelItem {
   enabled: boolean;
   contextLimit: number;
   capabilities: string[];
+  outputLimit?: number;
+  endpointPath?: string;
+  adapter?: 'openai-responses' | 'anthropic-messages' | 'google-generative-language' | 'openai-compatible-chat';
+  protocol?: 'responses' | 'anthropic_messages' | 'google_native' | 'chat_completions';
+  description?: string;
 }
 
 export interface ModelProviderItem {
@@ -1231,17 +1271,16 @@ export const INITIAL_PROVIDERS: ModelProviderItem[] = [
     baseUrl: 'https://opencode.ai/zen/v1',
     defaultBaseUrl: 'https://opencode.ai/zen/v1',
     apiKey: '',
-    status: 'healthy',
-    latencyMs: 65,
+    status: 'untested',
+    latencyMs: 0,
     docUrl: 'https://opencode.ai',
     models: [
-      { id: 'mimo-v2.5-free', name: 'OpenCode MiMo v2.5 (Go套餐·深度推理)', enabled: true, contextLimit: 131072, capabilities: ['fast', 'code', 'stream'] },
-      { id: 'nemotron-3.5-lightning-free', name: 'Nemotron 3.5 Lightning (Go套餐·代码专精)', enabled: true, contextLimit: 131072, capabilities: ['code', 'stream', 'fast'] },
-      { id: 'hy3-free', name: '混元 3.0 (Go套餐·中文与架构)', enabled: true, contextLimit: 131072, capabilities: ['code', 'reasoning', 'stream'] },
-      { id: 'ling-3.0-flash-fin-free', name: '可灵 3.0 Flash (Go套餐·逻辑闪电)', enabled: true, contextLimit: 131072, capabilities: ['fast', 'stream'] },
-      { id: 'nemotron-3-ultra-free', name: 'Nemotron 3 Ultra (Go套餐·深度代码)', enabled: true, contextLimit: 131072, capabilities: ['code', 'reasoning'] },
-      { id: 'claude-sonnet-4-6', name: 'Claude 3.7 Sonnet (OpenCode)', enabled: true, contextLimit: 200000, capabilities: ['reasoning', 'code'] },
-      { id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash (OpenCode)', enabled: true, contextLimit: 65536, capabilities: ['fast', 'code'] }
+      { id: 'mimo-v2.5-free', name: 'OpenCode MiMo v2.5 (Go套餐·深度推理)', enabled: true, contextLimit: 131072, capabilities: ['fast', 'code', 'stream', 'reasoning'], endpointPath: '/chat/completions', adapter: 'openai-compatible-chat', protocol: 'chat_completions' },
+      { id: 'nemotron-3.5-lightning-free', name: 'Nemotron 3.5 Lightning (Go套餐·代码专精)', enabled: true, contextLimit: 131072, capabilities: ['code', 'stream', 'fast'], endpointPath: '/chat/completions', adapter: 'openai-compatible-chat', protocol: 'chat_completions' },
+      { id: 'ling-3.0-flash-fin-free', name: '可灵 3.0 Flash (Go套餐·逻辑闪电)', enabled: true, contextLimit: 131072, capabilities: ['fast', 'stream'], endpointPath: '/chat/completions', adapter: 'openai-compatible-chat', protocol: 'chat_completions' },
+      { id: 'nemotron-3-ultra-free', name: 'Nemotron 3 Ultra (Go套餐·深度代码)', enabled: true, contextLimit: 131072, capabilities: ['code', 'reasoning'], endpointPath: '/chat/completions', adapter: 'openai-compatible-chat', protocol: 'chat_completions' },
+      { id: 'claude-sonnet-4-6', name: 'Claude 3.7 Sonnet (OpenCode)', enabled: true, contextLimit: 200000, capabilities: ['reasoning', 'code', 'stream', 'toolCalling'], endpointPath: '/messages', adapter: 'anthropic-messages', protocol: 'anthropic_messages' },
+      { id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash (OpenCode)', enabled: true, contextLimit: 65536, capabilities: ['fast', 'code', 'stream'], endpointPath: '/chat/completions', adapter: 'openai-compatible-chat', protocol: 'chat_completions' }
     ]
   },
   // 1. Domestic Chinese Models (国内顶流)
@@ -1273,7 +1312,7 @@ export const INITIAL_PROVIDERS: ModelProviderItem[] = [
     protocol: 'openai',
     baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
     defaultBaseUrl: 'https://open.bigmodel.cn/api/paas/v4',
-    apiKey: '98472918374910283749.zhipu',
+    apiKey: '',
     status: 'healthy',
     latencyMs: 92,
     docUrl: 'https://open.bigmodel.cn',
@@ -1292,7 +1331,7 @@ export const INITIAL_PROVIDERS: ModelProviderItem[] = [
     protocol: 'openai',
     baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
     defaultBaseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-    apiKey: 'sk-dashscope-9284719284',
+    apiKey: '',
     status: 'healthy',
     latencyMs: 88,
     docUrl: 'https://bailian.console.aliyun.com',
@@ -1349,7 +1388,7 @@ export const INITIAL_PROVIDERS: ModelProviderItem[] = [
     protocol: 'openai',
     baseUrl: 'https://api.siliconflow.cn/v1',
     defaultBaseUrl: 'https://api.siliconflow.cn/v1',
-    apiKey: 'sk-sf-938471928471928374',
+    apiKey: '',
     status: 'healthy',
     latencyMs: 68,
     docUrl: 'https://cloud.siliconflow.cn',
@@ -1368,7 +1407,7 @@ export const INITIAL_PROVIDERS: ModelProviderItem[] = [
     protocol: 'openai',
     baseUrl: 'https://api.oneapi-hub.com/v1',
     defaultBaseUrl: 'https://api.oneapi-hub.com/v1',
-    apiKey: 'sk-oneapi-9384719284719284',
+    apiKey: '',
     status: 'healthy',
     latencyMs: 72,
     docUrl: 'https://github.com/songquanpeng/one-api',
@@ -1513,7 +1552,6 @@ export function addCustomModelToProvider(providers: ModelProviderItem[], provide
     return { ...p, models: [...p.models, newModel] };
   });
 }
-
 
 // ============================================================================
 // ALL-TABS SYSTEM CONTRACTS & DATA MODELS
@@ -2680,71 +2718,65 @@ export function parseAgentMessage(rawText: string): ParsedAgentMessage {
   let text = rawText || '';
   let thinkingText = '';
   const toolCalls: ParsedToolCall[] = [];
+  let toolIndex = 0;
+  const stableHash = (value: string) => {
+    let hash = 5381;
+    for (const character of value) hash = ((hash * 33) ^ character.charCodeAt(0)) >>> 0;
+    return hash.toString(36);
+  };
 
-  // 1. Extract <think>...</think>
-  const thinkStart = text.indexOf('<think>');
-  const thinkEnd = text.indexOf('</think>');
-  if (thinkStart !== -1) {
-    if (thinkEnd !== -1) {
-      thinkingText = text.substring(thinkStart + 7, thinkEnd).trim();
-      text = (text.substring(0, thinkStart) + text.substring(thinkEnd + 8)).trim();
-    } else {
-      thinkingText = text.substring(thinkStart + 7).trim();
-      text = text.substring(0, thinkStart).trim();
-    }
+  const addToolCall = (name: string, parameters: Record<string, string>, raw: string) => {
+    toolCalls.push({
+      id: `tool-${toolIndex++}-${stableHash(raw)}`,
+      name,
+      parameters,
+      raw
+    });
+  };
+
+  const thinkMatch = /<think>([\s\S]*?)(?:<\/think>|$)/i.exec(text);
+  if (thinkMatch) {
+    thinkingText = thinkMatch[1].trim();
+    text = text.replace(thinkMatch[0], '').trim();
   }
 
-  // 2. Extract DeepSeek DSML / Standard Tool Calls
-  // Patterns: < | DSML | tool_calls> ... </ | DSML | tool_calls> OR <tool_calls> ... </tool_calls>
   const dsmlRegex = /<\s*\|?\s*DSML\s*\|?\s*tool_calls>([\s\S]*?)<\/\s*\|?\s*DSML\s*\|?\s*tool_calls>/gi;
-  let match: RegExpExecArray | null;
-  while ((match = dsmlRegex.exec(text)) !== null) {
-    const blockContent = match[1];
-    // Extract invoke name and parameters
-    const invokeRegex = /<\s*\|?\s*DSML\s*\|?\s*invoke\s+name="([^"]+)">([\s\S]*?)<\/\s*\|?\s*DSML\s*\|?\s*invoke>/gi;
-    let invMatch: RegExpExecArray | null;
-    while ((invMatch = invokeRegex.exec(blockContent)) !== null) {
-      const toolName = invMatch[1];
-      const paramsContent = invMatch[2];
-      const params: Record<string, string> = {};
-      const paramRegex = /<\s*\|?\s*DSML\s*\|?\s*parameter\s+name="([^"]+)"[^>]*>([\s\S]*?)<\/\s*\|?\s*DSML\s*\|?\s*parameter>/gi;
-      let pMatch: RegExpExecArray | null;
-      while ((pMatch = paramRegex.exec(paramsContent)) !== null) {
-        params[pMatch[1]] = pMatch[2].trim();
+  let dsmlMatch: RegExpExecArray | null;
+  while ((dsmlMatch = dsmlRegex.exec(text)) !== null) {
+    const invokeRegex = /<\s*\|?\s*DSML\s*\|?\s*invoke\s+name="([^"]+)"[^>]*>([\s\S]*?)<\/\s*\|?\s*DSML\s*\|?\s*invoke>/gi;
+    let invokeMatch: RegExpExecArray | null;
+    while ((invokeMatch = invokeRegex.exec(dsmlMatch[1])) !== null) {
+      const parameters: Record<string, string> = {};
+      const parameterRegex = /<\s*\|?\s*DSML\s*\|?\s*parameter\s+name="([^"]+)"[^>]*>([\s\S]*?)<\/\s*\|?\s*DSML\s*\|?\s*parameter>/gi;
+      let parameterMatch: RegExpExecArray | null;
+      while ((parameterMatch = parameterRegex.exec(invokeMatch[2])) !== null) {
+        parameters[parameterMatch[1]] = parameterMatch[2].trim();
       }
-      toolCalls.push({
-        id: `tool-${Date.now()}-${toolCalls.length}`,
-        name: toolName,
-        parameters: params,
-        raw: invMatch[0]
-      });
+      addToolCall(invokeMatch[1], parameters, invokeMatch[0]);
     }
   }
-
-  // Also support standard <tool_calls> or incomplete streaming DSML
   text = text.replace(dsmlRegex, '').trim();
 
-  // Strip unclosed streaming < | DSML | tool_calls>
-  const unclosedIdx = text.search(/<\s*\|?\s*DSML\s*\|?\s*tool_calls>/i);
-  if (unclosedIdx !== -1) {
-    const partial = text.substring(unclosedIdx);
-    const invokeMatch = /name="([^"]+)"/i.exec(partial);
-    if (invokeMatch) {
-      toolCalls.push({
-        id: `tool-streaming`,
-        name: invokeMatch[1],
-        parameters: { status: '正在调度执行...' },
-        raw: partial
-      });
+  const toolCallRegex = /<tool_call>\s*<([a-zA-Z0-9_-]+)>([\s\S]*?)<\/\1>\s*<\/tool_call>/gi;
+  let toolCallMatch: RegExpExecArray | null;
+  while ((toolCallMatch = toolCallRegex.exec(text)) !== null) {
+    const parameters: Record<string, string> = {};
+    const body = toolCallMatch[2];
+    const keyValueRegex = /<arg_key>\s*([^<]+?)\s*<\/arg_key>\s*<arg_value>([\s\S]*?)<\/arg_value>/gi;
+    let keyValueMatch: RegExpExecArray | null;
+    while ((keyValueMatch = keyValueRegex.exec(body)) !== null) {
+      parameters[keyValueMatch[1].trim()] = keyValueMatch[2].trim();
     }
-    text = text.substring(0, unclosedIdx).trim();
+    const directRegex = /<(path|command|content)>\s*([\s\S]*?)<\/\1>/gi;
+    let directMatch: RegExpExecArray | null;
+    while ((directMatch = directRegex.exec(body)) !== null) {
+      parameters[directMatch[1]] = directMatch[2].trim();
+    }
+    addToolCall(toolCallMatch[1], parameters, toolCallMatch[0]);
   }
+  text = text.replace(toolCallRegex, '').trim();
 
-  return {
-    thinkingText,
-    toolCalls,
-    cleanContent: text
-  };
+  return { thinkingText, toolCalls, cleanContent: text };
 }
 
 export function extractThinkingFromText(rawText: string, elapsedSeconds: number = 0): ThinkingBlockPayload {
@@ -2844,56 +2876,11 @@ export function applyUnifiedDiffPatch(originalSource: string, chunk: PatchChunk)
 }
 
 
-// ============================================================================
-// 20. OPENAI UPSTREAM PROTOCOL SELECTION CONTRACTS
-// ============================================================================
-
-export type OpenAiProtocolType = 'responses' | 'chat_completions';
-
-export interface OpenAiProtocolConfig {
-  protocol: OpenAiProtocolType;
-  customBaseUrl?: string;
-}
-
-export const DEFAULT_OPENAI_PROTOCOL: OpenAiProtocolType = 'responses';
-
-export interface OpenAiPayloadResult {
-  endpointPath: string;
-  body: Record<string, unknown>;
-}
-
-export function buildOpenAiRequestPayload(
-  model: string,
-  prompt: string,
-  protocol: OpenAiProtocolType = DEFAULT_OPENAI_PROTOCOL,
-  temperature: number = 0.3
-): OpenAiPayloadResult {
-  if (protocol === 'responses') {
-    return {
-      endpointPath: '/v1/responses',
-      body: {
-        model,
-        input: prompt,
-        temperature
-      }
-    };
-  }
-
-  // Fallback / legacy Chat Completions
-  return {
-    endpointPath: '/v1/chat/completions',
-    body: {
-      model,
-      messages: [{ role: 'user', content: prompt }],
-      stream: true,
-      temperature
-    }
-  };
-}
-
+// OpenCode protocol selection was intentionally removed from the Provider contract.
+// Adapter/protocol/endpoint metadata belongs to ModelCatalogEntry in modelGateway.ts.
 
 // ============================================================================
-// 21. STAGE 3: MULTI-AGENT SWARM & CONTEXT COMPRESSOR CONTRACTS
+// 20. STAGE 3: MULTI-AGENT SWARM & CONTEXT COMPRESSOR CONTRACTS
 // ============================================================================
 
 export type SwarmRoleType = 'planner' | 'coder' | 'verifier' | 'scribe';
@@ -3172,7 +3159,6 @@ export async function loadFromDiskStorageAsync(key: string): Promise<any> {
 export const STORAGE_KEYS = {
   PROVIDERS: 'codemind_providers',
   CURRENT_MODEL: 'codemind_current_model',
-  OPENAI_PROTOCOL: 'codemind_openai_protocol',
   SESSIONS: 'codemind_sessions',
   ACTIVE_SESSION_ID: 'codemind_active_session_id',
   SESSION_MESSAGES: 'codemind_session_messages',
@@ -3244,29 +3230,59 @@ export function saveSessionMessagesToStorage(messagesMap: Record<string, ChatMes
   } catch (e) {}
 }
 
+const PLACEHOLDER_PROVIDER_KEYS = new Set([
+  '98472918374910283749.zhipu',
+  'sk-dashscope-9284719284',
+  'sk-sf-938471928471928374',
+  'sk-oneapi-9384719284719284'
+]);
+
+const NONEXISTENT_OPENCODE_MODELS = new Set(['hy3-free']);
+
+function sanitizeProviderCredentials(provider: ModelProviderItem): ModelProviderItem {
+  const hasPlaceholderKey = PLACEHOLDER_PROVIDER_KEYS.has(provider.apiKey);
+  const apiKey = hasPlaceholderKey ? '' : provider.apiKey;
+  // Upgrade migration: never resurrect models that do not exist in the
+  // official OpenCode Zen catalog, even if an older build saved them.
+  const models = provider.id === 'provider-opencode' && Array.isArray(provider.models)
+    ? provider.models.filter(model => !NONEXISTENT_OPENCODE_MODELS.has(model.id))
+    : provider.models;
+  if (!apiKey) {
+    return { ...provider, apiKey: '', status: 'untested', latencyMs: 0, models };
+  }
+  return { ...provider, apiKey, models };
+}
+
+function normalizeProviders(providers: ModelProviderItem[]): ModelProviderItem[] {
+  return providers.map(sanitizeProviderCredentials);
+}
+
 export function loadSavedProviders(): ModelProviderItem[] {
   try {
     const saved = localStorage.getItem(STORAGE_KEYS.PROVIDERS);
     if (saved) {
       const parsed = JSON.parse(saved);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        const hasOpenCode = parsed.some((p: any) => p.id === 'provider-opencode');
-        if (!hasOpenCode) {
-          const merged = [INITIAL_PROVIDERS[0], ...parsed];
+        const normalized = normalizeProviders(parsed);
+        const hasOpenCode = normalized.some((p: any) => p.id === 'provider-opencode');
+        const merged = hasOpenCode ? normalized : [INITIAL_PROVIDERS[0], ...normalized];
+        if (JSON.stringify(merged) !== JSON.stringify(parsed)) {
           saveProvidersToStorage(merged);
-          return merged;
         }
-        return parsed;
+        return merged;
       }
     }
   } catch (e) {}
-  return INITIAL_PROVIDERS;
+  return normalizeProviders(INITIAL_PROVIDERS);
 }
 
 export function saveProvidersToStorage(providers: ModelProviderItem[]): void {
   try {
     localStorage.setItem(STORAGE_KEYS.PROVIDERS, JSON.stringify(providers));
     saveToDiskStorageAsync(STORAGE_KEYS.PROVIDERS, providers);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('tcode_providers_updated', { detail: providers }));
+    }
   } catch (e) {}
 }
 

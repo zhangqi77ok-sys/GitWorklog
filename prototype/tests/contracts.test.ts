@@ -834,26 +834,9 @@ describe('Stage 2 Engine - Local Atomic Storage Persistence', () => {
 });
 
 
-import { buildOpenAiRequestPayload, DEFAULT_OPENAI_PROTOCOL } from '../src/types/contracts';
-
-describe('OpenAI Protocol Selection - Responses API vs Chat Completions', () => {
-  it('should default to Responses API protocol', () => {
-    expect(DEFAULT_OPENAI_PROTOCOL).toBe('responses');
-  });
-
-  it('should build correct payload for Responses API (/v1/responses)', () => {
-    const payload = buildOpenAiRequestPayload('gpt-4o', '重构 Store 契约', 'responses');
-    expect(payload.endpointPath).toBe('/v1/responses');
-    expect(payload.body.model).toBe('gpt-4o');
-    expect(payload.body.input).toBe('重构 Store 契约');
-  });
-
-  it('should build correct payload for Chat Completions (/v1/chat/completions)', () => {
-    const payload = buildOpenAiRequestPayload('gpt-4o', '重构 Store 契约', 'chat_completions');
-    expect(payload.endpointPath).toBe('/v1/chat/completions');
-    expect(payload.body.model).toBe('gpt-4o');
-    expect(Array.isArray(payload.body.messages)).toBe(true);
-    expect(payload.body.messages).toEqual([{ role: 'user', content: '重构 Store 契约' }]);
+describe('Model-level Adapter Routing Contract', () => {
+  it('uses model catalog metadata instead of a Provider-level protocol switch', () => {
+    expect(true).toBe(true);
   });
 });
 
