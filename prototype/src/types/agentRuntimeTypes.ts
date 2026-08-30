@@ -204,7 +204,20 @@ export type AgentEventType =
   | 'verification.completed'
   | 'context.loaded'
   | 'context.compressed'
-  | 'error.created';
+  | 'error.created'
+  | 'task.created'
+  | 'task.ready'
+  | 'task.started'
+  | 'task.completed'
+  | 'task.failed'
+  | 'task.retrying'
+  | 'task.blocked'
+  | 'agent.started'
+  | 'agent.completed'
+  | 'agent.failed'
+  | 'artifact.created'
+  | 'review.requested'
+  | 'review.completed';
 
 export interface AgentEventEnvelope {
   id: string;

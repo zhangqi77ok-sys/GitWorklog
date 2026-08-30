@@ -1230,6 +1230,7 @@ describe('Event-Driven Agent Runtime & Truth-First Execution Contract', () => {
 });
 
 import { TaskGraphValidator, globalArtifactStore } from '../src/services/swarmScheduler';
+import { persistentArtifactStore } from '../src/services/artifactStore';
 import { SwarmTask, Artifact } from '../src/types/agentRuntimeTypes';
 
 describe('Swarm TaskGraph & Shared Artifacts Contract', () => {
@@ -1344,7 +1345,31 @@ describe('Swarm TaskGraph & Shared Artifacts Contract', () => {
     expect(retrieved).toBeDefined();
     expect(retrieved?.title).toBe('日志模块重构设计方案');
   });
+
+  it('verifies persistent artifact versioning and retrieval by task', () => {
+    const art1 = persistentArtifactStore.createArtifact({
+      runId: 'swarm-test-01',
+      taskId: 'task-arch',
+      type: 'architecture',
+      title: '架构设计初稿',
+      content: 'v1 design'
+    });
+    expect(art1.version).toBe(1);
+
+    const art2 = persistentArtifactStore.createArtifact({
+      runId: 'swarm-test-01',
+      taskId: 'task-arch',
+      type: 'architecture',
+      title: '架构设计修订稿',
+      content: 'v2 design'
+    });
+    expect(art2.version).toBe(2);
+
+    const list = persistentArtifactStore.getArtifactsForTask('task-arch');
+    expect(list.length).toBe(2);
+  });
 });
+
 
 
 

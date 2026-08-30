@@ -3,6 +3,7 @@ import { ActionApprovalModal } from './ActionApprovalModal';
 import { ShareCardModal } from './ShareCardModal';
 import React, { useState, useEffect } from 'react';
 import { MarkdownCard } from './MarkdownCard';
+import { agentRuntimeController } from '../services/agentRuntimeController';
 import {
   Send,
   ArrowUp,
@@ -599,40 +600,29 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
     }
   }, [messages, sessionAutoAllowed, permissionPolicy, processedActionIds]);
 
-  // Execute a single action on host engine
+  // Execute a single action through unified AgentRuntimeController
   const executePendingAction = async (action: AgentPendingAction) => {
-    if (action.type === 'write_file') {
-      try {
-        const res = await fetch('/api/fs/write', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ path: action.target, content: action.code })
-        });
-        const data = await res.json();
-        if (data.success) {
-          setChangesetToast(`✨ 成功将代码落地写入至: ${action.target} (${data.size || action.code.length} 字节)`);
-        } else {
-          setChangesetToast(`❌ 写入 ${action.target} 失败: ${data.error}`);
-        }
-      } catch (e: any) {
-        setChangesetToast(`❌ 写入 ${action.target} 异常: ${e.message}`);
+    try {
+      const intent = {
+        runId: `run-manual-${Date.now()}`,
+        roundId: `round-manual-${Date.now()}`,
+        source: 'builtin' as const,
+        toolName: action.type,
+        input: action.type === 'write_file'
+          ? { path: action.target, content: action.code }
+          : { command: action.code }
+      };
+
+      const { toolCall } = await agentRuntimeController.requestToolExecution(intent, 'allow_all');
+      const result = await agentRuntimeController.executeApprovedTool(toolCall);
+
+      if (result.status === 'succeeded') {
+        setChangesetToast(`✨ 动作执行成功: ${action.target || action.code.slice(0, 30)}`);
+      } else {
+        setChangesetToast(`❌ 动作执行失败: ${result.error || result.stderr}`);
       }
-    } else {
-      try {
-        const res = await fetch('/api/terminal/exec', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ command: action.code })
-        });
-        const data = await res.json();
-        if (data.success) {
-          setChangesetToast(`▶️ 终端指令已执行完成 (Exit Code: ${data.exitCode ?? 0})`);
-        } else {
-          setChangesetToast(`❌ 终端指令执行失败: ${data.error}`);
-        }
-      } catch (e: any) {
-        setChangesetToast(`❌ 终端指令异常: ${e.message}`);
-      }
+    } catch (e: any) {
+      setChangesetToast(`❌ 动作执行异常: ${e.message}`);
     }
     setTimeout(() => setChangesetToast(null), 3500);
   };
