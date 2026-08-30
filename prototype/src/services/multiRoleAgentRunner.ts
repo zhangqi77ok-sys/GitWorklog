@@ -10,7 +10,7 @@ import { persistentArtifactStore } from './artifactStore';
 import { agentEventStore } from './agentEventStore';
 import { agentRuntimeController } from './agentRuntimeController';
 import { hostGateway } from './hostGateway';
-import { buildGatewayRequestBody, buildModelCatalogEntry, extractGatewayResponseText, resolveModelRoute } from './modelGateway';
+import { buildGatewayRequestBody, buildModelCatalogEntry, consumeSseResponse, resolveModelRoute } from './modelGateway';
 import { loadSavedProviders } from '../types/contracts';
 
 export interface AgentTaskInput {
@@ -275,15 +275,16 @@ export class MultiRoleAgentRunner {
       body: JSON.stringify(buildGatewayRequestBody(route, [
         { role: 'system', content: params.systemPrompt },
         { role: 'user', content: params.userPrompt }
-      ], false))
+      ]))
     });
 
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
 
-    const data = await response.json();
-    return extractGatewayResponseText(route.adapter, data) || 'Task completed successfully.';
+    // Stream-Only contract: Swarm roles also consume SSE, never response.json().
+    const consumed = await consumeSseResponse(response, route.adapter, params.signal);
+    return consumed.content || 'Task completed successfully.';
   }
 }
 

@@ -72,7 +72,7 @@ export class LlmStreamingClient {
           adapter,
           protocol: adapter === 'openai-responses' ? 'responses' : adapter === 'anthropic-messages' ? 'anthropic_messages' : adapter === 'google-generative-language' ? 'google_native' : 'chat_completions',
           apiKey: config.apiKey || ''
-        }, [{ role: 'user', content: config.prompt }], true, config.temperature ?? 0.3)),
+        }, [{ role: 'user', content: config.prompt }], config.temperature ?? 0.3)),
         signal: this.abortController.signal
       });
 

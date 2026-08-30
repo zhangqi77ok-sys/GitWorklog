@@ -1143,8 +1143,7 @@ ${mcpToolsPromptSnippet}
           requestHeaders = headers;
           requestBody = JSON.stringify(buildGatewayRequestBody(
             route,
-            apiMessages as Array<{ role: 'system' | 'user' | 'assistant' | 'tool'; content: string }>,
-            true
+            apiMessages as Array<{ role: 'system' | 'user' | 'assistant' | 'tool'; content: string }>
           ));
         }
 

@@ -1508,3 +1508,15 @@ Tcode 必须区分“环境中发现了工作流工具”和“用户选择并�
 4. **UI 呈现**：`model_claimed` 以 Sparkles 区分展示，与 `passed`（CheckCircle）视觉可辨。
 
 执行契约见 [`docs/technical_reviews/runengine-p0-hardening-contract.md`](technical_reviews/runengine-p0-hardening-contract.md)。
+
+### 4.48.6 全流式契约：所有模型调用必须流式（2026-08-30）
+
+用户硬性要求：任何真实的大模型生成请求必须以 SSE（stream: true）发送与消费，禁止非流式（stream: false + response.json()）路径：
+
+1. **请求恒流式**：`buildGatewayRequestBody` 移除 stream 参数，Chat / Responses / Anthropic / Gemini 四种 Adapter 恒输出 `stream: true`；
+2. **消费恒流式**：新增共享 `consumeSseResponse` 逐行消费 SSE、聚合 content/reasoning/tool_calls、识别 `[DONE]`；空 Body → provider_empty_response、非法 data: JSON → tool_protocol_error、EOF 无终止 → stream_interrupted、abort → 取消读取；
+3. **改造范围**：Swarm 角色执行（multiRoleAgentRunner）与 v1 ModelGateway.request 由非流式 response.json() 全面改为流式消费；主 Agent Loop / 打字机客户端 / v2 多账号网关保持流式；
+4. **回归守卫**：tests/streamOnly.test.ts 静态扫描 prototype/src，禁止 stream: false 字面量与 buildGatewayRequestBody 布尔实参；
+5. **真实验证**：Fresh 安装桌面端经 /api/proxy 对 OpenCode Zen mimo-v2.5-free 发送 stream:true，HTTP 200 text/event-stream，12 data 事件 + [DONE]，真实流式内容 STREAM_OK。
+
+契约见 [`docs/technical_reviews/stream-only-contract.md`](technical_reviews/stream-only-contract.md)。

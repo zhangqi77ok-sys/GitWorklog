@@ -334,18 +334,18 @@ export interface NormalizedGatewayChunk {
 export function buildGatewayRequestBody(
   route: ResolvedModelRoute,
   messages: GatewayMessage[],
-  stream = true,
   temperature = 0.3
 ): GatewayRequestBody {
   const systemMessage = messages.find(message => message.role === 'system');
   const conversation = messages.filter(message => message.role !== 'system');
 
+  // Stream-Only contract: every generation request MUST stream (SSE).
   switch (route.adapter) {
     case 'openai-responses':
       return {
         model: route.modelId,
         input: messages,
-        stream,
+        stream: true,
         temperature
       };
     case 'anthropic-messages':
@@ -354,7 +354,7 @@ export function buildGatewayRequestBody(
         system: systemMessage?.content,
         messages: conversation,
         max_tokens: 8192,
-        stream,
+        stream: true,
         temperature
       };
     case 'google-generative-language':
@@ -366,16 +366,84 @@ export function buildGatewayRequestBody(
         })),
         systemInstruction: systemMessage ? { parts: [{ text: systemMessage.content }] } : undefined,
         generationConfig: { temperature },
-        stream
+        stream: true
       };
     default:
       return {
         model: route.modelId,
         messages,
-        stream,
+        stream: true,
         temperature
       };
   }
+}
+
+export interface ConsumedSseResult {
+  content: string;
+  reasoning: string;
+  finished: boolean;
+  toolCalls: NormalizedToolCall[];
+}
+
+/**
+ * Stream-Only contract helper: reads a text/event-stream response line by line,
+ * aggregates content/reasoning/tool calls via parseGatewayEvent, and enforces the
+ * P0 terminal-state iron rules (empty body / unparseable data: event are errors).
+ */
+export async function consumeSseResponse(
+  response: Response,
+  adapter: ModelAdapter,
+  signal?: AbortSignal
+): Promise<ConsumedSseResult> {
+  if (!response.body) throw new Error('模型流异常: 上游返回空响应 (HTTP 200 无 Body) [provider_empty_response]');
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder('utf-8');
+  let buffer = '';
+  let content = '';
+  let reasoning = '';
+  let finished = false;
+  let receivedAnyBytes = false;
+  const toolCalls: NormalizedToolCall[] = [];
+  const onAbort = () => { void reader.cancel().catch(() => undefined); };
+  signal?.addEventListener('abort', onAbort, { once: true });
+
+  try {
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    receivedAnyBytes = true;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith('data:')) continue;
+      const raw = trimmed.slice(5).trim();
+      if (raw === '[DONE]') {
+        return { content, reasoning, finished: true, toolCalls };
+      }
+      let parsed: Record<string, any>;
+      try {
+        parsed = JSON.parse(raw);
+      } catch (error) {
+        throw new Error(`模型流异常: 工具协议解析失败 (data: 事件非法 JSON) [tool_protocol_error]: ${error instanceof Error ? error.message : String(error)}`);
+      }
+      const chunk = parseGatewayEvent(adapter, parsed);
+      content += chunk.content;
+      reasoning += chunk.reasoning;
+      toolCalls.push(...chunk.toolCalls);
+      if (chunk.finished) finished = true;
+    }
+  }
+
+  } finally {
+    signal?.removeEventListener('abort', onAbort);
+  }
+
+  if (!receivedAnyBytes) throw new Error('模型流异常: 上游返回空响应 (HTTP 200 无 Body) [provider_empty_response]');
+  if (!finished) throw new Error('模型流异常: 模型流在未收到正常完成信号前中断 (EOF without [DONE]/finish_reason) [stream_interrupted]');
+  return { content, reasoning, finished, toolCalls };
 }
 
 export function parseGatewayEvent(
@@ -483,9 +551,11 @@ export class ModelGateway {
         'Content-Type': 'application/json',
         ...(route.apiKey ? { Authorization: `Bearer ${route.apiKey}` } : {})
       },
-      body: JSON.stringify(buildGatewayRequestBody(route, request.messages, false, request.temperature ?? 0.3))
+      body: JSON.stringify(buildGatewayRequestBody(route, request.messages, request.temperature ?? 0.3))
     });
     if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-    return extractGatewayResponseText(route.adapter, await response.json());
+    // Stream-Only contract: consume SSE even for a "complete" request.
+    const consumed = await consumeSseResponse(response, route.adapter, request.signal);
+    return consumed.content;
   }
 }

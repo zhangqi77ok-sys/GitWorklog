@@ -124,6 +124,17 @@ npm run dev -- --host 127.0.0.1
 
 真实桌面端验证（真实 Key 仅运行时注入、不入库）：`/health` 200、`/` 200；经宿主 `/api/proxy` 对 OpenCode Zen `mimo-v2.5-free` 非流式 HTTP 200 真实 chat completion（token usage 252/16/268）、流式 `text/event-stream` 24 chunks / 13 data 事件正常 [DONE] 终结。付费模型（`deepseek-v4-flash`/`gpt-5.1-codex`）返回 401 `CreditsError: Insufficient balance`（Key 有效但余额不足，属上游/额度边界）。契约见 `docs/technical_reviews/runengine-p0-hardening-contract.md`。
 
+## 全流式契约：所有模型调用必须流式（Stream-Only，2026-08-30）
+
+用户硬性要求：**所有必须流式**。Tcode 内任何真实的大模型生成请求都必须以 SSE（`stream: true`）发送与消费：
+
+1. `buildGatewayRequestBody` 移除可选的 `stream` 参数，四种 Adapter（Chat / Responses / Anthropic / Gemini）恒输出 `stream: true`，调用方无法再传 `false`；
+2. 新增共享积木 `consumeSseResponse(response, adapter, signal?)`：逐行消费 SSE、聚合 content/reasoning/tool_calls、识别 `[DONE]`，并守住 P0 终态铁律（空 Body → `provider_empty_response`、非法 `data:` → `tool_protocol_error`、EOF 无终止 → `stream_interrupted`、abort → 取消读取）；
+3. **Swarm 角色执行（multiRoleAgentRunner）与 v1 `ModelGateway.request` 已从非流式 `response.json()` 全面改为流式消费**；主 Agent Loop / 打字机客户端 / v2 多账号网关本就流式；
+4. 静态守卫 `tests/streamOnly.test.ts` 扫描 `prototype/src`：禁止 `stream: false` 字面量、禁止向 `buildGatewayRequestBody` 传布尔 stream 实参，防止回归。
+
+真实桌面端验证：Fresh 安装后经宿主 `/api/proxy` 对 OpenCode Zen `mimo-v2.5-free` 发送 `stream:true`，HTTP 200 `text/event-stream`，12 data 事件 + `[DONE]`，真实流式内容 `STREAM_OK`（含 110 字符推理流）。契约见 `docs/technical_reviews/stream-only-contract.md`。
+
 ## 本轮真实验收边界（2026-08-30）
 
 本轮已闭环的是 Windows 安装与宿主运行链路：安装器由当前 `prototype/dist` 和当前桌面宿主重新构建，安装目录中的 `Tcode.exe` 可作为脱离源码目录的独立宿主启动；验收必须以安装目录进程实际返回为准，而不是以构建成功或截图推断成功。
