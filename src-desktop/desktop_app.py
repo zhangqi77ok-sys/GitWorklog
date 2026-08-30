@@ -794,12 +794,30 @@ def start_local_server(port=PORT):
 if __name__ == '__main__':
     port = start_local_server()
     url = f"http://127.0.0.1:{port}/"
-    
+
+    # Calculate screen center position for reliable centering (especially frameless windows on Windows)
+    win_width = 1440
+    win_height = 900
+    center_x = None
+    center_y = None
+    try:
+        import ctypes
+        user32 = ctypes.windll.user32
+        user32.SetProcessDPIAware()  # Handle high-DPI screens
+        screen_w = user32.GetSystemMetrics(0)
+        screen_h = user32.GetSystemMetrics(1)
+        center_x = max(0, (screen_w - win_width) // 2)
+        center_y = max(0, (screen_h - win_height) // 2)
+    except Exception:
+        pass  # Fallback: let pywebview handle positioning
+
     window = webview.create_window(
         title=f"{APP_NAME} - Enterprise AI Agentic IDE",
         url=url,
-        width=1440,
-        height=900,
+        width=win_width,
+        height=win_height,
+        x=center_x,
+        y=center_y,
         min_size=(1024, 640),
         text_select=True,
         zoomable=True,
