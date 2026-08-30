@@ -156,7 +156,9 @@
 
 - **WP-A（模块二+四）**：✅ 已完成并推送（黄金不变量 + 硬沙箱）。
 - **WP-B（模块五+一）**：✅ 纯逻辑层完成并推送（executionMode/stageGate 契约、策略、迁移、requireUserReview 兼容，16 项新测试）；✅ **UI 接线完成并推送**（B4-B8：ExecutionModeCapsule + Alt+1/2、移除 Harness/Swarm 切换与冗余工作流按钮、Graph 动态编排注入 + 动态图谱门禁、StageGateCard、App 门禁挂起 + 输入框意见模式，新增 12 项测试，全量 342 测试绿）。设计文档：`docs/superpowers/specs/2026-08-31-wp-b-ui-wiring-design.md`。
-- **WP-C/D/E**：未开始。
+- **WP-C（模块三）**：✅ 完成并推送（sessionActorManager 每会话运行态 + per-session AbortController + 门禁按会话分发；useChatColumn Hook D1 状态线程化；App 全局 isStreaming/单例 abort 废除，会话并发提问/独立流式/独立取消；+11 测试）。
+- **WP-D（模块七）**：✅ 完成并推送（RepoMap 骨架注入 assembleCacheOptimizedMessages 前缀层；TTFT 首字遥测；TokenAnalyticsModal + 顶部 HUD 3 指标：总 Token / KV 命中率 / TTFT；+3 测试）。
+- **WP-E（模块六）**：✅ 控制平面完成（宿主 /api/git/worktree/create|list|remove + 沙箱注册 + 4 项 pytest；worktreeManager 影子生命周期；swarmSteering 角色×路径越界规则；SwarmMaster 遥测总线纠偏；swarmExecution 真并发（每 Agent 独立流 + 影子 cwd）；twoPhaseMerge 2PC 门禁（测试绿灯后才落盘）；swarmRuntime 门面；multiRoleAgentRunner 写入路径重定向影子区；+19 测试）。⏸️ 实时 UI 编排接线（SwarmWorkbench 影子区可视化 + Master 干预消息流）留待后续专项，与 WP-C actor 模型统一。
 ## 汇总路线图
 
 | WP | 模块 | 依赖 | 规模/风险 |

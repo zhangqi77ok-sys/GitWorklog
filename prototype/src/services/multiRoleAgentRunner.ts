@@ -21,6 +21,8 @@ export interface AgentTaskInput {
   userGoal: string;
   contextSnapshotMarkdown: string;
   signal?: AbortSignal;
+  /** WP-E 模块六：影子工作区物理路径（可空，缺省为直写主工作区）。 */
+  shadowPath?: string;
 }
 
 export interface AgentTaskResult {
@@ -147,14 +149,34 @@ export class MultiRoleAgentRunner {
           for (const match of writeMatches) {
             const rawPath = match[1].trim();
             const content = match[2];
+            // WP-E 模块六：写入路径重定向到影子工作区（物理隔离，互不覆盖）。
+            const targetPath = input.shadowPath
+              ? `${input.shadowPath}/${rawPath.replace(/^[\\/]+/, '')}`
+              : rawPath;
+            agentEventStore.emit({
+              sessionId: 'swarm',
+              runId,
+              roundId: `round-${task.id}`,
+              type: 'tool.started',
+              source: 'agent',
+              payload: { toolName: 'write_file', path: rawPath, shadowPath: input.shadowPath || null }
+            });
             const { toolCall } = await agentRuntimeController.requestToolExecution({
               runId,
               roundId: `round-${task.id}`,
               source: 'builtin',
               toolName: 'write_file',
-              input: { path: rawPath, content }
+              input: { path: targetPath, content }
             }, 'allow_all');
             await agentRuntimeController.executeApprovedTool(toolCall);
+            agentEventStore.emit({
+              sessionId: 'swarm',
+              runId,
+              roundId: `round-${task.id}`,
+              type: 'tool.completed',
+              source: 'agent',
+              payload: { toolName: 'write_file', path: rawPath }
+            });
           }
         }
         const changesetArtifact = persistentArtifactStore.createArtifact({

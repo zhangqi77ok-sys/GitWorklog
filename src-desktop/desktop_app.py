@@ -2,6 +2,7 @@
 import os
 import sys
 import json
+import re
 import subprocess
 from window_geometry import center_window
 import host_auth
@@ -233,6 +234,69 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Tcode-Token, Authorization")
         self.end_headers()
 
+    def _handle_worktree(self, method: str):
+        """WP-E 模块六：git worktree 影子工作区隔离（Token 鉴权 + 路径沙箱注册）。"""
+        parsed = urllib.parse.urlparse(self.path)
+        action = parsed.path.rstrip("/").split("/")[-1]
+        try:
+            if method == "GET" and action == "list":
+                qs = urllib.parse.parse_qs(parsed.query)
+                project_path = qs.get("projectPath", [os.getcwd()])[0]
+                path_sandbox.assert_path_allowed(project_path)
+                proc = run_silent_cmd(["git", "worktree", "list", "--porcelain"], cwd=project_path)
+                worktrees = []
+                current = {}
+                for line in (proc.stdout or "").splitlines():
+                    if line.startswith("worktree "):
+                        if current:
+                            worktrees.append(current)
+                        current = {"path": line[len("worktree "):]}
+                    elif line.startswith("HEAD "):
+                        current["head"] = line[len("HEAD "):]
+                    elif line.startswith("branch "):
+                        current["branch"] = line[len("branch "):].replace("refs/heads/", "")
+                if current:
+                    worktrees.append(current)
+                self._send_json(200, {"success": True, "worktrees": worktrees})
+                return
+
+            if method == "POST" and action in ("create", "remove"):
+                length = int(self.headers.get("Content-Length", 0))
+                body = self.rfile.read(length)
+                payload = json.loads(body.decode("utf-8"))
+                project_path = payload.get("projectPath") or os.getcwd()
+                path_sandbox.assert_path_allowed(project_path)
+                shadow_id = payload.get("id") or f"shadow-{int(time.time() * 1000)}"
+                if not re.fullmatch(r"[A-Za-z0-9_\-]+", shadow_id):
+                    self._send_json(400, {"error": "INVALID_SHADOW_ID", "code": 400})
+                    return
+                p = Path(project_path)
+                if not (p / ".git").exists():
+                    self._send_json(400, {"error": "NOT_A_GIT_REPOSITORY", "code": 400})
+                    return
+                shadow_path = (p.parent / shadow_id).resolve()
+                if action == "create":
+                    proc = run_silent_cmd(["git", "worktree", "add", str(shadow_path), "HEAD"], cwd=project_path)
+                    if proc.returncode != 0:
+                        self._send_json(500, {"error": "WORKTREE_CREATE_FAILED", "detail": (proc.stderr or "")[-500:]})
+                        return
+                    path_sandbox.register_roots([str(shadow_path)])
+                    self._send_json(200, {"success": True, "shadowPath": str(shadow_path), "id": shadow_id})
+                    return
+                if action == "remove":
+                    proc = run_silent_cmd(["git", "worktree", "remove", "--force", str(shadow_path)], cwd=project_path)
+                    if proc.returncode != 0:
+                        self._send_json(500, {"error": "WORKTREE_REMOVE_FAILED", "detail": (proc.stderr or "")[-500:]})
+                        return
+                    self._send_json(200, {"success": True, "removed": str(shadow_path)})
+                    return
+
+            self._send_json(404, {"error": "WORKTREE_ACTION_NOT_FOUND", "code": 404})
+        except path_sandbox.PathSandboxError:
+            self._send_json(403, {"error": "PATH_OUTSIDE_WORKSPACE", "code": 403})
+        except Exception as e:
+            self._send_json(500, {"error": str(e), "code": 500})
+
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
 
@@ -249,6 +313,10 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
             self.send_header('Content-Type', 'application/json')
             self.end_headers()
             self.wfile.write(json.dumps({'status': 'ok', 'service': 'tcode'}).encode('utf-8'))
+            return
+
+        if parsed.path.startswith('/api/git/worktree'):
+            self._handle_worktree('GET')
             return
 
         # 1. Native Folder Picker
@@ -544,6 +612,10 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
 
     def do_POST(self):
         if self.path.startswith('/api/') and not self._guard():
+            return
+
+        if self.path.startswith('/api/git/worktree'):
+            self._handle_worktree('POST')
             return
 
         # 1. Real File Write to Disk

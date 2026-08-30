@@ -42,6 +42,20 @@ ModelRef(providerId:modelId)
 
 ### WP-B · 执行模式收敛（⚡ Agent Loop / 🧩 Graph 编排）+ Stage Gate 质量门禁
 
+### WP-C · 会话级并发调度引擎（Session-Level Concurrency）
+- 每个会话拥有独立运行态（`SessionActorManager` 单例：streaming / gate_pending / idle），`AbortController`、Stage Gate 决策、Token/轮次遥测全部按 sessionId 分发。
+- 会话 A 跑重构时切换到会话 B 可立即并发提问，两边独立流式渲染与独立取消；停止按钮只中止目标会话。
+- `useChatColumn` Hook 将 D1 运行时状态线程化到每个 ChatColumn 实例。
+
+### WP-D · 缓存与代码索引（RepoMap + KV-Cache 命中保障）
+- 探查阶段自动注入 <2k tokens 工程骨架图谱（`buildRepoMapFromTree` + `buildRepoMapFromFileContents`），经 `assembleCacheOptimizedMessages` 置于 System Prompt 最前端（字节级前缀不变，服务端 KV-Cache 高命中）。
+- 遥测：TTFT 首字响应延迟落盘 TokenStats；Token 大盘与顶部 HUD 展示 3 指标（总 Token / KV 命中率 / TTFT）。
+
+### WP-E · 真并发 Swarm 控制平面（影子工作区 + Master 纠偏 + 2PC）
+- 宿主新增 `/api/git/worktree/create|list|remove`（Token 鉴权 + 路径沙箱注册，越界 403）。
+- 前端：`worktreeManager` 影子生命周期、`swarmSteering` 角色×路径越界规则（如前端改 server/ → Master 纠偏指令）、`SwarmMaster` 遥测总线实时记录干预、`swarmExecution` 真并发（每 Agent 独立请求流 + 影子 cwd）、`twoPhaseMerge` 两阶段提交（测试绿灯后才 git apply 落盘）。
+- 说明：控制平面与宿主能力已交付并测试；Swarm 工作台实时可视化接线留待后续专项（与 WP-C actor 模型统一）。
+
 - **双态执行胶囊**：对话栏顶部 `⚡ Agent Loop`（极速执行，无门禁）与 `🧩 Graph 编排`（阶段图谱 + 门禁审批）双态切换，`Alt+1 / Alt+2` 快捷键；旧的 `Harness / Swarm` 顶层切换与冗余工作流按钮已移除。
 - **Graph 工作流选择**：Graph 态胶囊浮层内选择积木工作流模板（SDD/TDD 等）或「🛰 动态图谱规划（自动）」；未选模板时注入动态 DAG planner 指令，首轮任务图谱产出后挂起门禁终审，批准后才允许写码。
 - **Stage Gate 方案终审卡**：工作流门禁块（`gate-user` / `requireUserReview`）阶段结束自动挂起，弹出终审卡（✅ 批准 / 💬 提修改意见 / ⛔ 终止）；挂起期间输入框切换「输入修改意见」模式；终止绝不写码；快照复用 git checkpoint。
