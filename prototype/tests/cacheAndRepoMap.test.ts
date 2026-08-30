@@ -6,8 +6,49 @@ import {
   canonicalizeJson,
   assembleCacheOptimizedMessages,
   recordCacheHitTelemetry,
-  getCachedTelemetryStats
+  getCachedTelemetryStats,
+  buildRepoMapFromTree,
+  buildRepoMapFromFileContents
 } from '../src/services/cacheEngine';
+
+describe('RepoMap tree selection & file-content assembly (WP-D)', () => {
+  it('buildRepoMapFromTree selects source files deterministically with cap', () => {
+    const tree = [
+      { name: 'src', type: 'dir', path: 'src' },
+      { name: 'App.tsx', type: 'file', path: 'src/App.tsx' },
+      { name: 'util.ts', type: 'file', path: 'src/util.ts' },
+      { name: 'desktop_app.py', type: 'file', path: 'src-desktop/desktop_app.py' },
+      { name: 'README.md', type: 'file', path: 'README.md' },
+      { name: 'data.json', type: 'file', path: 'data.json' },
+      { name: 'b.css', type: 'file', path: 'b.css' },
+      { name: 'z.tsx', type: 'file', path: 'z.tsx' }
+    ];
+    const files = buildRepoMapFromTree(tree as never, 3);
+    const paths = files.map(f => f.filePath);
+    expect(paths).toContain('src/App.tsx');
+    expect(paths).not.toContain('README.md'); // non-source excluded
+    expect(paths).not.toContain('data.json'); // non-source excluded
+    expect(paths.length).toBeLessThanOrEqual(3);
+    expect(paths).toContain('src-desktop/desktop_app.py'); // .py included
+    expect(paths).toContain('src/util.ts');
+  });
+
+  it('buildRepoMapFromFileContents emits a compact skeleton', () => {
+    const map = buildRepoMapFromFileContents([
+      { filePath: 'src/account.ts', content: 'export function computeBalance() { return 1; }\nexport interface UserAccount { id: string }' },
+      { filePath: 'services/db.py', content: 'class DatabaseClient:\n    pass\ndef fetch_user_data():\n    pass' }
+    ]);
+    expect(map).toContain('🧭');
+    expect(map).toContain('src/account.ts');
+    expect(map).toContain('computeBalance');
+    expect(map).toContain('DatabaseClient');
+    expect(map.length).toBeLessThan(2000);
+  });
+
+  it('buildRepoMapFromFileContents returns empty for no files', () => {
+    expect(buildRepoMapFromFileContents([])).toBe('');
+  });
+});
 
 describe('Prompt Cache Accelerator & RepoMap Engine', () => {
   beforeEach(() => {

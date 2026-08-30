@@ -35,6 +35,7 @@ export interface TokenStats {
   cacheHitTokens: number;
   cacheWriteTokens: number;
   estimatedCostUsd: number;
+  ttftMs?: number;
   contextCurrentTokens: number;
   contextMaxTokens: number;
 }

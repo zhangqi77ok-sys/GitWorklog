@@ -2,7 +2,7 @@
 import { loadSavedExecutionMode, saveExecutionModeToStorage, migratePipelineMode, executionModeFromShortcut, buildModePromptSnippet, type ExecutionMode } from './services/executionMode';
 import { createGateSuspensionFromBlock, createGateSuspension, resolveGateDecision, extractTaskBreakdown, extractSpecPath, shouldSuspendDynamicGraphPlanning, type GateSuspension, type StageGateDecision } from './services/stageGate';
 import { sessionActorManager } from './services/sessionActorManager';
-import { assembleCacheOptimizedMessages, recordCacheHitTelemetry, extractFileSymbols, buildCompactRepoMap } from './services/cacheEngine';
+import { assembleCacheOptimizedMessages, recordCacheHitTelemetry, extractFileSymbols, buildCompactRepoMap, buildRepoMapFromTree, buildRepoMapFromFileContents } from './services/cacheEngine';
 import { hostGateway } from './services/hostGateway';
 import { getContextBudget, getContextTelemetry, compressModelContext } from './services/contextTelemetry';
 // ────────────────────────────────────────────────────────────
@@ -1075,6 +1075,32 @@ export const App: React.FC = () => {
       }
     } catch (e) {}
 
+    // WP-D 模块七：RepoMap 骨架注入（<2k tokens，前缀字节级稳定，KV-Cache 命中保障）
+    let repoMapText = '';
+    if (activeSession.projectPath) {
+      try {
+        const treeRes = await fetch(`/api/fs/tree?path=${encodeURIComponent(activeSession.projectPath)}`);
+        const treeData = await treeRes.json();
+        if (treeData.success && Array.isArray(treeData.tree)) {
+          const selected = buildRepoMapFromTree(treeData.tree, 40).slice(0, 12);
+          const contents: Array<{ filePath: string; content: string }> = [];
+          for (const f of selected) {
+            try {
+              const fr = await fetch(`/api/fs/read?path=${encodeURIComponent(activeSession.projectPath + '/' + f.filePath)}`);
+              const fd = await fr.json();
+              if (fd.success && typeof fd.content === 'string') {
+                contents.push({ filePath: f.filePath, content: fd.content.slice(0, 8000) });
+              }
+            } catch (e) {}
+          }
+          repoMapText = buildRepoMapFromFileContents(contents);
+          if (repoMapText) {
+            addLog('INFO', 'RepoMap', `[Cache] 注入工程骨架图谱 ${selected.length} 文件 / ${Math.round(repoMapText.length / 4)} tokens`);
+          }
+        }
+      } catch (e) {}
+    }
+
     // 📜 Build active rules snapshot to inject into system prompt
     const { rulesSnapshotText, activeCount, snapshotId } = buildPromptRulesSnapshot();
 
@@ -1260,6 +1286,7 @@ ${modePromptSnippet}
         const apiMessages = assembleCacheOptimizedMessages({
           baseSystemPrompt: dynamicSystemPrompt,
           staticRulesText: '',
+          repoMapText,
           immutableHistory: cleanHistory
         });
 
@@ -1378,6 +1405,8 @@ ${modePromptSnippet}
         // ── Stream LLM Response ──
         let accumulatedContent = '';
         let accumulatedThinking = '';
+        let firstTokenAt: number | null = null;
+        const roundStartTime = performance.now();
         const nativeToolCalls: Array<{ id: string; name?: string; arguments?: string }> = [];
 
         const response = await fetch(requestUrl, {
@@ -1458,6 +1487,7 @@ ${modePromptSnippet}
                 }
 
                 if (normalized.reasoning || normalized.content) {
+                  if (firstTokenAt === null) firstTokenAt = performance.now();
                   let currentDisplay = '';
                   if (accumulatedThinking && !accumulatedContent) {
                     currentDisplay = `<think>\n${accumulatedThinking}\n</think>\n\n*正在深入推演与分析代码架构...*`;
@@ -1524,6 +1554,11 @@ ${modePromptSnippet}
         }
 
         runCardMsg.content = finalContent;
+
+        if (firstTokenAt !== null) {
+          const roundTtftMs = Math.max(0, Math.round(firstTokenAt - roundStartTime));
+          setTokenStats(prev => ({ ...prev, ttftMs: roundTtftMs }));
+        }
 
         // ── Gateway v2: token-level usage & billing ledger ──
         if (gatewayPrepared) {
@@ -2102,6 +2137,7 @@ ${modePromptSnippet}
               setPermissionPolicy={setPermissionPolicy}
               isStreaming={sessionActorManager.isSessionRunning(activeSession?.id)}
               onStopGeneration={handleStopGeneration}
+              tokenStats={tokenStats}
               promptQueue={promptQueue}
               onWithdrawQueuedPrompt={handleWithdrawQueuedPrompt}
               onEditQueuedPrompt={handleEditQueuedPrompt}

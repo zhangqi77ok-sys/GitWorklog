@@ -45,6 +45,43 @@ export interface CacheTelemetryStats {
 
 const STORAGE_KEY_CACHE_STATS = 'tcode_prompt_cache_telemetry_v1';
 
+const SOURCE_FILE_RE = /.(tsx?|jsx?|py)$/i;
+const TREE_ENTRY = /\.[^\\/]+$/;
+
+/**
+ * Select source file paths from a project directory tree deterministically.
+ * Non-source assets/config/docs are excluded; the list is capped at maxFiles
+ * and sorted for byte-level prefix stability across turns.
+ */
+export function buildRepoMapFromTree(
+  tree: Array<{ name: string; type: string; path?: string }>,
+  maxFiles = 40
+): Array<{ filePath: string }> {
+  if (!tree || tree.length === 0) return [];
+  const paths: string[] = [];
+  for (const node of tree) {
+    if (node.type !== 'file') continue;
+    const p = node.path || node.name;
+    if (!SOURCE_FILE_RE.test(p)) continue;
+    paths.push(p.replace(/^\/+/, ''));
+  }
+  paths.sort();
+  return paths.slice(0, maxFiles).map(filePath => ({ filePath }));
+}
+
+/**
+ * Build the compact RepoMap text from a capped set of file contents
+ * (extractFileSymbols + buildCompactRepoMap). Deterministic and <2k tokens.
+ */
+export function buildRepoMapFromFileContents(
+  files: Array<{ filePath: string; content: string }>
+): string {
+  if (!files || files.length === 0) return '';
+  return buildCompactRepoMap(
+    files.map(f => extractFileSymbols(f.filePath, (f.content || '').slice(0, 20000)))
+  );
+}
+
 /**
  * Generates a compact RepoMap (<2k tokens) from project file summaries.
  * Allows the LLM to know exact symbol locations without needing brute-force grep.

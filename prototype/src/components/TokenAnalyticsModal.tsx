@@ -84,7 +84,7 @@ export const TokenAnalyticsModal: React.FC<TokenAnalyticsModalProps> = ({
         {/* Body */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '18px', display: 'flex', flexDirection: 'column', gap: '14px', background: 'var(--bg-base)' }}>
           {/* Top 4 KPI Metrics Grid */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '10px' }}>
             <div style={{ padding: '12px', borderRadius: '8px', background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)' }}>
               <div style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>总 Token 消耗</div>
               <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--text-strong)', marginTop: '4px' }}>
@@ -99,7 +99,17 @@ export const TokenAnalyticsModal: React.FC<TokenAnalyticsModalProps> = ({
                 {tokenStats.cacheHitTokens.toLocaleString()}
               </div>
               <div style={{ fontSize: '9.5px', color: '#16A34A', marginTop: '2px' }}>
-                节省 90% 输入费
+                命中率 {cacheRatio}% · 节省 90% 输入费
+              </div>
+            </div>
+
+            <div style={{ padding: '12px', borderRadius: '8px', background: 'var(--bg-surface)', border: '1px solid #2563EB', boxShadow: '0 2px 8px rgba(37, 99, 235, 0.08)' }}>
+              <div style={{ fontSize: '10.5px', color: '#2563EB', fontWeight: 600 }}>⏱ TTFT 首字响应</div>
+              <div style={{ fontSize: '16px', fontWeight: 800, color: '#2563EB', marginTop: '4px' }}>
+                {tokenStats.ttftMs != null ? `${tokenStats.ttftMs}ms` : '--'}
+              </div>
+              <div style={{ fontSize: '9.5px', color: '#2563EB', marginTop: '2px' }}>
+                {tokenStats.ttftMs != null ? (tokenStats.ttftMs < 800 ? '极速 (前缀命中)' : '常规') : '待真实调用'}
               </div>
             </div>
 

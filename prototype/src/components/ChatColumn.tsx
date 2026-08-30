@@ -115,6 +115,7 @@ import { resolveProviderIdForModelTab, assertProviderCredentials } from '../serv
 import { getGatewayModelOptions } from '../services/gateway/gatewayRuntime';
 import { ExecutionModeCapsule } from './ExecutionModeCapsule';
 import { useChatColumn } from '../hooks/useChatColumn';
+import type { TokenStats } from '../types/contracts';
 import { StageGateCard } from './StageGateCard';
 
 interface ChatColumnProps {
@@ -155,6 +156,7 @@ interface ChatColumnProps {
   onGateDecision?: (decision: StageGateDecision) => void;
   onGateFeedback?: (feedback: string) => void;
   onOpenSpec?: (path: string) => void;
+  tokenStats?: TokenStats;
 }
 
 export const ChatColumn: React.FC<ChatColumnProps> = ({
@@ -192,7 +194,8 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
   activeGate: activeGateProp = null,
   onGateDecision,
   onGateFeedback,
-  onOpenSpec
+  onOpenSpec,
+  tokenStats
 }) => {
   // D1 runtime state threading: per-session streaming/gate from SessionActorManager.
   const chatRuntime = useChatColumn(session.id);
@@ -950,6 +953,20 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
               </div>
             );
           })()}
+
+          {tokenStats ? (() => {
+            const totalKv = (tokenStats.totalTokens ?? tokenStats.promptTokens + tokenStats.completionTokens + tokenStats.cacheHitTokens) || 0;
+            const kvRate = totalKv > 0 ? Math.round((tokenStats.cacheHitTokens / totalKv) * 100) : 0;
+            return (
+              <span title="KV-Cache 命中率 / 首字响应延迟 (TTFT)" style={{
+                display: 'flex', alignItems: 'center', gap: '4px', padding: '1px 7px', borderRadius: '10px',
+                background: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.25)',
+                fontSize: '9.5px', color: '#10B981', fontWeight: 600, whiteSpace: 'nowrap'
+              }}>
+                ⚡ KV {kvRate}% · ⏱ TTFT {tokenStats.ttftMs != null ? `${tokenStats.ttftMs}ms` : '--'}
+              </span>
+            );
+          })() : null}
 
           {workMode === 'minimal' && (
             <span style={{ padding: '1px 6px', borderRadius: '10px', background: 'rgba(16, 185, 129, 0.12)', color: '#10B981', fontSize: '9.5px', fontWeight: 600 }}>
