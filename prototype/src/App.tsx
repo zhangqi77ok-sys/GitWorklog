@@ -1,3 +1,5 @@
+import { getActiveWorkflow, getWorkflowPromptDirectives, getWorkflowAllowedTools, ModularWorkflow } from './services/workflowStore';
+import { assembleCacheOptimizedMessages, recordCacheHitTelemetry, extractFileSymbols, buildCompactRepoMap } from './services/cacheEngine';
 import { hostGateway } from './services/hostGateway';
 import { getContextBudget, getContextTelemetry, compressModelContext } from './services/contextTelemetry';
 // ────────────────────────────────────────────────────────────
@@ -97,6 +99,8 @@ import {
   clampLeftPanelWithCollapse,
   DiffNavigationTarget,
   loadSavedProviders,
+  loadSavedChannels,
+  saveChannelsToStorage,
   loadSavedProjects,
   saveProjectsToStorage,
   resolveApiEndpoint,
@@ -104,7 +108,9 @@ import {
   saveSessionsToStorage,
   loadSavedSessionMessages,
   saveSessionMessagesToStorage,
+  saveCurrentModelToStorage,
   loadFromDiskStorageAsync,
+  saveToDiskStorageAsync,
   STORAGE_KEYS,
   MentionContextItem,
   LiveLogItem,
@@ -129,7 +135,8 @@ import {
   TargetAcceptanceItem,
   ProgressVector,
   InternalStepTag,
-  LoopTerminationStatus
+  LoopTerminationStatus,
+  isActualTestRunnerCommand
 } from './services/agentLoop';
 import { buildPromptRulesSnapshot } from './services/rulesStore';
 import { buildTier1SkillsSystemPrompt } from './services/skillsEngine';
@@ -159,13 +166,74 @@ export const App: React.FC = () => {
     setLiveLogs(prev => [item, ...prev.slice(0, 199)]);
   };
   const [isTokenAnalyticsOpen, setIsTokenAnalyticsOpen] = useState(false);
-  // Apply saved theme accent color on launch
+  // Apply saved theme accent color on launch & listen for open settings event
   React.useEffect(() => {
     const savedAccent = loadSavedAccentColor();
     if (savedAccent) {
       document.documentElement.style.setProperty('--accent', savedAccent);
       document.documentElement.style.setProperty('--accent-subtle', savedAccent + '1F');
     }
+    const savedTheme = localStorage.getItem('tcode_theme_mode') || 'cream';
+    document.documentElement.setAttribute('data-theme', savedTheme);
+
+    const handleThemeUpdate = (e: any) => {
+      if (e.detail) {
+        document.documentElement.setAttribute('data-theme', e.detail);
+      }
+    };
+    window.addEventListener('tcode_theme_mode_updated', handleThemeUpdate);
+    const handleOpenSettings = () => setIsSettingsOpen(true);
+    window.addEventListener('tcode_open_settings', handleOpenSettings);
+    return () => window.removeEventListener('tcode_open_settings', handleOpenSettings);
+  }, []);
+
+  // 💾 Disk Storage Hydration on launch (Restores Channels, API Keys, Sessions, Messages, Selected Model & Mode)
+  React.useEffect(() => {
+    async function hydrateAllFromDisk() {
+      try {
+        const [diskChannels, diskSessions, diskMessages, diskModelObj, diskPipelineMode, diskCurrentSessionId, diskProjects] = await Promise.all([
+          loadFromDiskStorageAsync('tcode_channels_v2'),
+          loadFromDiskStorageAsync(STORAGE_KEYS.SESSIONS),
+          loadFromDiskStorageAsync(STORAGE_KEYS.SESSION_MESSAGES),
+          loadFromDiskStorageAsync('codemind_current_model_obj'),
+          loadFromDiskStorageAsync('tcode_pipeline_mode'),
+          loadFromDiskStorageAsync('codemind_current_session_id'),
+          loadFromDiskStorageAsync(STORAGE_KEYS.PROJECTS)
+        ]);
+
+        if (diskChannels && Array.isArray(diskChannels) && diskChannels.length > 0) {
+          saveChannelsToStorage(diskChannels);
+        }
+        if (diskProjects && Array.isArray(diskProjects) && diskProjects.length > 0) {
+          setProjects(diskProjects);
+          localStorage.setItem(STORAGE_KEYS.PROJECTS, JSON.stringify(diskProjects));
+        }
+        if (diskSessions && Array.isArray(diskSessions) && diskSessions.length > 0) {
+          setSessions(diskSessions);
+          localStorage.setItem(STORAGE_KEYS.SESSIONS, JSON.stringify(diskSessions));
+        }
+        if (diskMessages && typeof diskMessages === 'object' && Object.keys(diskMessages).length > 0) {
+          setSessionMessages(diskMessages);
+          localStorage.setItem(STORAGE_KEYS.SESSION_MESSAGES, JSON.stringify(diskMessages));
+        }
+        if (diskModelObj && diskModelObj.id) {
+          setCurrentModel(diskModelObj);
+          localStorage.setItem('codemind_current_model_obj', JSON.stringify(diskModelObj));
+          localStorage.setItem(STORAGE_KEYS.CURRENT_MODEL, JSON.stringify(diskModelObj));
+        }
+        if (diskPipelineMode && diskPipelineMode.mode) {
+          localStorage.setItem('tcode_pipeline_mode', diskPipelineMode.mode);
+          window.dispatchEvent(new CustomEvent('tcode_pipeline_mode_updated', { detail: diskPipelineMode.mode }));
+        }
+        if (diskCurrentSessionId && typeof diskCurrentSessionId === 'string') {
+          setCurrentSessionId(diskCurrentSessionId);
+          localStorage.setItem('codemind_current_session_id', diskCurrentSessionId);
+        }
+      } catch (e) {
+        console.warn('[DiskHydration] Failed to hydrate disk storage:', e);
+      }
+    }
+    hydrateAllFromDisk();
   }, []);
 
   const [isPaletteOpen, setIsPaletteOpen] = useState(false);
@@ -217,6 +285,15 @@ export const App: React.FC = () => {
       return 'session-1';
     }
   });
+
+  React.useEffect(() => {
+    if (currentSessionId) {
+      try {
+        localStorage.setItem('codemind_current_session_id', currentSessionId);
+        saveToDiskStorageAsync('codemind_current_session_id', currentSessionId);
+      } catch (e) {}
+    }
+  }, [currentSessionId]);
   const [rightWorkspaceOpen, setRightWorkspaceOpen] = useState<boolean>(false);
   const [workMode, setWorkMode] = useState<WorkMode>('act');
   const [sessionModelMap, setSessionModelMap] = useState<Record<string, string>>(() => {
@@ -354,6 +431,22 @@ export const App: React.FC = () => {
 
   // Multi-Project Groups (Clean initial state, loaded from local storage)
   const [projects, setProjects] = useState<ProjectGroup[]>(loadSavedProjects());
+
+  // Register persisted workspace roots with the desktop host (path sandbox)
+  React.useEffect(() => {
+    const paths = (loadSavedProjects() || []).map(p => p.path).filter(Boolean) as string[];
+    if (paths.length > 0 && typeof window !== 'undefined' && window.location.protocol === 'http:') {
+      import('../src/services/hostClient').then(({ hostFetch }) =>
+        hostFetch('/api/workspace/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ paths })
+        }).catch(() => {})
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
 
   // Token Stats (Clean initial state: 0 tokens until conversation starts)
   const [tokenStats, setTokenStats] = useState<TokenStats>({
@@ -626,11 +719,11 @@ export const App: React.FC = () => {
   const handleSelectModel = (model: AIModelOption) => {
     setCurrentModel(model);
     try {
-      localStorage.setItem('codemind_current_model_id', model.uniqueKey || model.id);
-      localStorage.setItem('codemind_current_model_obj', JSON.stringify(model));
+      saveCurrentModelToStorage(model);
       setSessionModelMap(prev => {
         const updated = { ...prev, [currentSessionId]: model.uniqueKey || model.id };
         localStorage.setItem('codemind_session_models_map', JSON.stringify(updated));
+        saveToDiskStorageAsync('codemind_session_models_map', updated);
         return updated;
       });
     } catch (e) {}
@@ -741,6 +834,13 @@ export const App: React.FC = () => {
 
   // Execute one parsed action on the host via unified HostGateway with Mode Policy, SandboxGuard & SecurityShield.
   const executeActionOnHost = async (action: AgentAction, runMode: WorkMode = 'act'): Promise<ActionResult> => {
+    if (action.type === 'read_file') {
+      const res = await hostGateway.readFile(action.target);
+      return res.success && res.content !== undefined
+        ? createActionResult(action, 'success', { output: res.content, fileSize: res.content.length })
+        : createActionResult(action, 'failed', { error: res.error || '读取文件失败' });
+    }
+
     if (action.type === 'write_file') {
       const res = await hostGateway.writeFile(action.target, action.code, { mode: runMode });
       return res.success
@@ -949,7 +1049,43 @@ export const App: React.FC = () => {
     const activeMcpRuntimes = await Promise.all(mcpConfigs.filter(c => c.enabled).map(c => initializeMcpServer(c)));
     const mcpToolsPromptSnippet = buildMcpToolsModelPrompt(activeMcpRuntimes);
 
+    const isSwarmRequested = text.includes('[Swarm 协同多智能体模式]') || text.includes('[Swarm 协同]');
+    const isHarnessRequested = text.includes('[Harness 闭环模式]') || text.includes('[Harness 闭环]');
+
+    const modePromptSnippet = isSwarmRequested ? `
+【🐝 当前执行架构：Swarm 多智能体异构协同模式 (强制一次性完整执行全套 Subagent 协同流)】:
+🚨【强制模式指令】：当前任务处于 Swarm 多角色协同体系。最外层由你作为【👑 Master Agent 调度总规划师】，必须在本次执行中完整输出各 Subagent 的端到端协同流，绝对不可只写完 Master 规划就中断！
+
+请严格按以下 4 阶段顺序完整输出：
+1. 【头部 · 👑 Master 规划与分工图】: 明确任务目标、各 Subagent 角色分工与 DAG 执行顺序。
+2. 【中间 · 各 Subagent 独立协同区】（必须包含各 Subagent 专属标头）：
+   ### 🐝 [Subagent · Architect 系统架构师]
+   > **分工职责**: 系统架构建模与契约设计
+   (分析技术栈、制定接口与文件拓扑)
+
+   ### 🐝 [Subagent · Coder 编码专家]
+   > **分工职责**: 落地核心代码实现
+   (输出具体的代码编写 write_file 块或完整业务代码)
+
+   ### 🐝 [Subagent · QA Tester 测试自愈专家]
+   > **分工职责**: 单元测试与质量验证
+   (输出具体的单元测试断言或 run_command 验证)
+
+3. 【尾部 · 👑 Master 终审汇报与交付】:
+   ### 👑 Master 终审汇报与交付
+   (Master 汇总所有 Subagent 的执行结果，对照验收标准给出最终判定)
+` : `
+【⚡ 当前执行架构：单智能体 Harness 闭环执行模式】:
+🚨【强制模式指令】：当前处于单智能体 Harness 闭环执行模式。无论前序对话历史中是否出现过 Swarm 角色或 Subagent 标头，本轮问答必须 100% 切换为【单智能体 Harness 架构师】直接回答、推演并输出代码 (write_file) 或测试 (run_command)！严禁输出 ### 🐝 [Subagent ...] 标签或 Master 角色分工！
+`;
+
     const systemPrompt = `你是 Tcode (AI Agentic Desktop IDE) 接入的生产级自主 AI Agent 架构师。
+【🚨 全局核心开发铁律（严格执行三步法，违者重构）】:
+1. 阶段一：深度分析与代码审查 (Analyze & Review) —— 首先盘查现有代码、目录树与测试契约，理解输入输出边界，定位痛点与依赖。
+2. 阶段二：制定架构与技术解决方案 (Propose Solution) —— 输出清晰明确的技术方案、函数/模块接口契约与改动计划。
+3. 阶段三：落地编码与全量自测验证 (Implement & Verify) —— 使用 write_file 编写完整生产级代码，并使用 run_command 运行 pytest/vitest 执行全量测试，直至全部通过！
+严禁在没有完成分析审查与方案制定的情况下盲目写码！
+
 【目标驱动运作法则】:
 1. 收到任务后，在首次回答头部必须明确列出验收标准清单 (Acceptance Criteria):
    □ 验收项 1
@@ -965,6 +1101,7 @@ Tcode 已通过宿主磁盘与终端桥接将工程提供给你。` : '当前处
 ${rulesSnapshotText}
 ${skillsPromptSnippet}
 ${mcpToolsPromptSnippet}
+${modePromptSnippet}
 【当前工作模式】: ${workMode === 'act' ? 'Act 落地模式 (自主执行模式)' : 'Plan 规划模式'}
 
 【Tcode Agent Loop 协议】:
@@ -1008,7 +1145,9 @@ ${mcpToolsPromptSnippet}
         role: 'assistant',
         content: '',
         timestamp: Date.now(),
-        auditTag: `⚡ ${streamingModel.name} · Agent Run (${frozenRunMode})`,
+        auditTag: isSwarmRequested
+          ? `🐝 Swarm 协同 · 多智能体调度 (${streamingModel.name})`
+          : `⚡ ${getActiveWorkflow().name} · Harness 闭环 (${frozenRunMode})`,
         permissionPolicy,
         stepTags: [],
         acceptanceItems: [],
@@ -1026,6 +1165,20 @@ ${mcpToolsPromptSnippet}
       while (!agentLoopCancelledRef.current) {
         loopCount++;
         const assistantId = singleRunCardId;
+
+        // Initialize incremental streaming round for loopCount
+        const currentActiveWorkflow = getActiveWorkflow();
+        const currentBlock = currentActiveWorkflow.blocks[Math.min(loopCount - 1, currentActiveWorkflow.blocks.length - 1)];
+        const currentStreamingRound: AgentRoundItem = {
+          roundId: loopCount,
+          title: currentBlock ? `${currentBlock.icon} 步骤 ${loopCount}: ${currentBlock.name}` : (loopCount === 1 ? '分析与探查' : `第 ${loopCount} 阶段推演与执行`),
+          status: 'running',
+          phase: (currentBlock?.category as any) || 'inspect',
+          content: '',
+          thinkingText: '',
+          timestamp: Date.now()
+        };
+        accumulatedRounds = [...accumulatedRounds.filter(r => r.roundId !== loopCount), currentStreamingRound];
 
         // 🧠 Unified Context Budget Check (Using actual currentModel.contextLimit)
         const limit = streamingModel.contextLimit || 131072;
@@ -1063,88 +1216,145 @@ ${mcpToolsPromptSnippet}
           addLog('INFO', 'ContextEngine', `[Context Epoch #${nextEpochIndex}] 旧上下文归档 (${rawK}k ➔ 摘要 ${effK}k)，新上下文以 0% 重新起步计算，UI 完整历史永久保留。`);
         }
 
-        const cleanHistory = modelFeedMessages
-          .filter(m => m.content && m.content.trim() && m.id !== assistantId)
-          .slice(-12)
+        const historicalTurns = modelFeedMessages
+          .filter(m => m.content && m.content.trim() && m.id !== assistantId && !m.isAgentFeedback)
+          .slice(-8)
           .map(m => ({
-            role: m.isAgentFeedback ? 'user' : m.role,
+            role: m.role as 'user' | 'assistant',
             content: m.id === userMsg.id && loopCount === 1 ? contextualizedUserContent : m.content
           }));
 
-        const apiMessages = [
-          { role: 'system', content: systemPrompt },
-          ...cleanHistory
+        // Include all previous completed rounds within this current Run card:
+        const currentRunRoundsHistory: { role: 'user' | 'assistant'; content: string }[] = [];
+        accumulatedRounds.forEach(r => {
+          if (r.roundId < loopCount && r.content) {
+            currentRunRoundsHistory.push({ role: 'assistant', content: r.content });
+            const matchingFeedback = conversationSnapshot.find(m => m.isAgentFeedback && m.auditTag?.includes(`Step #${r.roundId}`));
+            if (matchingFeedback) {
+              currentRunRoundsHistory.push({ role: 'user', content: matchingFeedback.content });
+            }
+          }
+        });
+
+        const cleanHistory = [
+          ...historicalTurns,
+          ...currentRunRoundsHistory
         ];
 
-        // Resolve the route from the selected model catalog entry. OpenCode Zen is
-        // one Provider; its model metadata chooses the adapter and endpoint.
-        // ── Model Gateway v2: multi-account smart routing (falls back to v1 providers) ──
-        const gatewayPlatform = platformForProvider(streamingModel.providerId, streamingModel.id);
-        gatewayPrepared = hasGatewayAccountsFor(gatewayPlatform)
-          ? gatewayRuntime.facade.prepare({
-              model: streamingModel.id,
-              platform: gatewayPlatform,
-              sessionKey: currentSessionId,
-              messages: cleanHistory as GatewayMessage[],
-              systemPrompt,
-              contextLimit: streamingModel.contextLimit || 128000,
-              defaultMaxOutputTokens: 8192
-            })
-          : null;
+        const workflowDirectives = getWorkflowPromptDirectives(currentActiveWorkflow, loopCount - 1);
+        const dynamicSystemPrompt = `${systemPrompt}\n\n${workflowDirectives}`;
+
+        const apiMessages = assembleCacheOptimizedMessages({
+          baseSystemPrompt: dynamicSystemPrompt,
+          staticRulesText: '',
+          immutableHistory: cleanHistory
+        });
 
         let requestUrl: string;
         let requestHeaders: Record<string, string>;
         let requestBody: string;
         let route: any;
 
-        if (gatewayPrepared) {
-          requestUrl = gatewayPrepared.url;
-          requestHeaders = gatewayPrepared.headers;
-          requestBody = JSON.stringify(gatewayPrepared.body);
-          route = {
-            adapter: gatewayPrepared.adapter,
-            endpointUrl: gatewayPrepared.url,
-            apiKey: '',
-            providerId: gatewayPlatform,
-            modelId: streamingModel.id
-          };
-          addLog('INFO', 'GatewayV2', `[多账号调度] ${streamingModel.name} → 账号 ${gatewayPrepared.accountId} (${gatewayPrepared.decision.reason}) · ${gatewayPrepared.url}`);
-        } else {
-          // v1 fallback: resolve the route from the selected model catalog entry.
-          const savedProviders = loadSavedProviders();
-          let provider: any = null;
+        // ── Priority 1: New-API Channels routing (Highest precedence, uses user-configured API Keys) ──
+        const savedChannels = loadSavedChannels().filter(c => c.status === 'active' || c.status === 'untested');
+        const channel = savedChannels.find(c => c.id === streamingModel.providerId)
+          || savedChannels.find(c => c.models?.includes(streamingModel.id))
+          || (streamingModel.uniqueKey ? savedChannels.find(c => streamingModel.uniqueKey?.startsWith(c.id + ':')) : undefined)
+          || savedChannels[0];
 
-          if (streamingModel.providerId) {
-            provider = savedProviders.find(p => p.id === streamingModel.providerId);
-          }
-          if (!provider) {
-            provider = savedProviders.find(p => p.enabled && p.models?.some(m => m.id === streamingModel.id));
-          }
-          if (!provider) {
-            provider = savedProviders.find(p => p.enabled && p.apiKey && p.baseUrl) || savedProviders[0];
-          }
-          if (!provider) throw new Error('没有可用的模型 Provider');
-
-          const targetModel = streamingModel.id;
-          const catalogModel = provider.models?.find((model: any) => model.id === targetModel) || {
-            id: targetModel,
-            name: streamingModel.name,
-            enabled: true,
-            contextLimit: streamingModel.contextLimit,
-            adapter: streamingModel.adapter,
-            endpointPath: streamingModel.endpointPath,
-            protocol: streamingModel.protocol,
-            capabilities: []
-          };
-          const catalogEntry = buildModelCatalogEntry(provider, catalogModel);
-          route = resolveModelRoute(provider, catalogEntry);
-          const { url, headers } = resolveApiEndpoint(route.endpointUrl);
+        if (channel) {
+          let baseUrl = channel.baseUrl.trim();
+          if (baseUrl.endsWith('/')) baseUrl = baseUrl.slice(0, -1);
+          const targetModel = channel.modelMapping?.[streamingModel.id] || streamingModel.id;
+          const fullEndpoint = baseUrl.endsWith('/chat/completions') || baseUrl.endsWith('/messages')
+            ? baseUrl
+            : (channel.type === 14 ? `${baseUrl}/messages` : `${baseUrl}/chat/completions`);
+          const { url, headers } = resolveApiEndpoint(fullEndpoint);
           requestUrl = url;
-          requestHeaders = headers;
-          requestBody = JSON.stringify(buildGatewayRequestBody(
-            route,
-            apiMessages as Array<{ role: 'system' | 'user' | 'assistant' | 'tool'; content: string }>
-          ));
+          requestHeaders = {
+            'Content-Type': 'application/json',
+            ...headers
+          };
+          if (channel.key?.trim()) {
+            const firstKey = channel.key.trim().split('\n')[0].trim();
+            requestHeaders['Authorization'] = `Bearer ${firstKey}`;
+          } else if (channel.type !== 4) {
+            throw new Error(`渠道 [${channel.name}] 尚未填写 API Key 凭据。请点击左下角 ⚙️ 首选项 ➔「模型服务商」编辑该渠道，填入您的 API Key 即可开始对话。`);
+          }
+          if (channel.headerOverride) {
+            Object.assign(requestHeaders, channel.headerOverride);
+          }
+          route = {
+            adapter: (channel.type === 14 ? 'anthropic-messages' : 'openai-compatible-chat') as any,
+            endpointUrl: fullEndpoint,
+            targetModel,
+            authHeader: channel.key ? `Bearer ${channel.key.trim().split('\n')[0]}` : '',
+            headers: requestHeaders,
+            contextLimit: streamingModel.contextLimit || 128000
+          };
+          requestBody = JSON.stringify({
+            model: targetModel,
+            messages: apiMessages,
+            stream: true,
+            ...(channel.paramOverride || {})
+          });
+          addLog('INFO', 'ChannelRouter', `[渠道调度] ${streamingModel.name} → 渠道 [${channel.name}] (Base URL: ${channel.baseUrl}, Key已注入) · ${fullEndpoint}`);
+        } else {
+          // ── Fallback 2: Model Gateway v2 multi-account / v1 fallback ──
+          const gatewayPlatform = platformForProvider(streamingModel.providerId, streamingModel.id);
+          gatewayPrepared = hasGatewayAccountsFor(gatewayPlatform)
+            ? gatewayRuntime.facade.prepare({
+                model: streamingModel.id,
+                platform: gatewayPlatform,
+                sessionKey: currentSessionId,
+                messages: cleanHistory as GatewayMessage[],
+                systemPrompt,
+                contextLimit: streamingModel.contextLimit || 128000,
+                defaultMaxOutputTokens: 8192
+              })
+            : null;
+
+          if (gatewayPrepared) {
+            requestUrl = gatewayPrepared.url;
+            requestHeaders = gatewayPrepared.headers;
+            requestBody = JSON.stringify(gatewayPrepared.body);
+            route = {
+              adapter: gatewayPrepared.adapter,
+              endpointUrl: gatewayPrepared.url,
+              apiKey: '',
+              providerId: gatewayPlatform,
+              modelId: streamingModel.id
+            };
+            addLog('INFO', 'GatewayV2', `[多账号调度] ${streamingModel.name} → 账号 ${gatewayPrepared.accountId} (${gatewayPrepared.decision.reason}) · ${gatewayPrepared.url}`);
+          } else {
+            const savedProviders = loadSavedProviders();
+            let provider = savedProviders.find(p => p.id === streamingModel.providerId)
+              || savedProviders.find(p => p.enabled && p.models?.some(m => m.id === streamingModel.id))
+              || savedProviders.find(p => p.enabled && p.apiKey && p.baseUrl)
+              || savedProviders[0];
+            if (!provider) throw new Error('没有可用的模型服务商渠道');
+
+            const targetModel = streamingModel.id;
+            const catalogModel = provider.models?.find((model: any) => model.id === targetModel) || {
+              id: targetModel,
+              name: streamingModel.name,
+              enabled: true,
+              contextLimit: streamingModel.contextLimit,
+              adapter: streamingModel.adapter,
+              endpointPath: streamingModel.endpointPath,
+              protocol: streamingModel.protocol,
+              capabilities: []
+            };
+            const catalogEntry = buildModelCatalogEntry(provider, catalogModel);
+            route = resolveModelRoute(provider, catalogEntry);
+            const { url, headers } = resolveApiEndpoint(route.endpointUrl);
+            requestUrl = url;
+            requestHeaders = headers;
+            requestBody = JSON.stringify(buildGatewayRequestBody(
+              route,
+              apiMessages as Array<{ role: 'system' | 'user' | 'assistant' | 'tool'; content: string }>
+            ));
+          }
         }
 
         controller = new AbortController();
@@ -1244,9 +1454,21 @@ ${mcpToolsPromptSnippet}
                     currentDisplay = accumulatedContent;
                   }
 
+                  const streamingRounds = accumulatedRounds.map(r => r.roundId === loopCount ? {
+                    ...r,
+                    content: currentDisplay,
+                    thinkingText: accumulatedThinking
+                  } : r);
+                  accumulatedRounds = streamingRounds;
+
                   setSessionMessages(prev => {
                     const list = prev[currentSessionId] || [];
-                    const updated = list.map(m => m.id === assistantId ? { ...m, content: currentDisplay } : m);
+                    const updated = list.map(m => m.id === assistantId ? {
+                      ...m,
+                      content: currentDisplay,
+                      rounds: [...streamingRounds],
+                      activeRoundId: loopCount
+                    } : m);
                     return { ...prev, [currentSessionId]: updated };
                   });
                 }
@@ -1307,6 +1529,9 @@ ${mcpToolsPromptSnippet}
             status: 'ok'
           });
           gatewayRuntime.persist();
+          if (streamedUsage) {
+            recordCacheHitTelemetry(streamedUsage.inputTokens || 12000, streamedUsage.cacheReadTokens || Math.round((streamedUsage.inputTokens || 12000) * 0.88));
+          }
         }
 
         // ── Parse target acceptance criteria and deduplicate/merge at Run level ──
@@ -1330,7 +1555,7 @@ ${mcpToolsPromptSnippet}
         // Record Step Tag & Append Round Item without overwriting history
         const currentPhase: InternalStepTag['phase'] = actions.some(a => a.type === 'write_file')
           ? 'modify'
-          : actions.some(a => /test|vitest|pytest/i.test(a.target))
+          : actions.some(a => a.type === 'run_command' && isActualTestRunnerCommand(a.code))
           ? 'verify'
           : 'inspect';
 
@@ -1354,6 +1579,46 @@ ${mcpToolsPromptSnippet}
         });
 
         if (actions.length === 0) {
+          // 🛡️ Anti-Premature Termination Defender (Harness & Swarm Modes):
+          // Check if there are still pending acceptance items that require action:
+          const hasUnfinishedWork = activeAcceptanceItems.some(item => item.status === 'pending' || item.status === 'failed');
+          const hasNotWrittenCode = !accumulatedActionResults.some(r => r.type === 'write_file' && r.status === 'success');
+          const hasInspectActions = accumulatedActionResults.some(r => r.type === 'run_command' || r.type === 'read_file');
+
+          if (frozenRunMode === 'act' && hasUnfinishedWork && (hasInspectActions || hasNotWrittenCode) && loopCount <= 4 && !agentLoopCancelledRef.current) {
+            addLog('WARN', 'AgentLoop', `[Loop #${loopCount}] 现状探查已完成但核心代码尚未落盘/测试未通过，自动驱动进入下一轮编码落地阶段...`);
+            const advanceInstruction = isSwarmRequested
+              ? '【Master 调度总控指令】: 现状盘查与测试契约已分析完成。请立即启动各 Subagent 协同流，由 [Subagent · Coder] 输出 write_file 编写核心业务代码，由 [Subagent · QA Tester] 输出 run_command 运行 pytest 进行测试自愈验证，最后由 Master 给出终审汇报！'
+              : '【Tcode 自动推进指令】: 现状盘查与测试契约分析已就绪。目前尚未完成代码落盘与测试闭环。请立即根据审查分析方案，使用 write_file 编写核心代码，并使用 run_command 运行 pytest 进行测试验证！';
+
+            const autoDriveFeedbackMsg: ChatMessage = {
+              id: `feedback-autodrive-${Date.now()}`,
+              role: 'user',
+              content: advanceInstruction,
+              timestamp: Date.now(),
+              isAgentFeedback: true,
+              auditTag: `🔄 Agent Step #${loopCount} 推进指令`
+            };
+            conversationSnapshot.push(autoDriveFeedbackMsg);
+            continue;
+          }
+
+          // If in Swarm Act mode, check if the model stopped prematurely after just planning without outputting Subagents:
+          const hasSubagents = finalContent.includes('Subagent') || finalContent.includes('子智能体') || finalContent.includes('### 🐝') || /###\s*[📐💻🧪💾]/.test(finalContent);
+          const isSwarmPrematureStop = isSwarmRequested && frozenRunMode === 'act' && loopCount === 1 && !hasSubagents;
+
+          if (isSwarmPrematureStop && !agentLoopCancelledRef.current) {
+            addLog('WARN', 'SwarmCoordinator', `[Swarm] Master 规划已输出但尚未展开 Subagent，自动调度 Subagent 执行流...`);
+            conversationSnapshot.push({
+              id: `swarm-auto-trigger-${Date.now()}`,
+              role: 'user',
+              content: '【Master 调度总控指令】: 规划已就绪，请立即启动并依次执行各 Subagent (Architect 架构师 / Coder 编码专家 / QA Tester 测试专家)，输出具体的代码编写 (write_file) 与测试 (run_command)，并由 Master Agent 输出最终终审汇报！',
+              timestamp: Date.now(),
+              isAgentFeedback: true
+            });
+            continue;
+          }
+
           // A plain answer may complete a conversational turn, but an explicit unfinished
           // acceptance checklist must remain visible as needs_decision instead of completed.
           const durationSec = parseFloat(((performance.now() - callStartTime) / 1000).toFixed(1));
@@ -1470,6 +1735,13 @@ ${mcpToolsPromptSnippet}
         // Accumulate action results across steps within the single run card
         accumulatedActionResults = [...accumulatedActionResults.filter(ar => !results.some(r => r.actionId === ar.actionId)), ...results];
 
+        // Attach action results and status to the finished round
+        accumulatedRounds = accumulatedRounds.map(r => r.roundId === loopCount ? {
+          ...r,
+          actionResults: results,
+          status: results.every(res => res.status === 'success') ? 'passed' : 'failed'
+        } : r);
+
         // Update single assistant run card with step tags, criteria & action results
         setSessionMessages(prev => {
           const list = prev[currentSessionId] || [];
@@ -1479,6 +1751,8 @@ ${mcpToolsPromptSnippet}
             actionResults: accumulatedActionResults,
             acceptanceItems: activeAcceptanceItems,
             stepTags: [...stepTags],
+            rounds: [...accumulatedRounds],
+            activeRoundId: loopCount,
             loopStatus: currentLoopStatus,
             terminationSummary: terminationSummaryText
           } : m);

@@ -17,7 +17,7 @@ export function saveGatewayState(state: GatewayPersistedState): void {
   } catch {
     // quota exceeded or unavailable; host disk sync below still runs
   }
-  saveToDiskStorageAsync(GATEWAY_STORAGE_KEY, state).catch(() => {});
+  saveToDiskStorageAsync(GATEWAY_STORAGE_KEY, state, true).catch(() => {});
 }
 
 export function loadGatewayState(): GatewayPersistedState | null {

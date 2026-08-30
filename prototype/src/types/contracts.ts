@@ -1,6 +1,7 @@
 // Tcode 核心接口规范契约 (SDD Contract)
 
 import { buildModelCatalogEntry, getAvailableModelOptions as getCatalogModelOptions, providerItemsToRecords } from '../services/modelGateway';
+import { hostFetch, getHostToken } from '../services/hostClient';
 
 export type SessionTier1Type = 'global' | 'project';
 
@@ -102,7 +103,7 @@ export type ActionExecutionStatus = 'idle' | 'pending' | 'executing' | 'success'
 
 export interface AgentPendingAction {
   id: string;
-  type: 'write_file' | 'run_command';
+  type: 'write_file' | 'run_command' | 'read_file';
   target: string;
   code: string;
   linesCount?: number;
@@ -114,13 +115,13 @@ export interface AgentPendingAction {
 // Agent Loop execution result. actionId is the stable link from a rendered action block to its host result.
 export interface ActionResult {
   actionId: string;
-  type: 'write_file' | 'run_command';
+  type: 'write_file' | 'run_command' | 'read_file';
   target: string;           // file path or first line of command
   status: ActionExecutionStatus;
-  output?: string;          // stdout for run_command
+  output?: string;          // stdout for run_command or read_file content
   error?: string;           // stderr or error message
   exitCode?: number;        // for run_command
-  fileSize?: number;        // for write_file
+  fileSize?: number;        // for write_file or read_file
 }
 
 export interface AgentSkillItem {
@@ -640,6 +641,37 @@ export const AVAILABLE_MODELS: AIModelOption[] = [
 
 export function getAllAvailableModels(): AIModelOption[] {
   try {
+    const channels = loadSavedChannels().filter(c => c.status === 'active' || c.status === 'untested');
+    if (channels.length > 0) {
+      const channelModels: AIModelOption[] = [];
+      for (const chan of channels) {
+        const preset = getPresetForChannelType(chan.type);
+        for (const modelId of chan.models) {
+          const uniqueKey = `${chan.id}:${modelId}`;
+          let badge = preset.name.split(' ')[0];
+          if (chan.id.includes('opencode-go')) badge = 'Go套餐·免配';
+          else if (chan.id.includes('opencode-zen')) badge = 'Zen旗舰';
+          else if (chan.priority >= 10) badge = `P${chan.priority}·${badge}`;
+
+          channelModels.push({
+            id: modelId,
+            name: modelId,
+            provider: preset.name.split(' ')[0] as any,
+            providerId: chan.id,
+            uniqueKey,
+            contextLimit: 131072,
+            inputPricePerM: 0,
+            outputPricePerM: 0,
+            badge,
+            description: `${chan.name} (端点: ${chan.baseUrl}) · 优先级 P${chan.priority} 权重 W${chan.weight}`
+          });
+        }
+      }
+      if (channelModels.length > 0) {
+        return channelModels;
+      }
+    }
+
     const providers = loadSavedProviders();
     const records = providerItemsToRecords(providers);
     const catalogs = Object.fromEntries(providers.map(provider => [
@@ -1227,6 +1259,417 @@ export function addCustomChannel(
 }
 
 
+// ============================================================================
+// New-API Channels & Standard Gateway Domain Contracts (Ref: E:\pro\new-api)
+// ============================================================================
+
+export type ChannelType =
+  | 1   // OpenAI
+  | 3   // Azure
+  | 4   // Ollama
+  | 8   // Custom
+  | 14  // Anthropic
+  | 16  // Zhipu
+  | 17  // Ali
+  | 20  // OpenRouter
+  | 24  // Gemini
+  | 25  // Moonshot
+  | 33  // AWS Bedrock
+  | 35  // MiniMax
+  | 40  // SiliconFlow
+  | 43  // DeepSeek
+  | 48  // xAI
+  | 60  // OpenCode
+  | 61; // New API / One API
+
+export interface ChannelPresetMeta {
+  type: ChannelType;
+  name: string;
+  icon: string;
+  defaultBaseUrl: string;
+  defaultTestModel: string;
+  recommendedModels: string[];
+  docUrl?: string;
+  description: string;
+}
+
+export const CHANNEL_PRESETS: ChannelPresetMeta[] = [
+  {
+    type: 60,
+    name: 'OpenCode (Go/Zen 官方网关)',
+    icon: '⚡',
+    defaultBaseUrl: 'https://opencode.ai/zen/go/v1',
+    defaultTestModel: 'mimo-v2.5-free',
+    recommendedModels: [
+      'mimo-v2.5-free',
+      'nemotron-3.5-lightning-free',
+      'ling-3.0-flash-fin-free',
+      'nemotron-3-ultra-free',
+      'deepseek-v4-flash-free',
+      'laguna-s-2.1-free',
+      'claude-sonnet-4-6',
+      'deepseek-v4-flash'
+    ],
+    docUrl: 'https://opencode.ai',
+    description: 'OpenCode 官方极速与推理网关，内置免费高并发 Go 套餐与旗舰 Zen 套餐'
+  },
+  {
+    type: 43,
+    name: 'DeepSeek (深度求索)',
+    icon: '🔵',
+    defaultBaseUrl: 'https://api.deepseek.com',
+    defaultTestModel: 'deepseek-chat',
+    recommendedModels: ['deepseek-chat', 'deepseek-reasoner'],
+    docUrl: 'https://platform.deepseek.com',
+    description: '深度求索官方平台，V3 极速代码与 R1 深度逻辑思考'
+  },
+  {
+    type: 14,
+    name: 'Anthropic (Claude)',
+    icon: '◈',
+    defaultBaseUrl: 'https://api.anthropic.com',
+    defaultTestModel: 'claude-3-5-haiku-20241022',
+    recommendedModels: ['claude-3-7-sonnet', 'claude-3-5-sonnet', 'claude-3-5-haiku'],
+    docUrl: 'https://docs.anthropic.com',
+    description: 'Anthropic 官方平台，Claude 3.7 Sonnet 思考混合架构'
+  },
+  {
+    type: 1,
+    name: 'OpenAI (GPT / Codex)',
+    icon: '🟢',
+    defaultBaseUrl: 'https://api.openai.com',
+    defaultTestModel: 'gpt-4o-mini',
+    recommendedModels: ['gpt-4o', 'gpt-4o-mini', 'o3-mini', 'o1'],
+    docUrl: 'https://platform.openai.com',
+    description: 'OpenAI 官方接口，GPT-4o 多模态与 o3-mini 推理'
+  },
+  {
+    type: 24,
+    name: 'Google Gemini',
+    icon: '✦',
+    defaultBaseUrl: 'https://generativelanguage.googleapis.com',
+    defaultTestModel: 'gemini-2.5-flash',
+    recommendedModels: ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.0-flash'],
+    docUrl: 'https://ai.google.dev',
+    description: '谷歌 Gemini 官方 API，超长 2M 上下文'
+  },
+  {
+    type: 40,
+    name: '硅基流动 (SiliconFlow)',
+    icon: '🌊',
+    defaultBaseUrl: 'https://api.siliconflow.cn',
+    defaultTestModel: 'deepseek-ai/DeepSeek-V3',
+    recommendedModels: [
+      'deepseek-ai/DeepSeek-V3',
+      'deepseek-ai/DeepSeek-R1',
+      'Qwen/Qwen2.5-Coder-32B-Instruct',
+      'Pro/deepseek-ai/DeepSeek-V3'
+    ],
+    docUrl: 'https://siliconflow.cn',
+    description: '国内顶级高吞吐推理算力平台，全面覆盖开源顶流模型'
+  },
+  {
+    type: 4,
+    name: '本地私有 Ollama',
+    icon: '🦙',
+    defaultBaseUrl: 'http://localhost:11434',
+    defaultTestModel: 'qwen2.5-coder:7b',
+    recommendedModels: ['qwen2.5-coder:32b', 'deepseek-r1:14b', 'qwen2.5-coder:7b', 'llama3.3:70b'],
+    docUrl: 'https://ollama.com',
+    description: '本地离线部署运行开源大模型，纯本地隐私零外泄'
+  },
+  {
+    type: 20,
+    name: 'OpenRouter (全球聚合)',
+    icon: '🌐',
+    defaultBaseUrl: 'https://openrouter.ai/api',
+    defaultTestModel: 'openai/gpt-4o-mini',
+    recommendedModels: ['anthropic/claude-3.7-sonnet', 'deepseek/deepseek-r1', 'google/gemini-2.5-pro'],
+    docUrl: 'https://openrouter.ai',
+    description: '全球多模型聚合路由网关'
+  },
+  {
+    type: 16,
+    name: '智谱 AI (GLM / CodeGeeX)',
+    icon: '⚡',
+    defaultBaseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+    defaultTestModel: 'glm-4-flash',
+    recommendedModels: ['glm-4-plus', 'glm-4-air', 'glm-4-flash', 'codegeex-4'],
+    docUrl: 'https://open.bigmodel.cn',
+    description: '智谱 AI 大模型平台'
+  },
+  {
+    type: 17,
+    name: '阿里百炼 (DashScope)',
+    icon: '🟣',
+    defaultBaseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    defaultTestModel: 'qwen-plus',
+    recommendedModels: ['qwen-max', 'qwen-plus', 'qwen-turbo', 'qwen-coder-plus'],
+    docUrl: 'https://dashscope.aliyun.com',
+    description: '阿里云百炼平台与通义千问全系'
+  },
+  {
+    type: 25,
+    name: '月之暗面 (Kimi)',
+    icon: '🌙',
+    defaultBaseUrl: 'https://api.moonshot.cn/v1',
+    defaultTestModel: 'moonshot-v1-8k',
+    recommendedModels: ['moonshot-v1-8k', 'moonshot-v1-32k', 'moonshot-v1-128k'],
+    docUrl: 'https://platform.moonshot.cn',
+    description: 'Kimi 长文本大模型'
+  },
+  {
+    type: 48,
+    name: 'xAI (Grok)',
+    icon: '✕',
+    defaultBaseUrl: 'https://api.x.ai/v1',
+    defaultTestModel: 'grok-2-mini',
+    recommendedModels: ['grok-2', 'grok-2-mini', 'grok-beta'],
+    docUrl: 'https://x.ai',
+    description: '马斯克 xAI Grok 官方推理平台'
+  },
+  {
+    type: 61,
+    name: '自建 New API / One API',
+    icon: '⇄',
+    defaultBaseUrl: 'https://your-new-api-domain.com',
+    defaultTestModel: 'gpt-4o-mini',
+    recommendedModels: ['gpt-4o', 'claude-3-7-sonnet', 'deepseek-chat'],
+    docUrl: 'https://github.com/QuantumNous/new-api',
+    description: '自建 New API / One API 聚合分发中转中枢'
+  },
+  {
+    type: 8,
+    name: '自定义 OpenAI 兼容渠道',
+    icon: '⚙️',
+    defaultBaseUrl: 'https://api.example.com/v1',
+    defaultTestModel: 'default',
+    recommendedModels: ['custom-model'],
+    description: '任意符合 OpenAI /v1 规范的自定义反代或私有端点'
+  }
+];
+
+export interface ChannelItem {
+  id: string;                            // Unique channel identifier
+  name: string;                          // Human-readable channel name
+  type: ChannelType;                     // Channel type (constant/channel.go)
+  key: string;                           // API key (supports multi-key separated by newline)
+  baseUrl: string;                       // Upstream base URL
+  defaultBaseUrl: string;                // Default base URL for this channel type
+  models: string[];                      // Whitelist models enabled on this channel
+  modelMapping?: Record<string, string>; // Model alias mapping, e.g. {"gpt-4": "claude-3-7-sonnet"}
+  status: 'active' | 'disabled' | 'error' | 'untested';
+  responseTime: number;                  // Latency in ms from last probe
+  testTime?: number;                     // Timestamp of last probe
+  testModel?: string;                    // Model used for connectivity probe
+  priority: number;                      // Routing priority (higher = first)
+  weight: number;                        // Load balance weight
+  group: string;                         // Routing group
+  headerOverride?: Record<string, string>;
+  paramOverride?: Record<string, any>;
+  remark?: string;
+}
+
+export const INITIAL_NEW_API_CHANNELS: ChannelItem[] = [
+  {
+    id: 'chan-opencode-go',
+    name: 'OpenCode (Go 套餐直连)',
+    type: 60,
+    key: '',
+    baseUrl: 'https://opencode.ai/zen/go/v1',
+    defaultBaseUrl: 'https://opencode.ai/zen/go/v1',
+    models: [
+      'mimo-v2.5-free',
+      'nemotron-3.5-lightning-free',
+      'ling-3.0-flash-fin-free',
+      'nemotron-3-ultra-free',
+      'deepseek-v4-flash-free',
+      'laguna-s-2.1-free'
+    ],
+    status: 'untested',
+    responseTime: 0,
+    testModel: 'mimo-v2.5-free',
+    priority: 10,
+    weight: 10,
+    group: 'default',
+    remark: 'OpenCode Go 套餐官方免配置直连通道'
+  },
+  {
+    id: 'chan-opencode-zen',
+    name: 'OpenCode (Zen 旗舰套餐)',
+    type: 60,
+    key: '',
+    baseUrl: 'https://opencode.ai/zen/v1',
+    defaultBaseUrl: 'https://opencode.ai/zen/v1',
+    models: [
+      'claude-sonnet-4-6',
+      'deepseek-v4-flash',
+      'claude-opus-4-6',
+      'gemini-3.7-flash'
+    ],
+    status: 'untested',
+    responseTime: 0,
+    testModel: 'deepseek-v4-flash',
+    priority: 5,
+    weight: 10,
+    group: 'default',
+    remark: 'OpenCode Zen 专业旗舰聚合网关'
+  },
+  {
+    id: 'chan-deepseek',
+    name: 'DeepSeek (深度求索官方)',
+    type: 43,
+    key: '',
+    baseUrl: 'https://api.deepseek.com',
+    defaultBaseUrl: 'https://api.deepseek.com',
+    models: ['deepseek-chat', 'deepseek-reasoner'],
+    status: 'untested',
+    responseTime: 0,
+    testModel: 'deepseek-chat',
+    priority: 10,
+    weight: 10,
+    group: 'default'
+  },
+  {
+    id: 'chan-siliconflow',
+    name: '硅基流动 (SiliconFlow)',
+    type: 40,
+    key: '',
+    baseUrl: 'https://api.siliconflow.cn',
+    defaultBaseUrl: 'https://api.siliconflow.cn',
+    models: ['deepseek-ai/DeepSeek-V3', 'deepseek-ai/DeepSeek-R1', 'Qwen/Qwen2.5-Coder-32B-Instruct'],
+    status: 'untested',
+    responseTime: 0,
+    testModel: 'deepseek-ai/DeepSeek-V3',
+    priority: 8,
+    weight: 10,
+    group: 'default'
+  },
+  {
+    id: 'chan-zhipu',
+    name: '智谱 AI (GLM / CodeGeeX)',
+    type: 16,
+    key: '',
+    baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+    defaultBaseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+    models: ['glm-4-plus', 'glm-4-flash', 'codegeex-4'],
+    status: 'untested',
+    responseTime: 0,
+    testModel: 'glm-4-flash',
+    priority: 5,
+    weight: 10,
+    group: 'default'
+  },
+  {
+    id: 'chan-ali',
+    name: '阿里通义千问 (DashScope)',
+    type: 17,
+    key: '',
+    baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    defaultBaseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    models: ['qwen-max', 'qwen-plus', 'qwen-coder-plus'],
+    status: 'untested',
+    responseTime: 0,
+    testModel: 'qwen-plus',
+    priority: 5,
+    weight: 10,
+    group: 'default'
+  },
+  {
+    id: 'chan-claude',
+    name: 'Anthropic (Claude 官方)',
+    type: 14,
+    key: '',
+    baseUrl: 'https://api.anthropic.com',
+    defaultBaseUrl: 'https://api.anthropic.com',
+    models: ['claude-3-7-sonnet', 'claude-3-5-sonnet', 'claude-3-5-haiku'],
+    status: 'untested',
+    responseTime: 0,
+    testModel: 'claude-3-5-haiku',
+    priority: 10,
+    weight: 10,
+    group: 'default'
+  },
+  {
+    id: 'chan-openai',
+    name: 'OpenAI (官方平台)',
+    type: 1,
+    key: '',
+    baseUrl: 'https://api.openai.com',
+    defaultBaseUrl: 'https://api.openai.com',
+    models: ['gpt-4o', 'gpt-4o-mini', 'o3-mini'],
+    status: 'untested',
+    responseTime: 0,
+    testModel: 'gpt-4o-mini',
+    priority: 8,
+    weight: 10,
+    group: 'default'
+  },
+  {
+    id: 'chan-ollama',
+    name: '本地私有 Ollama (离线隔离)',
+    type: 4,
+    key: '',
+    baseUrl: 'http://localhost:11434',
+    defaultBaseUrl: 'http://localhost:11434',
+    models: ['qwen2.5-coder:32b', 'deepseek-r1:14b'],
+    status: 'untested',
+    responseTime: 0,
+    testModel: 'qwen2.5-coder:32b',
+    priority: 0,
+    weight: 10,
+    group: 'default'
+  }
+];
+
+export function loadSavedChannels(): ChannelItem[] {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      const saved = localStorage.getItem('tcode_channels_v2');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+    }
+  } catch (e) {}
+  return INITIAL_NEW_API_CHANNELS;
+}
+
+export function saveChannelsToStorage(channels: ChannelItem[]): void {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('tcode_channels_v2', JSON.stringify(channels));
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('tcode_channels_updated', { detail: channels }));
+        window.dispatchEvent(new CustomEvent('tcode_providers_updated', { detail: channels }));
+      }
+    }
+    saveToDiskStorageAsync('tcode_channels_v2', channels);
+  } catch (e) {}
+}
+
+export function saveCurrentModelToStorage(model: AIModelOption): void {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('codemind_current_model_id', model.uniqueKey || model.id);
+      localStorage.setItem('codemind_current_model_obj', JSON.stringify(model));
+      localStorage.setItem(STORAGE_KEYS.CURRENT_MODEL, JSON.stringify(model));
+    }
+    saveToDiskStorageAsync(STORAGE_KEYS.CURRENT_MODEL, model);
+    saveToDiskStorageAsync('codemind_current_model_id', model.uniqueKey || model.id);
+    saveToDiskStorageAsync('codemind_current_model_obj', model);
+  } catch (e) {}
+}
+
+export function getPresetForChannelType(type: ChannelType): ChannelPresetMeta {
+  const found = CHANNEL_PRESETS.find(p => p.type === type);
+  if (found) return found;
+  return CHANNEL_PRESETS[CHANNEL_PRESETS.length - 1]; // fallback Custom
+}
+
+
 // GitHub Benchmark Model Provider Contracts
 export type ProviderCategory = 'all' | 'domestic' | 'international' | 'aggregator' | 'local';
 
@@ -1260,11 +1703,34 @@ export interface ModelProviderItem {
 }
 
 export const INITIAL_PROVIDERS: ModelProviderItem[] = [
-  // 0. OpenCode Zen Official Gateway
+  // 0. OpenCode Go Official Gateway (Go 套餐直连)
   {
     id: 'provider-opencode',
-    name: 'OpenCode (Zen 官方网关)',
+    name: 'OpenCode (Go 套餐·直连)',
     icon: '⚡',
+    category: 'aggregator',
+    enabled: true,
+    protocol: 'openai',
+    baseUrl: 'https://opencode.ai/zen/go/v1',
+    defaultBaseUrl: 'https://opencode.ai/zen/go/v1',
+    apiKey: '',
+    status: 'untested',
+    latencyMs: 0,
+    docUrl: 'https://opencode.ai',
+    models: [
+      { id: 'mimo-v2.5-free', name: 'OpenCode MiMo v2.5 (Go套餐·深度推理)', enabled: true, contextLimit: 131072, capabilities: ['fast', 'code', 'stream', 'reasoning'], endpointPath: '/chat/completions', adapter: 'openai-compatible-chat', protocol: 'chat_completions' },
+      { id: 'nemotron-3.5-lightning-free', name: 'Nemotron 3.5 Lightning (Go套餐·代码专精)', enabled: true, contextLimit: 131072, capabilities: ['code', 'stream', 'fast'], endpointPath: '/chat/completions', adapter: 'openai-compatible-chat', protocol: 'chat_completions' },
+      { id: 'ling-3.0-flash-fin-free', name: '可灵 3.0 Flash (Go套餐·逻辑闪电)', enabled: true, contextLimit: 131072, capabilities: ['fast', 'stream'], endpointPath: '/chat/completions', adapter: 'openai-compatible-chat', protocol: 'chat_completions' },
+      { id: 'nemotron-3-ultra-free', name: 'Nemotron 3 Ultra (Go套餐·深度代码)', enabled: true, contextLimit: 131072, capabilities: ['code', 'reasoning'], endpointPath: '/chat/completions', adapter: 'openai-compatible-chat', protocol: 'chat_completions' },
+      { id: 'deepseek-v4-flash-free', name: 'DeepSeek V4 Flash (Go套餐·极速闪电)', enabled: true, contextLimit: 65536, capabilities: ['fast', 'code', 'stream'], endpointPath: '/chat/completions', adapter: 'openai-compatible-chat', protocol: 'chat_completions' },
+      { id: 'laguna-s-2.1-free', name: 'Laguna S 2.1 (Go套餐·架构推演)', enabled: true, contextLimit: 131072, capabilities: ['reasoning', 'code'], endpointPath: '/chat/completions', adapter: 'openai-compatible-chat', protocol: 'chat_completions' }
+    ]
+  },
+  // 0.1 OpenCode Zen Official Gateway (Zen 旗舰套餐)
+  {
+    id: 'provider-opencode-zen',
+    name: 'OpenCode (Zen 旗舰套餐)',
+    icon: '👑',
     category: 'aggregator',
     enabled: true,
     protocol: 'openai',
@@ -1275,12 +1741,10 @@ export const INITIAL_PROVIDERS: ModelProviderItem[] = [
     latencyMs: 0,
     docUrl: 'https://opencode.ai',
     models: [
-      { id: 'mimo-v2.5-free', name: 'OpenCode MiMo v2.5 (Go套餐·深度推理)', enabled: true, contextLimit: 131072, capabilities: ['fast', 'code', 'stream', 'reasoning'], endpointPath: '/chat/completions', adapter: 'openai-compatible-chat', protocol: 'chat_completions' },
-      { id: 'nemotron-3.5-lightning-free', name: 'Nemotron 3.5 Lightning (Go套餐·代码专精)', enabled: true, contextLimit: 131072, capabilities: ['code', 'stream', 'fast'], endpointPath: '/chat/completions', adapter: 'openai-compatible-chat', protocol: 'chat_completions' },
-      { id: 'ling-3.0-flash-fin-free', name: '可灵 3.0 Flash (Go套餐·逻辑闪电)', enabled: true, contextLimit: 131072, capabilities: ['fast', 'stream'], endpointPath: '/chat/completions', adapter: 'openai-compatible-chat', protocol: 'chat_completions' },
-      { id: 'nemotron-3-ultra-free', name: 'Nemotron 3 Ultra (Go套餐·深度代码)', enabled: true, contextLimit: 131072, capabilities: ['code', 'reasoning'], endpointPath: '/chat/completions', adapter: 'openai-compatible-chat', protocol: 'chat_completions' },
-      { id: 'claude-sonnet-4-6', name: 'Claude 3.7 Sonnet (OpenCode)', enabled: true, contextLimit: 200000, capabilities: ['reasoning', 'code', 'stream', 'toolCalling'], endpointPath: '/messages', adapter: 'anthropic-messages', protocol: 'anthropic_messages' },
-      { id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash (OpenCode)', enabled: true, contextLimit: 65536, capabilities: ['fast', 'code', 'stream'], endpointPath: '/chat/completions', adapter: 'openai-compatible-chat', protocol: 'chat_completions' }
+      { id: 'claude-sonnet-4-6', name: 'Claude 3.7 Sonnet (OpenCode Zen)', enabled: true, contextLimit: 200000, capabilities: ['reasoning', 'code', 'stream', 'toolCalling'], endpointPath: '/messages', adapter: 'anthropic-messages', protocol: 'anthropic_messages' },
+      { id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash (OpenCode Zen)', enabled: true, contextLimit: 128000, capabilities: ['fast', 'code', 'stream'], endpointPath: '/chat/completions', adapter: 'openai-compatible-chat', protocol: 'chat_completions' },
+      { id: 'claude-opus-4-6', name: 'Claude Opus 4.6 (OpenCode Zen)', enabled: true, contextLimit: 200000, capabilities: ['reasoning', 'code'], endpointPath: '/messages', adapter: 'anthropic-messages', protocol: 'anthropic_messages' },
+      { id: 'gemini-3.7-flash', name: 'Gemini 3.7 Flash (OpenCode Zen)', enabled: true, contextLimit: 200000, capabilities: ['fast', 'code', 'vision'], endpointPath: '/chat/completions', adapter: 'openai-compatible-chat', protocol: 'chat_completions' }
     ]
   },
   // 1. Domestic Chinese Models (国内顶流)
@@ -2460,6 +2924,19 @@ export type RulesMemoryItem = ManagedRule;
 
 export const INITIAL_MANAGED_RULES: ManagedRule[] = [
   {
+    id: 'rule-global-analysis-first',
+    category: 'iron_law',
+    scope: 'global',
+    title: '全局三大铁律 #0: 先分析审查 ➔ 再出解决方案 ➔ 才能开发落地',
+    description: '【严禁盲目直接写码】收到开发需求后，必须先深度分析和审查现有代码与测试契约，输出明确的架构设计与技术解决方案，然后才能落地编写代码 (write_file) 并运行全量测试 (run_command pytest/vitest)！',
+    sourceFile: '.codemind/global_rules.md',
+    enabled: true,
+    priority: 200,
+    readonly: true,
+    updatedAt: 1724900000000,
+    version: 1
+  },
+  {
     id: 'rule-iron-1',
     category: 'iron_law',
     scope: 'project',
@@ -3129,14 +3606,14 @@ export function isFirstLaunchState(sessions: SessionItem[]): boolean {
   return sessions.length === 0 || (sessions.length === 1 && sessions[0].messagesCount === 0);
 }
 
-export async function saveToDiskStorageAsync(key: string, data: any): Promise<void> {
+export async function saveToDiskStorageAsync(key: string, data: any, sensitive = false): Promise<void> {
   try {
     const isDesktop = typeof window !== 'undefined' && (window.location.protocol === 'http:' || window.location.protocol === 'https:');
     if (isDesktop) {
-      await fetch('/api/storage', {
+      await hostFetch('/api/storage', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key, data })
+        body: JSON.stringify({ key, data, sensitive })
       });
     }
   } catch (e) {}
@@ -3146,7 +3623,7 @@ export async function loadFromDiskStorageAsync(key: string): Promise<any> {
   try {
     const isDesktop = typeof window !== 'undefined' && (window.location.protocol === 'http:' || window.location.protocol === 'https:');
     if (isDesktop) {
-      const res = await fetch(`/api/storage?key=${encodeURIComponent(key)}`);
+      const res = await hostFetch(`/api/storage?key=${encodeURIComponent(key)}`);
       const json = await res.json();
       if (json.success && json.data !== null && json.data !== undefined) {
         return json.data;
@@ -3247,10 +3724,20 @@ function sanitizeProviderCredentials(provider: ModelProviderItem): ModelProvider
   const models = provider.id === 'provider-opencode' && Array.isArray(provider.models)
     ? provider.models.filter(model => !NONEXISTENT_OPENCODE_MODELS.has(model.id))
     : provider.models;
-  if (!apiKey) {
-    return { ...provider, apiKey: '', status: 'untested', latencyMs: 0, models };
+  
+  let baseUrl = provider.baseUrl;
+  let defaultBaseUrl = provider.defaultBaseUrl;
+  if (provider.id === 'provider-opencode') {
+    defaultBaseUrl = 'https://opencode.ai/zen/go/v1';
+    if (!baseUrl || baseUrl === 'https://opencode.ai/zen/v1' || baseUrl === 'https://opencode.ai/zen/v1/') {
+      baseUrl = 'https://opencode.ai/zen/go/v1';
+    }
   }
-  return { ...provider, apiKey, models };
+
+  if (!apiKey) {
+    return { ...provider, baseUrl, defaultBaseUrl, apiKey: '', status: 'untested', latencyMs: 0, models };
+  }
+  return { ...provider, baseUrl, defaultBaseUrl, apiKey, models };
 }
 
 function normalizeProviders(providers: ModelProviderItem[]): ModelProviderItem[] {
@@ -3279,7 +3766,7 @@ export function loadSavedProviders(): ModelProviderItem[] {
 export function saveProvidersToStorage(providers: ModelProviderItem[]): void {
   try {
     localStorage.setItem(STORAGE_KEYS.PROVIDERS, JSON.stringify(providers));
-    saveToDiskStorageAsync(STORAGE_KEYS.PROVIDERS, providers);
+    saveToDiskStorageAsync(STORAGE_KEYS.PROVIDERS, providers, true);
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('tcode_providers_updated', { detail: providers }));
     }
@@ -3312,7 +3799,8 @@ export function resolveApiEndpoint(targetUrl: string): { url: string; headers: R
     return {
       url: '/api/proxy',
       headers: {
-        'x-target-url': targetUrl
+        'x-target-url': targetUrl,
+        'X-Tcode-Token': getHostToken()
       }
     };
   }
@@ -3507,4 +3995,23 @@ export function calculateKVCacheMetrics(
     savingsPercentage,
     latencySpeedup
   };
+}
+
+export function loadSavedThemeMode(): string {
+  try {
+    return localStorage.getItem('tcode_theme_mode') || 'cream';
+  } catch (e) {
+    return 'cream';
+  }
+}
+
+export function saveThemeModeToStorage(theme: string): void {
+  try {
+    localStorage.setItem('tcode_theme_mode', theme);
+    saveToDiskStorageAsync('tcode_theme_mode', theme);
+    document.documentElement.setAttribute('data-theme', theme);
+    if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+      window.dispatchEvent(new CustomEvent('tcode_theme_mode_updated', { detail: theme }));
+    }
+  } catch (e) {}
 }
