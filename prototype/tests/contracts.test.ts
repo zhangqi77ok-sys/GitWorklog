@@ -1155,4 +1155,79 @@ describe('Official MCP Specification (2025-06-18) JSON-RPC Lifecycle Contract', 
   });
 });
 
+import { agentEventStore } from '../src/services/agentEventStore';
+import { agentRuntimeController } from '../src/services/agentRuntimeController';
+
+describe('Event-Driven Agent Runtime & Truth-First Execution Contract', () => {
+  it('records immutable events on Run and Round lifecycle creation', () => {
+    agentEventStore.clearAll();
+    const run = agentEventStore.createRun({
+      id: 'run-test-01',
+      sessionId: 'sess-01',
+      userMessageId: 'msg-01',
+      status: 'created',
+      goal: '重构单元测试并验证',
+      modelId: 'deepseek-coder',
+      workMode: 'auto',
+      permissionPolicy: 'ask_destructive',
+      contextSnapshotId: 'snap-01'
+    });
+
+    const round = agentEventStore.createRound({
+      id: 'round-test-01',
+      runId: run.id,
+      index: 1,
+      phase: 'inspect',
+      status: 'thinking'
+    });
+
+    expect(run.roundIds).toContain(round.id);
+    const events = agentEventStore.getAllEvents();
+    expect(events.length).toBeGreaterThanOrEqual(2);
+    expect(events.find(e => e.type === 'run.created')).toBeDefined();
+    expect(events.find(e => e.type === 'round.started')).toBeDefined();
+  });
+
+  it('evaluates permission rules and blocks destructive operations', async () => {
+    // 1. Safe command requires no approval under ask_destructive
+    const safeRes = await agentRuntimeController.requestToolExecution({
+      runId: 'run-test-01',
+      roundId: 'round-test-01',
+      source: 'builtin',
+      toolName: 'run_command',
+      input: { command: 'npm test' }
+    }, 'ask_destructive');
+    expect(safeRes.requiresApproval).toBe(false);
+
+    // 2. Destructive file write requires blocking approval
+    const dangerRes = await agentRuntimeController.requestToolExecution({
+      runId: 'run-test-01',
+      roundId: 'round-test-01',
+      source: 'builtin',
+      toolName: 'write_file',
+      input: { path: 'package.json', content: '{}' }
+    }, 'ask_destructive');
+    expect(dangerRes.requiresApproval).toBe(true);
+    expect(dangerRes.toolCall.status).toBe('awaiting_approval');
+  });
+
+  it('only generates Changeset after actual host file execution succeed', async () => {
+    const { toolCall } = await agentRuntimeController.requestToolExecution({
+      runId: 'run-test-01',
+      roundId: 'round-test-01',
+      source: 'builtin',
+      toolName: 'write_file',
+      input: { path: 'test_demo.txt', content: 'hello agent' }
+    }, 'allow_all');
+
+    const result = await agentRuntimeController.executeApprovedTool(toolCall);
+    expect(result.status).toBe('succeeded');
+    
+    const events = agentEventStore.getAllEvents();
+    const changesetEvt = events.find(e => e.type === 'changeset.applied');
+    expect(changesetEvt).toBeDefined();
+  });
+});
+
+
 
