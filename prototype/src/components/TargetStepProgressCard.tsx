@@ -1,5 +1,5 @@
 import React from 'react';
-import { CheckCircle2, XCircle, Clock, AlertTriangle, Zap, ChevronDown, ChevronUp, Layers } from 'lucide-react';
+import { CheckCircle2, XCircle, Clock, AlertTriangle, Zap, ChevronDown, ChevronUp, Layers, Sparkles } from 'lucide-react';
 import { TargetAcceptanceItem, InternalStepTag, LoopTerminationStatus, AgentRoundItem } from '../types/contracts';
 
 interface TargetStepProgressCardProps {
@@ -38,9 +38,10 @@ const AcceptanceRow: React.FC<AcceptanceRowProps> = ({ item }) => {
             {item.status === 'failed' && <XCircle size={14} color="#DC2626" />}
             {item.status === 'running' && <Zap size={14} color="var(--accent)" />}
             {item.status === 'pending' && <Clock size={14} color="var(--text-muted)" />}
+            {item.status === 'model_claimed' && <Sparkles size={14} color="var(--accent)" />}
           </span>
           <span style={{
-            color: item.status === 'passed' ? 'var(--text-primary)' : item.status === 'failed' ? '#DC2626' : 'var(--text-secondary)',
+            color: item.status === 'passed' ? 'var(--text-primary)' : item.status === 'failed' ? '#DC2626' : item.status === 'model_claimed' ? 'var(--accent)' : 'var(--text-secondary)',
             fontWeight: item.status === 'passed' ? 600 : 400,
             fontSize: '11.5px',
             lineHeight: 1.4

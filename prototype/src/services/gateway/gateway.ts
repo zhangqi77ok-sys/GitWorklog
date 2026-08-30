@@ -323,7 +323,7 @@ export class GatewayFacade {
     adapter: ReturnType<typeof adapterFor>,
     signal?: AbortSignal
   ): Promise<{ content: string; thinking: string; toolCalls: Array<{ id: string; name: string; arguments: string }>; usage?: TokenUsage }> {
-    if (!response.body) throw new GatewayError('模型响应缺少可读取的流体内容', 502, undefined, false);
+    if (!response.body) throw new GatewayError('模型流异常: 上游返回空响应 (HTTP 200 无 Body)', 502, undefined, false);
 
     const reader = response.body.getReader();
     const decoder = new TextDecoder('utf-8');
@@ -331,6 +331,8 @@ export class GatewayFacade {
     let content = '';
     let thinking = '';
     let sawDone = false;
+    let receivedAnyBytes = false;
+    let toolProtocolError = false;
     let sawFinish = false;
     let usage: TokenUsage | undefined;
     const merged = new Map<string, { name: string; arguments: string }>();
@@ -339,6 +341,7 @@ export class GatewayFacade {
       const { done, value } = await reader.read();
       if (done) break;
       buffer += decoder.decode(value, { stream: true });
+      receivedAnyBytes = true;
       const lines = buffer.split('\n');
       buffer = lines.pop() || '';
       for (const line of lines) {
@@ -350,7 +353,9 @@ export class GatewayFacade {
         try {
           parsed = JSON.parse(raw);
         } catch {
-          continue;
+          // P0: unparseable tool protocol must be surfaced, never silently swallowed.
+          toolProtocolError = true;
+          break;
         }
         const streamed = extractUsage(parsed);
         if (streamed) usage = addUsage(usage ?? { ...EMPTY_USAGE }, streamed);
@@ -371,6 +376,12 @@ export class GatewayFacade {
     const toolCalls = Array.from(merged.entries()).map(([id, call]) => ({ id, name: call.name, arguments: call.arguments }));
 
     if (!sawDone && !sawFinish) {
+      if (!receivedAnyBytes) {
+        throw new GatewayError('模型流异常: 上游返回空响应 (HTTP 200 无 Body)', 502, undefined, false);
+      }
+      if (toolProtocolError) {
+        throw new GatewayError('模型流异常: 工具协议解析失败 (data: 事件非法 JSON)', 502, undefined, false);
+      }
       throw new GatewayError('模型流中断：EOF without normal termination signal', 502, undefined, false);
     }
     return { content, thinking, toolCalls, usage };

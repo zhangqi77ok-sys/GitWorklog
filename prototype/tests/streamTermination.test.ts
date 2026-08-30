@@ -9,11 +9,24 @@ describe('stream and tool protocol termination contract', () => {
   });
 
   it('treats EOF without a terminal event as interrupted instead of completed', () => {
-    expect(classifyStreamTermination({ readerDone: true, sawDoneSentinel: false, sawFinishReason: false })).toBe('interrupted');
+    expect(classifyStreamTermination({ readerDone: true, sawDoneSentinel: false, sawFinishReason: false })).toBe('stream_interrupted');
   });
 
   it('does not classify an intentional abort as a provider failure', () => {
     expect(classifyStreamTermination({ readerDone: true, sawDoneSentinel: false, sawFinishReason: false, aborted: true })).toBe('cancelled');
+  });
+
+  it('classifies an HTTP 200 empty body as provider_empty_response', () => {
+    expect(classifyStreamTermination({ readerDone: true, sawDoneSentinel: false, sawFinishReason: false, emptyResponse: true })).toBe('provider_empty_response');
+  });
+
+  it('classifies an unparseable data: event as tool_protocol_error', () => {
+    expect(classifyStreamTermination({ readerDone: false, sawDoneSentinel: false, sawFinishReason: false, toolProtocolError: true })).toBe('tool_protocol_error');
+  });
+
+  it('never lets empty-body or protocol errors masquerade as completed', () => {
+    expect(classifyStreamTermination({ readerDone: true, sawDoneSentinel: true, sawFinishReason: false, emptyResponse: true })).toBe('provider_empty_response');
+    expect(classifyStreamTermination({ readerDone: true, sawDoneSentinel: true, sawFinishReason: false, toolProtocolError: true })).toBe('tool_protocol_error');
   });
 
   it('normalizes generic XML tool_call blocks without leaking them as assistant content', () => {
@@ -30,3 +43,4 @@ describe('stream and tool protocol termination contract', () => {
     expect(parsed.cleanContent).toBe('我先检查文件。');
   });
 });
+

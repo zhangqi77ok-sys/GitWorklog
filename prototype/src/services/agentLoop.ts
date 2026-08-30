@@ -306,12 +306,17 @@ export function mergeAcceptanceCriteria(
     }
 
     if (matched) {
-      // Update status: only upgrade or update if status changed meaningfully
-      if (inc.status === 'passed') {
-        matched.status = 'passed';
-      } else if (inc.status === 'failed' && matched.status !== 'passed') {
+      // P0 iron rule: model text can never verify an item — incoming 'passed'
+      // from parsing is downgraded to a claim; only verifyTargetAcceptance
+      // (physical evidence) may set 'passed'.
+      const incStatus = inc.status === 'passed' ? 'model_claimed' : inc.status;
+      if (incStatus === 'model_claimed') {
+        if (matched.status === 'pending' || matched.status === 'running') {
+          matched.status = 'model_claimed';
+        }
+      } else if (incStatus === 'failed' && matched.status !== 'passed' && matched.status !== 'model_claimed') {
         matched.status = 'failed';
-      } else if (inc.status === 'running' && matched.status === 'pending') {
+      } else if (incStatus === 'running' && matched.status === 'pending') {
         matched.status = 'running';
       }
 
@@ -321,10 +326,11 @@ export function mergeAcceptanceCriteria(
         matched.evidenceDetails = [...(matched.evidenceDetails || []), ...inc.evidenceDetails];
       }
     } else {
-      // Brand new criterion found, append with clean ID
+      // Brand new criterion found, append with clean ID (downgrade model-claimed passed)
       result.push({
         ...inc,
         id: inc.id || `crit-${result.length + 1}`,
+        status: inc.status === 'passed' ? 'model_claimed' : inc.status,
         evidenceDetails: inc.evidenceDetails || []
       });
     }
@@ -347,7 +353,8 @@ export function parseAcceptanceCriteria(content: string): TargetAcceptanceItem[]
       const desc = match[2].trim();
       let status: TargetAcceptanceItem['status'] = 'pending';
       if (mark === 'x' || mark === '✓' || trimmed.startsWith('✓')) {
-        status = 'passed';
+        // P0 iron rule: model self-report is only a claim; physical evidence is required to pass.
+        status = 'model_claimed';
       } else if (mark === '✕' || trimmed.startsWith('✕')) {
         status = 'failed';
       }

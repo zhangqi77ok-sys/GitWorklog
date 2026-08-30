@@ -1473,14 +1473,16 @@ Tcode 必须区分“环境中发现了工作流工具”和“用户选择并�
 - 安装器构建脚本每次从当前 `prototype/dist` 和当前桌面宿主生成核心 EXE，再生成安装向导；构建成功后同时保留版本化安装器 `release/Tcode-Setup-v1.5.0.exe` 与稳定兼容入口 `dist/Tcode-Setup.exe`。
 - 安装后的 `Tcode.exe` 脱离源码目录运行时，宿主固定绑定 `127.0.0.1:8010`；只有安装目录进程实际返回 `GET /health` HTTP 200 和 `GET /` 完整 HTML，才可宣称安装/宿主运行闭环。
 
-### 4.48.2 未闭环：远程模型真实调用
+### 4.48.2 远程模型真实调用（已凭真实 Key 闭环，2026-08-30）
 
-当前环境没有可用于远程 Provider 真实调用验收的云端 API Key 和可达 Base URL。因此：
+经真实 Key 运行时注入（严禁入库），通过桌面宿主 /api/proxy 对 OpenCode Zen 实测：
 
-1. 云端 Provider 缺少 API Key 或 Base URL 时，路由、同步和连通性测试必须在请求前 fail-closed；
-2. 本地 Ollama/本地兼容端点可以免 API Key，但仍需有效 Base URL 和实际可达服务；
-3. 400、401、403、500、网络断开、JSON 解析失败以及空模型目录必须展示真实失败/阻塞状态，不能标记为健康、同步成功或 Agent completed；
-4. 本轮只能确认门禁和错误传播契约已接入，不能把缺少凭据时的远程调用结果写成成功。
+1. `GET https://opencode.ai/zen/v1/models` → HTTP 200（5286B 官方模型清单）；
+2. `POST .../chat/completions` `mimo-v2.5-free` 非流式 → HTTP 200 真实 `chat.completion`（usage 252/16/268，cost "0"）；
+3. 同模型 `stream:true` → HTTP 200 `text/event-stream`，24 chunks / 13 个 `data:` 事件，正常 `[DONE]` 终结；
+4. `deepseek-v4-flash` / `gpt-5.1-codex` → HTTP 401 `CreditsError: Insufficient balance`（Key 有效但付费余额不足，属上游/额度边界，如实展示）；
+5. 门禁契约仍生效：云端缺少 API Key / Base URL 时请求前 fail-closed；本地 Ollama 例外仍需可达 Base URL；
+6. 400/401/403/500、网络断开、JSON 解析失败、空模型目录必须展示真实失败/阻塞状态，不得标记为健康或 completed。
 
 ### 4.48.3 Agent Loop 与工具协议真实状态
 
@@ -1496,3 +1498,13 @@ Tcode 必须区分“环境中发现了工作流工具”和“用户选择并�
 - 兼容升级时清除已知历史占位凭据，并将对应 Provider 恢复为 `untested`；用户自行保存的未知凭据不得被覆盖。
 - 真实 HTTP 400/401/403/500、网络异常或缺少凭据必须显示为阻塞/失败原因，不能伪装成健康连接。
 
+### 4.48.5 RunEngine P0 硬化：SSE 终态五分类与验收物理证据铁律（2026-08-30）
+
+依据 implementation_plan.md P0（紧急基础）完成契约化落地，自动化测试 223 项全绿：
+
+1. **SSE 终态五分类**：`completed`（`[DONE]`/finish_reason）；`stream_interrupted`（EOF 无终止事件，严禁误标完成）；`provider_empty_response`（HTTP 200 空 Body）；`tool_protocol_error`（data: 事件非法 JSON，禁止静默吞掉）；`cancelled`（Abort）；
+2. **验收项物理证据铁律**：模型文本自报 `✓`/`[x]` 仅映射 `model_claimed`；只有真实文件落盘、命令 `exitCode===0` 或测试断言通过才置 `passed`；`mergeAcceptanceCriteria` 禁止把模型输入升级为 `passed`；
+3. **凭据卫生**：源码静态扫描（`tests/credentialHygiene.test.ts`）禁止真实 `sk-` 字面量；Settings 新通道不注入假 Key（`apiKey:''` + `status:'untested'`）；
+4. **UI 呈现**：`model_claimed` 以 Sparkles 区分展示，与 `passed`（CheckCircle）视觉可辨。
+
+执行契约见 [`docs/technical_reviews/runengine-p0-hardening-contract.md`](technical_reviews/runengine-p0-hardening-contract.md)。

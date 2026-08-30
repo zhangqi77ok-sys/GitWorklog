@@ -134,7 +134,7 @@ import {
 import { buildPromptRulesSnapshot } from './services/rulesStore';
 import { buildTier1SkillsSystemPrompt } from './services/skillsEngine';
 import { buildMcpToolsModelPrompt, loadSavedMcpConfigs, initializeMcpServer } from './services/mcpGateway';
-import { classifyStreamTermination } from './services/streamProtocol';
+import { classifyStreamTermination, describeStreamTermination } from './services/streamProtocol';
 import { gatewayRuntime, platformForProvider, hasGatewayAccountsFor } from './services/gateway/gatewayRuntime';
 import type { PreparedGatewayRequest } from './services/gateway/gateway';
 import { estimateTokens, type GatewayMessage } from './services/gateway/transform';
@@ -1182,6 +1182,8 @@ ${mcpToolsPromptSnippet}
           let sawDoneSentinel = false;
           let sawFinishReason = false;
           let readerDone = false;
+          let receivedAnyBytes = false;
+          let toolProtocolError = false;
 
           while (!streamFinished) {
             const { done, value } = await reader.read();
@@ -1190,6 +1192,7 @@ ${mcpToolsPromptSnippet}
               break;
             }
             buffer += decoder.decode(value, { stream: true });
+            receivedAnyBytes = true;
 
             if (isFirstChunk && buffer.trim()) {
               isFirstChunk = false;
@@ -1249,7 +1252,11 @@ ${mcpToolsPromptSnippet}
                   });
                 }
               } catch (error) {
-                addLog('WARN', 'StreamParser', `忽略无法解析的流事件: ${error instanceof Error ? error.message : String(error)}`);
+                // P0: unparseable tool protocol must be surfaced, never silently swallowed.
+                toolProtocolError = true;
+                streamFinished = true;
+                addLog('ERROR', 'StreamParser', `工具协议解析失败: ${error instanceof Error ? error.message : String(error)}`);
+                break;
               }
             }
           }
@@ -1258,13 +1265,15 @@ ${mcpToolsPromptSnippet}
             readerDone,
             sawDoneSentinel,
             sawFinishReason,
-            aborted: controller.signal.aborted
+            aborted: controller.signal.aborted,
+            emptyResponse: readerDone && !receivedAnyBytes,
+            toolProtocolError
           });
           if (termination !== 'completed') {
-            throw new Error(termination === 'cancelled' ? '用户已取消本次模型响应' : '模型流在未收到正常完成信号前中断');
+            throw new Error(termination === 'cancelled' ? '用户已取消本次模型响应' : `模型流异常: ${describeStreamTermination(termination)}`);
           }
         } else {
-          throw new Error('模型响应缺少可读取的流体内容');
+          throw new Error(`模型流异常: ${describeStreamTermination('provider_empty_response')}`);
         }
 
         // Finalize content

@@ -321,7 +321,7 @@ export interface EvidenceItem {
 export interface TargetAcceptanceItem {
   id: string;
   description: string;
-  status: 'pending' | 'running' | 'passed' | 'failed' | 'blocked';
+  status: 'pending' | 'running' | 'passed' | 'failed' | 'blocked' | 'model_claimed';
   evidence?: string;                 // Backwards compatible string summary
   evidenceDetails?: EvidenceItem[]; // 🔬 结构化证据链（命令、退出码、stdout/stderr、文件）
 }

@@ -113,6 +113,17 @@ npm run dev -- --host 127.0.0.1
 4. OpenCode Provider 初始状态改为 `untested` + 空凭据（诚实展示，需在 Settings 配置 opencode.ai 官方 API Key 后才会请求上游）。
 
 **本轮真实探活证据（2026-08-30）**：`dist/Tcode-Setup.exe` 静默安装至独立目录后启动 `Tcode.exe`：`/health` HTTP 200、`/` HTTP 200（867 字节 HTML）；经宿主 `/api/proxy` 拉取 `https://opencode.ai/zen/v1/models` HTTP 200（含 `mimo-v2.5-free`、`deepseek-v4-flash`，无 `hy3-free`）；`/chat/completions` 未带 Key 返回 401（端点可达，凭据门禁生效）。
+## RunEngine P0 硬化（凭据脱敏 + SSE 终态 + 验收铁律，2026-08-30）
+
+依据 implementation_plan.md P0（紧急基础）完成契约化改造，自动化测试 223 项全绿：
+
+1. **硬编码凭据清零**：源码不允许出现真实 `sk-` 凭据字面量；云端凭据一律来自运行时存储，未配置 fail-closed；新增 `tests/credentialHygiene.test.ts` 静态扫描守卫；
+2. **SSE 终态五分类**：`completed` / `stream_interrupted`（EOF 无终止事件）/ `provider_empty_response`（HTTP 200 空 Body）/ `tool_protocol_error`（data: 事件非法 JSON，禁止静默吞掉）/ `cancelled`（Abort）；
+3. **验收项物理证据铁律**：模型文本自报 ✓ 仅映射 `model_claimed`，只有真实文件落盘 / `exitCode===0` / 测试断言通过才置 `passed`；
+4. **新通道诚实状态**：Settings 新增自定义通道不再注入假 Key，`apiKey` 为空 + `status:'untested'`。
+
+真实桌面端验证（真实 Key 仅运行时注入、不入库）：`/health` 200、`/` 200；经宿主 `/api/proxy` 对 OpenCode Zen `mimo-v2.5-free` 非流式 HTTP 200 真实 chat completion（token usage 252/16/268）、流式 `text/event-stream` 24 chunks / 13 data 事件正常 [DONE] 终结。付费模型（`deepseek-v4-flash`/`gpt-5.1-codex`）返回 401 `CreditsError: Insufficient balance`（Key 有效但余额不足，属上游/额度边界）。契约见 `docs/technical_reviews/runengine-p0-hardening-contract.md`。
+
 ## 本轮真实验收边界（2026-08-30）
 
 本轮已闭环的是 Windows 安装与宿主运行链路：安装器由当前 `prototype/dist` 和当前桌面宿主重新构建，安装目录中的 `Tcode.exe` 可作为脱离源码目录的独立宿主启动；验收必须以安装目录进程实际返回为准，而不是以构建成功或截图推断成功。
@@ -124,7 +135,7 @@ npm run dev -- --host 127.0.0.1
 | 安装器构建 | 已闭环 | `release/Tcode-Setup-v1.5.0.exe` 与稳定兼容副本 `dist/Tcode-Setup.exe` 均由本轮脚本生成 |
 | 安装目录冷启动 | 已闭环 | 真实安装至 `E:/pro/agent-learning/smoke-install` 后启动 `Tcode.exe`：`/health` HTTP 200，`/` HTTP 200、867 字节并包含 `<html>`/`index` |
 | Provider/模型路由 | 已实现 fail-closed | 云端缺 API Key/Base URL 时在路由前拒绝；模型级 Adapter/Endpoint 来自目录元数据；默认/历史伪凭据会被清除 |
-| 远程模型真实调用 | 未闭环 | 当前环境没有可用于验收的云端凭据；400/500 等错误不能写成成功 |
+| 远程模型真实调用 | 已闭环（凭据可达模型） | 真实 Key 经宿主 /api/proxy 调用 OpenCode Zen mimo-v2.5-free：非流式 HTTP 200（真实 chat completion）与流式 HTTP 200（[DONE] 正常终结）；付费模型 401 余额不足属上游/额度边界，如实记录 |
 | Agent Loop | 原型契约已覆盖 | `[DONE]`/finish reason 才能完成；异常 EOF、无动作未完成、工具解析失败分别保留真实状态 |
 
 完整契约见 [`docs/technical_reviews/opencode-provider-model-routing-contract.md`](docs/technical_reviews/opencode-provider-model-routing-contract.md) 与 [`docs/technical_reviews/windows-installer-contract.md`](docs/technical_reviews/windows-installer-contract.md)。

@@ -150,7 +150,7 @@ describe('Target-driven Agent Loop - Acceptance criteria & Verifier', () => {
     const items = parseAcceptanceCriteria(markdown);
     expect(items).toHaveLength(4);
     expect(items[0]).toEqual({ id: 'crit-1', description: '登录成功路径正常', status: 'pending' });
-    expect(items[1]).toEqual({ id: 'crit-2', description: '密码加密处理正确', status: 'passed' });
+    expect(items[1]).toEqual({ id: 'crit-2', description: '密码加密处理正确', status: 'model_claimed' });
     expect(items[2]).toEqual({ id: 'crit-3', description: '未登录拦截存在漏洞', status: 'failed' });
     expect(items[3]).toEqual({ id: 'crit-4', description: '补充自动化测试', status: 'pending' });
   });
@@ -204,23 +204,23 @@ describe('Target-driven Agent Loop - Acceptance criteria & Verifier', () => {
 
   it('mergeAcceptanceCriteria cleanly deduplicates across multiple LLM rounds and preserves evidence', () => {
     const round1: TargetAcceptanceItem[] = [
-      { id: 'crit-1', description: '1. 识别工程结构', status: 'passed' },
+      { id: 'crit-1', description: '1. 识别工程结构', status: 'model_claimed' },
       { id: 'crit-2', description: '2. 安装 SDD / TDD Skill', status: 'pending' },
       { id: 'crit-3', description: '3. 运行单元测试通过', status: 'pending' }
     ];
 
     // Model repeats checklist on round 2 with slight wording differences and updated status
     const round2: TargetAcceptanceItem[] = [
-      { id: 'crit-1', description: '识别工程结构', status: 'passed' },
-      { id: 'crit-2', description: '安装 SDD / TDD Skill', status: 'passed' },
+      { id: 'crit-1', description: '识别工程结构', status: 'model_claimed' },
+      { id: 'crit-2', description: '安装 SDD / TDD Skill', status: 'model_claimed' },
       { id: 'crit-3', description: '单元测试与类型检查通过', status: 'pending' }
     ];
 
     const merged = mergeAcceptanceCriteria(round1, round2);
     // Should NOT duplicate items to 6; must remain 3 deduplicated items
     expect(merged).toHaveLength(3);
-    expect(merged[0].status).toBe('passed');
-    expect(merged[1].status).toBe('passed');
+    expect(merged[0].status).toBe('model_claimed');
+    expect(merged[1].status).toBe('model_claimed');
     expect(merged[2].status).toBe('pending');
   });
 });
@@ -248,5 +248,51 @@ describe('Agent Loop contract - native tools and honest termination', () => {
   it('does not classify an explicit-criteria no-action response as completed', () => {
     expect(resolveNoActionLoopStatus('running', true)).toBe('needs_decision');
     expect(resolveNoActionLoopStatus('completed', true)).toBe('completed');
+  });
+});
+
+
+describe('Agent Loop contract - acceptance physical-evidence iron rule (P0)', () => {
+  it('maps model self-reported ✓ to model_claimed, never to passed', () => {
+    const items = parseAcceptanceCriteria('- [x] 修复登录\n✓ 测试通过\n- [ ] 待办\n✕ 失败项');
+    const byDesc = Object.fromEntries(items.map(i => [i.description, i.status]));
+    expect(byDesc['修复登录']).toBe('model_claimed');
+    expect(byDesc['测试通过']).toBe('model_claimed');
+    expect(byDesc['待办']).toBe('pending');
+    expect(byDesc['失败项']).toBe('failed');
+  });
+
+  it('mergeAcceptanceCriteria never upgrades an item to passed from model input', () => {
+    const existing: TargetAcceptanceItem[] = [{ id: 'crit-1', description: '实现 A', status: 'pending' }];
+    const incoming: TargetAcceptanceItem[] = [{ id: 'crit-1', description: '实现 A', status: 'passed' }];
+    const merged = mergeAcceptanceCriteria(existing, incoming);
+    expect(merged[0].status).not.toBe('passed');
+    expect(merged[0].status).toBe('model_claimed');
+  });
+
+  it('mergeAcceptanceCriteria keeps pending when the model is silent and never fabricates evidence', () => {
+    const existing: TargetAcceptanceItem[] = [{ id: 'crit-1', description: '实现 A', status: 'pending' }];
+    const merged = mergeAcceptanceCriteria(existing, [{ id: 'crit-1', description: '实现 A', status: 'pending' }]);
+    expect(merged[0].status).toBe('pending');
+  });
+
+  it('verifyTargetAcceptance requires physical evidence to mark passed and complete', () => {
+    const items: TargetAcceptanceItem[] = [
+      { id: 'crit-1', description: '运行测试', status: 'model_claimed' },
+      { id: 'crit-2', description: '实现模块', status: 'model_claimed' }
+    ];
+    // No physical results: model self-report alone must not complete the run.
+    const noEvidence = verifyTargetAcceptance(items, [], [], []);
+    expect(noEvidence.items.every(i => i.status === 'model_claimed')).toBe(true);
+    expect(noEvidence.status).not.toBe('completed');
+
+    // Real command evidence (exitCode 0) flips the matching item to passed.
+    const withTest = verifyTargetAcceptance(
+      items,
+      [{ id: 'a1', type: 'run_command', target: 'npm test', code: 'npm test', isHighRisk: false, tier: 'silent' }],
+      [{ actionId: 'a1', type: 'run_command', target: 'npm test', status: 'success', exitCode: 0, output: '1 passed' }],
+      []
+    );
+    expect(withTest.items.find(i => /测试/.test(i.description))?.status).toBe('passed');
   });
 });

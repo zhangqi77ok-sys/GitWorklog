@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { loadSavedProfile, saveProfileToStorage, loadSavedAccentColor, saveAccentColorToStorage, DeveloperProfile, DEFAULT_DEVELOPER_PROFILE, AgentSkillItem, loadSavedSkills, saveSkillsToStorage, INITIAL_AGENT_SKILLS } from '../types/contracts';
 import {
   X,
@@ -302,9 +302,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       name: newChanName.trim(),
       protocol: 'openai',
       baseUrl: newChanUrl.trim(),
-      apiKey: newChanKey.trim() || 'sk-custom-placeholder',
-      status: 'healthy',
-      latencyMs: 75,
+      apiKey: newChanKey.trim(),
+      status: 'untested',
+      latencyMs: 0,
       models: [
         { id: 'custom-model-1', name: 'Custom-DeepSeek-R1', enabled: true, contextLimit: 64000 },
         { id: 'custom-model-2', name: 'Custom-Claude-3.5', enabled: true, contextLimit: 200000 }
