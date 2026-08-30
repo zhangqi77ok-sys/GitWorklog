@@ -157,6 +157,10 @@
 - **WP-A（模块二+四）**：✅ 已完成并推送（黄金不变量 + 硬沙箱）。
 - **WP-B（模块五+一）**：✅ 纯逻辑层完成并推送（executionMode/stageGate 契约、策略、迁移、requireUserReview 兼容，16 项新测试）；✅ **UI 接线完成并推送**（B4-B8：ExecutionModeCapsule + Alt+1/2、移除 Harness/Swarm 切换与冗余工作流按钮、Graph 动态编排注入 + 动态图谱门禁、StageGateCard、App 门禁挂起 + 输入框意见模式，新增 12 项测试，全量 342 测试绿）。设计文档：`docs/superpowers/specs/2026-08-31-wp-b-ui-wiring-design.md`。
 - **WP-C（模块三）**：✅ 完成并推送（sessionActorManager 每会话运行态 + per-session AbortController + 门禁按会话分发；useChatColumn Hook D1 状态线程化；App 全局 isStreaming/单例 abort 废除，会话并发提问/独立流式/独立取消；+11 测试）。
+- **WP-C 完善**：✅ 每会话 prompt 队列（promptQueueStore 纯函数 + App per-session 状态，入队/撤回/编辑/移动/顶替按会话隔离；+5 测试）。
+- **模块一完善**：✅ 每会话执行态（SessionExecutionState：会话切换恢复模式、切换持久化到会话级；+4 测试）。
+- **模块七完善**：✅ Active Working Set 聚焦钉扎（recordActiveFile + prioritizeActiveFiles，最近访问文件优先入 RepoMap；+2 测试）。
+- **WP-E 完善**：✅ Swarm 启动入口（Graph 工作流模板「🐝 Swarm 多智能体协同」→ 发送消息即启动真并发 Run + 自动打开工作台）；工作台新增「影子区与纠偏」控制平面页。
 - **WP-D（模块七）**：✅ 完成并推送（RepoMap 骨架注入 assembleCacheOptimizedMessages 前缀层；TTFT 首字遥测；TokenAnalyticsModal + 顶部 HUD 3 指标：总 Token / KV 命中率 / TTFT；+3 测试）。
 - **WP-E（模块六）**：✅ 控制平面完成（宿主 /api/git/worktree/create|list|remove + 沙箱注册 + 4 项 pytest；worktreeManager 影子生命周期；swarmSteering 角色×路径越界规则；SwarmMaster 遥测总线纠偏；swarmExecution 真并发（每 Agent 独立流 + 影子 cwd）；twoPhaseMerge 2PC 门禁（测试绿灯后才落盘）；swarmRuntime 门面；multiRoleAgentRunner 写入路径重定向影子区；+19 测试）。⏸️ 实时 UI 编排接线（SwarmWorkbench 影子区可视化 + Master 干预消息流）留待后续专项，与 WP-C actor 模型统一。
 ## 汇总路线图

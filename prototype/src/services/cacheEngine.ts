@@ -69,6 +69,53 @@ export function buildRepoMapFromTree(
   return paths.slice(0, maxFiles).map(filePath => ({ filePath }));
 }
 
+// 模块七完善：运行期 Active Working Set（最近访问文件，跨 Run 保持，上限 20）
+const activeWorkingSet = new Set<string>();
+
+export function recordActiveFile(filePath: string): void {
+  if (!filePath) return;
+  const p = filePath.replace(/\\/g, '/');
+  activeWorkingSet.delete(p);
+  activeWorkingSet.add(p);
+  while (activeWorkingSet.size > 20) {
+    const first = activeWorkingSet.values().next().value;
+    if (first === undefined) break;
+    activeWorkingSet.delete(first);
+  }
+}
+
+export function getActiveFiles(): string[] {
+  return Array.from(activeWorkingSet);
+}
+
+export function clearActiveFilesForTest(): void {
+  activeWorkingSet.clear();
+}
+
+/**
+ * 模块七完善：Active Working Set 聚焦钉扎 —— 把最近访问过的文件排到 RepoMap
+ * 选择列表最前（在 max 上限内），保证焦点文件永远入图。
+ */
+export function prioritizeActiveFiles(
+  selected: Array<{ filePath: string }>,
+  activeFiles: string[],
+  max = 40
+): Array<{ filePath: string }> {
+  const selectedSet = new Set(selected.map(f => f.filePath.replace(/\\/g, '/')));
+  const pinned: Array<{ filePath: string }> = [];
+  const seen = new Set<string>();
+  // 最近访问优先：按 activeFiles 顺序钉扎。
+  for (const raw of activeFiles) {
+    const p = raw.replace(/\\/g, '/');
+    if (selectedSet.has(p) && !seen.has(p)) {
+      pinned.push({ filePath: p });
+      seen.add(p);
+    }
+  }
+  const rest = selected.filter(f => !seen.has(f.filePath.replace(/\\/g, '/')));
+  return [...pinned, ...rest].slice(0, max);
+}
+
 /**
  * Build the compact RepoMap text from a capped set of file contents
  * (extractFileSymbols + buildCompactRepoMap). Deterministic and <2k tokens.

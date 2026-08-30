@@ -1,8 +1,11 @@
 ﻿import { getActiveWorkflow, getWorkflowPromptDirectives, getWorkflowAllowedTools, ModularWorkflow } from './services/workflowStore';
+import { RuntimeConfigResolver } from './services/runtimeConfigResolver';
+import { taskGraphScheduler } from './services/taskGraphScheduler';
 import { loadSavedExecutionMode, saveExecutionModeToStorage, migratePipelineMode, executionModeFromShortcut, buildModePromptSnippet, loadSessionExecutionMode, saveSessionExecutionMode, type ExecutionMode } from './services/executionMode';
 import { createGateSuspensionFromBlock, createGateSuspension, resolveGateDecision, extractTaskBreakdown, extractSpecPath, shouldSuspendDynamicGraphPlanning, type GateSuspension, type StageGateDecision } from './services/stageGate';
 import { sessionActorManager } from './services/sessionActorManager';
-import { assembleCacheOptimizedMessages, recordCacheHitTelemetry, extractFileSymbols, buildCompactRepoMap, buildRepoMapFromTree, buildRepoMapFromFileContents } from './services/cacheEngine';
+import { enqueueItem, withdrawItem, editItem, moveItem } from './services/promptQueueStore';
+import { assembleCacheOptimizedMessages, recordCacheHitTelemetry, extractFileSymbols, buildCompactRepoMap, buildRepoMapFromTree, buildRepoMapFromFileContents, prioritizeActiveFiles, recordActiveFile, getActiveFiles } from './services/cacheEngine';
 import { hostGateway } from './services/hostGateway';
 import { getContextBudget, getContextTelemetry, compressModelContext } from './services/contextTelemetry';
 // ────────────────────────────────────────────────────────────
@@ -332,6 +335,7 @@ export const App: React.FC = () => {
   const [workMode, setWorkMode] = useState<WorkMode>('act');
   const [executionMode, setExecutionMode] = useState<ExecutionMode>(() => loadSavedExecutionMode());
   const [, setActorTick] = React.useState(0);
+  const [swarmRunId, setSwarmRunId] = useState<string | undefined>(undefined);
   // WP-C: per-session runtime single source of truth -> re-render App on any actor change.
   React.useEffect(() => sessionActorManager.subscribe(() => setActorTick(t => t + 1)), []);
   const [sessionModelMap, setSessionModelMap] = useState<Record<string, string>>(() => {
@@ -528,9 +532,9 @@ export const App: React.FC = () => {
       completionTokens: Math.max(prev.completionTokens, budget.breakdown.toolsTokens)
     }));
   }, [sessionMessages, currentSessionId, currentModel, contextEpochMap]);
-  const [promptQueue, setPromptQueue] = useState<QueuedPromptItem[]>([]);
-  const promptQueueRef = React.useRef<QueuedPromptItem[]>([]);
-  promptQueueRef.current = promptQueue;
+  const [promptQueues, setPromptQueues] = useState<Record<string, QueuedPromptItem[]>>({});
+  const promptQueuesRef = React.useRef<Record<string, QueuedPromptItem[]>>({});
+  promptQueuesRef.current = promptQueues;
 
   const handleExecutionModeChange = (mode: ExecutionMode) => {
     setExecutionMode(mode);
@@ -823,45 +827,38 @@ export const App: React.FC = () => {
     addLog('INFO', 'Workspace', `[文件直达] 已在工作台打开 ${filePath} (目标行: ${line || 1})`);
   };
 
-    const handleEnqueuePrompt = (text: string, mentions?: MentionContextItem[]) => {
+  const handleEnqueuePrompt = (sessionId: string, text: string, mentions?: MentionContextItem[]) => {
     const newItem: QueuedPromptItem = {
       id: `queue-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       text,
       createdAt: Date.now(),
       selectedMentions: mentions
     };
-    setPromptQueue(prev => [...prev, newItem]);
-    addLog('INFO', 'QueueBus', `[队列注入] 新增等待问答任务 #${promptQueue.length + 1}: ${text.slice(0, 30)}...`);
+    setPromptQueues(prev => ({ ...prev, [sessionId]: enqueueItem(prev[sessionId] || [], newItem) }));
+    addLog('INFO', 'QueueBus', `[队列注入] 会话 ${sessionId} 新增等待问答任务: ${text.slice(0, 30)}...`);
   };
 
-  const handleWithdrawQueuedPrompt = (id: string) => {
-    setPromptQueue(prev => prev.filter(q => q.id !== id));
+  const handleWithdrawQueuedPrompt = (sessionId: string, id: string) => {
+    setPromptQueues(prev => ({ ...prev, [sessionId]: withdrawItem(prev[sessionId] || [], id) }));
     addLog('INFO', 'QueueBus', `[队列撤回] 成功撤回任务 [${id}]`);
   };
 
-  const handleEditQueuedPrompt = (id: string, newText: string) => {
-    setPromptQueue(prev => prev.map(q => q.id === id ? { ...q, text: newText } : q));
+  const handleEditQueuedPrompt = (sessionId: string, id: string, newText: string) => {
+    setPromptQueues(prev => ({ ...prev, [sessionId]: editItem(prev[sessionId] || [], id, newText) }));
     addLog('INFO', 'QueueBus', `[队列更新] 任务 [${id}] 内容已更新`);
   };
 
-  const handleMoveQueuedPrompt = (index: number, direction: -1 | 1) => {
-    setPromptQueue(prev => {
-      const nextIdx = index + direction;
-      if (nextIdx < 0 || nextIdx >= prev.length) return prev;
-      const copy = [...prev];
-      const temp = copy[index];
-      copy[index] = copy[nextIdx];
-      copy[nextIdx] = temp;
-      return copy;
-    });
+  const handleMoveQueuedPrompt = (sessionId: string, index: number, direction: -1 | 1) => {
+    setPromptQueues(prev => ({ ...prev, [sessionId]: moveItem(prev[sessionId] || [], index, direction) }));
   };
 
-  const handlePreemptQueuedPrompt = (id: string) => {
-    const item = promptQueue.find(q => q.id === id);
+  const handlePreemptQueuedPrompt = (sessionId: string, id: string) => {
+    const queue = promptQueuesRef.current[sessionId] || [];
+    const item = queue.find(q => q.id === id);
     if (!item) return;
     addLog('WARN', 'QueueBus', `[队列顶替] 立即打断当前问答，强行置顶执行任务: ${item.text.slice(0, 30)}...`);
     handleStopGeneration();
-    setPromptQueue(prev => prev.filter(q => q.id !== id));
+    setPromptQueues(prev => ({ ...prev, [sessionId]: withdrawItem(prev[sessionId] || [], id) }));
     setTimeout(() => {
       handleSendMessage(item.text, item.selectedMentions);
     }, 150);
@@ -876,6 +873,9 @@ export const App: React.FC = () => {
 
   // Execute one parsed action on the host via unified HostGateway with Mode Policy, SandboxGuard & SecurityShield.
   const executeActionOnHost = async (action: AgentAction, runMode: WorkMode = 'act'): Promise<ActionResult> => {
+    if (action.target) {
+      recordActiveFile(action.target);
+    }
     if (action.type === 'read_file') {
       const res = await hostGateway.readFile(action.target);
       return res.success && res.content !== undefined
@@ -951,10 +951,67 @@ export const App: React.FC = () => {
   };
 
 
+  const runSwarmTurn = async (text: string, mentions?: MentionContextItem[]) => {
+    const activeSessionForRun = sessions.find(s => s.id === currentSessionId) || sessions[0];
+    const userMsg: ChatMessage = {
+      id: `user-${Date.now()}`,
+      role: 'user',
+      content: text,
+      timestamp: Date.now(),
+      permissionPolicy,
+      turnIndex: 1
+    };
+    setSessionMessages(prev => ({
+      ...prev,
+      [currentSessionId]: [...(prev[currentSessionId] || []), userMsg]
+    }));
+    try {
+      const configSnapshot = await RuntimeConfigResolver.resolveCurrentConfig(
+        currentModel.provider,
+        currentModel.id,
+        workMode,
+        permissionPolicy,
+        activeSessionForRun?.projectPath || ''
+      );
+      const run = await taskGraphScheduler.startSwarmRun({
+        sessionId: currentSessionId,
+        userMessageId: userMsg.id,
+        goal: text,
+        configSnapshot,
+        projectPath: activeSessionForRun?.projectPath
+      });
+      setSwarmRunId(run.id);
+      addLog('INFO', 'Swarm', `[Swarm Run] 已启动: ${run.id}`);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('tcode_open_swarm_workbench'));
+      }
+    } catch (err: any) {
+      addLog('ERROR', 'Swarm', `[Swarm Run] 启动失败: ${err?.message || String(err)}`);
+      const errMsg: ChatMessage = {
+        id: `swarm-error-${Date.now()}`,
+        role: 'assistant',
+        content: `✕ Swarm Run 启动失败: ${err?.message || String(err)}`,
+        timestamp: Date.now(),
+        auditTag: '⚠️ Swarm 异常'
+      };
+      setSessionMessages(prev => ({
+        ...prev,
+        [currentSessionId]: [...(prev[currentSessionId] || []), errMsg]
+      }));
+    }
+  };
+
   const handleSendMessage = async (text: string, mentions?: MentionContextItem[]) => {
     if (!text.trim()) return;
     if (sessionActorManager.isSessionRunning(currentSessionId)) {
-      handleEnqueuePrompt(text, mentions);
+      handleEnqueuePrompt(currentSessionId, text, mentions);
+      return;
+    }
+
+    // 🐝 WP-E 模块六：Graph 模式下选中 Swarm 工作流 -> 真并发 Swarm Run（影子区 + Master 纠偏 + 2PC）。
+    const activeWorkflowForRun = getActiveWorkflow();
+    if (executionMode === 'graph' && activeWorkflowForRun.id === 'swarm') {
+      await runSwarmTurn(text, mentions);
       return;
     }
 
@@ -1086,7 +1143,7 @@ export const App: React.FC = () => {
         const treeRes = await fetch(`/api/fs/tree?path=${encodeURIComponent(activeSession.projectPath)}`);
         const treeData = await treeRes.json();
         if (treeData.success && Array.isArray(treeData.tree)) {
-          const selected = buildRepoMapFromTree(treeData.tree, 40).slice(0, 12);
+          const selected = prioritizeActiveFiles(buildRepoMapFromTree(treeData.tree, 40), getActiveFiles(), 40).slice(0, 12);
           const contents: Array<{ filePath: string; content: string }> = [];
           for (const f of selected) {
             try {
@@ -2142,11 +2199,11 @@ ${modePromptSnippet}
               isStreaming={sessionActorManager.isSessionRunning(activeSession?.id)}
               onStopGeneration={handleStopGeneration}
               tokenStats={tokenStats}
-              promptQueue={promptQueue}
-              onWithdrawQueuedPrompt={handleWithdrawQueuedPrompt}
-              onEditQueuedPrompt={handleEditQueuedPrompt}
-              onMoveQueuedPrompt={handleMoveQueuedPrompt}
-              onPreemptQueuedPrompt={handlePreemptQueuedPrompt}
+              promptQueue={promptQueues[currentSessionId] || []}
+              onWithdrawQueuedPrompt={(id) => handleWithdrawQueuedPrompt(currentSessionId, id)}
+              onEditQueuedPrompt={(id, newText) => handleEditQueuedPrompt(currentSessionId, id, newText)}
+              onMoveQueuedPrompt={(index, direction) => handleMoveQueuedPrompt(currentSessionId, index, direction)}
+              onPreemptQueuedPrompt={(id) => handlePreemptQueuedPrompt(currentSessionId, id)}
               onSendMessage={handleSendMessage}
               onResolveOptions={handleResolveOptions}
               executionMode={executionMode}
@@ -2155,6 +2212,7 @@ ${modePromptSnippet}
               onGateDecision={handleGateDecision}
               onGateFeedback={(feedback) => handleGateDecision({ approved: false, feedback })}
               onOpenSpec={handleOpenFile}
+              swarmRunId={swarmRunId}
               onForkMessage={handleForkSessionFromMessage}
               onNavigateDiff={(target) => {
                 handleOpenFile(target.filePath, undefined, target.targetLine);

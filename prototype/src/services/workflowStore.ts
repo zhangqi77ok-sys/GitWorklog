@@ -126,6 +126,17 @@ export const NORMAL_WORKFLOW: ModularWorkflow = {
   blocks: []
 };
 
+export const SWARM_WORKFLOW: ModularWorkflow = {
+  id: 'swarm',
+  name: 'Swarm 多智能体协同',
+  icon: '🐝',
+  description: '真并发多角色协作：影子工作区隔离 + Master 实时纠偏 + 两阶段合并 (WP-E)',
+  category: 'hybrid',
+  enabled: true,
+  isDefault: false,
+  blocks: []
+};
+
 export const INITIAL_MODULAR_WORKFLOWS: ModularWorkflow[] = [
   {
     id: 'sdd-workflow',

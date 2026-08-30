@@ -1,4 +1,4 @@
-import { getActiveWorkflow, setActiveWorkflowId, loadSavedWorkflows, ModularWorkflow, NORMAL_WORKFLOW } from '../services/workflowStore';
+import { getActiveWorkflow, setActiveWorkflowId, loadSavedWorkflows, ModularWorkflow, NORMAL_WORKFLOW, SWARM_WORKFLOW } from '../services/workflowStore';
 import { TargetStepProgressCard } from './TargetStepProgressCard';
 import { ActionApprovalModal } from './ActionApprovalModal';
 import { ShareCardModal } from './ShareCardModal';
@@ -157,6 +157,7 @@ interface ChatColumnProps {
   onGateFeedback?: (feedback: string) => void;
   onOpenSpec?: (path: string) => void;
   tokenStats?: TokenStats;
+  swarmRunId?: string;
 }
 
 export const ChatColumn: React.FC<ChatColumnProps> = ({
@@ -195,7 +196,8 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
   onGateDecision,
   onGateFeedback,
   onOpenSpec,
-  tokenStats
+  tokenStats,
+  swarmRunId
 }) => {
   // D1 runtime state threading: per-session streaming/gate from SessionActorManager.
   const chatRuntime = useChatColumn(session.id);
@@ -268,6 +270,13 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
   const [selectedRoundByMsgId, setSelectedRoundByMsgId] = useState<Record<string, number>>({});
   const [userToggledRounds, setUserToggledRounds] = useState<Record<string, boolean>>({});
   const [isSwarmModalOpen, setIsSwarmModalOpen] = useState(false);
+
+  // WP-E：App 发起 Swarm Run 后自动打开工作台
+  useEffect(() => {
+    const openWorkbench = () => setIsSwarmModalOpen(true);
+    window.addEventListener('tcode_open_swarm_workbench', openWorkbench);
+    return () => window.removeEventListener('tcode_open_swarm_workbench', openWorkbench);
+  }, []);
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
     setInputText(val);
@@ -830,7 +839,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
           <ExecutionModeCapsule
             mode={executionMode}
             activeWorkflowId={activeModularWorkflow.id}
-            workflows={[NORMAL_WORKFLOW, ...savedWorkflowsList]}
+            workflows={[NORMAL_WORKFLOW, SWARM_WORKFLOW, ...savedWorkflowsList]}
             onModeChange={onExecutionModeChange}
             onSelectWorkflow={(wf) => {
               setActiveWorkflowId(wf.id);
@@ -3229,6 +3238,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
       <SwarmWorkbenchModal
         isOpen={isSwarmModalOpen}
         onClose={() => setIsSwarmModalOpen(false)}
+        activeRunId={swarmRunId}
       />
     </div>
   );
