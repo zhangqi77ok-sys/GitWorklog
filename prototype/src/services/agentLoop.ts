@@ -758,6 +758,26 @@ export function shouldContinueLoop(params: {
   return { continue: true, reason: 'tool_driven' };
 }
 
+export function resolveAllowedTools(workflowBlock?: { allowedTools?: string[] }, mode?: string): string[] {
+  if (workflowBlock && workflowBlock.allowedTools && workflowBlock.allowedTools.length > 0) {
+    return workflowBlock.allowedTools;
+  }
+  switch (mode) {
+    case 'plan':
+      return ['read_file', 'grep_search', 'find_by_name'];
+    case 'act':
+    default:
+      return ['read_file', 'write_file', 'run_command', 'grep_search', 'find_by_name'];
+  }
+}
+
+export function filterToolDefs(
+  tools: Array<{ name?: string; type?: string }>,
+  allowedTools: string[]
+): Array<{ name?: string; type?: string }> {
+  return (tools || []).filter(t => allowedTools.includes(t.name || '') || allowedTools.includes(t.type || ''));
+}
+
 /** Keeps a no-action round honest: explicit unfinished criteria cannot be marked completed. */
 export function resolveNoActionLoopStatus(
   verifierStatus: LoopTerminationStatus,
