@@ -98,6 +98,8 @@ import { ThinkingBlock } from './ThinkingBlock';
 import { extractThinkingFromText, SLASH_COMMANDS, SlashCommandItem, loadSavedProfile, DeveloperProfile } from '../types/contracts';
 import { GitPullRequest, RotateCcw } from 'lucide-react';
 import type { AgentAction } from '../services/agentLoop';
+import { ManagedRule } from '../types/contracts';
+import { loadSavedRules } from '../services/rulesStore';
 import { getContextBudget, ContextBudget, compressModelContext } from '../services/contextTelemetry';
 
 interface ChatColumnProps {
@@ -282,15 +284,9 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
   }, [isDraggingInputHeight]);
 
   const fileInputRef = React.useRef<HTMLInputElement>(null);
-  const [allRules, setAllRules] = useState<RuleItem[]>(() => {
-    try {
-      const raw = localStorage.getItem('codemind_unified_rules');
-      if (raw) return JSON.parse(raw);
-    } catch (e) {}
-    return INITIAL_RULES;
-  });
+  const [allRules, setAllRules] = useState<ManagedRule[]>(() => loadSavedRules());
 
-  // Sync rules across Settings and ChatColumn dynamically
+  // Sync rules across Settings, RulesMemoryPanel and ChatColumn dynamically
   React.useEffect(() => {
     const handleRulesUpdate = (e: any) => {
       if (e.detail) {
@@ -299,10 +295,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
     };
     window.addEventListener('codemind_rules_updated', handleRulesUpdate);
     window.addEventListener('storage', () => {
-      try {
-        const raw = localStorage.getItem('codemind_unified_rules');
-        if (raw) setAllRules(JSON.parse(raw));
-      } catch (e) {}
+      setAllRules(loadSavedRules());
     });
     return () => {
       window.removeEventListener('codemind_rules_updated', handleRulesUpdate);
@@ -739,84 +732,45 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
           )}
         </div>
 
-        {/* Center: Ultra-Sleek Swarm Relay Indicator & Mode Switcher Button */}
+        {/* Center: Honest Closed-Loop Harness Runtime Pipeline */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', overflowX: 'auto', padding: '0 4px' }}>
-          {pipelineMode === 'swarm' ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--accent)' }}>🐝 调度拓扑:</span>
-              {isStreaming ? (
-                <span style={{
-                  padding: '1px 8px',
-                  borderRadius: '10px',
-                  background: 'rgba(217, 107, 39, 0.15)',
-                  border: '1px solid var(--accent)',
-                  color: 'var(--accent)',
-                  fontSize: '9.5px',
-                  fontWeight: 700,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px'
-                }}>
-                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--accent)' }} />
-                  <span>⚡ {currentModel.name} 实时流式响应中...</span>
-                </span>
-              ) : (
-                <span style={{
-                  padding: '1px 6px',
-                  borderRadius: '3px',
-                  background: 'rgba(22, 163, 74, 0.08)',
-                  color: '#16A34A',
-                  fontSize: '9.5px',
-                  fontWeight: 600,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px'
-                }}>
-                  <span>● 待命中 (就绪)</span>
-                  <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>· {currentModel.name}</span>
-                </span>
-              )}
-            </div>
-          ) : (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', color: 'var(--text-muted)' }}>
-              <span style={{ fontWeight: 700, color: '#2563EB' }}>🛡️ Harness 管道:</span>
-              <span style={{ padding: '1px 4px', borderRadius: '3px', background: 'var(--bg-base)' }}>📜 规则(3)</span>
-              <span>➔</span>
-              <span style={{ color: '#10B981', fontWeight: 600 }}>🛡️ AST</span>
-              <span>➔</span>
-              <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>🧠 {currentModel.name.split(' ')[0]}</span>
-              <span>➔</span>
-              <span style={{ color: '#2563EB', fontWeight: 600 }}>🔌 MCP</span>
-            </div>
-          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px' }}>
+            <span style={{ fontWeight: 700, color: 'var(--accent)', display: 'flex', alignItems: 'center', gap: '3px' }}>
+              <span>🛡️ Harness 闭环执行器:</span>
+            </span>
+            <span style={{ padding: '1px 5px', borderRadius: '3px', background: 'var(--bg-base)', color: 'var(--text-muted)' }}>
+              📜 规则({activeRules.length})
+            </span>
+            <span style={{ color: 'var(--text-muted)' }}>➔</span>
+            <span style={{ padding: '1px 5px', borderRadius: '3px', background: 'rgba(234, 179, 8, 0.12)', color: '#CA8A04', fontWeight: 600 }}>
+              🧠 推演
+            </span>
+            <span style={{ color: 'var(--text-muted)' }}>➔</span>
+            <span style={{ padding: '1px 5px', borderRadius: '3px', background: 'rgba(37, 99, 235, 0.1)', color: '#2563EB', fontWeight: 600 }}>
+              ⚡ 宿主执行
+            </span>
+            <span style={{ color: 'var(--text-muted)' }}>➔</span>
+            <span style={{ padding: '1px 5px', borderRadius: '3px', background: 'rgba(22, 163, 74, 0.1)', color: '#16A34A', fontWeight: 600 }}>
+              🎯 验收验证
+            </span>
+          </div>
 
-          {/* Explicit Mode Switch Button */}
-          <button
-            onClick={() => {
-              const nextMode = pipelineMode === 'swarm' ? 'harness' : 'swarm';
-              setPipelineMode(nextMode);
-              setChangesetToast(nextMode === 'swarm' ? '🐝 已切换至多智能体异构协同蜂群 (Swarm)' : '🛡️ 已切换至轻量 Harness 串行执行管道');
-              setTimeout(() => setChangesetToast(null), 3000);
-            }}
+          <div
             style={{
-              padding: '2px 7px',
-              borderRadius: '10px',
+              padding: '1px 6px',
+              borderRadius: '8px',
               background: 'var(--bg-base)',
               border: '1px solid var(--border-subtle)',
-              color: 'var(--text-secondary)',
-              fontSize: '10px',
-              fontWeight: 600,
-              cursor: 'pointer',
+              color: 'var(--text-muted)',
+              fontSize: '9.5px',
               display: 'flex',
               alignItems: 'center',
-              gap: '3px',
-              transition: 'all 0.15s ease'
+              gap: '3px'
             }}
-            title="点击在 Swarm 蜂群与 Harness 管道之间切换"
+            title="多智能体异构协同蜂群 (Swarm) 正在研发中，后续版本提供 Architect/Coder/Tester 独立模型调度"
           >
-            <span style={{ color: 'var(--accent)' }}>⇄</span>
-            <span>{pipelineMode === 'swarm' ? '切为 Harness' : '切为 Swarm'}</span>
-          </button>
+            <span>🐝 Swarm 协同 (研发中)</span>
+          </div>
         </div>
 
         {/* Right: Merge to Main Pill & Toggle Workbench */}
@@ -2979,7 +2933,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                   }}
                 >
                   <ScrollText size={11} />
-                  <span>📜 {activeRules.length}条规则生效 ▾</span>
+                  <span>📜 {activeRules.length} 条规则已注入 ▾</span>
                 </button>
 
                 {/* Rules Popover */}
@@ -2989,7 +2943,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                     bottom: '34px',
                     right: 0,
                     left: 'auto',
-                    width: 'min(340px, calc(100vw - 48px))',
+                    width: 'min(360px, calc(100vw - 48px))',
                     maxWidth: 'calc(100vw - 48px)',
                     maxHeight: 'min(360px, 60vh)',
                     overflowY: 'auto',
@@ -3002,17 +2956,22 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                     fontSize: '11px'
                   }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '4px' }}>
-                      <span style={{ fontWeight: 700, color: 'var(--accent)' }}>已生效的顶层 System Rules</span>
-                      <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>先行注入 Prompt</span>
+                      <span style={{ fontWeight: 700, color: 'var(--accent)' }}>已注入 Agent 请求的生效规则</span>
+                      <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>实时快照</span>
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                       {activeRules.map(r => (
-                        <div key={r.id} style={{ padding: '4px 6px', background: 'var(--bg-surface)', borderRadius: '4px', border: '1px solid var(--border-subtle)' }}>
-                          <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '2px' }}>
-                            ● {r.title}
+                        <div key={r.id} style={{ padding: '6px 8px', background: 'var(--bg-surface)', borderRadius: '4px', border: '1px solid var(--border-subtle)' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
+                            <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '11px' }}>
+                              ● {r.title}
+                            </span>
+                            <span style={{ fontSize: '9px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                              {r.sourceFile}
+                            </span>
                           </div>
-                          <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
-                            {r.content}
+                          <div style={{ fontSize: '10.5px', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+                            {r.description}
                           </div>
                         </div>
                       ))}

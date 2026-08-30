@@ -1030,3 +1030,48 @@ describe('Stage 5 - Enterprise Air-Gapped & Full Integrity Gate', () => {
     expect(isProductionReady).toBe(true);
   });
 });
+
+import {
+  loadSavedRules,
+  addManagedRule,
+  updateManagedRule,
+  deleteManagedRule,
+  toggleRuleState,
+  buildPromptRulesSnapshot
+} from '../src/services/rulesStore';
+
+describe('Managed Rules & Prompt Injection Contract', () => {
+  it('loads default rules and formats a clean markdown prompt snapshot', () => {
+    const rules = loadSavedRules();
+    expect(rules.length).toBeGreaterThanOrEqual(3);
+
+    const snapshot = buildPromptRulesSnapshot(rules);
+    expect(snapshot.activeCount).toBeGreaterThan(0);
+    expect(snapshot.rulesSnapshotText).toContain('【Tcode 生效规则快照】');
+    expect(snapshot.rulesSnapshotText).toContain('项目三大铁律');
+  });
+
+  it('supports persistent add, update, toggle and delete lifecycle', () => {
+    const added = addManagedRule({
+      title: '测试临时规则',
+      description: '所有异步函数必须捕获异常',
+      category: 'team_rule',
+      scope: 'project',
+      sourceFile: 'tests/rule.md',
+      enabled: true,
+      priority: 99
+    });
+    expect(added[0].title).toBe('测试临时规则');
+    expect(added[0].id).toContain('rule-');
+
+    const toggled = toggleRuleState(added[0].id);
+    expect(toggled.find(r => r.id === added[0].id)?.enabled).toBe(false);
+
+    const updated = updateManagedRule(added[0].id, { description: '已修改的描述' });
+    expect(updated.find(r => r.id === added[0].id)?.description).toBe('已修改的描述');
+
+    const deleted = deleteManagedRule(added[0].id);
+    expect(deleted.find(r => r.id === added[0].id)).toBeUndefined();
+  });
+});
+

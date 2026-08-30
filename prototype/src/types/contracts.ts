@@ -2404,57 +2404,90 @@ export function generatePullRequestDraft(
   };
 }
 
-export interface RulesMemoryItem {
+export interface ManagedRule {
   id: string;
-  category: 'iron_law' | 'lesson' | 'team_rule';
   title: string;
   description: string;
+  category: 'iron_law' | 'lesson' | 'team_rule' | 'global';
+  scope: 'global' | 'project' | 'session';
   sourceFile: string;
   enabled: boolean;
+  priority: number;
+  readonly?: boolean;
+  updatedAt?: number;
+  version?: number;
 }
 
-export const MOCK_RULES_MEMORY: RulesMemoryItem[] = [
+export type RulesMemoryItem = ManagedRule;
+
+export const INITIAL_MANAGED_RULES: ManagedRule[] = [
   {
     id: 'rule-iron-1',
     category: 'iron_law',
+    scope: 'project',
     title: '项目三大铁律 #1: 需求与原型强同步',
     description: '有需求和原型、功能的变更，一定要同步到 PRD 和原型中。',
     sourceFile: 'AGENTS.md',
-    enabled: true
+    enabled: true,
+    priority: 100,
+    readonly: true,
+    updatedAt: 1724900000000,
+    version: 1
   },
   {
     id: 'rule-iron-2',
     category: 'iron_law',
+    scope: 'project',
     title: '项目三大铁律 #2: 需求未澄清严禁开发',
     description: '没有进行需求澄清和原型设计，不准进行任何代码编写。',
     sourceFile: 'AGENTS.md',
-    enabled: true
+    enabled: true,
+    priority: 95,
+    readonly: true,
+    updatedAt: 1724900000000,
+    version: 1
   },
   {
     id: 'rule-iron-3',
     category: 'iron_law',
+    scope: 'project',
     title: '项目三大铁律 #3: 功能原型必须有交互页面',
     description: '设计到的功能原型必须具备真实可点击的高保真交互页面。',
     sourceFile: 'AGENTS.md',
-    enabled: true
+    enabled: true,
+    priority: 90,
+    readonly: true,
+    updatedAt: 1724900000000,
+    version: 1
   },
   {
     id: 'rule-lesson-1',
     category: 'lesson',
+    scope: 'project',
     title: '经验沉淀: 禁止直接 new Store 实例',
     description: '必须通过 StoreFactory 单例方法获取全局 Store，保持单状态源。',
     sourceFile: '.codemind/lessons.md',
-    enabled: true
+    enabled: true,
+    priority: 80,
+    updatedAt: 1724900000000,
+    version: 1
   },
   {
     id: 'rule-team-1',
     category: 'team_rule',
+    scope: 'global',
     title: '团队规范: SDD/TDD 契约前置验证',
     description: '先定义契约纯函数与测试断言，通过后方可注入 UI 组件。',
     sourceFile: '.cursorrules',
-    enabled: true
+    enabled: true,
+    priority: 75,
+    updatedAt: 1724900000000,
+    version: 1
   }
 ];
+
+export const MOCK_RULES_MEMORY: ManagedRule[] = INITIAL_MANAGED_RULES;
+
 
 
 // ============================================================================

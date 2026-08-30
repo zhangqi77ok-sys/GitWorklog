@@ -1,13 +1,28 @@
-import React, { useState } from 'react';
-import { BookOpen, Search, Shield, Sparkles, Code2, Plus, Check, Edit3, Trash2 } from 'lucide-react';
-import { MOCK_RULES_MEMORY, RulesMemoryItem } from '../../types/contracts';
+import React, { useState, useEffect } from 'react';
+import { BookOpen, Search, Shield, Sparkles, Code2, Plus, Check, Edit3, Trash2, Globe, FolderGit2 } from 'lucide-react';
+import { ManagedRule } from '../../types/contracts';
+import { loadSavedRules, saveRulesToStorage, toggleRuleState, addManagedRule, updateManagedRule, deleteManagedRule } from '../../services/rulesStore';
 
 export const RulesMemoryPanel: React.FC = () => {
-  const [rules, setRules] = useState<RulesMemoryItem[]>(MOCK_RULES_MEMORY);
+  const [rules, setRules] = useState<ManagedRule[]>(loadSavedRules());
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeCategory, setActiveCategory] = useState<'all' | 'iron_law' | 'lesson' | 'team_rule'>('all');
+  const [activeCategory, setActiveCategory] = useState<'all' | 'iron_law' | 'lesson' | 'team_rule' | 'global'>('all');
   const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
   const [editPrompt, setEditPrompt] = useState('');
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newTitle, setNewTitle] = useState('');
+  const [newDesc, setNewDesc] = useState('');
+  const [newCategory, setNewCategory] = useState<'team_rule' | 'lesson' | 'global'>('team_rule');
+  const [newScope, setNewScope] = useState<'project' | 'global'>('project');
+  const [newSource, setNewSource] = useState('.cursorrules');
+
+  useEffect(() => {
+    const handleRulesUpdated = (e: any) => {
+      if (e.detail) setRules(e.detail);
+    };
+    window.addEventListener('codemind_rules_updated', handleRulesUpdated);
+    return () => window.removeEventListener('codemind_rules_updated', handleRulesUpdated);
+  }, []);
 
   const filteredRules = rules.filter(r => {
     if (activeCategory !== 'all' && r.category !== activeCategory) return false;
@@ -17,18 +32,42 @@ export const RulesMemoryPanel: React.FC = () => {
     return true;
   });
 
-  const toggleRule = (id: string) => {
-    setRules(prev => prev.map(r => r.id === id ? { ...r, enabled: !r.enabled } : r));
+  const handleToggle = (id: string) => {
+    const updated = toggleRuleState(id);
+    setRules(updated);
   };
 
-  const handleStartEdit = (r: RulesMemoryItem) => {
+  const handleStartEdit = (r: ManagedRule) => {
     setEditingRuleId(r.id);
     setEditPrompt(r.description);
   };
 
   const handleSaveEdit = (id: string) => {
-    setRules(prev => prev.map(r => r.id === id ? { ...r, description: editPrompt } : r));
+    const updated = updateManagedRule(id, { description: editPrompt });
+    setRules(updated);
     setEditingRuleId(null);
+  };
+
+  const handleDelete = (id: string) => {
+    const updated = deleteManagedRule(id);
+    setRules(updated);
+  };
+
+  const handleCreateRule = () => {
+    if (!newTitle.trim() || !newDesc.trim()) return;
+    const updated = addManagedRule({
+      title: newTitle.trim(),
+      description: newDesc.trim(),
+      category: newCategory,
+      scope: newScope,
+      sourceFile: newSource,
+      enabled: true,
+      priority: newCategory === 'lesson' ? 80 : 70
+    });
+    setRules(updated);
+    setNewTitle('');
+    setNewDesc('');
+    setShowAddModal(false);
   };
 
   return (
@@ -53,17 +92,35 @@ export const RulesMemoryPanel: React.FC = () => {
             <BookOpen size={14} color="var(--accent)" />
             <span>规则与经验记忆中心</span>
           </div>
-          <span style={{ fontSize: '10px', color: 'var(--accent)', fontWeight: 600 }}>
-            {rules.filter(r => r.enabled).length}/{rules.length} 条已激活
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ fontSize: '10px', color: 'var(--accent)', fontWeight: 600 }}>
+              {rules.filter(r => r.enabled).length}/{rules.length} 条生效
+            </span>
+            <button
+              onClick={() => setShowAddModal(true)}
+              style={{
+                padding: '2px 6px',
+                borderRadius: '4px',
+                background: 'var(--accent)',
+                color: '#FFF',
+                border: 'none',
+                fontSize: '10px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '2px'
+              }}
+              title="新增自定义规则或沉淀经验"
+            >
+              <Plus size={11} />
+              <span>新建</span>
+            </button>
+          </div>
         </div>
 
         {/* Search Input */}
-        <div style={{
-          position: 'relative',
-          display: 'flex',
-          alignItems: 'center'
-        }}>
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
           <Search size={12} style={{ position: 'absolute', left: '8px', color: 'var(--text-muted)' }} />
           <input
             type="text"
@@ -100,20 +157,6 @@ export const RulesMemoryPanel: React.FC = () => {
             全部 ({rules.length})
           </button>
           <button
-            onClick={() => setActiveCategory('lesson')}
-            style={{
-              padding: '2px 7px',
-              borderRadius: '3px',
-              border: activeCategory === 'lesson' ? '1px solid var(--accent)' : '1px solid var(--border-subtle)',
-              background: activeCategory === 'lesson' ? 'rgba(217, 107, 39, 0.12)' : 'transparent',
-              color: activeCategory === 'lesson' ? 'var(--accent)' : 'var(--text-muted)',
-              fontSize: '10px',
-              cursor: 'pointer'
-            }}
-          >
-            沉淀经验 (.codemind)
-          </button>
-          <button
             onClick={() => setActiveCategory('iron_law')}
             style={{
               padding: '2px 7px',
@@ -126,6 +169,34 @@ export const RulesMemoryPanel: React.FC = () => {
             }}
           >
             三大铁律
+          </button>
+          <button
+            onClick={() => setActiveCategory('lesson')}
+            style={{
+              padding: '2px 7px',
+              borderRadius: '3px',
+              border: activeCategory === 'lesson' ? '1px solid var(--accent)' : '1px solid var(--border-subtle)',
+              background: activeCategory === 'lesson' ? 'rgba(217, 107, 39, 0.12)' : 'transparent',
+              color: activeCategory === 'lesson' ? 'var(--accent)' : 'var(--text-muted)',
+              fontSize: '10px',
+              cursor: 'pointer'
+            }}
+          >
+            经验沉淀 (.codemind)
+          </button>
+          <button
+            onClick={() => setActiveCategory('team_rule')}
+            style={{
+              padding: '2px 7px',
+              borderRadius: '3px',
+              border: activeCategory === 'team_rule' ? '1px solid #2563EB' : '1px solid var(--border-subtle)',
+              background: activeCategory === 'team_rule' ? 'rgba(37, 99, 235, 0.1)' : 'transparent',
+              color: activeCategory === 'team_rule' ? '#2563EB' : 'var(--text-muted)',
+              fontSize: '10px',
+              cursor: 'pointer'
+            }}
+          >
+            团队规范
           </button>
         </div>
       </div>
@@ -159,13 +230,23 @@ export const RulesMemoryPanel: React.FC = () => {
                 <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-primary)' }}>
                   {r.title}
                 </span>
+                <span style={{
+                  fontSize: '9px',
+                  padding: '1px 4px',
+                  borderRadius: '3px',
+                  background: 'var(--bg-base)',
+                  border: '1px solid var(--border-subtle)',
+                  color: 'var(--text-muted)'
+                }}>
+                  {r.scope === 'global' ? '全局' : '工程'}
+                </span>
               </div>
               <input
                 type="checkbox"
                 checked={r.enabled}
-                onChange={() => toggleRule(r.id)}
+                onChange={() => handleToggle(r.id)}
                 style={{ cursor: 'pointer' }}
-                title="开启/禁用该规则"
+                title="开启/禁用该规则 (实时写入持久化并在下轮请求生效)"
               />
             </div>
 
@@ -210,19 +291,146 @@ export const RulesMemoryPanel: React.FC = () => {
             {/* Meta bar */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px', fontSize: '9.5px', color: 'var(--text-muted)' }}>
               <span style={{ fontFamily: 'var(--font-mono)' }}>📄 {r.sourceFile}</span>
-              {editingRuleId !== r.id && (
-                <button
-                  onClick={() => handleStartEdit(r)}
-                  style={{ background: 'transparent', border: 'none', color: 'var(--accent)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '2px', padding: 0 }}
-                >
-                  <Edit3 size={10} />
-                  <span>微调约束</span>
-                </button>
-              )}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                {editingRuleId !== r.id && !r.readonly && (
+                  <button
+                    onClick={() => handleStartEdit(r)}
+                    style={{ background: 'transparent', border: 'none', color: 'var(--accent)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '2px', padding: 0 }}
+                  >
+                    <Edit3 size={10} />
+                    <span>编辑</span>
+                  </button>
+                )}
+                {!r.readonly && (
+                  <button
+                    onClick={() => handleDelete(r.id)}
+                    style={{ background: 'transparent', border: 'none', color: '#EF4444', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '2px', padding: 0 }}
+                    title="删除该规则"
+                  >
+                    <Trash2 size={10} />
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         ))}
       </div>
+
+      {/* Create New Rule Modal */}
+      {showAddModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999
+        }}>
+          <div style={{
+            width: '380px',
+            borderRadius: '8px',
+            background: 'var(--bg-surface)',
+            border: '1px solid var(--border-strong)',
+            padding: '16px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '12px',
+            boxShadow: '0 8px 30px rgba(0,0,0,0.3)'
+          }}>
+            <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
+              ➕ 新建规则 / 经验条目
+            </div>
+
+            <div>
+              <label style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>规则标题:</label>
+              <input
+                type="text"
+                placeholder="例如: 团队规范: 禁止在组件内写内联样式"
+                value={newTitle}
+                onChange={e => setNewTitle(e.target.value)}
+                style={{ width: '100%', padding: '6px 8px', borderRadius: '4px', background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', color: 'var(--text-primary)', fontSize: '11px', outline: 'none' }}
+              />
+            </div>
+
+            <div>
+              <label style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>规则约束详情 (注入 Agent System Prompt):</label>
+              <textarea
+                rows={3}
+                placeholder="详细说明触发条件与行为约束要求..."
+                value={newDesc}
+                onChange={e => setNewDesc(e.target.value)}
+                style={{ width: '100%', padding: '6px 8px', borderRadius: '4px', background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', color: 'var(--text-primary)', fontSize: '11px', outline: 'none' }}
+              />
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+              <div>
+                <label style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>分类:</label>
+                <select
+                  value={newCategory}
+                  onChange={e => setNewCategory(e.target.value as any)}
+                  style={{ width: '100%', padding: '5px', borderRadius: '4px', background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', color: 'var(--text-primary)', fontSize: '11px' }}
+                >
+                  <option value="team_rule">团队规范 (Team Rule)</option>
+                  <option value="lesson">经验沉淀 (Lesson)</option>
+                  <option value="global">全局准则 (Global)</option>
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>作用域:</label>
+                <select
+                  value={newScope}
+                  onChange={e => setNewScope(e.target.value as any)}
+                  style={{ width: '100%', padding: '5px', borderRadius: '4px', background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', color: 'var(--text-primary)', fontSize: '11px' }}
+                >
+                  <option value="project">当前工程 (Project)</option>
+                  <option value="global">全局生效 (Global)</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>来源文件标识:</label>
+              <input
+                type="text"
+                value={newSource}
+                onChange={e => setNewSource(e.target.value)}
+                style={{ width: '100%', padding: '5px 8px', borderRadius: '4px', background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', color: 'var(--text-primary)', fontSize: '11px', outline: 'none' }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '4px' }}>
+              <button
+                onClick={() => setShowAddModal(false)}
+                style={{ padding: '5px 12px', borderRadius: '4px', background: 'transparent', border: '1px solid var(--border-subtle)', color: 'var(--text-muted)', fontSize: '11px', cursor: 'pointer' }}
+              >
+                取消
+              </button>
+              <button
+                onClick={handleCreateRule}
+                disabled={!newTitle.trim() || !newDesc.trim()}
+                style={{
+                  padding: '5px 14px',
+                  borderRadius: '4px',
+                  background: 'var(--accent)',
+                  color: '#FFF',
+                  border: 'none',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  cursor: (!newTitle.trim() || !newDesc.trim()) ? 'not-allowed' : 'pointer',
+                  opacity: (!newTitle.trim() || !newDesc.trim()) ? 0.6 : 1
+                }}
+              >
+                保存并激活
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

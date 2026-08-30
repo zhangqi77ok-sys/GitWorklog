@@ -129,6 +129,7 @@ import {
   InternalStepTag,
   LoopTerminationStatus
 } from './services/agentLoop';
+import { buildPromptRulesSnapshot } from './services/rulesStore';
 
 export const App: React.FC = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -935,6 +936,9 @@ export const App: React.FC = () => {
       }
     } catch (e) {}
 
+    // 📜 Build active rules snapshot to inject into system prompt
+    const { rulesSnapshotText, activeCount, snapshotId } = buildPromptRulesSnapshot();
+
     const systemPrompt = `你是 Tcode (AI Agentic Desktop IDE) 接入的生产级自主 AI Agent 架构师。
 【目标驱动运作法则】:
 1. 收到任务后，在首次回答头部必须明确列出验收标准清单 (Acceptance Criteria):
@@ -948,7 +952,7 @@ ${activeSession.projectPath ? `【本地物理工程已挂载】
 - 物理路径: ${activeSession.projectPath}
 - Git活跃分支: ${activeSession.gitBranch || 'main'}
 Tcode 已通过宿主磁盘与终端桥接将工程提供给你。` : '当前处于全局自由会话模式。'}
-
+${rulesSnapshotText}
 【当前工作模式】: ${workMode === 'act' ? 'Act 落地模式 (自主执行模式)' : 'Plan 规划模式'}
 
 【Tcode Agent Loop 协议】:

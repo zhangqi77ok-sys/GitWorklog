@@ -52,11 +52,7 @@ import {
   addCustomModelToProvider,
   ProviderCategory,
   filterProviders,
-  RuleItem,
-  INITIAL_RULES,
-  toggleRuleItem,
-  addCustomRule,
-  deleteRule,
+  ManagedRule,
   toggleMcpServer,
   INITIAL_KEYBINDINGS,
   INITIAL_MCP_SERVERS,
@@ -70,7 +66,7 @@ import {
 } from '../types/contracts';
 import { hostGateway } from '../services/hostGateway';
 import { clearStorageData, exportSanitizedConfig, loadSavedGlobalSettings, saveGlobalSettingsToStorage, GlobalSettings } from '../services/settingsStore';
-import { loadSavedRules, saveRulesToStorage } from '../services/rulesStore';
+import { loadSavedRules, saveRulesToStorage, addManagedRule, toggleRuleState, deleteManagedRule } from '../services/rulesStore';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -88,7 +84,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [openaiProtocol, setOpenaiProtocol] = useState<'responses' | 'chat_completions'>('responses');
   const [activeTab, setActiveTab] = useState<'gateway' | 'rules' | 'skills' | 'mcp' | 'appearance' | 'keybindings' | 'system'>('rules');
   const [searchFilter, setSearchFilter] = useState('');
-  const [rules, setRules] = useState<RuleItem[]>(loadSavedRules());
+  const [rules, setRules] = useState<ManagedRule[]>(loadSavedRules());
   const [ruleFilter, setRuleFilter] = useState<'all' | 'project' | 'global'>('all');
   const [showAddRuleForm, setShowAddRuleForm] = useState(false);
   const [newRuleTitle, setNewRuleTitle] = useState('');
@@ -586,7 +582,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
 
                   <button
-                    onClick={() => setShowAddRuleForm(!showAddRuleForm)}
+                    onClick={() => setShowAddRuleForm(true)}
                     style={{
                       padding: '4px 10px',
                       borderRadius: '4px',
@@ -675,8 +671,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       </button>
                       <button
                         onClick={() => {
-                          if (!newRuleTitle.trim()) return;
-                          setRules(addCustomRule(rules, { title: newRuleTitle, content: newRuleContent, scope: newRuleScope }));
+                          if (!newRuleTitle.trim() || !newRuleContent.trim()) return;
+                          const updated = addManagedRule({
+                            title: newRuleTitle.trim(),
+                            description: newRuleContent.trim(),
+                            scope: newRuleScope,
+                            category: newRuleScope === 'global' ? 'global' : 'team_rule',
+                            sourceFile: newRuleScope === 'global' ? 'global-rules.json' : '.cursorrules',
+                            enabled: true,
+                            priority: 70
+                          });
+                          setRules(updated);
                           setNewRuleTitle('');
                           setNewRuleContent('');
                           setShowAddRuleForm(false);
@@ -721,9 +726,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             }}>
                               {r.scope === 'project' ? '📁 工程级规则' : '🌐 全局通用规则'}
                             </span>
-                            {r.id.startsWith('rule-') && (
+                            {!r.readonly && (
                               <span
-                                onClick={() => setRules(deleteRule(rules, r.id))}
+                                onClick={() => {
+                                  const updated = deleteManagedRule(r.id);
+                                  setRules(updated);
+                                }}
                                 title="删除此条规则"
                                 style={{ fontSize: '10px', color: 'var(--text-muted)', cursor: 'pointer', marginLeft: 'auto' }}
                               >
@@ -732,15 +740,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             )}
                           </div>
                           <p style={{ fontSize: '11px', color: 'var(--text-secondary)', lineHeight: 1.5, margin: 0 }}>
-                            {r.content}
+                            {r.description}
                           </p>
                         </div>
 
                         <button
                           onClick={() => {
-                            const updated = toggleRuleItem(rules, r.id);
+                            const updated = toggleRuleState(r.id);
                             setRules(updated);
-                            saveRulesToStorage(updated);
                           }}
                           style={{
                             padding: '3px 12px',
