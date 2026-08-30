@@ -7,35 +7,9 @@ export * from './contractsTypes';
 import { buildModelCatalogEntry, getAvailableModelOptions as getCatalogModelOptions, providerItemsToRecords } from '../services/modelGateway';
 import { hostFetch, getHostToken } from '../services/hostClient';
 
-
-
-
-
-
-export function getContextGaugeLevel(current: number, max: number): ContextGaugeLevel {
-  if (max <= 0) return 'safe';
-  const ratio = current / max;
-  if (ratio >= 0.8) return 'danger';
-  if (ratio >= 0.6) return 'warning';
-  return 'safe';
-}
-
-export function calculateTokenSavingsPercent(stats: TokenStats): number {
-  const total = stats.promptTokens + stats.cacheHitTokens;
-  if (total <= 0) return 0;
-  return Math.round((stats.cacheHitTokens / total) * 1000) / 10;
-}
-
-
-
-
-
-
-
-
-
-
-
+export * from './contractsLayout';
+export * from './contractsTelemetry';
+export * from './contractsSafety';
 
 export const INITIAL_AGENT_SKILLS: AgentSkillItem[] = [
   // Tier 1: 专精能力 (Capabilities / 技能)
@@ -203,18 +177,6 @@ export function saveSkillsToStorage(skills: AgentSkillItem[]): void {
   } catch (e) {}
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
 export const liveLogStore: LiveLogItem[] = [
   { id: 'log-1', timestamp: Date.now(), level: 'INFO', module: 'System', message: 'Tcode 内核启动完成，本地同源网关已就绪' }
 ];
@@ -232,15 +194,6 @@ export function appendLiveLog(level: 'INFO' | 'WARN' | 'ERROR' | 'NET', module: 
   return item;
 }
 
-
-export function getWindowBreakpoint(width: number): WindowBreakpoint {
-  if (width >= 2000) return 'ultrawide';
-  if (width >= 1400) return 'standard';
-  if (width >= 1000) return 'laptop';
-  return 'split_half';
-}
-
-// Session Tree Operations
 export function addTagToSession(session: SessionItem, tag: string): SessionItem {
   const cleanTag = tag.trim().replace(/^#/, '');
   if (!cleanTag || session.tags.includes(cleanTag)) return session;
@@ -282,7 +235,6 @@ export function addProjectToWorkspace(
 export function removeProjectFromWorkspace(projects: ProjectGroup[], projectId: string): ProjectGroup[] {
   return projects.filter(p => p.id !== projectId);
 }
-
 
 // AI Models Contract & Registry
 
@@ -518,7 +470,6 @@ export function findModelById(id: string): AIModelOption {
   return AVAILABLE_MODELS.find(m => m.id === id) || AVAILABLE_MODELS.find(m => m.id === 'deepseek-v4-flash') || AVAILABLE_MODELS[0];
 }
 
-
 // Terminal Management Contract
 
 export function createTerminalTab(existing: TerminalTab[], shell: string = 'PowerShell', defaultCwd: string = 'e:/pro/agent-learning'): TerminalTab {
@@ -561,10 +512,7 @@ export function closeTerminalTab(existing: TerminalTab[], tabId: string): Termin
   return existing.filter(t => t.id !== tabId);
 }
 
-
 // File Explorer Contract
-
-
 
 export function filterFilesByQuery(query: string, files: Array<{ path: string; content: string }>): SearchResultFile[] {
   if (!query.trim()) return [];
@@ -595,11 +543,6 @@ export function filterFilesByQuery(query: string, files: Array<{ path: string; c
 }
 
 // Git & Shadow Snapshot Contract
-
-
-
-
-
 
 export const WORKSPACE_MOCK_DATA: Record<string, ProjectWorkspaceData> = {
   'proj-1': {
@@ -718,10 +661,7 @@ export function getProjectWorkspaceData(projectId: string): ProjectWorkspaceData
   return WORKSPACE_MOCK_DATA[projectId] || WORKSPACE_MOCK_DATA['proj-1'];
 }
 
-
 // Settings Modal System Contracts
-
-
 
 export const ACCENT_COLOR_PRESETS: AccentColorOption[] = [
   { id: 'terracotta', name: '陶土暖橙 (默认)', hex: '#D96B27', bgSubtle: 'rgba(217, 107, 39, 0.12)' },
@@ -738,7 +678,6 @@ export function updateKeybinding(bindings: KeybindingItem[], id: string, newKey:
   return bindings.map(b => b.id === id ? { ...b, currentKey: newKey } : b);
 }
 
-
 // Attachment & Rules Contracts
 
 export function addAttachedFile(existing: AttachedFile[], file: { name: string; size?: number; type?: string }): AttachedFile[] {
@@ -754,7 +693,6 @@ export function addAttachedFile(existing: AttachedFile[], file: { name: string; 
 export function removeAttachedFile(existing: AttachedFile[], id: string): AttachedFile[] {
   return existing.filter(f => f.id !== id);
 }
-
 
 export const INITIAL_RULES: RuleItem[] = [
   {
@@ -791,7 +729,6 @@ export function toggleRuleItem(rules: RuleItem[], ruleId: string): RuleItem[] {
   return rules.map(r => r.id === ruleId ? { ...r, enabled: !r.enabled } : r);
 }
 
-
 // Industrial-Grade Model Gateway Contracts
 
 export const INITIAL_ROLE_ROUTING: ModelRoleRouting = {
@@ -808,8 +745,6 @@ export function updateModelRoleRouting(
 ): ModelRoleRouting {
   return { ...current, [role]: newModelId };
 }
-
-
 
 export const INITIAL_CHANNELS: GatewayChannel[] = [
   {
@@ -888,12 +823,9 @@ export function addCustomChannel(
   return [...channels, newChannel];
 }
 
-
 // ============================================================================
 // New-API Channels & Standard Gateway Domain Contracts (Ref: E:\pro\new-api)
 // ============================================================================
-
-
 
 export const CHANNEL_PRESETS: ChannelPresetMeta[] = [
   {
@@ -1050,7 +982,6 @@ export const CHANNEL_PRESETS: ChannelPresetMeta[] = [
     description: '任意符合 OpenAI /v1 规范的自定义反代或私有端点'
   }
 ];
-
 
 export const INITIAL_NEW_API_CHANNELS: ChannelItem[] = [
   {
@@ -1251,10 +1182,7 @@ export function getPresetForChannelType(type: ChannelType): ChannelPresetMeta {
   return CHANNEL_PRESETS[CHANNEL_PRESETS.length - 1]; // fallback Custom
 }
 
-
 // GitHub Benchmark Model Provider Contracts
-
-
 
 export const INITIAL_PROVIDERS: ModelProviderItem[] = [
   // 0. OpenCode Go Official Gateway (Go 套餐直连)
@@ -1577,7 +1505,6 @@ export function addCustomModelToProvider(providers: ModelProviderItem[], provide
 
 // 1. MCP Server & Tools Contracts
 
-
 export const INITIAL_MCP_SERVERS: McpServerItem[] = [
   {
     id: 'mcp-github',
@@ -1684,7 +1611,6 @@ export function closeEditorFile(
 
 // 5. Appearance Theme Preset Contracts
 
-
 export const INITIAL_THEME_CONFIG: ThemeConfig = {
   mode: 'paper-warm',
   fontSize: 13,
@@ -1712,11 +1638,9 @@ export const INITIAL_KEYBINDINGS: KeybindingItem[] = [
   { id: 'kb-settings', actionName: '打开全局首选项与设置弹窗', category: 'navigation', currentKey: 'Ctrl + ,', defaultKey: 'Ctrl + ,' }
 ];
 
-
 // ============================================================================
 // 10. DeepSeek Harness Architecture Integration Contracts
 // ============================================================================
-
 
 export const WORK_MODE_CONFIGS: Record<WorkMode, WorkModeMetadata> = {
   act: {
@@ -1820,11 +1744,9 @@ export function filterCompilerNoise(rawLogs: string[]): {
   };
 }
 
-
 // ============================================================================
 // 11. DX & PM POWER FEATURES CONTRACTS (@Mentions, Changeset, Pinned, ROI)
 // ============================================================================
-
 
 export const DEFAULT_MENTION_ITEMS: MentionContextItem[] = [
   { id: 'm-file-contracts', type: 'file', name: 'contracts.ts', path: 'src/types/contracts.ts', detail: '核心数据契约与接口' },
@@ -1849,8 +1771,6 @@ export function searchMentionItems(
   );
 }
 
-
-
 export const INITIAL_CHANGESET: ChangesetReviewPayload = {
   id: 'cs-001',
   taskId: 'task-refactor-store',
@@ -1874,7 +1794,6 @@ export function rejectChangeset(payload: ChangesetReviewPayload): ChangesetRevie
   return { ...payload, status: 'rejected' };
 }
 
-
 export function togglePinnedFile(
   pinnedList: PinnedFileItem[],
   file: { path: string; name: string; size?: number }
@@ -1892,30 +1811,6 @@ export function togglePinnedFile(
   return [...pinnedList, newItem];
 }
 
-
-export function calculateTokenRoi(stats: TokenStats): TokenRoiStats {
-  const totalTokens = stats.promptTokens + stats.completionTokens + stats.cacheHitTokens;
-  const cacheHitRate = totalTokens > 0 ? (stats.cacheHitTokens / totalTokens) * 100 : 0;
-  const savedCost = (stats.cacheHitTokens / 1000000) * 2.5; // ~$2.5 per 1M tokens saved
-  const linesGenerated = Math.round(stats.completionTokens / 12);
-
-  return {
-    promptTokens: stats.promptTokens,
-    completionTokens: stats.completionTokens,
-    cacheHitTokens: stats.cacheHitTokens,
-    cacheHitRatePercent: Math.round(cacheHitRate * 10) / 10,
-    estimatedCostUsd: stats.estimatedCostUsd,
-    savedCostUsd: Math.round(savedCost * 1000) / 1000,
-    linesGeneratedApprox: linesGenerated
-  };
-}
-
-
-// ============================================================================
-// 12. ADVANCED 5-KILLER FEATURES CONTRACTS (Merge Fork, Sandbox, Swarm, Graph, PII)
-// ============================================================================
-
-// 1. Fork Branch Merging
 export function mergeForkSessionToMain(
   sessions: SessionItem[],
   messages: ChatMessage[],
@@ -1937,40 +1832,6 @@ export function mergeForkSessionToMain(
 }
 
 // 2. Terminal Security Sandbox
-
-
-export function evaluateCommandSafety(command: string): CommandSafetyResult {
-  const cmd = command.trim().toLowerCase();
-
-  const blockedPatterns = [
-    { pattern: /rm\s+-rf\s+[/*]/, reason: '危险的根路径全量递归删除' },
-    { pattern: /drop\s+(database|table|schema)/i, reason: '不可逆的数据库或表结构销毁' },
-    { pattern: /format\s+[a-z]:/i, reason: '磁盘驱动器格式化指令' },
-    { pattern: /git\s+push\s+.*--force.*main/, reason: '强推覆盖生产主分支' }
-  ];
-
-  const warningPatterns = [
-    { pattern: /npm\s+install\s+-g/, reason: '全局系统级依赖安装' },
-    { pattern: /docker\s+run\s+.*--privileged/, reason: '特权容器执行' },
-    { pattern: /chmod\s+(-r\s+)?777/, reason: '开放全部文件执行与读写权限' }
-  ];
-
-  for (const b of blockedPatterns) {
-    if (b.pattern.test(cmd)) {
-      return { level: 'blocked', reason: b.reason, command };
-    }
-  }
-
-  for (const w of warningPatterns) {
-    if (w.pattern.test(cmd)) {
-      return { level: 'warning', reason: w.reason, command };
-    }
-  }
-
-  return { level: 'safe', command };
-}
-
-// 3. Multi-Agent Swarm Mode
 
 export const INITIAL_SWARM_STAGES: SwarmPipelineStage[] = [
   { id: 'swarm-1', role: 'architect', name: 'Architect 架构师', model: 'DeepSeek R1 (Reasoning)', task: '任务拆解与 SDD 接口契约定义', status: 'completed' },
@@ -1995,66 +1856,12 @@ export function queryRepoGraphDependencies(symbolName: string, graph: RepoGraphN
 }
 
 // 5. PII Masking Engine
-export function maskSensitiveText(text: string): { maskedText: string; mapping: Record<string, string> } {
-  const mapping: Record<string, string> = {};
-  let counter = 1;
-
-  // Mask API Keys (e.g. sk-xxxx, gsk_xxxx)
-  let masked = text.replace(/(sk-[a-zA-Z0-9_-]{16,}|gsk_[a-zA-Z0-9_-]{16,})/g, (match) => {
-    const placeholder = `[SEC_API_KEY_${counter++}]`;
-    mapping[placeholder] = match;
-    return placeholder;
-  });
-
-  // Mask Database Passwords (e.g. postgres://user:password@)
-  masked = masked.replace(/(:\/\/[a-zA-Z0-9_-]+:)([^@]+)(@)/g, (match, prefix, pass, suffix) => {
-    const placeholder = `[SEC_DB_PASS_${counter++}]`;
-    mapping[placeholder] = pass;
-    return `${prefix}${placeholder}${suffix}`;
-  });
-
-  return { maskedText: masked, mapping };
-}
-
-export function unmaskSensitiveText(maskedText: string, mapping: Record<string, string>): string {
-  let restored = maskedText;
-  for (const [placeholder, original] of Object.entries(mapping)) {
-    restored = restored.replace(placeholder, original);
-  }
-  return restored;
-}
-
-
-// ============================================================================
-// 13. RESIZABLE LAYOUT CONTRACTS (Split-Pane Widths & Boundaries)
-// ============================================================================
-
 
 export const DEFAULT_LAYOUT_STATE: ResizableLayoutState = {
   leftPanelWidth: 240,
   workbenchWidth: 540,
   terminalHeightPercent: 40
 };
-
-export function clampLeftPanelWidth(width: number): number {
-  return Math.min(Math.max(width, 180), 420);
-}
-
-export function clampWorkbenchWidth(width: number, containerWidth: number = 1440): number {
-  const minWidth = 320;
-  const maxWidth = Math.max(minWidth, containerWidth * 0.65);
-  return Math.min(Math.max(width, minWidth), maxWidth);
-}
-
-export function clampTerminalHeightPercent(percent: number): number {
-  return Math.min(Math.max(percent, 20), 80);
-}
-
-
-// ============================================================================
-// 14. SENIOR DEV PRODUCTION FEATURES CONTRACTS (Lessons, CI, Commits, Probes, Blast)
-// ============================================================================
-
 
 export function appendLessonRule(
   existingRules: LessonRuleItem[],
@@ -2071,7 +1878,6 @@ export function appendLessonRule(
     addedRule
   };
 }
-
 
 export function generatePreFlightCiReport(
   passed: boolean,
@@ -2090,7 +1896,6 @@ export function generatePreFlightCiReport(
     allowPush: passed && currentLineCoverage >= 80
   };
 }
-
 
 export function splitChangesetIntoSemanticCommits(files: Array<{ path: string }>): SemanticCommitItem[] {
   const commits: SemanticCommitItem[] = [];
@@ -2141,7 +1946,6 @@ export function splitChangesetIntoSemanticCommits(files: Array<{ path: string }>
   return commits;
 }
 
-
 export function toggleDebugProbe(
   probes: DebugProbeItem[],
   fileId: string,
@@ -2165,8 +1969,6 @@ export function toggleDebugProbe(
   ];
 }
 
-
-
 export function calculateBlastRadius(sourceFile: string): BlastRadiusReport {
   if (sourceFile.includes('contracts.ts')) {
     return {
@@ -2185,16 +1987,9 @@ export function calculateBlastRadius(sourceFile: string): BlastRadiusReport {
   };
 }
 
-
 // ============================================================================
 // 15. UX & LOGIC CLOSURE CONTRACTS (Collapse Snap, Diff Navigation, Sudo Bypass)
 // ============================================================================
-
-export function clampLeftPanelWithCollapse(width: number): number {
-  if (width < 80) return 0;
-  return clampLeftPanelWidth(width);
-}
-
 
 export function createDiffNavigationTarget(
   fileId: string,
@@ -2208,13 +2003,6 @@ export function createDiffNavigationTarget(
     highlightToken: `diff-target-${fileId}-${targetLine}`
   };
 }
-
-
-export function clampChangesetHeight(height: number): number {
-  return Math.min(Math.max(height, 80), 450);
-}
-
-
 
 export const WORKBENCH_ICON_ACTIONS: WorkbenchIconAction[] = [
   {
@@ -2248,11 +2036,9 @@ export const WORKBENCH_ICON_ACTIONS: WorkbenchIconAction[] = [
   }
 ];
 
-
 // ============================================================================
 // 16. PULL REQUEST DRAFT & RULES MEMORY COCKPIT CONTRACTS
 // ============================================================================
-
 
 export function generatePullRequestDraft(
   branchName: string,
@@ -2273,8 +2059,6 @@ export function generatePullRequestDraft(
     }
   };
 }
-
-
 
 export const INITIAL_MANAGED_RULES: ManagedRule[] = [
   {
@@ -2357,13 +2141,9 @@ export const INITIAL_MANAGED_RULES: ManagedRule[] = [
 
 export const MOCK_RULES_MEMORY: ManagedRule[] = INITIAL_MANAGED_RULES;
 
-
-
 // ============================================================================
 // 17. AUTO MODEL ROUTER, TRAJECTORY TIME TRAVEL & TOPOLOGY GRAPH CONTRACTS
 // ============================================================================
-
-
 
 export const MODEL_ROUTING_STRATEGIES: ModelRoutingStrategy[] = [
   {
@@ -2418,7 +2198,6 @@ export function resolveOptimalModel(prompt: string, strategy: RoutingStrategyId)
   return { modelId: 'claude-3-5-sonnet', modelName: 'Claude 3.5 Sonnet', reason: '检测到复杂代码落地意图 ➔ 自动调度 Sonnet 精准实现' };
 }
 
-
 export const MOCK_TRAJECTORY_STEPS: TrajectoryStepSnapshot[] = [
   {
     stepIndex: 1,
@@ -2458,7 +2237,6 @@ export const MOCK_TRAJECTORY_STEPS: TrajectoryStepSnapshot[] = [
   }
 ];
 
-
 export const MOCK_TOPOLOGY_NODES: ArchitectureTopologyNode[] = [
   {
     id: 'pkg-core',
@@ -2494,13 +2272,9 @@ export const MOCK_TOPOLOGY_NODES: ArchitectureTopologyNode[] = [
   }
 ];
 
-
 // ============================================================================
 // 18. STAGE 2: STREAMING & THINKING BLOCK CONTRACTS
 // ============================================================================
-
-
-
 
 export function parseAgentMessage(rawText: string): ParsedAgentMessage {
   let text = rawText || '';
@@ -2605,12 +2379,9 @@ export function extractThinkingFromText(rawText: string, elapsedSeconds: number 
   };
 }
 
-
 // ============================================================================
 // 19. STAGE 2: FUZZY AST PATCH ENGINE CONTRACTS
 // ============================================================================
-
-
 
 export function applyUnifiedDiffPatch(originalSource: string, chunk: PatchChunk): PatchApplyResult {
   const sourceLines = originalSource.split('\n');
@@ -2651,15 +2422,12 @@ export function applyUnifiedDiffPatch(originalSource: string, chunk: PatchChunk)
   };
 }
 
-
 // OpenCode protocol selection was intentionally removed from the Provider contract.
 // Adapter/protocol/endpoint metadata belongs to ModelCatalogEntry in modelGateway.ts.
 
 // ============================================================================
 // 20. STAGE 3: MULTI-AGENT SWARM & CONTEXT COMPRESSOR CONTRACTS
 // ============================================================================
-
-
 
 export const INITIAL_SWARM_AGENTS: SwarmAgentState[] = [
   { role: 'planner', name: '架构推演者', model: 'DeepSeek-R1', status: 'completed', progress: 100, outputSummary: '完成 AST 依赖拓扑扫描与 4 步重构排期' },
@@ -2692,83 +2460,6 @@ export function extractAstSkeleton(fullCode: string): string {
   return skeletonLines.join('\n');
 }
 
-
-export function redactSensitivePii(rawText: string): RedactionResult {
-  const secretMap: Record<string, string> = {};
-  let count = 0;
-
-  let result = rawText.replace(/(sk-[a-zA-Z0-9_-]{20,})/g, match => {
-    count++;
-    const key = `<REDACTED_APIKEY_${count}>`;
-    secretMap[key] = match;
-    return key;
-  });
-
-  result = result.replace(/(ghp_[a-zA-Z0-9]{30,})/g, match => {
-    count++;
-    const key = `<REDACTED_GHTOKEN_${count}>`;
-    secretMap[key] = match;
-    return key;
-  });
-
-  result = result.replace(/(postgres:\/\/[^:]+:)([^@]+)(@)/g, (_match, prefix, pass, suffix) => {
-    count++;
-    const key = `<REDACTED_DBPASS_${count}>`;
-    secretMap[key] = pass;
-    return `${prefix}${key}${suffix}`;
-  });
-
-  return {
-    redactedText: result,
-    redactedSecretsCount: count,
-    secretMap
-  };
-}
-
-export function unredactSensitivePii(redactedText: string, secretMap: Record<string, string>): string {
-  let restored = redactedText;
-  for (const [placeholder, original] of Object.entries(secretMap)) {
-    restored = restored.split(placeholder).join(original);
-  }
-  return restored;
-}
-
-
-// ============================================================================
-// 22. STAGE 4: SANDBOX GUARD, SHADOW SNAPSHOT & MENTION ENGINE CONTRACTS
-// ============================================================================
-
-
-export function evaluateSandboxCommandSafety(command: string): SandboxSafetyCheckResult {
-  const lower = command.toLowerCase().trim();
-  const dangerousPatterns = [
-    { pattern: 'rm -rf /', reason: '检测到根目录递归删除指令' },
-    { pattern: 'rm -rf *', reason: '检测到通配符无差别删除指令' },
-    { pattern: 'drop database', reason: '检测到数据库销毁指令' },
-    { pattern: 'drop table', reason: '检测到数据表删除指令' },
-    { pattern: 'format c:', reason: '检测到磁盘格式化指令' },
-    { pattern: 'mkfs', reason: '检测到文件系统重置指令' }
-  ];
-
-  for (const { pattern, reason } of dangerousPatterns) {
-    if (lower.includes(pattern)) {
-      return {
-        isSafe: false,
-        command,
-        hazardReason: reason,
-        requiresSudo: true
-      };
-    }
-  }
-
-  return {
-    isSafe: true,
-    command,
-    requiresSudo: false
-  };
-}
-
-
 export function createShadowGitSnapshot(sessionId: string, stepIndex: number, label: string): ShadowSnapshotMeta {
   return {
     snapshotId: `snap-${sessionId}-${stepIndex}`,
@@ -2778,7 +2469,6 @@ export function createShadowGitSnapshot(sessionId: string, stepIndex: number, la
     label
   };
 }
-
 
 export function searchFuzzyMentions(query: string): MentionSearchResultItem[] {
   const allCandidates: MentionSearchResultItem[] = [
@@ -2800,13 +2490,9 @@ export function searchFuzzyMentions(query: string): MentionSearchResultItem[] {
   );
 }
 
-
 // ============================================================================
 // 23. STAGE 5: DESKTOP BUNDLE TARGET & MULTI-PLATFORM CONTRACTS
 // ============================================================================
-
-
-
 
 export function resolveDesktopPlatformConfig(platform: DesktopPlatformType, arch: DesktopArchType = 'x86_64'): DesktopPlatformConfig {
   if (platform === 'windows') {
@@ -2837,7 +2523,6 @@ export function resolveDesktopPlatformConfig(platform: DesktopPlatformType, arch
     isSandboxed: true
   };
 }
-
 
 // ============================================================================
 // 24. ZERO-STATE ONBOARDING & REAL DATA CONTRACTS
@@ -3030,8 +2715,6 @@ export function saveProvidersToStorage(providers: ModelProviderItem[]): void {
   } catch (e) {}
 }
 
-
-
 export function loadSavedProjects(): ProjectGroup[] {
   try {
     const saved = localStorage.getItem(STORAGE_KEYS.PROJECTS);
@@ -3049,7 +2732,6 @@ export function saveProjectsToStorage(projects: ProjectGroup[]): void {
     saveToDiskStorageAsync(STORAGE_KEYS.PROJECTS, projects);
   } catch (e) {}
 }
-
 
 export function resolveApiEndpoint(targetUrl: string): { url: string; headers: Record<string, string> } {
   if (typeof window !== 'undefined' && (window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost')) {
@@ -3199,38 +2881,6 @@ export function saveAccentColorToStorage(color: string): void {
 }
 
 // Real KV Cache Prefix & Token Savings Calculator
-
-export function calculateKVCacheMetrics(
-  messagesCount: number,
-  systemPromptLength: number = 850,
-  rulesCount: number = 5,
-  skillsCount: number = 1
-): KVCacheMetrics {
-  // Static Immutable Prefix: System Prompt (850) + Rules (5 * 120) + Skill (280) + Workspace File Tree (350)
-  const prefixTokens = systemPromptLength + (rulesCount * 120) + (skillsCount * 280) + 350;
-  
-  // Dynamic history accumulated per turn
-  const historyTokens = Math.max(0, (messagesCount - 1) * 620);
-  
-  // Turn cache hit: if turn > 1, prefix + history are hit
-  const turnCacheHitTokens = messagesCount > 1 ? prefixTokens + historyTokens : 0;
-  const totalCacheHitTokens = Math.max(0, messagesCount > 1 ? (messagesCount - 1) * prefixTokens + historyTokens : 0);
-  
-  // Cost saved: ¥0.000001 per token cached (DeepSeek / Claude 90% discount)
-  const savedCostYuan = Number((totalCacheHitTokens * 0.0000018).toFixed(4));
-  const savingsPercentage = totalCacheHitTokens > 0 ? 89.5 : 0;
-  const latencySpeedup = totalCacheHitTokens > 0 ? '2.8x' : '1.0x';
-
-  return {
-    prefixTokens,
-    historyTokens,
-    turnCacheHitTokens,
-    totalCacheHitTokens,
-    savedCostYuan,
-    savingsPercentage,
-    latencySpeedup
-  };
-}
 
 export function loadSavedThemeMode(): string {
   try {
