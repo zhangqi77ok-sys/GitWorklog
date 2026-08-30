@@ -197,6 +197,29 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+
+    def _proxy_guard(self, target_url: str):
+        """Validate proxy target against allowlist; returns extra_hosts or None (403 sent)."""
+        extra_hosts = set()
+        for cfg_file in ('codemind_providers.json', 'codemind_gateway_v2.json'):
+            try:
+                cfg_path = get_storage_dir() / cfg_file
+                if cfg_path.is_file():
+                    payload = json.loads(cfg_path.read_text(encoding='utf-8'))
+                    if credential_crypto.is_encrypted_envelope(payload):
+                        payload = json.loads(credential_crypto.unwrap_envelope(payload))
+                    extra_hosts |= proxy_policy.extract_extra_hosts(
+                        payload if isinstance(payload, list)
+                        else payload.get('providers') or payload.get('accounts') or []
+                    )
+            except Exception:
+                pass
+        ok, reason = proxy_policy.is_allowed_target(target_url, extra_hosts)
+        if not ok:
+            self._send_json(403, {'error': 'PROXY_TARGET_DENIED', 'code': 403, 'reason': reason})
+            return None
+        return extra_hosts
+
     def do_OPTIONS(self):
         origin = self.headers.get("Origin")
         if origin is None or not host_auth.origin_is_allowed(origin):
@@ -474,7 +497,11 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(b'{"error": "Missing target URL"}')
                 return
-                
+
+            extra_hosts = self._proxy_guard(target_url)
+            if extra_hosts is None:
+                return
+
             req = urllib.request.Request(target_url, method='GET')
             if 'opencode' in target_url:
                 req.add_header('User-Agent', 'OpenCode/1.0')
@@ -485,6 +512,12 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
                 
             try:
                 with urllib.request.urlopen(req, timeout=30) as resp:
+                    final_url = resp.geturl()
+                    ok_final, _ = proxy_policy.is_allowed_target(final_url, extra_hosts)
+                    if not ok_final:
+                        resp.close()
+                        self._send_json(403, {'error': 'PROXY_TARGET_DENIED', 'code': 403, 'reason': 'REDIRECT_ESCAPE'})
+                        return
                     self.send_response(resp.status)
                     self._apply_cors()
                     self.send_header('Content-Type', 'application/json')
@@ -936,6 +969,10 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
                 self.wfile.write(b'{"error": "Missing target URL in proxy request"}')
                 return
 
+            extra_hosts = self._proxy_guard(target_url)
+            if extra_hosts is None:
+                return
+
             req = urllib.request.Request(target_url, data=body_bytes, method='POST')
             req.add_header('Content-Type', 'application/json')
             # OpenCode requires User-Agent: opencode/1.0 to bypass Cloudflare protection
@@ -949,6 +986,12 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
             
             try:
                 with urllib.request.urlopen(req, timeout=60) as resp:
+                    final_url = resp.geturl()
+                    ok_final, _ = proxy_policy.is_allowed_target(final_url, extra_hosts)
+                    if not ok_final:
+                        resp.close()
+                        self._send_json(403, {'error': 'PROXY_TARGET_DENIED', 'code': 403, 'reason': 'REDIRECT_ESCAPE'})
+                        return
                     self.send_response(resp.status)
                     self._apply_cors()
                     for h, v in resp.headers.items():
@@ -982,7 +1025,8 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
 def start_local_server(port=PORT):
     global SERVER_PORT
     try:
-        httpd = socketserver.TCPServer((HOST, port), QuietHandler)
+        httpd = socketserver.ThreadingTCPServer((HOST, port), QuietHandler)
+        httpd.daemon_threads = True
     except OSError as error:
         raise RuntimeError(f'???? {HOST}:{port}?????????') from error
     SERVER_PORT = httpd.server_address[1]

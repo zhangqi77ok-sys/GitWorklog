@@ -148,3 +148,29 @@ def test_terminal_cwd_boundary():
         assert b"PATH_OUTSIDE_WORKSPACE" in data
     finally:
         shutil.rmtree(root, ignore_errors=True)
+
+def test_proxy_allowed_local_target():
+    status, data, _ = _request(
+        "GET", "/api/proxy",
+        headers={"x-target-url": f"http://127.0.0.1:{desktop.SERVER_PORT}/health"},
+    )
+    assert status == 200
+    assert b"tcode" in data
+
+
+def test_proxy_denied_internal_ip():
+    status, data, _ = _request(
+        "GET", "/api/proxy",
+        headers={"x-target-url": "http://192.168.1.1/x"},
+    )
+    assert status == 403
+    assert b"PROXY_TARGET_DENIED" in data
+
+
+def test_proxy_denied_unknown_host():
+    status, data, _ = _request(
+        "GET", "/api/proxy",
+        headers={"x-target-url": "https://evil.example.com/x"},
+    )
+    assert status == 403
+    assert b"PROXY_TARGET_DENIED" in data
