@@ -1,4 +1,4 @@
-import { getActiveWorkflow, getWorkflowPromptDirectives, getWorkflowAllowedTools, ModularWorkflow } from './services/workflowStore';
+﻿import { getActiveWorkflow, getWorkflowPromptDirectives, getWorkflowAllowedTools, ModularWorkflow } from './services/workflowStore';
 import { assembleCacheOptimizedMessages, recordCacheHitTelemetry, extractFileSymbols, buildCompactRepoMap } from './services/cacheEngine';
 import { hostGateway } from './services/hostGateway';
 import { getContextBudget, getContextTelemetry, compressModelContext } from './services/contextTelemetry';
@@ -136,7 +136,9 @@ import {
   ProgressVector,
   InternalStepTag,
   LoopTerminationStatus,
-  isActualTestRunnerCommand
+  isActualTestRunnerCommand,
+  executeSandboxAction,
+  resolveAllowedTools
 } from './services/agentLoop';
 import { buildPromptRulesSnapshot } from './services/rulesStore';
 import { buildTier1SkillsSystemPrompt } from './services/skillsEngine';
@@ -1581,28 +1583,6 @@ ${modePromptSnippet}
         if (actions.length === 0) {
           // 🛡️ Anti-Premature Termination Defender (Harness & Swarm Modes):
           // Check if there are still pending acceptance items that require action:
-          const hasUnfinishedWork = activeAcceptanceItems.some(item => item.status === 'pending' || item.status === 'failed');
-          const hasNotWrittenCode = !accumulatedActionResults.some(r => r.type === 'write_file' && r.status === 'success');
-          const hasInspectActions = accumulatedActionResults.some(r => r.type === 'run_command' || r.type === 'read_file');
-
-          if (frozenRunMode === 'act' && hasUnfinishedWork && (hasInspectActions || hasNotWrittenCode) && loopCount <= 4 && !agentLoopCancelledRef.current) {
-            addLog('WARN', 'AgentLoop', `[Loop #${loopCount}] 现状探查已完成但核心代码尚未落盘/测试未通过，自动驱动进入下一轮编码落地阶段...`);
-            const advanceInstruction = isSwarmRequested
-              ? '【Master 调度总控指令】: 现状盘查与测试契约已分析完成。请立即启动各 Subagent 协同流，由 [Subagent · Coder] 输出 write_file 编写核心业务代码，由 [Subagent · QA Tester] 输出 run_command 运行 pytest 进行测试自愈验证，最后由 Master 给出终审汇报！'
-              : '【Tcode 自动推进指令】: 现状盘查与测试契约分析已就绪。目前尚未完成代码落盘与测试闭环。请立即根据审查分析方案，使用 write_file 编写核心代码，并使用 run_command 运行 pytest 进行测试验证！';
-
-            const autoDriveFeedbackMsg: ChatMessage = {
-              id: `feedback-autodrive-${Date.now()}`,
-              role: 'user',
-              content: advanceInstruction,
-              timestamp: Date.now(),
-              isAgentFeedback: true,
-              auditTag: `🔄 Agent Step #${loopCount} 推进指令`
-            };
-            conversationSnapshot.push(autoDriveFeedbackMsg);
-            continue;
-          }
-
           // If in Swarm Act mode, check if the model stopped prematurely after just planning without outputting Subagents:
           const hasSubagents = finalContent.includes('Subagent') || finalContent.includes('子智能体') || finalContent.includes('### 🐝') || /###\s*[📐💻🧪💾]/.test(finalContent);
           const isSwarmPrematureStop = isSwarmRequested && frozenRunMode === 'act' && loopCount === 1 && !hasSubagents;
@@ -1700,13 +1680,14 @@ ${modePromptSnippet}
           }
         }
 
+        const allowedTools = resolveAllowedTools(currentBlock, frozenRunMode);
         for (const action of actions) {
           if (agentLoopCancelledRef.current) break;
           let result: ActionResult;
 
           if (approvedIds.has(action.id)) {
             publishActionResult(createActionResult(action, 'executing'));
-            result = await executeActionOnHost(action, frozenRunMode);
+            result = await executeSandboxAction(action, allowedTools, (a) => executeActionOnHost(a, frozenRunMode));
           } else {
             result = createActionResult(action, 'rejected');
           }

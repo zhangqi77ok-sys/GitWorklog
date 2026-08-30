@@ -20,7 +20,8 @@ describe('hard tool sandbox - protocol layer', () => {
 });
 
 import { executeSandboxAction } from '../src/services/agentLoop';
-import type { AgentAction, ActionResult } from '../src/types/contracts';
+import type { ActionResult } from '../src/types/contracts';
+import type { AgentAction } from '../src/services/agentLoop';
 
 describe('hard tool sandbox - runtime enforcement', () => {
   const host = async (): Promise<ActionResult> => ({ status: 'success' } as ActionResult);
