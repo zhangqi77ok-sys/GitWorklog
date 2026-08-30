@@ -76,6 +76,17 @@ GET http://127.0.0.1:8010/health → HTTP 200
 GET http://127.0.0.1:8010/       → 完整 HTML
 ```
 
+
+## 🔐 本地宿主安全模型（Host Security Model）
+
+桌面宿主（`127.0.0.1:8010`）为所有 `/api/*` 接口实施四层 fail-closed 防护：
+
+1. **Host Token 鉴权**：进程启动生成随机 Token 并注入首页 HTML（`window.__TCODE_HOST_TOKEN__`），前端经全局 `fetch` 拦截器为所有同源 `/api/*` 请求附加 `X-Tcode-Token` 头；缺失/错误一律 401。跨域请求（如直连上游）绝不携带 Token。
+2. **CORS 收紧 + Host 校验**：不再返回 `Access-Control-Allow-Origin: *`，仅对白名单 Origin（`127.0.0.1:8010`、dev `localhost:5173`）回显；`Host` 头必须为 `127.0.0.1:8010` / `localhost:8010`，防 DNS Rebinding。
+3. **凭据 DPAPI 加密落盘**：`/api/storage` 对 `sensitive: true` 的载荷（providers、gateway v2 账户等）用 Windows DPAPI（当前用户级）加密为信封后写盘，旧明文数据读时兼容。
+4. **路径沙箱 + 代理白名单**：`/api/fs/*`、`/api/git/*`、终端 `cwd` 必须位于已注册工作区根内（`POST /api/workspace/register`，越界 403）；`/api/proxy` 仅放行白名单厂商主机与用户自定义端点，禁内网 IP 直连、禁重定向逃逸（403）。
+
+`/health` 保持开放，供探活。实现契约与测试见 `docs/superpowers/specs/2026-08-30-host-security-hardening-design.md`。
 ## 工作流 Provider 与范式选择
 
 Tcode 不会因为项目规则、Skill 文件或用户安装了 Superspec/SpecKit 等工具，就自动启用 SDD、TDD 或外部工作流。工作流状态严格遵循：
@@ -171,5 +182,7 @@ npm run dev -- --host 127.0.0.1
 | Agent Loop | 原型契约已覆盖 | `[DONE]`/finish reason 才能完成；异常 EOF、无动作未完成、工具解析失败分别保留真实状态 |
 
 完整契约见 [`docs/technical_reviews/opencode-provider-model-routing-contract.md`](docs/technical_reviews/opencode-provider-model-routing-contract.md) 与 [`docs/technical_reviews/windows-installer-contract.md`](docs/technical_reviews/windows-installer-contract.md)。
+
+
 
 
