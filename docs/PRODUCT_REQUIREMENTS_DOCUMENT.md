@@ -1520,3 +1520,16 @@ Tcode 必须区分“环境中发现了工作流工具”和“用户选择并�
 5. **真实验证**：Fresh 安装桌面端经 /api/proxy 对 OpenCode Zen mimo-v2.5-free 发送 stream:true，HTTP 200 text/event-stream，12 data 事件 + [DONE]，真实流式内容 STREAM_OK。
 
 契约见 [`docs/technical_reviews/stream-only-contract.md`](technical_reviews/stream-only-contract.md)。
+
+### 4.48.7 模型服务商控制台 v2（三栏 Master-Detail + 自动探测 + 概率调度，2026-08-30）
+
+按用户要求对模型服务商前后端整体重设计：
+
+1. **三栏布局**：左平台导航（含账号数与状态点）/ 中账号列表（状态、额度条、模型数）/ 右详情编辑（凭据、Base URL、模型白名单、并发、粘性 TTL、立即探测、下游 Key 分发），暖色极简（#FAF8F5 + #D96B27）；
+2. **单一体系**：v1 Provider 目录降级为内置模型目录元数据，账号/凭据统一由 v2 Account 管理，Settings 网关 Tab 移除旧主从列表与旧 GatewayAccountManager；
+3. **添加后自动真实探测**：`probeAccount` 真实 GET {base}/models，2xx/404 → active、401/403 → expired、429 → quota_exhausted、网络/5xx → error，并写回 registry；
+4. **概率轮询调度**：默认 `probability`（N 账号各 1/N），sticky 会话与用户指定账号优先；`lru` 可显式选择（`GatewayRequest.strategy`）；
+5. **5 分钟周期刷新**：`AccountProbeScheduler` 定时重探启用账号（`onRound` 持久化 + 刷新 UI），stop 后停止；
+6. **下游 Key**：`DownstreamKeyStore.update` 支持启停/改名/白名单修改。
+
+契约见 [`docs/technical_reviews/provider-console-redesign-contract.md`](technical_reviews/provider-console-redesign-contract.md)。

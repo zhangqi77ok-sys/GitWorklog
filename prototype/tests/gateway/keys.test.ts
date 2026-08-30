@@ -76,3 +76,21 @@ describe('Gateway v2 - Downstream key distribution', () => {
   });
 });
 
+describe('DownstreamKeyStore - update', () => {
+  it('updates enabled/name/allowlist fields', () => {
+    const store = new DownstreamKeyStore();
+    const key = store.issue({ name: 'k1', modelAllowlist: ['m1'] });
+    store.update(key.id, { enabled: false, name: 'k1-renamed', modelAllowlist: ['m2'] });
+    const updated = store.list().find(k => k.id === key.id)!;
+    expect(updated.enabled).toBe(false);
+    expect(updated.name).toBe('k1-renamed');
+    expect(updated.modelAllowlist).toEqual(['m2']);
+  });
+
+  it('validate rejects a disabled key after update', () => {
+    const store = new DownstreamKeyStore();
+    const key = store.issue({ name: 'k2' });
+    store.update(key.id, { enabled: false });
+    expect(store.validate(key.key)).toEqual({ ok: false, reason: 'disabled' });
+  });
+});

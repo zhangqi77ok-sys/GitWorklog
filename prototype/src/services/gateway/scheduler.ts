@@ -1,5 +1,12 @@
 ﻿import type { GatewayAccount, RouteDecision, RouteRequest, SchedulerState } from './types';
 
+export type SelectionStrategy = 'probability' | 'lru';
+
+export interface SelectAccountOptions {
+  /** 'probability' = uniform random among available candidates (1/N per account). Default. */
+  strategy?: SelectionStrategy;
+}
+
 export function createSchedulerState(): SchedulerState {
   return { lastUsedAt: {}, stickySessions: {} };
 }
@@ -54,7 +61,8 @@ export function selectAccount(
   pool: GatewayAccount[],
   req: RouteRequest,
   state: SchedulerState,
-  now: number = Date.now()
+  now: number = Date.now(),
+  options: SelectAccountOptions = {}
 ): RouteDecision {
   const candidates = candidatePool(pool, req, now);
   if (candidates.length === 0) {
@@ -82,12 +90,14 @@ export function selectAccount(
     }
   }
 
-  // 3. LRU / round-robin.
-  const sorted = [...candidates].sort((a, b) =>
-    (state.lastUsedAt[a.id] ?? Number.NEGATIVE_INFINITY) -
-    (state.lastUsedAt[b.id] ?? Number.NEGATIVE_INFINITY)
-  );
-  const chosen = sorted[0];
+  // 3. Selection strategy: probability (uniform 1/N) or LRU / round-robin.
+  const strategy = options.strategy ?? 'probability';
+  const chosen = strategy === 'probability'
+    ? candidates[Math.floor(Math.random() * candidates.length)]
+    : [...candidates].sort((a, b) =>
+        (state.lastUsedAt[a.id] ?? Number.NEGATIVE_INFINITY) -
+        (state.lastUsedAt[b.id] ?? Number.NEGATIVE_INFINITY)
+      )[0];
   markAccountUsed(state, chosen.id, now);
   const reason = req.excludeAccountIds && req.excludeAccountIds.length > 0 ? 'failover' : 'round_robin';
   return { account: chosen, reason };

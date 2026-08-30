@@ -43,7 +43,7 @@ describe('Gateway v2 - RouteScheduler', () => {
     const state = createSchedulerState();
     markAccountUsed(state, 'acct-codex-2', now - 100);
     markAccountUsed(state, 'acct-codex-1', now - 50);
-    const decision = selectAccount(pool, { model: 'gpt-5.1-codex', platform: 'codex' }, state, now);
+    const decision = selectAccount(pool, { model: 'gpt-5.1-codex', platform: 'codex' }, state, now, { strategy: 'lru' });
     expect(decision.account.id).toBe('acct-codex-3');
     expect(decision.reason).toBe('round_robin');
   });
@@ -108,9 +108,9 @@ describe('Gateway v2 - RouteScheduler', () => {
     ];
     const state = createSchedulerState();
     markAccountUsed(state, 'acct-codex-1', now - 1000);
-    const d1 = selectAccount(pool, { model: 'gpt-5.1-codex', platform: 'codex' }, state, now);
+    const d1 = selectAccount(pool, { model: 'gpt-5.1-codex', platform: 'codex' }, state, now, { strategy: 'lru' });
     expect(d1.account.id).toBe('acct-codex-2');
-    const d2 = selectAccount(pool, { model: 'gpt-5.1-codex', platform: 'codex' }, state, now + 1);
+    const d2 = selectAccount(pool, { model: 'gpt-5.1-codex', platform: 'codex' }, state, now + 1, { strategy: 'lru' });
     expect(d2.account.id).toBe('acct-codex-1');
   });
 

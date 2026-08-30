@@ -68,7 +68,7 @@ describe('Gateway v2 - GatewayFacade pipeline', () => {
     });
     const { facade, ledger, key } = setup([codexAccount], fetchMock as unknown as typeof fetch);
 
-    const result = await facade.request({ ...baseRequest, downstreamKey: key });
+    const result = await facade.request({ ...baseRequest, downstreamKey: key, strategy: 'lru' });
 
     expect(result.content).toBe('Hello');
     expect(result.accountId).toBe('acct-codex-1');
@@ -101,7 +101,7 @@ describe('Gateway v2 - GatewayFacade pipeline', () => {
     const second: GatewayAccount = { ...codexAccount, id: 'acct-codex-2', credential: { authType: 'oauth', accessToken: 'at-2', refreshToken: 'rt-2' }, health: { consecutiveErrors: 0 } };
     const { facade, key, registry } = setup([codexAccount, second], fetchMock as unknown as typeof fetch);
 
-    const result = await facade.request({ ...baseRequest, downstreamKey: key });
+    const result = await facade.request({ ...baseRequest, downstreamKey: key, strategy: 'lru' });
 
     expect(calls.length).toBeGreaterThanOrEqual(2);
     expect(calls[0]).toContain('at-1');

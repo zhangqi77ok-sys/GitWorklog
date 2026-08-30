@@ -124,6 +124,18 @@ npm run dev -- --host 127.0.0.1
 
 真实桌面端验证（真实 Key 仅运行时注入、不入库）：`/health` 200、`/` 200；经宿主 `/api/proxy` 对 OpenCode Zen `mimo-v2.5-free` 非流式 HTTP 200 真实 chat completion（token usage 252/16/268）、流式 `text/event-stream` 24 chunks / 13 data 事件正常 [DONE] 终结。付费模型（`deepseek-v4-flash`/`gpt-5.1-codex`）返回 401 `CreditsError: Insufficient balance`（Key 有效但余额不足，属上游/额度边界）。契约见 `docs/technical_reviews/runengine-p0-hardening-contract.md`。
 
+## 模型服务商控制台 v2（三栏 Master-Detail，2026-08-30）
+
+按用户要求对「模型服务商」前后端整体重设计：
+
+1. **三栏布局**：左侧平台导航（Codex/Claude/Grok/Gemini/OpenAI/DeepSeek/兼容/本地，含账号数与状态点）+ 中间账号列表（状态/额度条/模型数）+ 右侧详情编辑（凭据/Base URL/模型白名单/并发/粘性 TTL + 立即探测 + 下游 Key 分发），暖色极简风格；
+2. **单一体系**：v1 Provider 旧目录降级为内置模型目录元数据；账号/凭据统一由 v2 Account 管理，Settings 网关 Tab 不再展示旧主从列表与旧 GatewayAccountManager；
+3. **添加后自动真实探测**：新账号保存后立即 `probeAccount`（真实 GET {base}/models），成功才可被调度；
+4. **概率轮询调度**：N 个可用账号各 1/N 概率被选中（默认 `probability` 策略，保留 sticky/用户指定优先；可显式 `lru`）；
+5. **每 5 分钟自动刷新**：`AccountProbeScheduler` 定时重探所有启用账号，更新状态（active/expired/quota_exhausted/error）与额度，并持久化。
+
+真实桌面端验证：Fresh 安装后经宿主 `/api/proxy` 以真实 Key 执行探测（GET opencode.ai/zen/v1/models → HTTP 200 → active），SSE 流式调用正常（49 data 事件 + [DONE]）。契约见 `docs/technical_reviews/provider-console-redesign-contract.md`。
+
 ## 全流式契约：所有模型调用必须流式（Stream-Only，2026-08-30）
 
 用户硬性要求：**所有必须流式**。Tcode 内任何真实的大模型生成请求都必须以 SSE（`stream: true`）发送与消费：

@@ -13,6 +13,7 @@ export interface GatewayRequest {
   platform: GatewayPlatform;
   sessionKey?: string;
   preferredAccountId?: string;
+  strategy?: import('./scheduler').SelectionStrategy;
   messages: GatewayMessage[];
   systemPrompt?: string;
   temperature?: number;
@@ -121,7 +122,8 @@ export class GatewayFacade {
           excludeAccountIds: attempted
         },
         this.deps.schedulerState,
-        now
+        now,
+        { strategy: req.strategy }
       );
       const account = decision.account;
       attempted.push(account.id);

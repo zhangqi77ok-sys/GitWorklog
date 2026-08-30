@@ -32,3 +32,6 @@ _*/
 build_temp/
 release/
 
+
+# Smoke-test install dirs (ephemeral verification targets)
+smoke-*/

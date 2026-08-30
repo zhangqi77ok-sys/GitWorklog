@@ -60,6 +60,14 @@ export class DownstreamKeyStore {
     this.keys = this.keys.filter(k => k.id !== keyId);
   }
 
+  public update(
+    keyId: string,
+    patch: Partial<Pick<DownstreamKey, 'enabled' | 'name' | 'groups' | 'modelAllowlist' | 'dailyTokenBudget'>>
+  ): void {
+    const key = this.keys.find(k => k.id === keyId);
+    if (key) Object.assign(key, patch);
+  }
+
   public findByKey(raw: string): DownstreamKey | undefined {
     return this.keys.find(k => k.key === raw);
   }
