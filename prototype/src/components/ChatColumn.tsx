@@ -104,6 +104,8 @@ import { ManagedRule } from '../types/contracts';
 import { loadSavedRules } from '../services/rulesStore';
 import { loadSavedOfficialSkills, getTier2SkillBody, SkillMetadata } from '../services/skillsEngine';
 import { getContextBudget, ContextBudget, compressModelContext } from '../services/contextTelemetry';
+import { WorkflowProviderPicker } from './WorkflowProviderPicker';
+import type { WorkflowSelection } from '../services/workflowProviderDiscovery';
 
 interface ChatColumnProps {
   rightWorkspaceOpen: boolean;
@@ -332,6 +334,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
   const [skillQuery, setSkillQuery] = useState('');
   const [officialSkillsList, setOfficialSkillsList] = useState<SkillMetadata[]>(() => loadSavedOfficialSkills());
   const [selectedSkill, setSelectedSkill] = useState<SkillMetadata | null>(null);
+  const [activeWorkflowSelection, setActiveWorkflowSelection] = useState<WorkflowSelection>({ mode: 'normal', state: 'normal' });
   const [shareTargetMessage, setShareTargetMessage] = useState<ChatMessage | null>(null);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
 
@@ -674,6 +677,13 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
     if (selectedSkill) {
       const fullSkillBody = getTier2SkillBody(selectedSkill.name);
       fullPrompt = `[用户显式激活 Skill: @${selectedSkill.name}]\n${fullSkillBody || selectedSkill.description}\n\n${fullPrompt}`;
+    }
+
+    if (activeWorkflowSelection.state === 'active' && activeWorkflowSelection.providerId) {
+      const executionNote = activeWorkflowSelection.mode === 'custom'
+        ? '该 Provider 当前只在发现/确认范围内，不得执行未知外部命令。'
+        : '仅在本次任务中启用，仍需遵守 Tcode 宿主审批与安全边界。';
+      fullPrompt = `[用户已确认启用工作流 Provider: ${activeWorkflowSelection.providerId}]\n${executionNote}\n\n${fullPrompt}`;
     }
 
     onSendMessage(fullPrompt);
@@ -2659,6 +2669,12 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                   </div>
                 )}
               </div>
+
+              {/* Workflow Provider discovery and explicit activation */}
+              <WorkflowProviderPicker
+                inputText={inputText}
+                onSelectionChange={setActiveWorkflowSelection}
+              />
 
               {/* @ Agent Skills Reference Trigger Button */}
               <div style={{ position: 'relative' }}>

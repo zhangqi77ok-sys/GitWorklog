@@ -1355,3 +1355,21 @@ Agent 执行请求 ➔ SecurityShield (脱敏) ➔ SandboxGuard (分类) ➔ Hos
 - 上下文百分比严格以当前模型 `contextLimit` 为分母并封顶为 100%；接近上限时按非破坏性的压缩请求副本计算有效占用。累计 Token 仅用于会话账单，不等于当前上下文窗口水位。
 - HUD 必须通过 tooltip 说明实际估算 Token、模型窗口上限、对话/工具/系统规则分项占比，避免把“原始历史水位”和“压缩后请求水位”混为一谈。
 - 详细契约见 `docs/technical_reviews/CONTEXT_TELEMETRY_SPEC.md`。
+
+
+---
+
+## 4.45 工作流 Provider 发现与用户确认规约
+
+Tcode 必须区分“环境中发现了工作流工具”和“用户选择并启用了工作流”。Superspec、SpecKit、OpenSpec、企业内部流程或用户自定义 Skill 均通过统一 Provider 发现契约接入；已安装或已发现的 Provider 不得自动成为当前任务的工作流。
+
+详细需求与验收标准见：`docs/PRD_WORKFLOW_PROVIDER_DISCOVERY.md`。
+技术契约见：`docs/technical_reviews/workflow-provider-discovery-contract.md`。
+
+核心规则：
+
+1. 用户没有表达 SDD、TDD 或其他范式意图时，使用普通任务模式；不得注入范式专属 Prompt 或阶段门禁。
+2. 用户明确提到某个范式或 Provider 时，先展示候选、来源、能力、权限与适配状态，用户确认后才激活。
+3. “我安装了 Superspec”只触发发现提示，不等于启用 Superspec。
+4. 未适配或无法验证的 Provider 只能展示为 `discovered_only`，不得伪造执行能力。
+5. Provider 的文件、命令、网络动作必须继续通过 Tcode 宿主安全网关与人机审批。

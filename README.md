@@ -41,3 +41,28 @@ python build_installer.py
 ## Windows 窗口启动位置
 
 Tcode 宿主启动时会根据当前 Windows 显示器的可用工作区计算窗口位置，并自动居中；计算会避开任务栏区域，安装完成后首次启动与普通快捷方式启动使用同一套定位逻辑。
+
+
+## 工作流 Provider 与范式选择
+
+Tcode 不会因为项目规则、Skill 文件或用户安装了 Superspec/SpecKit 等工具，就自动启用 SDD、TDD 或外部工作流。当前原型提供“工作流”选择器，区分普通任务、内置 SDD/TDD、SDD + TDD，以及“已发现但未适配”的外部 Provider。
+
+工作流状态严格遵循：
+
+```text
+发现 → 用户选择 → 用户确认 → 当前任务启用 → 执行
+```
+
+未表达范式意图时保持普通任务模式；“我安装了 Superspec”只产生发现提示，不会自动执行。详细需求与技术契约见：
+
+- `docs/PRD_WORKFLOW_PROVIDER_DISCOVERY.md`
+- `docs/technical_reviews/workflow-provider-discovery-contract.md`
+
+启动原型进行交互验收：
+
+```powershell
+cd prototype
+npm run dev -- --host 127.0.0.1
+```
+
+在聊天输入区点击“普通任务”工作流按钮，可体验候选识别、Provider 详情、确认启用、取消、切回普通模式和未适配 Provider 降级状态。
