@@ -251,6 +251,11 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(json.dumps({'error': 'Invalid or missing directory path'}).encode('utf-8'))
                 return
+            try:
+                path_sandbox.assert_path_allowed(target_path)
+            except path_sandbox.PathSandboxError:
+                self._send_json(403, {'error': 'PATH_OUTSIDE_WORKSPACE', 'code': 403})
+                return
 
             tree = scan_directory(target_path, max_depth=2)
             self.send_response(200)
@@ -271,6 +276,11 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_header('Content-Type', 'application/json')
                 self.end_headers()
                 self.wfile.write(json.dumps({'success': True, 'results': []}).encode('utf-8'))
+                return
+            try:
+                path_sandbox.assert_path_allowed(target_path)
+            except path_sandbox.PathSandboxError:
+                self._send_json(403, {'error': 'PATH_OUTSIDE_WORKSPACE', 'code': 403})
                 return
 
             results = []
@@ -318,6 +328,13 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
         if parsed.path == '/api/git/status':
             qs = urllib.parse.parse_qs(parsed.query)
             target_path = qs.get('path', [None])[0] or str(get_dist_path().parent.parent)
+            explicit_path = qs.get('path', [None])[0]
+            if explicit_path:
+                try:
+                    path_sandbox.assert_path_allowed(explicit_path)
+                except path_sandbox.PathSandboxError:
+                    self._send_json(403, {'error': 'PATH_OUTSIDE_WORKSPACE', 'code': 403})
+                    return
             changes = []
             branch = 'main'
             
@@ -360,6 +377,11 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_header('Content-Type', 'application/json')
                 self.end_headers()
                 self.wfile.write(json.dumps({'error': 'File not found on disk'}).encode('utf-8'))
+                return
+            try:
+                path_sandbox.assert_path_allowed(file_path)
+            except path_sandbox.PathSandboxError:
+                self._send_json(403, {'error': 'PATH_OUTSIDE_WORKSPACE', 'code': 403})
                 return
 
             try:
@@ -498,6 +520,11 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
                 content = data.get('content', '')
                 if not file_path:
                     raise Exception('Missing file path')
+                try:
+                    path_sandbox.assert_path_allowed(file_path)
+                except path_sandbox.PathSandboxError:
+                    self._send_json(403, {'error': 'PATH_OUTSIDE_WORKSPACE', 'code': 403})
+                    return
                 p = Path(file_path)
                 p.parent.mkdir(parents=True, exist_ok=True)
                 p.write_text(content, encoding='utf-8')
@@ -514,6 +541,19 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
                 self.wfile.write(json.dumps({'error': str(e)}).encode('utf-8'))
             return
 
+        # 8. Workspace Root Registration (path sandbox allowlist)
+        if self.path == '/api/workspace/register':
+            length = int(self.headers.get('Content-Length', 0))
+            body = self.rfile.read(length)
+            try:
+                payload = json.loads(body.decode('utf-8'))
+                paths = payload.get('paths') or []
+                registered = path_sandbox.register_roots(paths)
+                self._send_json(200, {'success': True, 'registered': registered})
+            except Exception as e:
+                self._send_json(500, {'error': str(e)})
+            return
+
         # 4. Real Terminal Command Execution on Desktop
         if self.path == '/api/terminal/exec':
             length = int(self.headers.get('Content-Length', 0))
@@ -524,6 +564,12 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
                 cwd = payload.get('cwd', None) or os.getcwd()
                 if not cmd:
                     raise Exception('Empty command')
+                if payload.get('cwd'):
+                    try:
+                        path_sandbox.assert_path_allowed(payload['cwd'])
+                    except path_sandbox.PathSandboxError:
+                        self._send_json(403, {'error': 'PATH_OUTSIDE_WORKSPACE', 'code': 403})
+                        return
                 
                 # Execute completely silently without popping any CMD / Windows Terminal console
                 if os.name == 'nt':
@@ -576,6 +622,11 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
             try:
                 payload = json.loads(body.decode('utf-8'))
                 project_path = payload.get('projectPath') or os.getcwd()
+                try:
+                    path_sandbox.assert_path_allowed(project_path)
+                except path_sandbox.PathSandboxError:
+                    self._send_json(403, {'error': 'PATH_OUTSIDE_WORKSPACE', 'code': 403})
+                    return
                 session_id = payload.get('sessionId', 'default')
                 turn_index = payload.get('turnIndex', 0)
                 summary = payload.get('summary', 'Auto Checkpoint')
@@ -678,6 +729,11 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
             try:
                 payload = json.loads(body.decode('utf-8'))
                 project_path = payload.get('projectPath') or os.getcwd()
+                try:
+                    path_sandbox.assert_path_allowed(project_path)
+                except path_sandbox.PathSandboxError:
+                    self._send_json(403, {'error': 'PATH_OUTSIDE_WORKSPACE', 'code': 403})
+                    return
                 ref = payload.get('ref')
                 if not ref:
                     raise Exception('Missing checkpoint ref')

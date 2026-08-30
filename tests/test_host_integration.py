@@ -82,3 +82,69 @@ def test_allowed_origin_preflight_ok():
     )
     assert status == 200
     assert headers.get("Access-Control-Allow-Origin") == "http://localhost:5173"
+
+import os
+import shutil
+import tempfile
+import time
+from urllib.parse import quote
+
+import path_sandbox
+
+
+def test_workspace_register_and_fs_boundary():
+    path_sandbox.clear_roots()
+    root = tempfile.mkdtemp(prefix="tcode_ws_")
+    try:
+        status, data, _ = _request("POST", "/api/workspace/register", {"paths": [root]})
+        assert status == 200
+        assert b'"registered"' in data
+
+        status, data, _ = _request("GET", f"/api/fs/tree?path={quote(root)}")
+        assert status == 200
+        assert b"success" in data
+
+        outside = tempfile.mkdtemp(prefix="tcode_outside_")
+        try:
+            status, data, _ = _request("GET", f"/api/fs/tree?path={quote(outside)}")
+            assert status == 403
+            assert b"PATH_OUTSIDE_WORKSPACE" in data
+        finally:
+            shutil.rmtree(outside, ignore_errors=True)
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_fs_write_boundary():
+    path_sandbox.clear_roots()
+    root = tempfile.mkdtemp(prefix="tcode_ws_")
+    try:
+        _request("POST", "/api/workspace/register", {"paths": [root]})
+        inside = os.path.join(root, "a.txt")
+        status, data, _ = _request("POST", "/api/fs/write", {"path": inside, "content": "hello"})
+        assert status == 200
+        assert os.path.isfile(inside)
+
+        outside = os.path.join(tempfile.gettempdir(), f"tcode_escape_{int(time.time()*1000)}.txt")
+        status, data, _ = _request("POST", "/api/fs/write", {"path": outside, "content": "evil"})
+        assert status == 403
+        assert not os.path.exists(outside)
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_terminal_cwd_boundary():
+    path_sandbox.clear_roots()
+    root = tempfile.mkdtemp(prefix="tcode_ws_")
+    try:
+        _request("POST", "/api/workspace/register", {"paths": [root]})
+        status, data, _ = _request("POST", "/api/terminal/exec", {"command": "echo hi", "cwd": root})
+        assert status == 200
+        assert b"hi" in data
+
+        outside = tempfile.gettempdir()
+        status, data, _ = _request("POST", "/api/terminal/exec", {"command": "echo hi", "cwd": outside})
+        assert status == 403
+        assert b"PATH_OUTSIDE_WORKSPACE" in data
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
