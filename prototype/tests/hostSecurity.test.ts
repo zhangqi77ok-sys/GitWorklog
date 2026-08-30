@@ -7,6 +7,7 @@ import {
 } from '../src/services/hostClient';
 import { saveProvidersToStorage, saveProjectsToStorage, resolveApiEndpoint } from '../src/types/contracts';
 import { saveGatewayState } from '../src/services/gateway/store';
+import { saveGlobalSettingsToStorage, DEFAULT_GLOBAL_SETTINGS } from '../src/services/settingsStore';
 
 function installWindowStub() {
   (globalThis as any).window = {
@@ -108,3 +109,13 @@ describe('resolveApiEndpoint desktop proxy', () => {
   });
 });
 
+describe('air-gapped settings persistence', () => {
+  it('persists global settings to host disk via /api/storage', async () => {
+    saveGlobalSettingsToStorage({ ...DEFAULT_GLOBAL_SETTINGS, isAirGapped: true });
+    await new Promise(r => setTimeout(r, 0));
+    const [, init] = fetchMock.mock.calls.find(([u]) => String(u) === '/api/storage')!;
+    const body = JSON.parse((init as any).body);
+    expect(body.key).toBe('tcode_settings');
+    expect(body.data.isAirGapped).toBe(true);
+  });
+});

@@ -1,4 +1,5 @@
 import { PermissionPolicy, WorkMode } from '../types/contracts';
+import { hostFetch } from './hostClient';
 
 export type ThemeMode = 'paper-warm' | 'charcoal-dark' | 'studio-white' | 'system';
 
@@ -51,6 +52,15 @@ export function loadSavedGlobalSettings(): GlobalSettings {
 export function saveGlobalSettingsToStorage(settings: GlobalSettings): void {
   try {
     localStorage.setItem(STORAGE_KEY_GLOBAL_SETTINGS, JSON.stringify(settings));
+    // Persist to desktop host disk so host-level policies (e.g. Air-Gapped
+    // enforcement at /api/terminal/exec) can read the flag fail-closed.
+    if (typeof window !== 'undefined' && window.location.protocol === 'http:') {
+      hostFetch('/api/storage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'tcode_settings', data: settings })
+      }).catch(() => {});
+    }
     window.dispatchEvent(new CustomEvent('codemind_settings_updated', { detail: settings }));
   } catch (e) {}
 }

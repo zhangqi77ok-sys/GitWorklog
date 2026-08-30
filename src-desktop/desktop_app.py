@@ -8,6 +8,7 @@ import host_auth
 import credential_crypto
 import path_sandbox
 import proxy_policy
+import airgap
 CREATE_NO_WINDOW = 0x08000000
 APP_NAME = 'Tcode Studio'
 APP_STORAGE_KEY = 'Tcode'
@@ -605,6 +606,18 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
                     except path_sandbox.PathSandboxError:
                         self._send_json(403, {'error': 'PATH_OUTSIDE_WORKSPACE', 'code': 403})
                         return
+
+                # ??? Air-Gapped Host Enforcement: block outbound-network commands at the host
+                if airgap.is_air_gapped(get_storage_dir()) and airgap.blocks_network(cmd):
+                    self._send_json(200, {
+                        'success': False,
+                        'stdout': '',
+                        'stderr': '?? [Air-Gapped Host Enforcement]: ???????????????????????',
+                        'exitCode': 1,
+                        'cmd': cmd,
+                        'blocked': True
+                    })
+                    return
                 
                 # Execute completely silently without popping any CMD / Windows Terminal console
                 if os.name == 'nt':

@@ -202,3 +202,39 @@ def test_storage_nonsensitive_plaintext():
     assert "warm" in raw
     assert "__tcode_enc__" not in raw
     storage_file.unlink(missing_ok=True)
+
+import airgap
+
+
+def test_airgapped_terminal_blocks_network_commands():
+    path_sandbox.clear_roots()
+    root = tempfile.mkdtemp(prefix="tcode_ws_")
+    settings_file = desktop.get_storage_dir() / "tcode_settings.json"
+    backup = None
+    if settings_file.exists():
+        backup = settings_file.read_text(encoding="utf-8")
+    try:
+        _request("POST", "/api/workspace/register", {"paths": [root]})
+        # enable air-gap
+        settings_file.write_text('{"isAirGapped": true}', encoding="utf-8")
+        assert airgap.is_air_gapped(desktop.get_storage_dir()) is True
+
+        status, data, _ = _request("POST", "/api/terminal/exec", {"command": "curl https://example.com", "cwd": root})
+        body = json.loads(data)
+        assert status == 200
+        assert body.get("blocked") is True
+        assert body.get("exitCode") == 1
+        assert "Air-Gapped" in body.get("stderr", "")
+
+        # local command still allowed
+        status, data, _ = _request("POST", "/api/terminal/exec", {"command": "echo hi", "cwd": root})
+        body = json.loads(data)
+        assert status == 200
+        assert body.get("blocked") is not True
+        assert b"hi" in data
+    finally:
+        if backup is None:
+            settings_file.unlink(missing_ok=True)
+        else:
+            settings_file.write_text(backup, encoding="utf-8")
+        shutil.rmtree(root, ignore_errors=True)
