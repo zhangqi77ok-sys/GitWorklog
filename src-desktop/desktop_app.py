@@ -469,6 +469,8 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
             if target_file.exists():
                 try:
                     data = json.loads(target_file.read_text(encoding='utf-8'))
+                    if credential_crypto.is_encrypted_envelope(data):
+                        data = json.loads(credential_crypto.unwrap_envelope(data))
                     self.send_response(200)
                     self._apply_cors()
                     self.send_header('Content-Type', 'application/json')
@@ -837,6 +839,8 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
                 if not key:
                     raise Exception('Missing key in storage write')
                 target_file = get_storage_dir() / f"{key}.json"
+                if payload.get('sensitive'):
+                    data = credential_crypto.make_envelope(json.dumps(data, ensure_ascii=False))
                 target_file.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding='utf-8')
                 self.send_response(200)
                 self._apply_cors()

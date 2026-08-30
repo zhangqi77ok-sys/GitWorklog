@@ -174,3 +174,31 @@ def test_proxy_denied_unknown_host():
     )
     assert status == 403
     assert b"PROXY_TARGET_DENIED" in data
+
+def test_storage_sensitive_encrypted_at_rest():
+    key = "tcode_test_secret"
+    secret = "fake-api-key-0123456789abcdef"
+    status, data, _ = _request("POST", "/api/storage", {"key": key, "data": {"apiKey": secret}, "sensitive": True})
+    assert status == 200
+
+    storage_file = desktop.get_storage_dir() / f"{key}.json"
+    raw = storage_file.read_text(encoding="utf-8")
+    assert secret not in raw
+    assert "__tcode_enc__" in raw
+
+    status, data, _ = _request("GET", f"/api/storage?key={key}")
+    body = json.loads(data)
+    assert body.get("success") is True
+    assert body["data"]["apiKey"] == secret
+    storage_file.unlink(missing_ok=True)
+
+
+def test_storage_nonsensitive_plaintext():
+    key = "tcode_test_plain"
+    status, data, _ = _request("POST", "/api/storage", {"key": key, "data": {"theme": "warm"}})
+    assert status == 200
+    storage_file = desktop.get_storage_dir() / f"{key}.json"
+    raw = storage_file.read_text(encoding="utf-8")
+    assert "warm" in raw
+    assert "__tcode_enc__" not in raw
+    storage_file.unlink(missing_ok=True)
