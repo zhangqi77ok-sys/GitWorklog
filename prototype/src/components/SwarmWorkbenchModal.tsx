@@ -14,11 +14,12 @@ import {
   RotateCcw,
   Check,
   ChevronRight,
-  Layers
+  Layers,
+  Users
 } from 'lucide-react';
-import { SwarmRun, SwarmTask, Artifact } from '../types/agentRuntimeTypes';
+import { SwarmRun, SwarmTask, Artifact, AgentDefinition } from '../types/agentRuntimeTypes';
 import { persistentArtifactStore } from '../services/artifactStore';
-import { taskGraphScheduler } from '../services/taskGraphScheduler';
+import { BUILTIN_AGENT_ROLES } from '../services/builtinAgents';
 
 interface SwarmWorkbenchModalProps {
   isOpen: boolean;
@@ -31,11 +32,10 @@ export const SwarmWorkbenchModal: React.FC<SwarmWorkbenchModalProps> = ({
   onClose,
   activeRunId
 }) => {
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'graph' | 'artifacts' | 'events'>('graph');
-  const [tasks, setTasks] = useState<SwarmTask[]>([]);
+  const [activeTab, setActiveTab] = useState<'roles' | 'graph' | 'artifacts'>('roles');
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
   const [selectedArtifact, setSelectedArtifact] = useState<Artifact | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
 
   useEffect(() => {
     if (!isOpen) return;
@@ -53,7 +53,7 @@ export const SwarmWorkbenchModal: React.FC<SwarmWorkbenchModalProps> = ({
     loadData();
 
     // Listen to real agent events
-    const handleAgentEvent = (e: any) => {
+    const handleAgentEvent = () => {
       loadData();
     };
 
@@ -62,6 +62,10 @@ export const SwarmWorkbenchModal: React.FC<SwarmWorkbenchModalProps> = ({
   }, [isOpen, activeRunId, selectedArtifact]);
 
   if (!isOpen) return null;
+
+  const filteredRoles = selectedCategory === 'all'
+    ? BUILTIN_AGENT_ROLES
+    : BUILTIN_AGENT_ROLES.filter(r => r.category === selectedCategory);
 
   return (
     <div
@@ -80,10 +84,10 @@ export const SwarmWorkbenchModal: React.FC<SwarmWorkbenchModalProps> = ({
     >
       <div
         style={{
-          width: '920px',
+          width: '980px',
           maxWidth: '95vw',
-          height: '680px',
-          maxHeight: '90vh',
+          height: '720px',
+          maxHeight: '92vh',
           backgroundColor: 'var(--bg-surface, #1E1E1E)',
           borderRadius: '12px',
           border: '1px solid var(--border-subtle, #333)',
@@ -136,11 +140,11 @@ export const SwarmWorkbenchModal: React.FC<SwarmWorkbenchModalProps> = ({
                     fontWeight: 600
                   }}
                 >
-                  ● 真实 DAG 调度引擎已就绪
+                  ● 内置 11 大专业角色库 (Master 智能路由)
                 </span>
               </div>
               <p style={{ margin: 0, fontSize: '11.5px', color: 'var(--text-muted, #888)' }}>
-                Planner ➔ Analyst ➔ Architect ➔ Coder (写锁) ➔ Tester (单测) ➔ Reviewer (仲裁)
+                产品(PM) ➔ 设计(UI/UX) ➔ 架构(Architect) ➔ 前后端(Dev) ➔ 数据库(DBA) ➔ 安全(Security) ➔ 质量(QA) ➔ 终审(Reviewer)
               </p>
             </div>
           </div>
@@ -174,7 +178,8 @@ export const SwarmWorkbenchModal: React.FC<SwarmWorkbenchModalProps> = ({
           }}
         >
           {[
-            { id: 'graph', label: '📊 任务依赖拓扑 (TaskGraph DAG)', icon: Layers },
+            { id: 'roles', label: `👥 内置专业角色矩阵 (${BUILTIN_AGENT_ROLES.length})`, icon: Users },
+            { id: 'graph', label: '📊 动态任务依赖拓扑 (TaskGraph DAG)', icon: Layers },
             { id: 'artifacts', label: `📦 共享产物仓库 (${artifacts.length})`, icon: FileText }
           ].map(tab => (
             <button
@@ -202,22 +207,106 @@ export const SwarmWorkbenchModal: React.FC<SwarmWorkbenchModalProps> = ({
 
         {/* Content Body */}
         <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-          {activeTab === 'graph' ? (
+          {activeTab === 'roles' ? (
             <div style={{ flex: 1, padding: '20px', overflowY: 'auto' }}>
-              <div style={{ marginBottom: '16px', fontSize: '12px', color: 'var(--text-muted)' }}>
-                TaskGraph 依赖流向说明：无前序依赖的任务率先并发执行，下游任务严格阻塞并消费上游输出的不可变产物。
+              {/* Category Filter Pills */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+                {[
+                  { id: 'all', label: '全部角色' },
+                  { id: 'product', label: '💡 产品与规划' },
+                  { id: 'design', label: '🎨 视觉与交互' },
+                  { id: 'engineering', label: '⚙️ 架构与工程' },
+                  { id: 'quality', label: '🧪 质量与验证' },
+                  { id: 'governance', label: '🛡️ 安全与审计' }
+                ].map(cat => (
+                  <button
+                    key={cat.id}
+                    onClick={() => setSelectedCategory(cat.id)}
+                    style={{
+                      padding: '4px 10px',
+                      borderRadius: '16px',
+                      background: selectedCategory === cat.id ? 'var(--accent, #D96B27)' : 'var(--bg-base, #181818)',
+                      border: '1px solid var(--border-subtle, #333)',
+                      color: selectedCategory === cat.id ? '#FFF' : 'var(--text-muted)',
+                      fontSize: '11px',
+                      fontWeight: selectedCategory === cat.id ? 600 : 400,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {cat.label}
+                  </button>
+                ))}
               </div>
 
-              {/* Standard 6-Role DAG Pipeline Visualizer */}
+              {/* Roles Grid */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
+                {filteredRoles.map(agent => (
+                  <div
+                    key={agent.id}
+                    style={{
+                      padding: '14px',
+                      borderRadius: '8px',
+                      background: 'var(--bg-base, #181818)',
+                      border: '1px solid var(--border-subtle, #333)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '8px'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontSize: '20px' }}>{agent.avatar}</span>
+                        <div>
+                          <span style={{ fontSize: '13px', fontWeight: 700 }}>{agent.name}</span>
+                          <span style={{ fontSize: '10.5px', color: 'var(--text-muted)', marginLeft: '6px' }}>
+                            ({agent.role})
+                          </span>
+                        </div>
+                      </div>
+                      <span
+                        style={{
+                          fontSize: '10px',
+                          padding: '1px 6px',
+                          borderRadius: '4px',
+                          background: agent.writeScopes.length > 0 ? 'rgba(217, 107, 39, 0.15)' : 'rgba(255,255,255,0.06)',
+                          color: agent.writeScopes.length > 0 ? 'var(--accent)' : 'var(--text-muted)',
+                          fontWeight: 600
+                        }}
+                      >
+                        {agent.writeScopes.length > 0 ? '独占写入锁' : '只读分析'}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '11.5px', color: 'var(--text-muted)', lineHeight: '1.4' }}>
+                      {agent.description}
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: 'auto', paddingTop: '6px', borderTop: '1px solid rgba(255,255,255,0.04)', fontSize: '10.5px', color: 'var(--text-muted)' }}>
+                      <span>支持工具:</span>
+                      {agent.allowedTools.map(t => (
+                        <code key={t} style={{ background: 'rgba(255,255,255,0.08)', padding: '1px 4px', borderRadius: '3px' }}>
+                          {t}
+                        </code>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : activeTab === 'graph' ? (
+            <div style={{ flex: 1, padding: '20px', overflowY: 'auto' }}>
+              <div style={{ marginBottom: '16px', fontSize: '12px', color: 'var(--text-muted)' }}>
+                Master Agent 动态任务图生成机制：根据用户意图，Master 会动态判断是否需要 PM 制定 PRD、Designer 制定 UI 规范、DBA 编写 Schema，并以 DAG 形式严格保序调度。
+              </div>
+
+              {/* Dynamic Task Flow Visualizer */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 {[
-                  { role: 'Planner', title: '1. 需求拆解与 DAG 任务图规划', desc: '拆分无环依赖拓扑，生成任务契约', icon: '🧠', access: '只读' },
-                  { role: 'Analyst', title: '2. 依赖拓扑与风险只读分析', desc: '并发扫描项目 AST 依赖与风险项', icon: '🔍', access: '只读' },
-                  { role: 'Architect', title: '3. 架构设计与实施规范', desc: '输出规范化的文件改动设计方案', icon: '📐', access: '只读' },
-                  { role: 'Coder', title: '4. 核心代码实现与落盘', desc: '获取独占写锁 (WriteLock)，生成真实 Changeset', icon: '⚡', access: '独占写入' },
-                  { role: 'Tester', title: '5. 自动化测试与静态验证', desc: '执行真实单测并验证 ExitCode 与输出', icon: '🧪', access: '只读执行' },
-                  { role: 'Reviewer', title: '6. 验收与 Review 终审裁决', desc: '比对验收标准，做出 APPROVED 或驳回', icon: '⚖️', access: '仲裁' }
-                ].map((step, idx) => (
+                  { role: 'Planner (Master)', title: '1. 全局诉求分析与智能角色调度', desc: 'Master Agent 评估任务类型并自适应组建专属 Agent 战队', icon: '👑', access: '调度' },
+                  { role: 'Product / UI', title: '2. 需求规格 (PRD) 与 交互设计 (UI/UX)', desc: 'PM 输出业务用例与验收项，Designer 输出视觉规范与组件层级', icon: '🎨', access: '只读规范' },
+                  { role: 'Architect / DBA', title: '3. 系统架构与数据模型 (Schema)', desc: 'Architect 定义分层契约，DBA 规划持久化 Schema 与索引', icon: '📐', access: '只读设计' },
+                  { role: 'Frontend / Backend', title: '4. 前后端核心代码落盘', desc: '获取独占写锁 (WriteLock)，生成标准 Changeset 文件写入', icon: '⚡', access: '独占写入' },
+                  { role: 'Security / Tester', title: '5. 安全合规审计与单测验证', desc: 'Security 审计凭据与权限，Tester 执行测试并捕获 ExitCode', icon: '🧪', access: '只读执行' },
+                  { role: 'Reviewer', title: '6. 终审裁决与验收闭环', desc: '比对 PRD、UI 规范与测试日志，做出权威决策并交付', icon: '⚖️', access: '终审' }
+                ].map((step) => (
                   <div
                     key={step.role}
                     style={{
@@ -262,7 +351,7 @@ export const SwarmWorkbenchModal: React.FC<SwarmWorkbenchModalProps> = ({
                       }}
                     >
                       <CheckCircle2 size={13} />
-                      <span>已注册调度</span>
+                      <span>自适应编排</span>
                     </span>
                   </div>
                 ))}

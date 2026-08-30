@@ -75,6 +75,24 @@ export class MultiRoleAgentRunner {
           content: llmResponse
         });
         outputArtifacts.push(planArtifact);
+      } else if (agentDef.role === 'product_manager') {
+        const prdArtifact = persistentArtifactStore.createArtifact({
+          runId,
+          taskId: task.id,
+          type: 'prd',
+          title: `产品需求规格说明书 PRD (${task.title})`,
+          content: llmResponse
+        });
+        outputArtifacts.push(prdArtifact);
+      } else if (agentDef.role === 'ui_designer') {
+        const uiArtifact = persistentArtifactStore.createArtifact({
+          runId,
+          taskId: task.id,
+          type: 'ui_spec',
+          title: `UI/UX 视觉与交互规范 (${task.title})`,
+          content: llmResponse
+        });
+        outputArtifacts.push(uiArtifact);
       } else if (agentDef.role === 'analyst') {
         const analysisArtifact = persistentArtifactStore.createArtifact({
           runId,
@@ -93,7 +111,34 @@ export class MultiRoleAgentRunner {
           content: llmResponse
         });
         outputArtifacts.push(archArtifact);
-      } else if (agentDef.role === 'coder' || agentDef.role === 'fixer') {
+      } else if (agentDef.role === 'dba_expert') {
+        const schemaArtifact = persistentArtifactStore.createArtifact({
+          runId,
+          taskId: task.id,
+          type: 'schema',
+          title: `数据库模型与迁移规范 (${task.title})`,
+          content: llmResponse
+        });
+        outputArtifacts.push(schemaArtifact);
+      } else if (agentDef.role === 'security_guard') {
+        const secArtifact = persistentArtifactStore.createArtifact({
+          runId,
+          taskId: task.id,
+          type: 'security_audit',
+          title: `安全合规审计报告 (${task.title})`,
+          content: llmResponse
+        });
+        outputArtifacts.push(secArtifact);
+      } else if (agentDef.role === 'tech_writer') {
+        const docArtifact = persistentArtifactStore.createArtifact({
+          runId,
+          taskId: task.id,
+          type: 'documentation',
+          title: `技术文档与用户指南 (${task.title})`,
+          content: llmResponse
+        });
+        outputArtifacts.push(docArtifact);
+      } else if (agentDef.role === 'coder' || agentDef.role === 'frontend_dev' || agentDef.role === 'backend_dev' || agentDef.role === 'fixer') {
         // Parse write_file actions if any
         const writeMatches = Array.from(llmResponse.matchAll(/```(?:write_file|patch):([^\n\r]+)[\r\n]+([\s\S]*?)```/g));
         if (writeMatches.length > 0) {
@@ -178,17 +223,24 @@ export class MultiRoleAgentRunner {
 
   private buildRoleSystemPrompt(agentDef: AgentDefinition, inputArtifacts: Artifact[], userGoal: string): string {
     const rolePrompts: Record<AgentRole, string> = {
-      planner: '你负责将用户的全局目标拆解为严谨的 DAG 任务依赖图。你只负责规划，禁止写业务文件。',
+      planner: '你负责全局理解用户诉求，评估并规划所需调度的专业角色集合，生成无环依赖 TaskGraph DAG。',
+      product_manager: '你负责业务用例拆解、用户旅程分析、功能边界定义与验收标准制定，输出标准化 PRD 产物。',
+      ui_designer: '你负责组件规范、视觉层级、响应式布局与色彩交互动效，输出 UI/UX 设计规范。',
+      architect: '你负责技术选型、系统分层、领域模型设计与模块接口契约制定。',
+      frontend_dev: '你负责 React 组件封装、CSS 样式排版与前端交互状态实现，输出 ```write_file:路径 ...``` 代码块。',
+      backend_dev: '你负责后端 API、服务层业务逻辑与数据处理，输出 ```write_file:路径 ...``` 代码块。',
+      dba_expert: '你负责数据库模型设计、索引规划与 Migration 迁移脚本编写。',
+      security_guard: '你负责凭据泄露防护、SQL注入防范、权限沙箱与依赖安全审计。',
       analyst: '你负责代码架构、依赖拓扑与风险只读分析。你严禁写文件或执行破坏性命令。',
-      architect: '你负责制定具体的技术设计与文件修改规范。输出严谨的实施方案供 Coder 消费。',
-      coder: '你是唯一的代码实现与落盘者。请根据上游架构产物输出精确的文件修改块 ```write_file:路径 ... ```。',
+      coder: '你是通用的代码实现者。请根据上游产物输出精确的文件修改块 ```write_file:路径 ... ```。',
       tester: '你负责执行编译与自动化测试，严格比对测试用例并输出真实 ExitCode 与日志。',
       reviewer: '你负责对 Changeset 和 TestResult 进行终审。若满足所有标准请给出 APPROVED，否则指出问题请求驳回。',
       fixer: '你根据 Reviewer 的驳回意见精准修复代码。',
+      tech_writer: '你负责编写清晰的用户使用手册与版本更新日志 (Changelog)。',
       summarizer: '你负责生成面向用户的最终完成简报。'
     };
 
-    return `你是 Tcode Swarm 协作系统中的【${agentDef.role.toUpperCase()}】专家智能体。\n${rolePrompts[agentDef.role] || ''}\n\n全局目标: ${userGoal}`;
+    return `你是 Tcode Swarm 协作系统中的【${agentDef.name || agentDef.role.toUpperCase()}】专家智能体。\n${rolePrompts[agentDef.role] || ''}\n\n全局目标: ${userGoal}`;
   }
 
   private async callLLM(params: {

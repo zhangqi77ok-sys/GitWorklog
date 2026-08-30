@@ -246,12 +246,19 @@ export interface PermissionRule {
 
 export type AgentRole =
   | 'planner'
-  | 'analyst'
+  | 'product_manager'
+  | 'ui_designer'
   | 'architect'
+  | 'frontend_dev'
+  | 'backend_dev'
+  | 'dba_expert'
+  | 'security_guard'
+  | 'analyst'
   | 'coder'
   | 'tester'
   | 'reviewer'
   | 'fixer'
+  | 'tech_writer'
   | 'summarizer';
 
 export type SwarmTaskStatus =
@@ -268,6 +275,10 @@ export type SwarmTaskStatus =
 export interface AgentDefinition {
   id: string;
   role: AgentRole;
+  name: string;
+  avatar: string;
+  description: string;
+  category: 'product' | 'design' | 'engineering' | 'quality' | 'governance';
   modelId: string;
   providerId: string;
   systemPrompt: string;
@@ -279,13 +290,18 @@ export interface AgentDefinition {
 }
 
 export type ArtifactType =
+  | 'prd'
+  | 'ui_spec'
   | 'plan'
   | 'analysis'
   | 'architecture'
+  | 'schema'
   | 'patch'
   | 'changeset'
   | 'test_result'
+  | 'security_audit'
   | 'review'
+  | 'documentation'
   | 'summary';
 
 export interface Artifact {

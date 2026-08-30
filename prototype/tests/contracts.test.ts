@@ -1231,6 +1231,7 @@ describe('Event-Driven Agent Runtime & Truth-First Execution Contract', () => {
 
 import { TaskGraphValidator, globalArtifactStore } from '../src/services/swarmScheduler';
 import { persistentArtifactStore } from '../src/services/artifactStore';
+import { BUILTIN_AGENT_ROLES, getBuiltinAgentByRole } from '../src/services/builtinAgents';
 import { SwarmTask, Artifact } from '../src/types/agentRuntimeTypes';
 
 describe('Swarm TaskGraph & Shared Artifacts Contract', () => {
@@ -1367,6 +1368,18 @@ describe('Swarm TaskGraph & Shared Artifacts Contract', () => {
 
     const list = persistentArtifactStore.getArtifactsForTask('task-arch');
     expect(list.length).toBe(2);
+  });
+
+  it('validates builtin agents registry and dynamic role dispatch', () => {
+    expect(BUILTIN_AGENT_ROLES.length).toBeGreaterThanOrEqual(10);
+    const pm = getBuiltinAgentByRole('product_manager');
+    const designer = getBuiltinAgentByRole('ui_designer');
+    const dba = getBuiltinAgentByRole('dba_expert');
+    const sec = getBuiltinAgentByRole('security_guard');
+    expect(pm).toBeDefined();
+    expect(designer).toBeDefined();
+    expect(dba).toBeDefined();
+    expect(sec).toBeDefined();
   });
 });
 
