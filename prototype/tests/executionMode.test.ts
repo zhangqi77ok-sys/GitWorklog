@@ -1,9 +1,21 @@
-﻿import { describe, it, expect } from 'vitest';
+﻿import { describe, it, expect, beforeEach } from 'vitest';
 import {
   resolveExecutionPolicy,
   migratePipelineMode,
+  loadSavedExecutionMode,
+  saveExecutionModeToStorage,
   type ExecutionMode
 } from '../src/services/executionMode';
+
+const mockStorage: Record<string, string> = {};
+if (typeof (globalThis as any).localStorage === 'undefined') {
+  (globalThis as any).localStorage = {
+    getItem: (k: string) => mockStorage[k] || null,
+    setItem: (k: string, v: string) => { mockStorage[k] = v; },
+    removeItem: (k: string) => { delete mockStorage[k]; },
+    clear: () => { Object.keys(mockStorage).forEach(k => delete mockStorage[k]); }
+  };
+}
 
 const sddWorkflow = {
   name: 'SDD',
@@ -45,5 +57,35 @@ describe('pipeline mode migration', () => {
     expect(migratePipelineMode('swarm')).toBe('graph');
     expect(migratePipelineMode(undefined)).toBe('act');
     expect(migratePipelineMode('bogus' as never)).toBe('act');
+  });
+});
+
+describe('execution mode storage & migration', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it('reads new key when present', () => {
+    localStorage.setItem('tcode_execution_mode', 'graph');
+    expect(loadSavedExecutionMode()).toBe('graph');
+  });
+
+  it('migrates legacy pipeline mode harness -> act', () => {
+    localStorage.setItem('tcode_pipeline_mode', 'harness');
+    expect(loadSavedExecutionMode()).toBe('act');
+  });
+
+  it('migrates legacy pipeline mode swarm -> graph', () => {
+    localStorage.setItem('tcode_pipeline_mode', 'swarm');
+    expect(loadSavedExecutionMode()).toBe('graph');
+  });
+
+  it('defaults to act when nothing stored', () => {
+    expect(loadSavedExecutionMode()).toBe('act');
+  });
+
+  it('save writes new key', () => {
+    saveExecutionModeToStorage('graph');
+    expect(localStorage.getItem('tcode_execution_mode')).toBe('graph');
   });
 });

@@ -30,10 +30,11 @@ export interface GateDecisionOutcome {
  * AND the stage's work is actually complete.
  */
 export function shouldSuspendForGate(
-  block?: { gate?: { mode: 'approval' | 'none' } },
+  block?: { gate?: { mode: 'approval' | 'none' }; requireUserReview?: boolean },
   stageCompleted = false
 ): boolean {
-  return block?.gate?.mode === 'approval' && stageCompleted === true;
+  const wantsApproval = block?.gate?.mode === 'approval' || block?.requireUserReview === true;
+  return wantsApproval && stageCompleted === true;
 }
 
 export function createGateSuspension(input: {

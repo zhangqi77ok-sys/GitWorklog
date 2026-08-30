@@ -61,3 +61,29 @@ export function migratePipelineMode(saved: 'harness' | 'swarm' | undefined): Exe
   if (saved === 'swarm') return 'graph';
   return 'act';
 }
+
+const STORAGE_KEY_EXECUTION_MODE = 'tcode_execution_mode';
+const LEGACY_KEY_PIPELINE_MODE = 'tcode_pipeline_mode';
+
+export function loadSavedExecutionMode(): ExecutionMode {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      const saved = localStorage.getItem(STORAGE_KEY_EXECUTION_MODE);
+      if (saved === 'act' || saved === 'graph') return saved;
+      const legacy = localStorage.getItem(LEGACY_KEY_PIPELINE_MODE) as 'harness' | 'swarm' | null;
+      if (legacy) return migratePipelineMode(legacy);
+    }
+  } catch (e) {}
+  return 'act';
+}
+
+export function saveExecutionModeToStorage(mode: ExecutionMode): void {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(STORAGE_KEY_EXECUTION_MODE, mode);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('tcode_execution_mode_updated', { detail: mode }));
+      }
+    }
+  } catch (e) {}
+}

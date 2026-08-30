@@ -15,6 +15,11 @@ describe('stage gate - suspension predicate', () => {
     expect(shouldSuspendForGate({ gate: { mode: 'approval' } }, false)).toBe(false);
     expect(shouldSuspendForGate(undefined, true)).toBe(false);
   });
+
+  it('suspends when block uses legacy requireUserReview flag', () => {
+    expect(shouldSuspendForGate({ requireUserReview: true }, true)).toBe(true);
+    expect(shouldSuspendForGate({ requireUserReview: true }, false)).toBe(false);
+  });
 });
 
 describe('stage gate - suspension state machine', () => {
