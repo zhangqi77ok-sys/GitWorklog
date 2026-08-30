@@ -152,6 +152,11 @@
 
 ---
 
+## 进度标记（2026-08-31）
+
+- **WP-A（模块二+四）**：✅ 已完成并推送（黄金不变量 + 硬沙箱）。
+- **WP-B（模块五+一）**：✅ 纯逻辑层完成并推送（executionMode/stageGate 契约、策略、迁移、requireUserReview 兼容，16 项新测试）；⏸️ **UI 接线待专项**（B4-B8：ExecutionModeCapsule + Alt+1/2、移除 Harness/Swarm 切换、Graph 动态编排注入、StageGateCard、App 门禁挂起）。
+- **WP-C/D/E**：未开始。
 ## 汇总路线图
 
 | WP | 模块 | 依赖 | 规模/风险 |
@@ -163,3 +168,5 @@
 | E | 六（真并发 Swarm） | B+C+宿主 worktree | 大/高 |
 
 每 WP 实施时：SDD 契约 → TDD 红绿 → 铁律 1.5（打包/安装/真实调用/一键 `run_acceptance.py`）→ 提交推送。
+
+
