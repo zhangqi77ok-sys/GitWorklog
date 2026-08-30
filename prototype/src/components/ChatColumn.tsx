@@ -114,6 +114,7 @@ import type { GateSuspension, StageGateDecision } from '../services/stageGate';
 import { resolveProviderIdForModelTab, assertProviderCredentials } from '../services/modelGateway';
 import { getGatewayModelOptions } from '../services/gateway/gatewayRuntime';
 import { ExecutionModeCapsule } from './ExecutionModeCapsule';
+import { useChatColumn } from '../hooks/useChatColumn';
 import { StageGateCard } from './StageGateCard';
 
 interface ChatColumnProps {
@@ -170,7 +171,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
   onSelectModel,
   permissionPolicy,
   setPermissionPolicy,
-  isStreaming = false,
+  isStreaming: isStreamingProp = false,
   onStopGeneration,
   promptQueue = [],
   onWithdrawQueuedPrompt,
@@ -188,11 +189,16 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
   onRollbackToCheckpoint,
   executionMode,
   onExecutionModeChange,
-  activeGate = null,
+  activeGate: activeGateProp = null,
   onGateDecision,
   onGateFeedback,
   onOpenSpec
 }) => {
+  // D1 runtime state threading: per-session streaming/gate from SessionActorManager.
+  const chatRuntime = useChatColumn(session.id);
+  const isStreaming = chatRuntime.isStreaming || isStreamingProp;
+  const activeGate = chatRuntime.gate ?? activeGateProp;
+
   const [inputText, setInputText] = useState(() => {
     try {
       return localStorage.getItem(`codemind_draft_${session.id}`) || '';

@@ -1,6 +1,7 @@
 ﻿import { getActiveWorkflow, getWorkflowPromptDirectives, getWorkflowAllowedTools, ModularWorkflow } from './services/workflowStore';
 import { loadSavedExecutionMode, saveExecutionModeToStorage, migratePipelineMode, executionModeFromShortcut, buildModePromptSnippet, type ExecutionMode } from './services/executionMode';
 import { createGateSuspensionFromBlock, createGateSuspension, resolveGateDecision, extractTaskBreakdown, extractSpecPath, shouldSuspendDynamicGraphPlanning, type GateSuspension, type StageGateDecision } from './services/stageGate';
+import { sessionActorManager } from './services/sessionActorManager';
 import { assembleCacheOptimizedMessages, recordCacheHitTelemetry, extractFileSymbols, buildCompactRepoMap } from './services/cacheEngine';
 import { hostGateway } from './services/hostGateway';
 import { getContextBudget, getContextTelemetry, compressModelContext } from './services/contextTelemetry';
@@ -327,8 +328,9 @@ export const App: React.FC = () => {
   const [rightWorkspaceOpen, setRightWorkspaceOpen] = useState<boolean>(false);
   const [workMode, setWorkMode] = useState<WorkMode>('act');
   const [executionMode, setExecutionMode] = useState<ExecutionMode>(() => loadSavedExecutionMode());
-  const [activeGate, setActiveGate] = useState<GateSuspension | null>(null);
-  const gateDecisionResolveRef = React.useRef<((decision: StageGateDecision) => void) | null>(null);
+  const [, setActorTick] = React.useState(0);
+  // WP-C: per-session runtime single source of truth -> re-render App on any actor change.
+  React.useEffect(() => sessionActorManager.subscribe(() => setActorTick(t => t + 1)), []);
   const [sessionModelMap, setSessionModelMap] = useState<Record<string, string>>(() => {
     try {
       const raw = localStorage.getItem('codemind_session_models_map');
@@ -523,13 +525,9 @@ export const App: React.FC = () => {
       completionTokens: Math.max(prev.completionTokens, budget.breakdown.toolsTokens)
     }));
   }, [sessionMessages, currentSessionId, currentModel, contextEpochMap]);
-  const [isStreaming, setIsStreaming] = useState<boolean>(false);
   const [promptQueue, setPromptQueue] = useState<QueuedPromptItem[]>([]);
   const promptQueueRef = React.useRef<QueuedPromptItem[]>([]);
   promptQueueRef.current = promptQueue;
-
-  const abortControllerRef = React.useRef<AbortController | null>(null);
-  const agentLoopCancelledRef = React.useRef(false);
 
   const handleExecutionModeChange = (mode: ExecutionMode) => {
     setExecutionMode(mode);
@@ -537,29 +535,16 @@ export const App: React.FC = () => {
   };
 
   const handleGateDecision = (decision: StageGateDecision) => {
-    if (gateDecisionResolveRef.current) {
-      gateDecisionResolveRef.current(decision);
-      gateDecisionResolveRef.current = null;
-    }
+    sessionActorManager.resolveGate(currentSessionId, decision);
   };
 
+  // WP-C: stop targets only the active session (aborts its stream + resolves pending gate as terminate).
   const handleStopGeneration = () => {
-    agentLoopCancelledRef.current = true;
-    if (activeGate?.active) {
-      // Stopping while a Stage Gate is suspended terminates the flow (no code written).
-      gateDecisionResolveRef.current?.({ approved: false });
-      gateDecisionResolveRef.current = null;
-      setActiveGate(null);
-    }
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-    }
+    sessionActorManager.abortSession(currentSessionId);
     if (pendingApproval) {
       pendingApproval.resolve({ approvedIds: [] });
       setPendingApproval(null);
     }
-    setIsStreaming(false);
   };
 
   // Messages for active session
@@ -601,6 +586,8 @@ export const App: React.FC = () => {
   }, [messages, currentModel]);
 
   const activeSession = sessions.find(s => s.id === currentSessionId) || sessions[0];
+  // Active session's stage gate (per-session via SessionActorManager).
+  const activeGate = sessionActorManager.getSessionRuntime(activeSession?.id)?.gate ?? null;
 
   // Session Tree Operations
   const handleNewGlobalSession = () => {
@@ -962,7 +949,7 @@ export const App: React.FC = () => {
 
   const handleSendMessage = async (text: string, mentions?: MentionContextItem[]) => {
     if (!text.trim()) return;
-    if (isStreaming) {
+    if (sessionActorManager.isSessionRunning(currentSessionId)) {
       handleEnqueuePrompt(text, mentions);
       return;
     }
@@ -975,7 +962,7 @@ export const App: React.FC = () => {
     // 🎯 Target-Driven Agent Loop State
     let loopCount = 0;
     let completedWithTarget = false;
-    agentLoopCancelledRef.current = false;
+    sessionActorManager.startSession(currentSessionId);
     const allowLowRiskInSession = false;
 
     // Track active target acceptance criteria, step tags & progress history
@@ -1029,7 +1016,6 @@ export const App: React.FC = () => {
       ...prev,
       [currentSessionId]: [...(prev[currentSessionId] || []), userMsg]
     }));
-    setIsStreaming(true);
 
     const callStartTime = performance.now();
 
@@ -1188,8 +1174,9 @@ ${modePromptSnippet}
       }));
 
       // ── Target-Driven Agent Loop: Understand → Breakdown → Act → Verify → Closed-loop Done ──
-      while (!agentLoopCancelledRef.current) {
+      while (sessionActorManager.isSessionRunning(currentSessionId)) {
         loopCount++;
+        sessionActorManager.bumpLoop(currentSessionId);
         const assistantId = singleRunCardId;
 
         // Initialize incremental streaming round for loopCount
@@ -1384,7 +1371,7 @@ ${modePromptSnippet}
         }
 
         controller = new AbortController();
-        abortControllerRef.current = controller;
+        sessionActorManager.setAbortController(currentSessionId, controller);
 
         addLog('INFO', 'AgentLoop', `[Loop #${loopCount}] 调度模型 [${streamingModel.name}] · ${route.adapter} · ${route.endpointUrl}`);
 
@@ -1625,13 +1612,12 @@ ${modePromptSnippet}
                 })
               : null);
         if (gateSuspension) {
-          setActiveGate(gateSuspension);
+          sessionActorManager.setGate(currentSessionId, gateSuspension);
           addLog('INFO', 'StageGate', `[Gate #${loopCount}] ${currentBlock?.name} 阶段完成，流程挂起等待人工终审...`);
           const decision = await new Promise<StageGateDecision>(resolve => {
-            gateDecisionResolveRef.current = resolve;
+            sessionActorManager.registerGateResolve(currentSessionId, resolve);
           });
-          gateDecisionResolveRef.current = null;
-          setActiveGate(null);
+          sessionActorManager.resolveGate(currentSessionId, decision);
           const outcome = resolveGateDecision(decision);
           if (outcome.outcome === 'terminate') {
             currentLoopStatus = 'blocked';
@@ -1758,7 +1744,7 @@ ${modePromptSnippet}
 
         const allowedTools = resolveAllowedTools(currentBlock, frozenRunMode);
         for (const action of actions) {
-          if (agentLoopCancelledRef.current) break;
+          if (!sessionActorManager.isSessionRunning(currentSessionId)) break;
           let result: ActionResult;
 
           if (approvedIds.has(action.id)) {
@@ -1871,7 +1857,7 @@ ${modePromptSnippet}
       });
 
     } catch (err: any) {
-      if (agentLoopCancelledRef.current) {
+      if (!sessionActorManager.isSessionRunning(currentSessionId)) {
         addLog('INFO', 'AgentLoop', '用户已停止 Agent Loop，已取消待审批与后续调度');
         return;
       }
@@ -1900,7 +1886,7 @@ ${modePromptSnippet}
         return { ...prev, [currentSessionId]: updated };
       });
     } finally {
-      setIsStreaming(false);
+      sessionActorManager.completeSession(currentSessionId);
     }
   };
 
@@ -2114,7 +2100,7 @@ ${modePromptSnippet}
               onRejectBatchApproval={() => handleBatchApprovalDecision({ approvedIds: [] })}
               onRollbackToCheckpoint={handleRollbackToCheckpoint}
               setPermissionPolicy={setPermissionPolicy}
-              isStreaming={isStreaming}
+              isStreaming={sessionActorManager.isSessionRunning(activeSession?.id)}
               onStopGeneration={handleStopGeneration}
               promptQueue={promptQueue}
               onWithdrawQueuedPrompt={handleWithdrawQueuedPrompt}
