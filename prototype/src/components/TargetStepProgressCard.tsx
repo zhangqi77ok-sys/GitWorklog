@@ -13,6 +13,108 @@ interface TargetStepProgressCardProps {
   onSelectAction?: (actionId: string) => void;
 }
 
+interface AcceptanceRowProps {
+  item: TargetAcceptanceItem;
+}
+
+const AcceptanceRow: React.FC<AcceptanceRowProps> = ({ item }) => {
+  const [showEvidence, setShowEvidence] = React.useState(false);
+  const hasEvidence = item.evidence || (item.evidenceDetails && item.evidenceDetails.length > 0);
+
+  return (
+    <div style={{
+      padding: '6px 8px',
+      borderRadius: '6px',
+      background: 'var(--bg-base)',
+      border: '1px solid var(--border-subtle)',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '4px'
+    }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', flex: 1 }}>
+          <span style={{ marginTop: '2px', flexShrink: 0 }}>
+            {item.status === 'passed' && <CheckCircle2 size={14} color="#16A34A" />}
+            {item.status === 'failed' && <XCircle size={14} color="#DC2626" />}
+            {item.status === 'running' && <Zap size={14} color="var(--accent)" />}
+            {item.status === 'pending' && <Clock size={14} color="var(--text-muted)" />}
+          </span>
+          <span style={{
+            color: item.status === 'passed' ? 'var(--text-primary)' : item.status === 'failed' ? '#DC2626' : 'var(--text-secondary)',
+            fontWeight: item.status === 'passed' ? 600 : 400,
+            fontSize: '11.5px',
+            lineHeight: 1.4
+          }}>
+            {item.description}
+          </span>
+        </div>
+
+        {hasEvidence && (
+          <button
+            onClick={() => setShowEvidence(!showEvidence)}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '3px',
+              padding: '1px 6px',
+              borderRadius: '4px',
+              background: item.status === 'passed' ? 'rgba(22, 163, 74, 0.08)' : 'var(--accent-subtle)',
+              border: 'none',
+              color: item.status === 'passed' ? '#16A34A' : 'var(--accent)',
+              fontSize: '10px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              flexShrink: 0
+            }}
+          >
+            <span>{showEvidence ? '收起证据' : '查看证据'}</span>
+            {showEvidence ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+          </button>
+        )}
+      </div>
+
+      {/* Expandable Structured Evidence Box */}
+      {showEvidence && (
+        <div style={{
+          marginTop: '4px',
+          padding: '8px',
+          borderRadius: '4px',
+          background: 'var(--bg-surface-elevated)',
+          border: '1px solid var(--border-strong)',
+          fontSize: '10.5px',
+          fontFamily: 'var(--font-mono)'
+        }}>
+          {item.evidence && (
+            <div style={{ color: item.status === 'passed' ? '#16A34A' : '#DC2626', fontWeight: 600, marginBottom: '4px' }}>
+              ● {item.evidence}
+            </div>
+          )}
+          {item.evidenceDetails && item.evidenceDetails.map((ev, evIdx) => (
+            <div key={evIdx} style={{ display: 'flex', flexDirection: 'column', gap: '2px', borderTop: evIdx > 0 ? '1px dashed var(--border-subtle)' : 'none', paddingTop: evIdx > 0 ? '4px' : '0' }}>
+              <div style={{ color: 'var(--text-primary)', fontWeight: 600 }}>
+                {ev.type === 'test' ? '🧪 自动化测试验证' : ev.type === 'file' ? '📁 文件落盘证据' : '▶ 执行指令'}:
+              </div>
+              {ev.command && (
+                <div style={{ color: 'var(--accent)', background: 'var(--bg-base)', padding: '2px 4px', borderRadius: '3px' }}>
+                  $ {ev.command} {ev.exitCode !== undefined && `(ExitCode: ${ev.exitCode})`}
+                </div>
+              )}
+              {ev.filePath && (
+                <div style={{ color: '#10B981' }}>已修改: {ev.filePath}</div>
+              )}
+              {ev.output && (
+                <div style={{ color: 'var(--text-muted)', maxHeight: '80px', overflowY: 'auto', whiteSpace: 'pre-wrap' }}>
+                  {ev.output}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 export const TargetStepProgressCard: React.FC<TargetStepProgressCardProps> = ({
   items = [],
   stepTags = [],
@@ -98,103 +200,9 @@ export const TargetStepProgressCard: React.FC<TargetStepProgressCardProps> = ({
             <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>共 {items.length} 项</span>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            {items.map(item => {
-              const [showEvidence, setShowEvidence] = React.useState(false);
-              const hasEvidence = item.evidence || (item.evidenceDetails && item.evidenceDetails.length > 0);
-
-              return (
-                <div key={item.id} style={{
-                  padding: '6px 8px',
-                  borderRadius: '6px',
-                  background: 'var(--bg-base)',
-                  border: '1px solid var(--border-subtle)',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '4px'
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' }}>
-                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', flex: 1 }}>
-                      <span style={{ marginTop: '2px', flexShrink: 0 }}>
-                        {item.status === 'passed' && <CheckCircle2 size={14} color="#16A34A" />}
-                        {item.status === 'failed' && <XCircle size={14} color="#DC2626" />}
-                        {item.status === 'running' && <Zap size={14} color="var(--accent)" />}
-                        {item.status === 'pending' && <Clock size={14} color="var(--text-muted)" />}
-                      </span>
-                      <span style={{
-                        color: item.status === 'passed' ? 'var(--text-primary)' : item.status === 'failed' ? '#DC2626' : 'var(--text-secondary)',
-                        fontWeight: item.status === 'passed' ? 600 : 400,
-                        fontSize: '11.5px',
-                        lineHeight: 1.4
-                      }}>
-                        {item.description}
-                      </span>
-                    </div>
-
-                    {hasEvidence && (
-                      <button
-                        onClick={() => setShowEvidence(!showEvidence)}
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '3px',
-                          padding: '1px 6px',
-                          borderRadius: '4px',
-                          background: item.status === 'passed' ? 'rgba(22, 163, 74, 0.08)' : 'var(--accent-subtle)',
-                          border: 'none',
-                          color: item.status === 'passed' ? '#16A34A' : 'var(--accent)',
-                          fontSize: '10px',
-                          fontWeight: 600,
-                          cursor: 'pointer',
-                          flexShrink: 0
-                        }}
-                      >
-                        <span>{showEvidence ? '收起证据' : '查看证据'}</span>
-                        {showEvidence ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Expandable Structured Evidence Box */}
-                  {showEvidence && (
-                    <div style={{
-                      marginTop: '4px',
-                      padding: '8px',
-                      borderRadius: '4px',
-                      background: 'var(--bg-surface-elevated)',
-                      border: '1px solid var(--border-strong)',
-                      fontSize: '10.5px',
-                      fontFamily: 'var(--font-mono)'
-                    }}>
-                      {item.evidence && (
-                        <div style={{ color: item.status === 'passed' ? '#16A34A' : '#DC2626', fontWeight: 600, marginBottom: '4px' }}>
-                          ● {item.evidence}
-                        </div>
-                      )}
-                      {item.evidenceDetails && item.evidenceDetails.map((ev, evIdx) => (
-                        <div key={evIdx} style={{ display: 'flex', flexDirection: 'column', gap: '2px', borderTop: evIdx > 0 ? '1px dashed var(--border-subtle)' : 'none', paddingTop: evIdx > 0 ? '4px' : '0' }}>
-                          <div style={{ color: 'var(--text-primary)', fontWeight: 600 }}>
-                            {ev.type === 'test' ? '🧪 自动化测试验证' : ev.type === 'file' ? '📁 文件落盘证据' : '▶ 执行指令'}:
-                          </div>
-                          {ev.command && (
-                            <div style={{ color: 'var(--accent)', background: 'var(--bg-base)', padding: '2px 4px', borderRadius: '3px' }}>
-                              $ {ev.command} {ev.exitCode !== undefined && `(ExitCode: ${ev.exitCode})`}
-                            </div>
-                          )}
-                          {ev.filePath && (
-                            <div style={{ color: '#10B981' }}>已修改: {ev.filePath}</div>
-                          )}
-                          {ev.output && (
-                            <div style={{ color: 'var(--text-muted)', maxHeight: '80px', overflowY: 'auto', whiteSpace: 'pre-wrap' }}>
-                              {ev.output}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+            {items.map(item => (
+              <AcceptanceRow key={item.id} item={item} />
+            ))}
           </div>
         </div>
       )}
