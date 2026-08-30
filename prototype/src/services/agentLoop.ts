@@ -778,6 +778,24 @@ export function filterToolDefs(
   return (tools || []).filter(t => allowedTools.includes(t.name || '') || allowedTools.includes(t.type || ''));
 }
 
+export async function executeSandboxAction(
+  action: AgentAction,
+  allowedTools: string[],
+  executeHost: (a: AgentAction) => Promise<ActionResult>
+): Promise<ActionResult> {
+  if (!allowedTools.includes(action.type)) {
+    return {
+      actionId: action.id,
+      type: action.type,
+      target: action.target,
+      status: 'rejected',
+      output: `【权限安全保护 403】: 当前工作流阶段受安全策略约束，仅允许使用 [${allowedTools.join(', ')}]，已拦截未经授权的 [${action.type}] 动作。请先完成当前阶段要求！`,
+      error: 'PERMISSION_RESTRICTED'
+    };
+  }
+  return executeHost(action);
+}
+
 /** Keeps a no-action round honest: explicit unfinished criteria cannot be marked completed. */
 export function resolveNoActionLoopStatus(
   verifierStatus: LoopTerminationStatus,
