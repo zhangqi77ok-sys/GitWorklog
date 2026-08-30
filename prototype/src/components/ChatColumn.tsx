@@ -1,6 +1,7 @@
 import { TargetStepProgressCard } from './TargetStepProgressCard';
 import { ActionApprovalModal } from './ActionApprovalModal';
 import { ShareCardModal } from './ShareCardModal';
+import { SwarmWorkbenchModal } from './SwarmWorkbenchModal';
 import React, { useState, useEffect } from 'react';
 import { MarkdownCard } from './MarkdownCard';
 import { agentRuntimeController } from '../services/agentRuntimeController';
@@ -234,6 +235,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
   const [showRulesPopover, setShowRulesPopover] = useState(false);
   const [selectedRoundByMsgId, setSelectedRoundByMsgId] = useState<Record<string, number>>({});
   const [userToggledRounds, setUserToggledRounds] = useState<Record<string, boolean>>({});
+  const [isSwarmModalOpen, setIsSwarmModalOpen] = useState(false);
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
     setInputText(val);
@@ -757,22 +759,26 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
             </span>
           </div>
 
-          <div
+          <button
+            onClick={() => setIsSwarmModalOpen(true)}
             style={{
-              padding: '1px 6px',
+              padding: '2px 8px',
               borderRadius: '8px',
-              background: 'var(--bg-base)',
-              border: '1px solid var(--border-subtle)',
-              color: 'var(--text-muted)',
-              fontSize: '9.5px',
+              background: 'rgba(217, 107, 39, 0.12)',
+              border: '1px solid rgba(217, 107, 39, 0.3)',
+              color: 'var(--accent, #D96B27)',
+              fontSize: '10px',
+              fontWeight: 600,
               display: 'flex',
               alignItems: 'center',
-              gap: '3px'
+              gap: '4px',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease'
             }}
-            title="多智能体异构协同蜂群 (Swarm) 正在研发中，后续版本提供 Architect/Coder/Tester 独立模型调度"
+            title="点击打开 Swarm 多智能体异构协同工作台 (TaskGraph DAG 拓扑与共享产物)"
           >
-            <span>🐝 Swarm 协同 (研发中)</span>
-          </div>
+            <span>🐝 Swarm 协同工作台</span>
+          </button>
         </div>
 
         {/* Right: Merge to Main Pill & Toggle Workbench */}
@@ -3132,6 +3138,12 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
           if (onOpenFile) onOpenFile(path);
           else if (onNavigateDiff) onNavigateDiff({ fileId: path, filePath: path, targetLine: 1 });
         }}
+      />
+
+      {/* 🐝 Swarm Multi-Agent Workbench Modal */}
+      <SwarmWorkbenchModal
+        isOpen={isSwarmModalOpen}
+        onClose={() => setIsSwarmModalOpen(false)}
       />
     </div>
   );
