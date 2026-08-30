@@ -8,7 +8,12 @@ import urllib.error
 from pathlib import Path
 
 BASE_URL = "https://platform.ai.hixinghai.com/api/v1"
-API_KEY = "sk-xh-ZVKvOZcvzLKxUSWECPQ3mUKfP9q9sxrz14NQmtoQ000"
+API_KEY = os.environ.get("TCODE_TEST_API_KEY", "")
+
+if not API_KEY:
+    print("? ??? TCODE_TEST_API_KEY????????????????????????")
+    print("   ???$env:TCODE_TEST_API_KEY='<your-key>' ; python scripts/run_real_automated_tests.py")
+    sys.exit(2)
 TARGET_MODEL = "deepseek-v4-flash"
 
 print("=" * 80)

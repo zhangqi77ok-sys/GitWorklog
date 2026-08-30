@@ -190,12 +190,12 @@ describe('AST Security Sandbox & Real PII Shielding', () => {
 
   it('should desensitize and restore sensitive API Keys and Database Passwords bidirectionally', () => {
     const rawCode = `
-      const apiKey = "sk-xh-ZVKvOZcvzLKxUSWECPQ3mUKfP9q9sxrz14NQmtoQ000";
+      const apiKey = "sk-test-masking-key-0123456789abcd";
       const dbUrl = "postgres://admin:SuperSecretPass123!@localhost:5432/proddb";
     `;
 
     const { maskedText, mapping } = maskSensitiveText(rawCode);
-    expect(maskedText).not.toContain('sk-xh-ZVKvOZcvzLKxUSWECPQ3mUKfP9q9sxrz14NQmtoQ000');
+    expect(maskedText).not.toContain('sk-test-masking-key-0123456789abcd');
     expect(maskedText).not.toContain('SuperSecretPass123!');
     expect(maskedText).toContain('[SEC_API_KEY_');
     expect(maskedText).toContain('[SEC_DB_PASS_');
