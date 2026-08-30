@@ -792,78 +792,32 @@ def start_local_server(port=PORT):
     t.start()
     return port
 
-def get_center_window_position(
-    window_width: int,
-    window_height: int,
-) -> tuple[int, int]:
-    try:
-        import ctypes
-        from ctypes import wintypes
-
-        user32 = ctypes.windll.user32
-        user32.SetProcessDPIAware()
-
-        class RECT(ctypes.Structure):
-            _fields_ = [
-                ("left", wintypes.LONG),
-                ("top", wintypes.LONG),
-                ("right", wintypes.LONG),
-                ("bottom", wintypes.LONG),
-            ]
-
-        work_area = RECT()
-
-        # SPI_GETWORKAREA = 48
-        # 获取扣除任务栏后的当前主显示器可用工作区
-        success = user32.SystemParametersInfoW(
-            48,
-            0,
-            ctypes.byref(work_area),
-            0,
-        )
-
-        if not success:
-            screen_width = user32.GetSystemMetrics(0)
-            screen_height = user32.GetSystemMetrics(1)
-            work_area.left = 0
-            work_area.top = 0
-            work_area.right = screen_width
-            work_area.bottom = screen_height
-
-        available_width = work_area.right - work_area.left
-        available_height = work_area.bottom - work_area.top
-
-        x = work_area.left + max(0, (available_width - window_width) // 2)
-        y = work_area.top + max(0, (available_height - window_height) // 2)
-
-        return x, y
-    except Exception:
-        return 0, 0
-
 if __name__ == '__main__':
     port = start_local_server()
     url = f"http://127.0.0.1:{port}/"
 
-    window_width = 1440
-    window_height = 900
+    from window_geometry import get_monitor_work_area, fit_window_size, center_window
 
-    window_x, window_y = get_center_window_position(
-        window_width,
-        window_height,
-    )
+    work_area = get_monitor_work_area()
+    target_width, target_height = fit_window_size(work_area, (1440, 900), (1024, 640))
+    window_x, window_y = center_window(work_area, (target_width, target_height))
 
-    def on_window_ready(win):
+    def on_window_ready():
         try:
-            cx, cy = get_center_window_position(window_width, window_height)
-            win.move(cx, cy)
-        except Exception:
-            pass
+            curr_wa = get_monitor_work_area()
+            w, h = fit_window_size(curr_wa, (1440, 900), (1024, 640))
+            cx, cy = center_window(curr_wa, (w, h))
+            if global_window:
+                global_window.resize(w, h)
+                global_window.move(cx, cy)
+        except Exception as e:
+            print(f"[WindowGeometry] Warning: Failed to re-align window: {e}")
 
     window = webview.create_window(
         title=f"{APP_NAME} - Enterprise AI Agentic IDE",
         url=url,
-        width=window_width,
-        height=window_height,
+        width=target_width,
+        height=target_height,
         x=window_x,
         y=window_y,
         min_size=(1024, 640),
@@ -876,4 +830,4 @@ if __name__ == '__main__':
     appdata = os.environ.get('LOCALAPPDATA', os.path.expanduser('~'))
     webview_data = os.path.join(appdata, APP_STORAGE_KEY, 'webview_profile')
     os.makedirs(webview_data, exist_ok=True)
-    webview.start(on_window_ready, window, debug=False, storage_path=webview_data, private_mode=False)
+    webview.start(on_window_ready, debug=False, storage_path=webview_data, private_mode=False)
