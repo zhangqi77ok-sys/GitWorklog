@@ -1291,14 +1291,13 @@ git add src-desktop/desktop_app.py tests/test_host_integration.py
 git commit -m "feat(security): DPAPI-encrypt sensitive storage payloads at rest (A2)"
 ```
 
-### Task 10: 前端 `hostClient.ts` + 调用点迁移
+### Task 10: 前端 Token 全局注入 + 敏感存储标记 + 工作区注册
 
 **Files:**
 - Create: `prototype/src/services/hostClient.ts`
-- Modify: `prototype/src/types/contracts.ts`（`saveToDiskStorageAsync` / `loadFromDiskStorageAsync` / `resolveApiEndpoint`）
-- Modify: `prototype/src/services/hostGateway.ts`（5 处 fetch → hostFetch）
+- Modify: `prototype/src/main.tsx`（启动时安装全局 fetch 拦截器）
+- Modify: `prototype/src/types/contracts.ts`（`saveToDiskStorageAsync` 支持 `sensitive`；`resolveApiEndpoint` 附 Token）
 - Modify: `prototype/src/services/gateway/store.ts`（sensitive 标记）
-- Modify: `prototype/src/services/workflowStore.ts`（fetch → hostFetch）
 - Modify: `prototype/src/App.tsx`（挂载时注册已保存工程根）
 - Test: `prototype/tests/hostSecurity.test.ts`（新建）
 
@@ -1306,9 +1305,12 @@ git commit -m "feat(security): DPAPI-encrypt sensitive storage payloads at rest 
 - Consumes: 无
 - Produces:
   - `getHostToken(): string`（读 `window.__TCODE_HOST_TOKEN__`）
-  - `hostFetch(input, init?): Promise<Response>`（附加 `X-Tcode-Token` 头）
+  - `shouldAttachToken(url: string): boolean`（相对 `/api/*` 或同源 127.0.0.1/localhost:8010 才附加；**跨域请求绝不附加**，防止 Token 外泄与 CORS 预检）
+  - `installHostTokenInterceptor(): void`（幂等；patch 全局 `window.fetch`，对所有 `shouldAttachToken(url)` 为真的请求附加 `X-Tcode-Token` 头）
+  - `hostFetch(input, init?): Promise<Response>`（显式助手，新代码使用）
   - `saveToDiskStorageAsync(key, data, sensitive?)` 支持第三参
-  - `saveGatewayState(state)` 内部以 sensitive 写盘
+
+**为什么用全局拦截而非逐点迁移：** 前端共有 30+ 处 `/api/*` 调用（App.tsx、EditorWorkspace、Titlebar、LeftPanel、GitSnapshotsPanel、hostGateway、contracts、workflowStore 等）。A1 接入后这些调用若不带 Token 全部 401；逐点迁移遗漏风险高。在 `main.tsx` 启动时一次性 patch `window.fetch`，所有现网与未来调用点自动携带 Token，且通过 `shouldAttachToken` 保证跨域直连（如 llmStreamingClient 直连上游）绝不附加 Token。
 
 - [ ] **Step 1: 写失败测试**
 
@@ -1316,14 +1318,18 @@ git commit -m "feat(security): DPAPI-encrypt sensitive storage payloads at rest 
 
 ```typescript
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { hostFetch, getHostToken } from '../src/services/hostClient';
+import {
+  hostFetch,
+  getHostToken,
+  shouldAttachToken,
+  installHostTokenInterceptor
+} from '../src/services/hostClient';
 import { saveProvidersToStorage, saveProjectsToStorage, resolveApiEndpoint } from '../src/types/contracts';
 import { saveGatewayState } from '../src/services/gateway/store';
 
-// Node-env stubs: hostClient/contracts gate on window.location.protocol === 'http:'
 function installWindowStub() {
   (globalThis as any).window = {
-    location: { protocol: 'http:', hostname: '127.0.0.1' },
+    location: { protocol: 'http:', hostname: '127.0.0.1', port: '8010' },
     dispatchEvent: () => true,
     CustomEvent: class {}
   };
@@ -1343,18 +1349,43 @@ beforeEach(() => {
     removeItem: () => {},
     clear: () => {}
   };
-  fetchMock.mockResolvedValue(new Response(JSON.stringify({ success: true }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+  fetchMock.mockResolvedValue({
+    ok: true,
+    status: 200,
+    json: async () => ({ success: true })
+  } as any);
 });
 
-describe('hostClient', () => {
-  it('exposes token from window', () => {
+describe('hostClient token scope', () => {
+  it('attaches token only to same-origin /api requests', () => {
     expect(getHostToken()).toBe('frontend-test-token');
+    expect(shouldAttachToken('/api/fs/tree')).toBe(true);
+    expect(shouldAttachToken('http://127.0.0.1:8010/api/proxy')).toBe(true);
+    expect(shouldAttachToken('http://localhost:8010/api/storage')).toBe(true);
+    expect(shouldAttachToken('https://api.deepseek.com/v1/chat/completions')).toBe(false);
+    expect(shouldAttachToken('https://api.openai.com/v1/models')).toBe(false);
   });
 
-  it('attaches X-Tcode-Token to requests', async () => {
+  it('global interceptor injects token into same-origin fetch', async () => {
+    installHostTokenInterceptor();
+    await (globalThis as any).fetch('/api/fs/tree');
+    const [, init] = fetchMock.mock.calls[0];
+    const headers = (init as any).headers as Headers;
+    expect(headers.get('X-Tcode-Token')).toBe('frontend-test-token');
+  });
+
+  it('global interceptor does not touch cross-origin fetch', async () => {
+    installHostTokenInterceptor();
+    await (globalThis as any).fetch('https://api.openai.com/v1/models');
+    const [, init] = fetchMock.mock.calls[0];
+    const headers = (init as any).headers as Headers;
+    expect(headers.get('X-Tcode-Token')).toBeNull();
+  });
+
+  it('explicit hostFetch attaches token', async () => {
     await hostFetch('/api/fs/tree');
     const [, init] = fetchMock.mock.calls[0];
-    expect((init as any).headers).toBe('X-Tcode-Token: frontend-test-token');
+    expect((init as any).headers.get('X-Tcode-Token')).toBe('frontend-test-token');
   });
 });
 
@@ -1362,8 +1393,7 @@ describe('sensitive storage marking', () => {
   it('marks providers write as sensitive', async () => {
     saveProvidersToStorage([{ id: 'provider-opencode', apiKey: '' } as any]);
     await new Promise(r => setTimeout(r, 0));
-    const [url, init] = fetchMock.mock.calls.find(([u]) => String(u) === '/api/storage')!;
-    expect(String(url)).toBe('/api/storage');
+    const [, init] = fetchMock.mock.calls.find(([u]) => String(u) === '/api/storage')!;
     const body = JSON.parse((init as any).body);
     expect(body.sensitive).toBe(true);
     expect(body.key).toBe('codemind_providers');
@@ -1397,7 +1427,7 @@ describe('resolveApiEndpoint desktop proxy', () => {
 });
 ```
 
-注意：本机 Node v24 已内置全局 `fetch/Response/Headers`，`new Response(...)` 可直接使用，无需安装 node-fetch。
+注意：本机 Node v24 已内置全局 `fetch/Response/Headers`；`installHostTokenInterceptor` 需幂等（重复调用只 patch 一次），测试中重复调用应无副作用。
 
 - [ ] **Step 2: 运行确认失败（Red）**
 
@@ -1409,27 +1439,65 @@ Push-Location E:\pro\agent-learning\prototype
 Pop-Location
 ```
 
-Expected: `Cannot find module '../src/services/hostClient'`（或 5 个用例失败）。
+Expected: `Cannot find module '../src/services/hostClient'`（或全部 8 个用例失败）。
 
 - [ ] **Step 3: 最小实现**
 
 3.1 创建 `prototype/src/services/hostClient.ts`：
 
 ```typescript
+let patched = false;
+
 export function getHostToken(): string {
   if (typeof window === 'undefined') return '';
   return ((window as any).__TCODE_HOST_TOKEN__ as string) || '';
 }
 
+export function shouldAttachToken(url: string | URL): boolean {
+  const raw = String(url);
+  // Relative /api/* calls (served same-origin from the desktop host)
+  if (raw.startsWith('/')) return raw.startsWith('/api/') || raw === '/health';
+  // Absolute URL: only the desktop host origin itself
+  try {
+    const u = new URL(raw);
+    const local = u.hostname === '127.0.0.1' || u.hostname === 'localhost';
+    return local && (u.pathname.startsWith('/api/') || u.pathname === '/health');
+  } catch {
+    return false;
+  }
+}
+
+export function installHostTokenInterceptor(): void {
+  if (patched || typeof window === 'undefined') return;
+  patched = true;
+  const original = window.fetch.bind(window);
+  window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    if (shouldAttachToken(input)) {
+      const headers = new Headers(init?.headers);
+      const token = getHostToken();
+      if (token) headers.set('X-Tcode-Token', token);
+      return original(input, { ...init, headers });
+    }
+    return original(input, init);
+  };
+}
+
 export async function hostFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const headers = new Headers(init?.headers);
   const token = getHostToken();
-  if (token) headers.set('X-Tcode-Token', token);
+  if (token && shouldAttachToken(input)) headers.set('X-Tcode-Token', token);
   return fetch(input, { ...init, headers });
 }
 ```
 
-3.2 `prototype/src/types/contracts.ts` 修改 `saveToDiskStorageAsync`：
+3.2 `prototype/src/main.tsx`：在 `ReactDOM.createRoot(...).render(...)` 之前调用：
+
+```tsx
+import { installHostTokenInterceptor } from './services/hostClient';
+installHostTokenInterceptor();
+```
+
+3.3 `prototype/src/types/contracts.ts`：`saveToDiskStorageAsync` 增加 `sensitive` 参数并走 `hostFetch`（顶部加 `import { hostFetch } from '../services/hostClient';`）：
 
 ```typescript
 export async function saveToDiskStorageAsync(key: string, data: any, sensitive = false): Promise<void> {
@@ -1446,46 +1514,11 @@ export async function saveToDiskStorageAsync(key: string, data: any, sensitive =
 }
 ```
 
-并在文件顶部 import 区加入 `import { hostFetch } from '../services/hostClient';`。
+3.4 同文件：`loadFromDiskStorageAsync` 内 `fetch(` 改 `hostFetch(`；`saveProvidersToStorage` 内 `saveToDiskStorageAsync(STORAGE_KEYS.PROVIDERS, providers)` 改为 `..., providers, true`；`resolveApiEndpoint` 的 desktop 分支 headers 增加 `'X-Tcode-Token': getHostToken()`（顶部加 `import { getHostToken } from '../services/hostClient';`）。
 
-3.3 同文件修改 `loadFromDiskStorageAsync`：
+3.5 `prototype/src/services/gateway/store.ts`：`saveToDiskStorageAsync(GATEWAY_STORAGE_KEY, state)` → `saveToDiskStorageAsync(GATEWAY_STORAGE_KEY, state, true)`。
 
-```typescript
-      const res = await hostFetch(`/api/storage?key=${encodeURIComponent(key)}`);
-```
-
-3.4 同文件修改 `saveProvidersToStorage` 内部调用：
-
-```typescript
-    saveToDiskStorageAsync(STORAGE_KEYS.PROVIDERS, providers, true);
-```
-
-3.5 同文件修改 `resolveApiEndpoint`：
-
-```typescript
-export function resolveApiEndpoint(targetUrl: string): { url: string; headers: Record<string, string> } {
-  if (typeof window !== 'undefined' && (window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost')) {
-    return {
-      url: '/api/proxy',
-      headers: {
-        'x-target-url': targetUrl,
-        'X-Tcode-Token': getHostToken()
-      }
-    };
-  }
-  return { url: targetUrl, headers: {} };
-}
-```
-
-并 import `getHostToken`。
-
-3.6 `prototype/src/services/hostGateway.ts`：把 5 处 `fetch(` 改为 `hostFetch(`（executeCommand、writeFile、readFile、gitCheckpoint、gitRevert），文件顶部 `import { hostFetch } from './hostClient';`。
-
-3.7 `prototype/src/services/gateway/store.ts`：`saveToDiskStorageAsync(GATEWAY_STORAGE_KEY, state)` → `saveToDiskStorageAsync(GATEWAY_STORAGE_KEY, state, true)`。
-
-3.8 `prototype/src/services/workflowStore.ts`：`fetch('/api/storage', {...})` → `hostFetch('/api/storage', {...})`，顶部加 import。
-
-3.9 `prototype/src/App.tsx`：在 `const [projects, setProjects] = useState<ProjectGroup[]>(loadSavedProjects());` 之后加一个挂载 effect：
+3.6 `prototype/src/App.tsx`：在 `const [projects, setProjects] = useState<ProjectGroup[]>(loadSavedProjects());` 之后加挂载 effect：
 
 ```tsx
   // Register persisted workspace roots with the desktop host (path sandbox)
@@ -1504,6 +1537,8 @@ export function resolveApiEndpoint(targetUrl: string): { url: string; headers: R
   }, []);
 ```
 
+3.7 其余 30+ 处 `/api/*` 调用（App.tsx/EditorWorkspace/Titlebar/LeftPanel/GitSnapshotsPanel/hostGateway/workflowStore 等）**无需逐点修改**——全局拦截器在 main.tsx 已统一注入 Token。
+
 - [ ] **Step 4: 运行确认通过（Green）**
 
 ```powershell
@@ -1512,17 +1547,14 @@ Push-Location E:\pro\agent-learning\prototype
 Pop-Location
 ```
 
-Expected: 全量 Vitest 通过（原 282 + 新增 6 ≈ 288）。若 `resolveApiEndpoint` 断言因 `window.location.hostname` stub 时序失败，确认 `installWindowStub` 先于 import 执行（将 `installWindowStub()` 调用放到 import 之后、describe 之前即可）。
+Expected: 全量 Vitest 通过（原 282 + 新增 8 ≈ 290）。
 
 - [ ] **Step 5: 提交**
 
 ```powershell
-git add prototype/src/services/hostClient.ts prototype/src/types/contracts.ts prototype/src/services/hostGateway.ts prototype/src/services/gateway/store.ts prototype/src/services/workflowStore.ts prototype/src/App.tsx prototype/tests/hostSecurity.test.ts
-git commit -m "feat(security): frontend token injection, sensitive storage marking, workspace registration"
+git add prototype/src/services/hostClient.ts prototype/src/main.tsx prototype/src/types/contracts.ts prototype/src/services/gateway/store.ts prototype/src/App.tsx prototype/tests/hostSecurity.test.ts
+git commit -m "feat(security): global token interceptor, sensitive storage marking, workspace registration"
 ```
-
----
-
 ### Task 11: 全量回归 + 铁律 1.5 真实验收闭环
 
 **Files:**
