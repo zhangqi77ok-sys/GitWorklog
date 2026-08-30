@@ -6,6 +6,8 @@ import {
   parseAgentActions,
   shouldRequireActionApproval,
   parseAcceptanceCriteria,
+  mergeAcceptanceCriteria,
+  normalizeCriteriaKey,
   verifyTargetAcceptance,
   detectProgressStall,
   TargetAcceptanceItem,
@@ -197,4 +199,27 @@ describe('Target-driven Agent Loop - Acceptance criteria & Verifier', () => {
     expect(result.suggestedActions).toHaveLength(3);
     expect(result.suggestedActions![0].label).toContain('换一种架构方案');
   });
+
+  it('mergeAcceptanceCriteria cleanly deduplicates across multiple LLM rounds and preserves evidence', () => {
+    const round1: TargetAcceptanceItem[] = [
+      { id: 'crit-1', description: '1. 识别工程结构', status: 'passed' },
+      { id: 'crit-2', description: '2. 安装 SDD / TDD Skill', status: 'pending' },
+      { id: 'crit-3', description: '3. 运行单元测试通过', status: 'pending' }
+    ];
+
+    // Model repeats checklist on round 2 with slight wording differences and updated status
+    const round2: TargetAcceptanceItem[] = [
+      { id: 'crit-1', description: '识别工程结构', status: 'passed' },
+      { id: 'crit-2', description: '安装 SDD / TDD Skill', status: 'passed' },
+      { id: 'crit-3', description: '单元测试与类型检查通过', status: 'pending' }
+    ];
+
+    const merged = mergeAcceptanceCriteria(round1, round2);
+    // Should NOT duplicate items to 6; must remain 3 deduplicated items
+    expect(merged).toHaveLength(3);
+    expect(merged[0].status).toBe('passed');
+    expect(merged[1].status).toBe('passed');
+    expect(merged[2].status).toBe('pending');
+  });
 });
+

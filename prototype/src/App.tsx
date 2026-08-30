@@ -121,6 +121,8 @@ import {
   parseAgentActions,
   shouldRequireActionApproval,
   parseAcceptanceCriteria,
+  mergeAcceptanceCriteria,
+  normalizeCriteriaKey,
   verifyTargetAcceptance,
   TargetAcceptanceItem,
   ProgressVector,
@@ -372,20 +374,31 @@ export const App: React.FC = () => {
   // Per-Session Message Map (100% Isolated: each session has its own message stream)
   const [sessionMessages, setSessionMessages] = useState<Record<string, ChatMessage[]>>(loadSavedSessionMessages());
 
+  // Context Epoch Lifecycle Map (Archived message IDs, summary tokens, epoch index per session)
+  const [contextEpochMap, setContextEpochMap] = useState<Record<string, { epochIndex: number; archivedMessageIds: string[]; summaryTokens: number }>>(() => {
+    try {
+      const raw = localStorage.getItem('codemind_context_epochs');
+      return raw ? JSON.parse(raw) : {};
+    } catch (e) {
+      return {};
+    }
+  });
+
   // 🧠 Single Source of Truth: Synchronize real Token telemetry and context percentage dynamically
   React.useEffect(() => {
     const curMsgs = sessionMessages[currentSessionId] || [];
     const limit = currentModel?.contextLimit || 131072;
-    const budget = getContextBudget(curMsgs, limit);
+    const activeEpoch = contextEpochMap[currentSessionId];
+    const budget = getContextBudget(curMsgs, limit, 16384, 4096, activeEpoch);
 
     setTokenStats(prev => ({
       ...prev,
-      contextCurrentTokens: budget.effectiveInputTokens,
+      contextCurrentTokens: (activeEpoch && activeEpoch.epochIndex > 1) ? budget.epochTurnTokens : budget.effectiveInputTokens,
       contextMaxTokens: budget.availableInputTokens,
       promptTokens: Math.max(prev.promptTokens, budget.breakdown.conversationTokens),
       completionTokens: Math.max(prev.completionTokens, budget.breakdown.toolsTokens)
     }));
-  }, [sessionMessages, currentSessionId, currentModel]);
+  }, [sessionMessages, currentSessionId, currentModel, contextEpochMap]);
   const [isStreaming, setIsStreaming] = useState<boolean>(false);
   const [promptQueue, setPromptQueue] = useState<QueuedPromptItem[]>([]);
   const promptQueueRef = React.useRef<QueuedPromptItem[]>([]);
@@ -997,24 +1010,38 @@ Tcode 已通过宿主磁盘与终端桥接将工程提供给你。` : '当前处
 
         // 🧠 Unified Context Budget Check (Using actual currentModel.contextLimit)
         const limit = streamingModel.contextLimit || 131072;
-        const budgetBefore = getContextBudget(conversationSnapshot, limit);
+        const activeEpoch = contextEpochMap[currentSessionId];
+        const budgetBefore = getContextBudget(conversationSnapshot, limit, 16384, 4096, activeEpoch);
         let modelFeedMessages = conversationSnapshot;
 
         if (budgetBefore.isCompressed || budgetBefore.usagePercent >= 85) {
           const compressRes = compressModelContext(conversationSnapshot, limit);
           modelFeedMessages = compressRes.compressed;
-          const budgetAfter = getContextBudget(modelFeedMessages, limit);
 
           const rawK = (compressRes.rawTokens / 1000).toFixed(1);
           const effK = (compressRes.effectiveTokens / 1000).toFixed(1);
           const savedK = (compressRes.savedTokens / 1000).toFixed(1);
+          const nextEpochIndex = (activeEpoch?.epochIndex || 1) + 1;
+
+          // Establish new Context Epoch with 0% baseline
+          const newEpochData = {
+            epochIndex: nextEpochIndex,
+            archivedMessageIds: conversationSnapshot.slice(0, -2).map(m => m.id),
+            summaryTokens: compressRes.effectiveTokens
+          };
+
+          setContextEpochMap(prev => {
+            const updated = { ...prev, [currentSessionId]: newEpochData };
+            try { localStorage.setItem('codemind_context_epochs', JSON.stringify(updated)); } catch (e) {}
+            return updated;
+          });
 
           setActiveAutoExecutedToast({
             count: 1,
-            glob: `⚡ 模型有效上下文已就地智能压缩 · ${rawK}k → ${effK}k (节约 ${savedK}k tokens)`
+            glob: `🍃 上下文已重新建立 (Epoch #${nextEpochIndex}) · 旧历史已归档，新上下文从 0% 起步`
           });
-          setTimeout(() => setActiveAutoExecutedToast(null), 3500);
-          addLog('INFO', 'ContextEngine', `[智能压缩] 原始历史 ${rawK}k ➔ 实际发送 ${effK}k (节约 ${savedK}k tokens)，UI 完整历史永久保留。`);
+          setTimeout(() => setActiveAutoExecutedToast(null), 4000);
+          addLog('INFO', 'ContextEngine', `[Context Epoch #${nextEpochIndex}] 旧上下文归档 (${rawK}k ➔ 摘要 ${effK}k)，新上下文以 0% 重新起步计算，UI 完整历史永久保留。`);
         }
 
         const cleanHistory = modelFeedMessages
@@ -1152,18 +1179,16 @@ Tcode 已通过宿主磁盘与终端桥接将工程提供给你。` : '当前处
 
         runCardMsg.content = finalContent;
 
-        // ── Parse target acceptance criteria and actions from AI response ──
-        if (activeAcceptanceItems.length === 0) {
-          const parsedCriteria = parseAcceptanceCriteria(finalContent);
-          if (parsedCriteria.length > 0) {
-            activeAcceptanceItems = parsedCriteria;
-          } else {
-            // Default baseline criteria if model did not output explicit checklist
-            activeAcceptanceItems = [
-              { id: 'crit-1', description: `实现并验证: ${text.slice(0, 30)}`, status: 'pending' },
-              { id: 'crit-2', description: '单元测试与类型检查通过', status: 'pending' }
-            ];
-          }
+        // ── Parse target acceptance criteria and deduplicate/merge at Run level ──
+        const incomingCriteria = parseAcceptanceCriteria(finalContent);
+        if (incomingCriteria.length > 0) {
+          activeAcceptanceItems = mergeAcceptanceCriteria(activeAcceptanceItems, incomingCriteria);
+        } else if (activeAcceptanceItems.length === 0) {
+          // Default baseline criteria if model did not output explicit checklist on initial turn
+          activeAcceptanceItems = [
+            { id: 'crit-1', description: `实现并验证: ${text.slice(0, 30)}`, status: 'pending', evidenceDetails: [] },
+            { id: 'crit-2', description: '单元测试与类型检查通过', status: 'pending', evidenceDetails: [] }
+          ];
         }
 
         const actions = (frozenRunMode === 'act' || frozenRunMode === 'minimal') ? parseActionsFromContent(finalContent) : [];

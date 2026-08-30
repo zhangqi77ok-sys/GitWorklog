@@ -1,17 +1,35 @@
 import React, { useState, useEffect } from 'react';
-import { GitBranch, RotateCcw, ShieldCheck, ChevronDown, RefreshCw, GitCommit, Check, ArrowDown, ArrowUp, Plus } from 'lucide-react';
+import {
+  GitBranch,
+  RotateCcw,
+  RefreshCw,
+  Plus,
+  Minus,
+  Trash2,
+  FileCode,
+  FileDiff,
+  ChevronDown,
+  ChevronRight,
+  ArrowDown,
+  ArrowUp,
+  ShieldCheck,
+  Check,
+  Zap
+} from 'lucide-react';
 import { ProjectGroup } from '../../types/contracts';
 
 interface GitSnapshotsPanelProps {
   activeProject: ProjectGroup;
   projects: ProjectGroup[];
   onSelectProject: (projectId: string) => void;
+  onOpenFile?: (filePath: string, fileName: string) => void;
 }
 
 interface RealGitChange {
   file: string;
-  status: string;
+  status: string; // 'modified' | 'added' | 'deleted' | 'untracked'
   label: string;
+  isStaged?: boolean;
 }
 
 interface RealGitCommit {
@@ -24,28 +42,77 @@ interface RealGitCommit {
 export const GitSnapshotsPanel: React.FC<GitSnapshotsPanelProps> = ({
   activeProject,
   projects,
-  onSelectProject
+  onSelectProject,
+  onOpenFile
 }) => {
   const [branch, setBranch] = useState('main');
-  const [gitChanges, setGitChanges] = useState<RealGitChange[]>([]);
+  const [changes, setChanges] = useState<RealGitChange[]>([]);
+  const [stagedChanges, setStagedChanges] = useState<RealGitChange[]>([]);
   const [commits, setCommits] = useState<RealGitCommit[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isExecutingGit, setIsExecutingGit] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [showProjDropdown, setShowProjDropdown] = useState(false);
   const [commitInput, setCommitInput] = useState('');
+  const [isChangesExpanded, setIsChangesExpanded] = useState(true);
+  const [isStagedExpanded, setIsStagedExpanded] = useState(true);
+  const [isAgentSnapshotsExpanded, setIsAgentSnapshotsExpanded] = useState(false);
+  const [showProjDropdown, setShowProjDropdown] = useState(false);
 
   const targetPath = activeProject?.path || 'e:/pro/agent-learning';
 
   const fetchRealGitData = async () => {
     setIsLoading(true);
     try {
-      // 1. Fetch git status
-      const resStatus = await fetch(`/api/git/status?path=${encodeURIComponent(targetPath)}`);
-      const dataStatus = await resStatus.json();
-      if (dataStatus.success) {
-        setBranch(dataStatus.branch || 'main');
-        setGitChanges(dataStatus.changes || []);
+      // 1. Fetch real porcelain git status
+      const res = await fetch('/api/terminal/exec', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ command: 'git status --porcelain -b', cwd: targetPath })
+      });
+      const data = await res.json();
+
+      if (data.success && data.stdout) {
+        const lines = data.stdout.split('\n').filter(Boolean);
+        const unstagedList: RealGitChange[] = [];
+        const stagedList: RealGitChange[] = [];
+
+        let currentBranch = 'main';
+
+        for (const line of lines) {
+          if (line.startsWith('## ')) {
+            const branchInfo = line.slice(3).split('...')[0].trim();
+            currentBranch = branchInfo || 'main';
+            continue;
+          }
+
+          const indexStatus = line.charAt(0);
+          const worktreeStatus = line.charAt(1);
+          const filePath = line.slice(3).trim();
+
+          // Staged (index has M, A, D, R)
+          if (indexStatus !== ' ' && indexStatus !== '?') {
+            stagedList.push({
+              file: filePath,
+              status: indexStatus === 'A' ? 'added' : indexStatus === 'D' ? 'deleted' : 'modified',
+              label: indexStatus === 'A' ? 'A' : indexStatus === 'D' ? 'D' : 'M',
+              isStaged: true
+            });
+          }
+
+          // Unstaged (worktree has M, D, or untracked ??)
+          if (worktreeStatus !== ' ' || indexStatus === '?') {
+            unstagedList.push({
+              file: filePath,
+              status: indexStatus === '?' ? 'untracked' : worktreeStatus === 'D' ? 'deleted' : 'modified',
+              label: indexStatus === '?' ? 'U' : worktreeStatus === 'D' ? 'D' : 'M',
+              isStaged: false
+            });
+          }
+        }
+
+        setBranch(currentBranch);
+        setChanges(unstagedList);
+        setStagedChanges(stagedList);
       }
 
       // 2. Fetch real git log
@@ -53,7 +120,7 @@ export const GitSnapshotsPanel: React.FC<GitSnapshotsPanelProps> = ({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          command: 'git log -n 8 --pretty=format:"%h|%an|%ar|%s"',
+          command: 'git log -n 6 --pretty=format:"%h|%an|%ar|%s"',
           cwd: targetPath
         })
       });
@@ -83,8 +150,138 @@ export const GitSnapshotsPanel: React.FC<GitSnapshotsPanelProps> = ({
     fetchRealGitData();
   }, [activeProject]);
 
-  // Mainstream Git Operations
-  const handleGitPull = async () => {
+  // Stage single file
+  const handleStageFile = async (filePath: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setIsExecutingGit(true);
+    try {
+      await fetch('/api/terminal/exec', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ command: `git add "${filePath}"`, cwd: targetPath })
+      });
+      setToastMessage(`✓ 已暂存: ${filePath}`);
+      fetchRealGitData();
+    } catch (e: any) {
+      setToastMessage(`❌ 暂存失败: ${e.message}`);
+    } finally {
+      setIsExecutingGit(false);
+      setTimeout(() => setToastMessage(null), 2500);
+    }
+  };
+
+  // Unstage single file
+  const handleUnstageFile = async (filePath: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setIsExecutingGit(true);
+    try {
+      await fetch('/api/terminal/exec', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ command: `git restore --staged "${filePath}"`, cwd: targetPath })
+      });
+      setToastMessage(`✓ 已取消暂存: ${filePath}`);
+      fetchRealGitData();
+    } catch (e: any) {
+      setToastMessage(`❌ 取消暂存失败: ${e.message}`);
+    } finally {
+      setIsExecutingGit(false);
+      setTimeout(() => setToastMessage(null), 2500);
+    }
+  };
+
+  // Discard changes for single file
+  const handleDiscardFile = async (filePath: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    if (!confirm(`确认放弃对 "${filePath}" 的全部修改？此操作不可撤销。`)) return;
+    setIsExecutingGit(true);
+    try {
+      await fetch('/api/terminal/exec', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ command: `git checkout -- "${filePath}"`, cwd: targetPath })
+      });
+      setToastMessage(`↩ 已放弃更改: ${filePath}`);
+      fetchRealGitData();
+    } catch (e: any) {
+      setToastMessage(`❌ 放弃更改失败: ${e.message}`);
+    } finally {
+      setIsExecutingGit(false);
+      setTimeout(() => setToastMessage(null), 2500);
+    }
+  };
+
+  // Stage All
+  const handleStageAll = async () => {
+    setIsExecutingGit(true);
+    try {
+      await fetch('/api/terminal/exec', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ command: 'git add -A', cwd: targetPath })
+      });
+      setToastMessage('✓ 已全部暂存');
+      fetchRealGitData();
+    } catch (e: any) {
+      setToastMessage(`❌ 暂存失败: ${e.message}`);
+    } finally {
+      setIsExecutingGit(false);
+      setTimeout(() => setToastMessage(null), 2500);
+    }
+  };
+
+  // Unstage All
+  const handleUnstageAll = async () => {
+    setIsExecutingGit(true);
+    try {
+      await fetch('/api/terminal/exec', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ command: 'git restore --staged .', cwd: targetPath })
+      });
+      setToastMessage('✓ 已全部取消暂存');
+      fetchRealGitData();
+    } catch (e: any) {
+      setToastMessage(`❌ 取消暂存失败: ${e.message}`);
+    } finally {
+      setIsExecutingGit(false);
+      setTimeout(() => setToastMessage(null), 2500);
+    }
+  };
+
+  // Commit Staged or All
+  const handleCommit = async () => {
+    if (!commitInput.trim() || isExecutingGit) return;
+    setIsExecutingGit(true);
+    const msg = commitInput.trim();
+    try {
+      // If nothing staged, auto stage all
+      const cmd = stagedChanges.length > 0
+        ? `git commit -m "${msg.replace(/"/g, '\\"')}"`
+        : `git add -A && git commit -m "${msg.replace(/"/g, '\\"')}"`;
+
+      const res = await fetch('/api/terminal/exec', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ command: cmd, cwd: targetPath })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setToastMessage(`✓ 成功提交: "${msg}"`);
+        setCommitInput('');
+        fetchRealGitData();
+      } else {
+        setToastMessage(`❌ 提交失败: ${data.error || data.stderr}`);
+      }
+    } catch (e: any) {
+      setToastMessage(`❌ 提交异常: ${e.message}`);
+    } finally {
+      setIsExecutingGit(false);
+      setTimeout(() => setToastMessage(null), 3000);
+    }
+  };
+
+  const handlePull = async () => {
     setIsExecutingGit(true);
     try {
       const res = await fetch('/api/terminal/exec', {
@@ -99,11 +296,11 @@ export const GitSnapshotsPanel: React.FC<GitSnapshotsPanelProps> = ({
       setToastMessage(`❌ 拉取异常: ${e.message}`);
     } finally {
       setIsExecutingGit(false);
-      setTimeout(() => setToastMessage(null), 3500);
+      setTimeout(() => setToastMessage(null), 3000);
     }
   };
 
-  const handleGitPush = async () => {
+  const handlePush = async () => {
     setIsExecutingGit(true);
     try {
       const res = await fetch('/api/terminal/exec', {
@@ -112,51 +309,24 @@ export const GitSnapshotsPanel: React.FC<GitSnapshotsPanelProps> = ({
         body: JSON.stringify({ command: `git push origin ${branch}`, cwd: targetPath })
       });
       const data = await res.json();
-      setToastMessage(data.success ? `✓ 成功推送至 origin/${branch} (git push)` : `❌ 推送失败: ${data.error || data.stderr}`);
+      setToastMessage(data.success ? `✓ 成功推送至 origin/${branch}` : `❌ 推送失败: ${data.error || data.stderr}`);
       fetchRealGitData();
     } catch (e: any) {
       setToastMessage(`❌ 推送异常: ${e.message}`);
     } finally {
       setIsExecutingGit(false);
-      setTimeout(() => setToastMessage(null), 3500);
-    }
-  };
-
-  const handleGitCommit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!commitInput.trim() || isExecutingGit) return;
-    setIsExecutingGit(true);
-    const msg = commitInput.trim();
-    try {
-      const res = await fetch('/api/terminal/exec', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ command: `git add -A && git commit -m "${msg.replace(/"/g, '\\"')}"`, cwd: targetPath })
-      });
-      const data = await res.json();
-      if (data.success) {
-        setToastMessage(`✓ 成功提交变更: "${msg}"`);
-        setCommitInput('');
-        fetchRealGitData();
-      } else {
-        setToastMessage(`❌ 提交失败: ${data.error || data.stderr}`);
-      }
-    } catch (e: any) {
-      setToastMessage(`❌ 提交异常: ${e.message}`);
-    } finally {
-      setIsExecutingGit(false);
-      setTimeout(() => setToastMessage(null), 3500);
+      setTimeout(() => setToastMessage(null), 3000);
     }
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative', userSelect: 'none' }}>
       {toastMessage && (
         <div style={{
           position: 'absolute',
-          top: '8px',
-          left: '8px',
-          right: '8px',
+          top: '6px',
+          left: '6px',
+          right: '6px',
           padding: '6px 10px',
           background: toastMessage.startsWith('✓') ? '#16A34A' : '#DC2626',
           color: '#FFF',
@@ -170,263 +340,340 @@ export const GitSnapshotsPanel: React.FC<GitSnapshotsPanelProps> = ({
         </div>
       )}
 
-      {/* Header & Mainstream Action Bar */}
+      {/* VS Code / Kiro Style Header */}
       <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--border-subtle)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
           <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-            Git 真实仓库与操作
+            源代码管理 (Source Control)
           </span>
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-              padding: '2px 6px',
-              borderRadius: '4px',
-              background: 'var(--accent-subtle)',
-              color: 'var(--accent)',
-              fontSize: '11px',
-              fontWeight: 600
-            }}>
-              <GitBranch size={11} />
-              <span>{branch}</span>
-            </div>
+            <button
+              onClick={handlePull}
+              title="拉取最新代码 (git pull)"
+              style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: '2px' }}
+            >
+              <ArrowDown size={13} color="#16A34A" />
+            </button>
+            <button
+              onClick={handlePush}
+              title="推送本地提交 (git push)"
+              style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: '2px' }}
+            >
+              <ArrowUp size={13} color="var(--accent)" />
+            </button>
             <button
               onClick={fetchRealGitData}
               title="刷新 Git 状态"
-              style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '2px' }}
+              style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: '2px' }}
             >
-              <RefreshCw size={11} className={isLoading ? 'animate-spin' : ''} />
+              <RefreshCw size={13} className={isLoading ? 'animate-spin' : ''} />
             </button>
           </div>
         </div>
 
-        {/* Project Switcher */}
-        <div style={{ position: 'relative', marginBottom: '8px' }}>
-          <div
-            onClick={() => setShowProjDropdown(!showProjDropdown)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '3px 6px',
-              borderRadius: '4px',
-              background: 'var(--bg-surface)',
-              border: '1px solid var(--border-subtle)',
-              fontSize: '11px',
-              cursor: 'pointer'
-            }}
-          >
-            <span style={{ color: 'var(--text-secondary)' }}>
-              仓库: 📁 <strong>{activeProject.name}</strong>
-            </span>
-            <ChevronDown size={11} color="var(--text-muted)" />
+        {/* Branch Pill & Project Switcher */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+          <div style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '4px',
+            padding: '2px 8px',
+            borderRadius: '10px',
+            background: 'var(--accent-subtle)',
+            color: 'var(--accent)',
+            fontSize: '11px',
+            fontWeight: 600
+          }}>
+            <GitBranch size={11} />
+            <span>{branch}</span>
           </div>
 
-          {showProjDropdown && (
-            <div style={{
-              position: 'absolute',
-              top: '26px',
-              left: 0,
-              right: 0,
-              background: 'var(--bg-surface-elevated)',
-              border: '1px solid var(--border-strong)',
-              borderRadius: '4px',
-              boxShadow: '0 6px 16px rgba(0,0,0,0.12)',
-              zIndex: 50,
-              padding: '4px'
-            }}>
-              {projects.map(p => (
-                <div
-                  key={p.id}
-                  onClick={() => {
-                    onSelectProject(p.id);
-                    setShowProjDropdown(false);
-                  }}
-                  style={{
-                    padding: '4px 6px',
-                    borderRadius: '3px',
-                    fontSize: '10.5px',
-                    cursor: 'pointer',
-                    color: p.id === activeProject.id ? 'var(--accent)' : 'var(--text-primary)',
-                    background: p.id === activeProject.id ? 'var(--accent-subtle)' : 'transparent'
-                  }}
-                >
-                  📁 {p.name}
-                </div>
-              ))}
-            </div>
-          )}
+          <div style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>
+            📁 {activeProject?.name || 'project'}
+          </div>
         </div>
 
-        {/* Mainstream Git Action Buttons: Pull, Push */}
-        <div style={{ display: 'flex', gap: '6px', marginBottom: '6px' }}>
-          <button
-            onClick={handleGitPull}
-            disabled={isExecutingGit}
-            style={{
-              flex: 1,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '4px',
-              padding: '4px 8px',
-              borderRadius: '4px',
-              background: 'var(--bg-surface)',
-              border: '1px solid var(--border-subtle)',
-              color: 'var(--text-primary)',
-              fontSize: '11px',
-              fontWeight: 600,
-              cursor: 'pointer'
-            }}
-          >
-            <ArrowDown size={12} color="#16A34A" />
-            <span>Pull 拉取</span>
-          </button>
-
-          <button
-            onClick={handleGitPush}
-            disabled={isExecutingGit}
-            style={{
-              flex: 1,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '4px',
-              padding: '4px 8px',
-              borderRadius: '4px',
-              background: 'var(--accent)',
-              border: 'none',
-              color: '#FFF',
-              fontSize: '11px',
-              fontWeight: 600,
-              cursor: 'pointer'
-            }}
-          >
-            <ArrowUp size={12} />
-            <span>Push 推送</span>
-          </button>
-        </div>
-
-        {/* Inline Commit Form */}
-        <form onSubmit={handleGitCommit} style={{ display: 'flex', gap: '4px' }}>
-          <input
-            type="text"
-            placeholder="Commit 提交信息 (feat / fix)..."
+        {/* Commit Message Textarea & Action Button */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          <textarea
+            placeholder="输入提交信息 (Ctrl+Enter 提交)..."
             value={commitInput}
             onChange={e => setCommitInput(e.target.value)}
-            disabled={isExecutingGit}
+            onKeyDown={e => {
+              if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                e.preventDefault();
+                handleCommit();
+              }
+            }}
+            rows={2}
             style={{
-              flex: 1,
-              padding: '3px 6px',
-              fontSize: '11px',
+              width: '100%',
+              padding: '6px',
+              fontSize: '11.5px',
               borderRadius: '4px',
               border: '1px solid var(--border-strong)',
               background: 'var(--bg-surface)',
               color: 'var(--text-primary)',
-              outline: 'none'
+              outline: 'none',
+              resize: 'none',
+              fontFamily: 'inherit'
             }}
           />
           <button
-            type="submit"
+            onClick={handleCommit}
             disabled={isExecutingGit || !commitInput.trim()}
             style={{
-              padding: '3px 8px',
+              padding: '5px 8px',
               borderRadius: '4px',
               background: commitInput.trim() ? 'var(--accent)' : 'var(--border-subtle)',
               border: 'none',
               color: '#FFF',
-              fontSize: '10.5px',
+              fontSize: '11px',
               fontWeight: 600,
-              cursor: commitInput.trim() ? 'pointer' : 'default'
+              cursor: commitInput.trim() ? 'pointer' : 'default',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '4px'
             }}
           >
-            提交
+            <Check size={12} />
+            <span>提交 (Commit)</span>
           </button>
-        </form>
+        </div>
       </div>
 
-      {/* Body: Real Working Tree Changes & Real Git Log Snapshots */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '8px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-        {/* Real Modified Files */}
+      {/* Main File Changes Tree */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        
+        {/* 1. Staged Changes Section */}
+        {stagedChanges.length > 0 && (
+          <div>
+            <div
+              onClick={() => setIsStagedExpanded(!isStagedExpanded)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '3px 4px',
+                cursor: 'pointer',
+                fontSize: '11px',
+                fontWeight: 700,
+                color: 'var(--text-secondary)'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                {isStagedExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                <span>已暂存的更改 (Staged Changes)</span>
+                <span style={{ fontSize: '10px', color: '#16A34A' }}>({stagedChanges.length})</span>
+              </div>
+              <button
+                onClick={(e) => { e.stopPropagation(); handleUnstageAll(); }}
+                title="全部取消暂存"
+                style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '1px' }}
+              >
+                <Minus size={12} />
+              </button>
+            </div>
+
+            {isStagedExpanded && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginTop: '2px', paddingLeft: '12px' }}>
+                {stagedChanges.map(c => (
+                  <div
+                    key={c.file}
+                    onClick={() => onOpenFile && onOpenFile(c.file, c.file.split(/[/\\]/).pop() || c.file)}
+                    style={{
+                      padding: '3px 6px',
+                      borderRadius: '3px',
+                      background: 'var(--bg-surface)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      fontSize: '11px',
+                      fontFamily: 'var(--font-mono)',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden' }}>
+                      <FileCode size={12} color="#16A34A" />
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.file}</span>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <span style={{ fontSize: '9.5px', fontWeight: 700, color: '#16A34A' }}>{c.label}</span>
+                      <button
+                        onClick={(e) => handleUnstageFile(c.file, e)}
+                        title="取消暂存"
+                        style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '1px' }}
+                      >
+                        <Minus size={11} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* 2. Unstaged Changes Section */}
         <div>
-          <div style={{ fontSize: '10.5px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '4px', display: 'flex', justifyContent: 'space-between' }}>
-            <span>工作区未提交变更</span>
-            <span style={{ color: gitChanges.length > 0 ? 'var(--accent)' : '#16A34A' }}>
-              {gitChanges.length > 0 ? `${gitChanges.length} 个文件变动` : '✓ 干净无变动'}
-            </span>
+          <div
+            onClick={() => setIsChangesExpanded(!isChangesExpanded)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '3px 4px',
+              cursor: 'pointer',
+              fontSize: '11px',
+              fontWeight: 700,
+              color: 'var(--text-secondary)'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              {isChangesExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+              <span>更改 (Changes)</span>
+              <span style={{ fontSize: '10px', color: changes.length > 0 ? 'var(--accent)' : '#16A34A' }}>
+                ({changes.length})
+              </span>
+            </div>
+
+            {changes.length > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <button
+                  onClick={(e) => { e.stopPropagation(); handleStageAll(); }}
+                  title="全部暂存"
+                  style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '1px' }}
+                >
+                  <Plus size={12} />
+                </button>
+              </div>
+            )}
+          </div>
+
+          {isChangesExpanded && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginTop: '2px', paddingLeft: '12px' }}>
+              {changes.length === 0 ? (
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', padding: '6px 4px' }}>
+                  ✓ 工作区无任何未提交更改
+                </div>
+              ) : (
+                changes.map(c => (
+                  <div
+                    key={c.file}
+                    onClick={() => onOpenFile && onOpenFile(c.file, c.file.split(/[/\\]/).pop() || c.file)}
+                    style={{
+                      padding: '3px 6px',
+                      borderRadius: '3px',
+                      background: 'var(--bg-surface)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      fontSize: '11px',
+                      fontFamily: 'var(--font-mono)',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden' }}>
+                      <FileDiff size={12} color="var(--accent)" />
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.file}</span>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <span style={{
+                        fontSize: '9.5px',
+                        fontWeight: 700,
+                        color: c.label === 'M' ? 'var(--accent)' : c.label === 'U' ? '#16A34A' : '#DC2626'
+                      }}>
+                        {c.label}
+                      </span>
+                      <button
+                        onClick={(e) => handleStageFile(c.file, e)}
+                        title="暂存更改 (+)"
+                        style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '1px' }}
+                      >
+                        <Plus size={11} />
+                      </button>
+                      <button
+                        onClick={(e) => handleDiscardFile(c.file, e)}
+                        title="放弃更改 (不可恢复)"
+                        style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '1px' }}
+                      >
+                        <RotateCcw size={10} />
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* 3. Tcode Agent Security Checkpoint & Rollback Section */}
+        <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '6px', marginTop: '4px' }}>
+          <div
+            onClick={() => setIsAgentSnapshotsExpanded(!isAgentSnapshotsExpanded)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '3px 4px',
+              cursor: 'pointer',
+              fontSize: '10.5px',
+              fontWeight: 700,
+              color: 'var(--text-muted)'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              {isAgentSnapshotsExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+              <ShieldCheck size={12} color="#16A34A" />
+              <span>Agent 安全快照 (Checkpoints)</span>
+            </div>
+            <span style={{ fontSize: '9px', color: 'var(--text-muted)' }}>保护中</span>
+          </div>
+
+          {isAgentSnapshotsExpanded && (
+            <div style={{ padding: '6px 8px', fontSize: '10.5px', color: 'var(--text-muted)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <div>每次 Agent Run 发起前会自动建立影子快照，您可在聊天记录中点击“↩ 回到这里”无损回滚。</div>
+            </div>
+          )}
+        </div>
+
+        {/* 4. Git Commits Log */}
+        <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '6px' }}>
+          <div style={{ fontSize: '10.5px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '4px' }}>
+            提交历史 (Commit Log)
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-            {gitChanges.map((c, idx) => (
-              <div
-                key={idx}
-                style={{
-                  padding: '4px 6px',
-                  borderRadius: '3px',
-                  background: 'var(--bg-surface)',
-                  border: '1px solid var(--border-subtle)',
-                  fontSize: '10.5px',
-                  fontFamily: 'var(--font-mono)',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center'
-                }}
-              >
-                <span style={{ color: 'var(--text-primary)' }}>{c.file}</span>
-                <span style={{
-                  fontSize: '9px',
-                  padding: '0 4px',
-                  borderRadius: '2px',
-                  background: c.status === 'modified' ? 'rgba(217, 107, 39, 0.1)' : 'rgba(22, 163, 74, 0.1)',
-                  color: c.status === 'modified' ? 'var(--accent)' : '#16A34A',
-                  fontWeight: 600
-                }}>
-                  {c.status}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Real Git Commit Log Snapshots */}
-        <div>
-          <div style={{ fontSize: '10.5px', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '4px' }}>
-            真实 Git 提交快照 (Commit Log)
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
             {commits.map(c => (
               <div
                 key={c.hash}
                 style={{
-                  padding: '6px 8px',
-                  borderRadius: '4px',
+                  padding: '4px 6px',
+                  borderRadius: '3px',
                   background: 'var(--bg-surface)',
-                  border: '1px solid var(--border-subtle)',
+                  fontSize: '10.5px',
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: '2px'
+                  gap: '1px'
                 }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: '10.5px', color: 'var(--accent)' }}>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--accent)', fontSize: '10px' }}>
                     #{c.hash}
                   </span>
-                  <span style={{ fontSize: '9px', color: 'var(--text-muted)' }}>
-                    {c.date}
-                  </span>
+                  <span style={{ fontSize: '9px', color: 'var(--text-muted)' }}>{c.date}</span>
                 </div>
-                <div style={{ fontSize: '11px', color: 'var(--text-primary)', fontWeight: 500 }}>
+                <div style={{ color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {c.message}
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '2px' }}>
-                  <span style={{ fontSize: '9.5px', color: 'var(--text-muted)' }}>by {c.author}</span>
                 </div>
               </div>
             ))}
           </div>
         </div>
+
       </div>
     </div>
   );

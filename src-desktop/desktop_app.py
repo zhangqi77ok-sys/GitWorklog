@@ -3,6 +3,7 @@ import os
 import sys
 import json
 import subprocess
+from window_geometry import center_window
 CREATE_NO_WINDOW = 0x08000000
 APP_NAME = 'Tcode Studio'
 APP_STORAGE_KEY = 'Tcode'
@@ -795,21 +796,45 @@ if __name__ == '__main__':
     port = start_local_server()
     url = f"http://127.0.0.1:{port}/"
 
-    # Calculate screen center position for reliable centering (especially frameless windows on Windows)
+    # Use the current Windows work area (not the full screen) so the taskbar
+    # is excluded and the initial window is centered on the usable desktop.
     win_width = 1440
     win_height = 900
-    center_x = None
-    center_y = None
+    center_x = 0
+    center_y = 0
     try:
         import ctypes
+        from ctypes import wintypes
+
         user32 = ctypes.windll.user32
-        user32.SetProcessDPIAware()  # Handle high-DPI screens
-        screen_w = user32.GetSystemMetrics(0)
-        screen_h = user32.GetSystemMetrics(1)
-        center_x = max(0, (screen_w - win_width) // 2)
-        center_y = max(0, (screen_h - win_height) // 2)
+        user32.SetProcessDPIAware()
+
+        class RECT(ctypes.Structure):
+            _fields_ = [
+                ('left', wintypes.LONG),
+                ('top', wintypes.LONG),
+                ('right', wintypes.LONG),
+                ('bottom', wintypes.LONG),
+            ]
+
+        work_rect = RECT()
+        SPI_GETWORKAREA = 48
+        if user32.SystemParametersInfoW(SPI_GETWORKAREA, 0, ctypes.byref(work_rect), 0):
+            work_area = (
+                int(work_rect.left),
+                int(work_rect.top),
+                int(work_rect.right),
+                int(work_rect.bottom),
+            )
+        else:
+            screen_w = int(user32.GetSystemMetrics(0))
+            screen_h = int(user32.GetSystemMetrics(1))
+            work_area = (0, 0, screen_w, screen_h)
+
+        center_x, center_y = center_window(work_area, (win_width, win_height))
     except Exception:
-        pass  # Fallback: let pywebview handle positioning
+        # A safe fallback is still preferable to passing an invalid position.
+        center_x, center_y = 0, 0
 
     window = webview.create_window(
         title=f"{APP_NAME} - Enterprise AI Agentic IDE",

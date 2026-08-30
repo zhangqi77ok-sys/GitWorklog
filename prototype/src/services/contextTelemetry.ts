@@ -99,35 +99,81 @@ export function compressModelContext(
   };
 }
 
+export interface ContextBudget {
+  modelContextLimit: number;      // 模型完整上下文窗口 (如 131,072)
+  reservedOutputTokens: number;   // 为模型输出预留 (默认 16,384)
+  safetyMarginTokens: number;     // 安全余量 (默认 4,096)
+  availableInputTokens: number;   // 当前实际可用输入预算 = Limit - Reserved - Margin
+  effectiveInputTokens: number;   // 本轮压缩后实际发送的输入
+  rawHistoryTokens: number;       // 未压缩原始历史 Token
+  isCompressed: boolean;          // 是否经过智能压缩
+  savedTokens: number;            // 压缩节约的 Token 数
+  usagePercent: number;           // effectiveInputTokens / availableInputTokens * 100
+  epochIndex: number;             // 当前上下文周期 (Epoch #1, Epoch #2...)
+  epochTurnTokens: number;        // 当前周期新增 Token (从 0k 起步)
+  epochSummaryTokens: number;     // 当前周期基底摘要 Token
+  status: ContextStatus;
+  canProceed: boolean;
+  breakdown: {
+    conversationTokens: number;
+    toolsTokens: number;
+    systemTokens: number;
+    convRatio: number;
+    toolRatio: number;
+    sysRatio: number;
+  };
+}
+
 /**
- * Standard Context Budget Evaluator:
- * Separates Raw History vs. Available Input Budget vs. Effective Payload.
+ * Standard Context Budget Evaluator with Context Epoch Support:
+ * - Separates Raw History vs. Available Input Budget vs. Effective Payload.
+ * - When an Epoch is active (post-compression), calculates UI % from epoch turn additions (starting from 0%)
+ * - LLM actual feed correctly accounts for system + summary tokens + turns.
  */
 export function getContextBudget(
   messages: ChatMessage[],
   contextLimit: number = 131072,
   reservedOutput: number = 16384,
-  safetyMargin: number = 4096
+  safetyMargin: number = 4096,
+  activeEpoch?: {
+    epochIndex: number;
+    archivedMessageIds: string[];
+    summaryTokens: number;
+  }
 ): ContextBudget {
   const limit = Math.max(8000, contextLimit || 131072);
   const availableInputTokens = Math.max(4000, limit - reservedOutput - safetyMargin);
 
+  // If epoch is active, filter messages belonging to current epoch for turn calculation
+  const epochMessages = activeEpoch && activeEpoch.archivedMessageIds.length > 0
+    ? messages.filter(m => !activeEpoch.archivedMessageIds.includes(m.id))
+    : messages;
+
   const rawEst = estimateMessageTokens(messages);
   const rawHistoryTokens = rawEst.totalEstimated;
+
+  const epochEst = estimateMessageTokens(epochMessages);
+  const epochTurnTokens = epochEst.totalEstimated - 1200; // exclude fixed system tokens
 
   let isCompressed = false;
   let effectiveInputTokens = rawHistoryTokens;
   let savedTokens = 0;
 
-  // If raw history exceeds 80% of available input, trigger smart compression
-  if (rawHistoryTokens > availableInputTokens * 0.80) {
+  // If raw history exceeds 80% of available input and not already in fresh epoch
+  if (rawHistoryTokens > availableInputTokens * 0.80 && (!activeEpoch || activeEpoch.epochIndex <= 1)) {
     const compResult = compressModelContext(messages, limit);
     effectiveInputTokens = compResult.effectiveTokens;
     savedTokens = compResult.savedTokens;
     isCompressed = true;
   }
 
-  const usagePercent = Math.min(100, Math.max(1, Math.round((effectiveInputTokens / availableInputTokens) * 100)));
+  // Calculate percentage: If in Epoch #2+, compute from Epoch additions (starts at 0%)
+  const epochSummary = activeEpoch?.summaryTokens || 0;
+  const effectiveEpochInput = (activeEpoch && activeEpoch.epochIndex > 1)
+    ? epochTurnTokens
+    : effectiveInputTokens;
+
+  const usagePercent = Math.min(100, Math.max(0, Math.round((effectiveEpochInput / availableInputTokens) * 100)));
 
   let status: ContextStatus = 'normal';
   if (usagePercent >= 100) {
@@ -143,10 +189,10 @@ export function getContextBudget(
   const canProceed = usagePercent < 100;
 
   // Calculate Breakdown based on effective payload
-  const convTokens = Math.ceil(rawEst.rawChars / 3.5);
-  const toolTokens = Math.ceil(rawEst.toolChars / 3.5);
+  const convTokens = Math.ceil((activeEpoch && activeEpoch.epochIndex > 1 ? epochEst.rawChars : rawEst.rawChars) / 3.5);
+  const toolTokens = Math.ceil((activeEpoch && activeEpoch.epochIndex > 1 ? epochEst.toolChars : rawEst.toolChars) / 3.5);
   const sysTokens = 1200;
-  const totalEffectiveBase = Math.max(1, effectiveInputTokens);
+  const totalEffectiveBase = Math.max(1, convTokens + toolTokens + sysTokens);
 
   const convRatio = Math.min(100, Math.max(1, Math.round((convTokens / totalEffectiveBase) * 100)));
   const toolRatio = Math.min(100, Math.max(0, Math.round((toolTokens / totalEffectiveBase) * 100)));
@@ -159,9 +205,12 @@ export function getContextBudget(
     availableInputTokens,
     effectiveInputTokens,
     rawHistoryTokens,
-    isCompressed,
+    isCompressed: isCompressed || (Boolean(activeEpoch && activeEpoch.epochIndex > 1)),
     savedTokens,
     usagePercent,
+    epochIndex: activeEpoch?.epochIndex || 1,
+    epochTurnTokens: Math.max(0, epochTurnTokens),
+    epochSummaryTokens: epochSummary,
     status,
     canProceed,
     breakdown: {

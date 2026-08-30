@@ -306,11 +306,36 @@ export interface QueuedPromptItem {
   selectedMentions?: MentionContextItem[];
 }
 
+export interface EvidenceItem {
+  type: 'command' | 'file' | 'test' | 'manual';
+  summary: string;
+  command?: string;
+  exitCode?: number;
+  output?: string;
+  filePath?: string;
+  timestamp?: number;
+}
+
 export interface TargetAcceptanceItem {
   id: string;
   description: string;
-  status: 'pending' | 'passed' | 'failed';
-  evidence?: string;
+  status: 'pending' | 'running' | 'passed' | 'failed' | 'blocked';
+  evidence?: string;                 // Backwards compatible string summary
+  evidenceDetails?: EvidenceItem[]; // 🔬 结构化证据链（命令、退出码、stdout/stderr、文件）
+}
+
+export interface ContextEpoch {
+  id: string;
+  sessionId: string;
+  epochIndex: number;
+  createdAt: number;
+  archivedMessageIds: string[];
+  summaryText: string;
+  summaryTokens: number;
+  systemTokens: number;
+  rulesTokens: number;
+  turnTokens: number;
+  contextLimit: number;
 }
 
 export type LoopTerminationStatus =

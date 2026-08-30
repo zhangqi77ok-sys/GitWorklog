@@ -31,4 +31,30 @@ describe('Context telemetry & budget contract', () => {
     expect(budget.savedTokens).toBeGreaterThan(0);
     expect(budget.effectiveInputTokens).toBeLessThan(budget.rawHistoryTokens);
   });
+
+  it('resets usage percentage to 0% on Context Epoch #2 while preserving historical reference', () => {
+    const oldMsg1 = message('旧会话内容1'.repeat(200));
+    const oldMsg2 = message('旧会话内容2'.repeat(200));
+    const messages = [oldMsg1, oldMsg2];
+
+    const epoch2 = {
+      epochIndex: 2,
+      archivedMessageIds: [oldMsg1.id, oldMsg2.id],
+      summaryTokens: 850
+    };
+
+    // When in Epoch #2 with no new turn messages yet
+    const budgetFresh = getContextBudget(messages, 128000, 16000, 4000, epoch2);
+    expect(budgetFresh.epochIndex).toBe(2);
+    expect(budgetFresh.usagePercent).toBe(0); // Starts fresh from 0%
+    expect(budgetFresh.epochTurnTokens).toBe(0);
+
+    // After 1 new turn arrives in Epoch #2
+    const newTurnMsg = message('新周期第一轮指令与分析'.repeat(50));
+    const budgetWithTurn = getContextBudget([...messages, newTurnMsg], 128000, 16000, 4000, epoch2);
+    expect(budgetWithTurn.epochIndex).toBe(2);
+    expect(budgetWithTurn.epochTurnTokens).toBeGreaterThan(0);
+    expect(budgetWithTurn.usagePercent).toBeGreaterThanOrEqual(0);
+  });
 });
+

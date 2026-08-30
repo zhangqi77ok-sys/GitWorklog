@@ -192,6 +192,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
           activeProject={activeProject}
           projects={projects}
           onSelectProject={handleSelectProject}
+          onOpenFile={(path, name) => onOpenFile(path, name)}
         />
       </div>
     );

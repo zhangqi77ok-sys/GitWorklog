@@ -13,7 +13,7 @@ export const ActivityBar: React.FC<ActivityBarProps> = ({ activeNav, setActiveNa
     { id: 'sessions', icon: MessageSquare, label: '会话管理' },
     { id: 'files', icon: FolderTree, label: '项目代码' },
     { id: 'search', icon: Search, label: '全局检索' },
-    { id: 'git', icon: GitBranch, label: 'Git 影子快照' },
+    { id: 'git', icon: GitBranch, label: '源代码管理 (Source Control)' },
     { id: 'rules', icon: BookOpen, label: '规则与经验库' },
     { id: 'gateway', icon: Cpu, label: '模型网关' },
   ];

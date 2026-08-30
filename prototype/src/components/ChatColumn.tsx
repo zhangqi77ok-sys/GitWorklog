@@ -229,6 +229,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
   const [showRulesPopover, setShowRulesPopover] = useState(false);
   const [selectedRoundByMsgId, setSelectedRoundByMsgId] = useState<Record<string, number>>({});
+  const [userToggledRounds, setUserToggledRounds] = useState<Record<string, boolean>>({});
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
     setInputText(val);
@@ -847,10 +848,19 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
             </button>
           )}
 
-          {/* Context Telemetry HUD Capsule (Industry Standard Context Budget Model) */}
+          {/* Context Telemetry HUD Capsule (Industry Standard Context Budget Model with Context Epoch) */}
           {(() => {
             const limit = currentModel?.contextLimit || 131072;
-            const budget = getContextBudget(messages, limit);
+            let activeEpoch = undefined;
+            try {
+              const raw = localStorage.getItem('codemind_context_epochs');
+              if (raw) {
+                const map = JSON.parse(raw);
+                activeEpoch = map[session.id];
+              }
+            } catch (e) {}
+
+            const budget = getContextBudget(messages, limit, 16384, 4096, activeEpoch);
             
             const totalPercent = budget.usagePercent;
             const convRatio = budget.breakdown.convRatio;
@@ -867,11 +877,11 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
 
             const detailedTooltip = `模型上下文预算看板：${totalPercent}% (${statusLabel})
 • 当前模型：${currentModel?.name || '默认模型'} (总窗口 ${limitK}k)
-• 本轮输入预算：${availK}k (已预留 16k 输出 + 4k 安全余量)
-• 有效请求负载：${effK}k / ${availK}k
-• 原始会话历史：${rawK}k ${budget.isCompressed ? `→ 压缩后 ${effK}k (节约 ${(budget.savedTokens / 1000).toFixed(1)}k)` : ''}
+• 当前周期：Context Epoch #${budget.epochIndex || 1} ${budget.epochIndex > 1 ? `(旧历史已归档，基底摘要 ${(budget.epochSummaryTokens / 1000).toFixed(1)}k)` : ''}
+• 本轮有效输入：${(budget.epochTurnTokens / 1000).toFixed(1)}k / 可用预算 ${availK}k
+• 原始会话历史：${rawK}k ${budget.isCompressed ? `(UI 完整保留)` : ''}
 • 负载构成：对话 ${convRatio}% · 工具/代码 ${toolRatio}% · 规则 ${sysRatio}%
-• 状态：${budget.isCompressed ? '🍃 已启用非破坏性智能压缩' : '完整原始上下文'}`;
+• 状态：${budget.epochIndex > 1 ? `🍃 Epoch #${budget.epochIndex} 新上下文周期 (从 0% 起步)` : budget.isCompressed ? '🍃 已启用非破坏性智能压缩' : '完整原始上下文'}`;
 
             return (
               <div
@@ -892,9 +902,11 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
               >
                 <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: statusColor }} />
                 <span style={{ fontWeight: 700 }}>上下文 {totalPercent}%</span>
-                {budget.isCompressed && (
+                {budget.epochIndex > 1 ? (
+                  <span style={{ fontSize: '9px', color: '#16A34A', fontWeight: 600 }}>🍃Epoch #{budget.epochIndex}</span>
+                ) : budget.isCompressed ? (
                   <span style={{ fontSize: '9px', color: '#16A34A', fontWeight: 600 }}>🍃已压缩</span>
-                )}
+                ) : null}
                 <span style={{ fontSize: '9px', color: 'var(--text-muted)' }}>({convRatio}% / {toolRatio}% / {sysRatio}%)</span>
               </div>
             );
@@ -1156,11 +1168,17 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                 return (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', userSelect: 'text', WebkitUserSelect: 'text' }}>
                     {msg.rounds!.map((round, roundIdx) => {
+                      const isLatestRound = roundIdx === msg.rounds!.length - 1;
+                      // Default state: latest round expanded, historical rounds collapsed
+                      const roundKey = `${msg.id}-round-${round.roundId}`;
+                      const isManuallyToggled = userToggledRounds[roundKey] !== undefined;
+                      const isRoundExpanded = isManuallyToggled ? userToggledRounds[roundKey] : isLatestRound;
+
                       const roundParsed = parseAgentMessage(round.content || '');
-                      const isCurrentlyStreaming = isLastAssistant && roundIdx === msg.rounds!.length - 1;
+                      const isCurrentlyStreaming = isLastAssistant && isLatestRound;
                       const phaseLabels: Record<string, string> = {
-                        understand: '🔍 理解', plan: '📋 规划', inspect: '🔎 探索',
-                        modify: '✏️ 修改', verify: '🧪 验证', fix: '🔧 修复', done: '✅ 完成'
+                        understand: '🔍 探索分析', plan: '📋 任务规划', inspect: '🔎 扫描工程',
+                        modify: '✏️ 修改代码', verify: '🧪 运行验证', fix: '🔧 修复代码', done: '✅ 验收完成'
                       };
                       const statusColors: Record<string, string> = {
                         running: 'var(--accent)', passed: '#16A34A', failed: '#DC2626', blocked: '#9333EA'
@@ -1171,119 +1189,145 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
 
                       return (
                         <div key={round.roundId} style={{
-                          borderLeft: `2px solid ${statusColors[round.status] || 'var(--border-subtle)'}`,
-                          paddingLeft: '12px',
-                          marginLeft: '2px',
-                          position: 'relative'
+                          border: `1px solid ${isLatestRound ? 'var(--accent)' : 'var(--border-subtle)'}`,
+                          borderRadius: '8px',
+                          background: isLatestRound ? 'var(--bg-surface-elevated)' : 'var(--bg-base)',
+                          boxShadow: isLatestRound ? '0 2px 8px rgba(0,0,0,0.04)' : 'none',
+                          overflow: 'hidden',
+                          transition: 'all 0.15s ease'
                         }}>
-                          {/* Round Header */}
-                          <div style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '6px',
-                            marginBottom: '6px',
-                            fontSize: '10.5px',
-                            fontWeight: 600
-                          }}>
-                            <span style={{
-                              display: 'inline-flex',
+                          {/* Collapsible Round Header */}
+                          <div
+                            onClick={() => setUserToggledRounds(prev => ({ ...prev, [roundKey]: !isRoundExpanded }))}
+                            style={{
+                              padding: '8px 12px',
+                              display: 'flex',
                               alignItems: 'center',
-                              gap: '3px',
-                              padding: '1px 8px',
-                              borderRadius: '10px',
-                              background: `${statusColors[round.status] || 'var(--accent)'}15`,
-                              border: `1px solid ${statusColors[round.status] || 'var(--accent)'}40`,
-                              color: statusColors[round.status] || 'var(--accent)',
-                              fontSize: '10px'
-                            }}>
-                              <span>{statusIcons[round.status] || '●'}</span>
-                              <span>Round {round.roundId}</span>
-                            </span>
-                            <span style={{ color: 'var(--text-muted)', fontSize: '10px' }}>
-                              {phaseLabels[round.phase] || round.phase} · {round.title}
-                            </span>
-                            <span style={{ color: 'var(--text-muted)', fontSize: '9.5px', marginLeft: 'auto' }}>
-                              {new Date(round.timestamp).toLocaleTimeString()}
-                            </span>
-                          </div>
-
-                          {/* Round Thinking Block */}
-                          {roundParsed.thinkingText && (
-                            <ThinkingBlock
-                              payload={{
-                                thinkingText: roundParsed.thinkingText,
-                                contentText: roundParsed.cleanContent,
-                                isThinkingFinished: !isCurrentlyStreaming,
-                                durationSeconds: 6.5,
-                                tokensCount: Math.ceil(roundParsed.thinkingText.length / 4)
-                              }}
-                              defaultExpanded={isCurrentlyStreaming}
-                            />
-                          )}
-
-                          {/* Round Tool Calls */}
-                          {roundParsed.toolCalls.length > 0 && (
-                            <div style={{
-                              borderRadius: '6px',
-                              border: '1px solid rgba(217, 107, 39, 0.3)',
-                              background: 'rgba(217, 107, 39, 0.04)',
-                              overflow: 'hidden',
-                              marginBottom: '4px'
-                            }}>
-                              <div
-                                onClick={() => setCollapsedTools(prev => ({ ...prev, [`${msg.id}-r${round.roundId}`]: !prev[`${msg.id}-r${round.roundId}`] }))}
-                                style={{
-                                  padding: '5px 10px',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'space-between',
-                                  background: 'rgba(217, 107, 39, 0.08)',
-                                  cursor: 'pointer',
-                                  userSelect: 'none',
-                                  fontSize: '10.5px',
-                                  fontWeight: 600,
-                                  color: 'var(--accent)'
-                                }}
-                              >
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                  <Wrench size={12} />
-                                  <span>🛠️ 工具调度: {roundParsed.toolCalls.length} 个函数 ({roundParsed.toolCalls.map((t: ParsedToolCall) => t.name).join(', ')})</span>
-                                </div>
-                                {collapsedTools[`${msg.id}-r${round.roundId}`] ? <ChevronDown size={13} /> : <ChevronUp size={13} />}
-                              </div>
-                              {!collapsedTools[`${msg.id}-r${round.roundId}`] && (
-                                <div style={{ padding: '6px 10px', display: 'flex', flexDirection: 'column', gap: '3px', fontSize: '10.5px', fontFamily: 'var(--font-mono)' }}>
-                                  {roundParsed.toolCalls.map((tc: ParsedToolCall, idx: number) => (
-                                    <div key={idx} style={{ padding: '2px 6px', borderRadius: '4px', background: 'var(--bg-base)' }}>
-                                      <span style={{ color: 'var(--accent)', fontWeight: 700 }}>▶ {tc.name}</span>
-                                      <span style={{ color: 'var(--text-muted)', marginLeft: '6px' }}>{JSON.stringify(tc.parameters)}</span>
-                                    </div>
-                                  ))}
-                                </div>
+                              justifyContent: 'space-between',
+                              background: isLatestRound ? 'rgba(217, 107, 39, 0.06)' : 'rgba(0,0,0,0.02)',
+                              borderBottom: isRoundExpanded ? '1px solid var(--border-subtle)' : 'none',
+                              cursor: 'pointer',
+                              userSelect: 'none'
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '3px',
+                                padding: '1px 8px',
+                                borderRadius: '10px',
+                                background: `${statusColors[round.status] || 'var(--accent)'}15`,
+                                border: `1px solid ${statusColors[round.status] || 'var(--accent)'}40`,
+                                color: statusColors[round.status] || 'var(--accent)',
+                                fontSize: '10.5px',
+                                fontWeight: 700
+                              }}>
+                                <span>{statusIcons[round.status] || '●'}</span>
+                                <span>第 {round.roundId} 轮</span>
+                              </span>
+                              <span style={{ color: 'var(--text-primary)', fontWeight: 600, fontSize: '11px' }}>
+                                {phaseLabels[round.phase] || round.phase} · {round.title}
+                              </span>
+                              {!isRoundExpanded && (
+                                <span style={{ color: 'var(--text-muted)', fontSize: '10px' }}>
+                                  (已收起 · 点击展开详情)
+                                </span>
                               )}
                             </div>
-                          )}
 
-                          {/* Round Content */}
-                          {(roundParsed.cleanContent || (!roundParsed.thinkingText && roundParsed.toolCalls.length === 0)) && (
-                            <div style={{
-                              padding: '6px 0',
-                              fontSize: '12.5px',
-                              lineHeight: 1.65,
-                              wordBreak: 'break-word',
-                              userSelect: 'text',
-                              WebkitUserSelect: 'text',
-                              cursor: 'text'
-                            }}>
-                              <MarkdownCard
-                                content={roundParsed.cleanContent || (isCurrentlyStreaming ? '正在推演并分析工程结构...' : round.content)}
-                                isStreaming={isCurrentlyStreaming && isStreaming}
-                                actionResults={round.actionResults}
-                                onOpenFile={(path) => {
-                                  if (onOpenFile) onOpenFile(path);
-                                  else if (onNavigateDiff) onNavigateDiff({ fileId: path, filePath: path, targetLine: 1 });
-                                }}
-                              />
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{ color: 'var(--text-muted)', fontSize: '9.5px' }}>
+                                {new Date(round.timestamp).toLocaleTimeString()}
+                              </span>
+                              {isRoundExpanded ? <ChevronUp size={14} color="var(--text-muted)" /> : <ChevronDown size={14} color="var(--text-muted)" />}
+                            </div>
+                          </div>
+
+                          {/* Round Body (Only rendered when expanded) */}
+                          {isRoundExpanded && (
+                            <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                              {/* Round Thinking Block */}
+                              {roundParsed.thinkingText && (
+                                <ThinkingBlock
+                                  payload={{
+                                    thinkingText: roundParsed.thinkingText,
+                                    contentText: roundParsed.cleanContent,
+                                    isThinkingFinished: !isCurrentlyStreaming,
+                                    durationSeconds: 6.5,
+                                    tokensCount: Math.ceil(roundParsed.thinkingText.length / 4)
+                                  }}
+                                  defaultExpanded={isLatestRound}
+                                />
+                              )}
+
+                              {/* Round Tool Calls */}
+                              {roundParsed.toolCalls.length > 0 && (
+                                <div style={{
+                                  borderRadius: '6px',
+                                  border: '1px solid rgba(217, 107, 39, 0.3)',
+                                  background: 'rgba(217, 107, 39, 0.04)',
+                                  overflow: 'hidden'
+                                }}>
+                                  <div
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setCollapsedTools(prev => ({ ...prev, [`${msg.id}-r${round.roundId}`]: !prev[`${msg.id}-r${round.roundId}`] }));
+                                    }}
+                                    style={{
+                                      padding: '5px 10px',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'space-between',
+                                      background: 'rgba(217, 107, 39, 0.08)',
+                                      cursor: 'pointer',
+                                      userSelect: 'none',
+                                      fontSize: '10.5px',
+                                      fontWeight: 600,
+                                      color: 'var(--accent)'
+                                    }}
+                                  >
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                      <Wrench size={12} />
+                                      <span>🛠️ 工具调度: {roundParsed.toolCalls.length} 个函数 ({roundParsed.toolCalls.map((t: ParsedToolCall) => t.name).join(', ')})</span>
+                                    </div>
+                                    {collapsedTools[`${msg.id}-r${round.roundId}`] ? <ChevronDown size={13} /> : <ChevronUp size={13} />}
+                                  </div>
+                                  {!collapsedTools[`${msg.id}-r${round.roundId}`] && (
+                                    <div style={{ padding: '6px 10px', display: 'flex', flexDirection: 'column', gap: '3px', fontSize: '10.5px', fontFamily: 'var(--font-mono)' }}>
+                                      {roundParsed.toolCalls.map((tc: ParsedToolCall, idx: number) => (
+                                        <div key={idx} style={{ padding: '2px 6px', borderRadius: '4px', background: 'var(--bg-base)' }}>
+                                          <span style={{ color: 'var(--accent)', fontWeight: 700 }}>▶ {tc.name}</span>
+                                          <span style={{ color: 'var(--text-muted)', marginLeft: '6px' }}>{JSON.stringify(tc.parameters)}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+
+                              {/* Round Content */}
+                              {(roundParsed.cleanContent || (!roundParsed.thinkingText && roundParsed.toolCalls.length === 0)) && (
+                                <div style={{
+                                  padding: '2px 0',
+                                  fontSize: '12.5px',
+                                  lineHeight: 1.65,
+                                  wordBreak: 'break-word',
+                                  userSelect: 'text',
+                                  WebkitUserSelect: 'text',
+                                  cursor: 'text'
+                                }}>
+                                  <MarkdownCard
+                                    content={roundParsed.cleanContent || (isCurrentlyStreaming ? '正在推演并分析工程结构...' : round.content)}
+                                    isStreaming={isCurrentlyStreaming && isStreaming}
+                                    actionResults={round.actionResults}
+                                    onOpenFile={(path) => {
+                                      if (onOpenFile) onOpenFile(path);
+                                      else if (onNavigateDiff) onNavigateDiff({ fileId: path, filePath: path, targetLine: 1 });
+                                    }}
+                                  />
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>

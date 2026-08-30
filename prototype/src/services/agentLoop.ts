@@ -1,4 +1,4 @@
-import type { ActionResult, PermissionPolicy } from '../types/contracts';
+import type { ActionResult, PermissionPolicy, TargetAcceptanceItem, EvidenceItem } from '../types/contracts';
 
 export type AgentActionType = 'write_file' | 'run_command';
 export type ActionExecutionTier = 'silent' | 'notify_after' | 'blocking_approval';
@@ -172,12 +172,7 @@ export function getActionResultForId(actionId: string, results: ActionResult[]):
 // 🎯 TARGET-DRIVEN AGENT LOOP CONTRACTS & VERIFIER
 // ────────────────────────────────────────────────────────────
 
-export interface TargetAcceptanceItem {
-  id: string;
-  description: string;
-  status: 'pending' | 'passed' | 'failed';
-  evidence?: string;
-}
+export type { TargetAcceptanceItem, EvidenceItem } from '../types/contracts';
 
 export type LoopTerminationStatus =
   | 'running'
@@ -212,6 +207,67 @@ export interface InternalStepTag {
   label: string;
 }
 
+/** Normalizes criteria description text for fuzzy deduplication across rounds */
+export function normalizeCriteriaKey(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[0-9]+[.:、\s]*/g, '') // remove numbers e.g. "1. " or "验收项 1："
+    .replace(/^(验收项|验收标准|目标|item|criterion|criteria)[\s:：]*/i, '')
+    .replace(/[^\u4e00-\u9fa5a-zA-Z0-9]/g, '') // keep alphanumeric and Chinese
+    .trim();
+}
+
+/**
+ * Merges newly parsed acceptance items from latest LLM response into Run-level criteria:
+ * - Deduplicates by id or normalized description
+ * - Updates status (never downgrades 'passed' to 'pending')
+ * - Merges new structured evidence
+ */
+export function mergeAcceptanceCriteria(
+  existing: TargetAcceptanceItem[],
+  incoming: TargetAcceptanceItem[]
+): TargetAcceptanceItem[] {
+  if (existing.length === 0) return incoming;
+  if (incoming.length === 0) return existing;
+
+  const result = existing.map(item => ({ ...item, evidenceDetails: item.evidenceDetails ? [...item.evidenceDetails] : [] }));
+
+  for (const inc of incoming) {
+    const incKey = normalizeCriteriaKey(inc.description);
+    // Find existing match by ID or normalized text
+    let matched = result.find(e => e.id === inc.id);
+    if (!matched && incKey) {
+      matched = result.find(e => normalizeCriteriaKey(e.description) === incKey);
+    }
+
+    if (matched) {
+      // Update status: only upgrade or update if status changed meaningfully
+      if (inc.status === 'passed') {
+        matched.status = 'passed';
+      } else if (inc.status === 'failed' && matched.status !== 'passed') {
+        matched.status = 'failed';
+      } else if (inc.status === 'running' && matched.status === 'pending') {
+        matched.status = 'running';
+      }
+
+      // Merge evidence
+      if (inc.evidence) matched.evidence = inc.evidence;
+      if (inc.evidenceDetails && inc.evidenceDetails.length > 0) {
+        matched.evidenceDetails = [...(matched.evidenceDetails || []), ...inc.evidenceDetails];
+      }
+    } else {
+      // Brand new criterion found, append with clean ID
+      result.push({
+        ...inc,
+        id: inc.id || `crit-${result.length + 1}`,
+        evidenceDetails: inc.evidenceDetails || []
+      });
+    }
+  }
+
+  return result;
+}
+
 /** Parses markdown task/acceptance items from goal breakdown (□ / - [ ] / ✓ / ✕). */
 export function parseAcceptanceCriteria(content: string): TargetAcceptanceItem[] {
   const items: TargetAcceptanceItem[] = [];
@@ -233,7 +289,8 @@ export function parseAcceptanceCriteria(content: string): TargetAcceptanceItem[]
       items.push({
         id: `crit-${idCounter++}`,
         description: desc,
-        status
+        status,
+        evidenceDetails: []
       });
     }
   }
@@ -284,6 +341,15 @@ export function verifyTargetAcceptance(
         if (/测试|单测|验证|类型|type/i.test(item.description)) {
           item.status = 'passed';
           item.evidence = `✓ ${tr.target} (全部测试用例通过)`;
+          item.evidenceDetails = item.evidenceDetails || [];
+          item.evidenceDetails.push({
+            type: 'test',
+            summary: '全部测试用例与类型检查通过',
+            command: tr.target,
+            exitCode: tr.exitCode ?? 0,
+            output: tr.output?.slice(0, 500),
+            timestamp: Date.now()
+          });
         }
       });
     } else {
@@ -293,6 +359,15 @@ export function verifyTargetAcceptance(
         if (/测试|单测|验证|类型/i.test(item.description)) {
           item.status = 'failed';
           item.evidence = `✕ ${tr.target} (${failureReason})`;
+          item.evidenceDetails = item.evidenceDetails || [];
+          item.evidenceDetails.push({
+            type: 'test',
+            summary: `测试执行失败: ${failureReason}`,
+            command: tr.target,
+            exitCode: tr.exitCode ?? 1,
+            output: (tr.error || tr.output)?.slice(0, 500),
+            timestamp: Date.now()
+          });
         }
       });
     }
@@ -304,6 +379,13 @@ export function verifyTargetAcceptance(
       updatedItems.forEach(item => {
         if (item.description.includes(wr.target) || /写入|修改|实现|修复/i.test(item.description)) {
           if (item.status !== 'failed') item.status = 'passed';
+          item.evidenceDetails = item.evidenceDetails || [];
+          item.evidenceDetails.push({
+            type: 'file',
+            summary: `已成功落盘写入代码文件: ${wr.target}`,
+            filePath: wr.target,
+            timestamp: Date.now()
+          });
         }
       });
     }
