@@ -88,6 +88,59 @@ export function saveExecutionModeToStorage(mode: ExecutionMode): void {
   } catch (e) {}
 }
 
+const STORAGE_KEY_SESSION_MODES = 'tcode_session_execution_modes_v1';
+
+function readSessionModes(): Record<string, ExecutionMode> {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      const raw = localStorage.getItem(STORAGE_KEY_SESSION_MODES);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object') return parsed;
+      }
+    }
+  } catch (e) {}
+  return {};
+}
+
+function writeSessionModes(modes: Record<string, ExecutionMode>): void {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(STORAGE_KEY_SESSION_MODES, JSON.stringify(modes));
+    }
+  } catch (e) {}
+}
+
+/**
+ * 模块一 SessionExecutionState：每会话执行模式覆盖。
+ * 缺省回退到全局模式（tcode_execution_mode）。
+ */
+export function loadSessionExecutionMode(sessionId: string): ExecutionMode {
+  const modes = readSessionModes();
+  if (modes[sessionId] === 'act' || modes[sessionId] === 'graph') {
+    return modes[sessionId];
+  }
+  return loadSavedExecutionMode();
+}
+
+export function saveSessionExecutionMode(sessionId: string, mode: ExecutionMode): void {
+  const modes = readSessionModes();
+  modes[sessionId] = mode;
+  writeSessionModes(modes);
+}
+
+export function resolveSessionExecutionMode(sessionId: string, globalMode: ExecutionMode): ExecutionMode {
+  const modes = readSessionModes();
+  if (modes[sessionId] === 'act' || modes[sessionId] === 'graph') {
+    return modes[sessionId];
+  }
+  return globalMode;
+}
+
+export function clearSessionExecutionModes(): void {
+  writeSessionModes({});
+}
+
 /**
  * Map an Alt+<key> keyboard shortcut to an execution mode.
  * Alt+1 -> 'act' (Agent Loop), Alt+2 -> 'graph' (Graph orchestration).

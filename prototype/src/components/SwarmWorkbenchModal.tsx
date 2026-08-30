@@ -20,6 +20,8 @@ import {
 import { SwarmRun, SwarmTask, Artifact, AgentDefinition } from '../types/agentRuntimeTypes';
 import { persistentArtifactStore } from '../services/artifactStore';
 import { BUILTIN_AGENT_ROLES } from '../services/builtinAgents';
+import { worktreeManager } from '../services/worktreeManager';
+import { taskGraphScheduler } from '../services/taskGraphScheduler';
 
 interface SwarmWorkbenchModalProps {
   isOpen: boolean;
@@ -32,10 +34,13 @@ export const SwarmWorkbenchModal: React.FC<SwarmWorkbenchModalProps> = ({
   onClose,
   activeRunId
 }) => {
-  const [activeTab, setActiveTab] = useState<'roles' | 'graph' | 'artifacts'>('roles');
+  const [activeTab, setActiveTab] = useState<'roles' | 'graph' | 'artifacts' | 'control'>('roles');
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
   const [selectedArtifact, setSelectedArtifact] = useState<Artifact | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [shadowList, setShadowList] = useState<Array<{ id: string; shadowPath: string }>>([]);
+  const [interventions, setInterventions] = useState<string[]>([]);
+  const [mergePhase, setMergePhase] = useState<string>('collect');
 
   useEffect(() => {
     if (!isOpen) return;
@@ -60,6 +65,25 @@ export const SwarmWorkbenchModal: React.FC<SwarmWorkbenchModalProps> = ({
     window.addEventListener('tcode_agent_event', handleAgentEvent);
     return () => window.removeEventListener('tcode_agent_event', handleAgentEvent);
   }, [isOpen, activeRunId, selectedArtifact]);
+
+  // WP-E 控制平面：影子工作区 / 2PC 相位 / Master 纠偏干预 实时轮询
+  useEffect(() => {
+    if (!isOpen || !activeRunId) {
+      setShadowList([]);
+      setInterventions([]);
+      setMergePhase('collect');
+      return;
+    }
+    const refresh = () => {
+      setShadowList(worktreeManager.list());
+      setInterventions(taskGraphScheduler.getRunInterventions(activeRunId));
+      const rt = taskGraphScheduler.getSwarmRunRuntime(activeRunId);
+      setMergePhase(rt?.merge.phase ?? 'collect');
+    };
+    refresh();
+    const timer = window.setInterval(refresh, 2000);
+    return () => window.clearInterval(timer);
+  }, [isOpen, activeRunId]);
 
   if (!isOpen) return null;
 
@@ -180,7 +204,8 @@ export const SwarmWorkbenchModal: React.FC<SwarmWorkbenchModalProps> = ({
           {[
             { id: 'roles', label: `👥 内置专业角色矩阵 (${BUILTIN_AGENT_ROLES.length})`, icon: Users },
             { id: 'graph', label: '📊 动态任务依赖拓扑 (TaskGraph DAG)', icon: Layers },
-            { id: 'artifacts', label: `📦 共享产物仓库 (${artifacts.length})`, icon: FileText }
+            { id: 'artifacts', label: `📦 共享产物仓库 (${artifacts.length})`, icon: FileText },
+            { id: 'control', label: '🛰 影子区与纠偏 (Control Plane)', icon: ShieldCheck }
           ].map(tab => (
             <button
               key={tab.id}
@@ -207,7 +232,40 @@ export const SwarmWorkbenchModal: React.FC<SwarmWorkbenchModalProps> = ({
 
         {/* Content Body */}
         <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-          {activeTab === 'roles' ? (
+          {activeTab === 'control' ? (
+            <div style={{ flex: 1, padding: '20px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div style={{ padding: '14px', borderRadius: '8px', background: 'var(--bg-base, #181818)', border: '1px solid var(--border-subtle, #333)' }}>
+                <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--accent, #D96B27)' }}>🌳 影子工作区隔离 (git worktree)</div>
+                {shadowList.length === 0 ? (
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted, #888)', marginTop: '8px' }}>当前无激活影子工作区（非 git 工程或尚未发起 Swarm Run）。</div>
+                ) : shadowList.map(s => (
+                  <div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', marginTop: '8px', borderRadius: '6px', background: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.25)', fontSize: '11px', fontFamily: 'var(--font-mono)' }}>
+                    <span style={{ color: '#10B981', fontWeight: 600 }}>{s.id}</span>
+                    <span style={{ color: 'var(--text-muted, #888)' }}>{s.shadowPath}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ padding: '14px', borderRadius: '8px', background: 'var(--bg-base, #181818)', border: '1px solid var(--border-subtle, #333)' }}>
+                <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--accent, #D96B27)' }}>🔀 两阶段提交 (2PC Merge Gate)</div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted, #888)', marginTop: '8px' }}>
+                  当前相位: <span style={{ fontWeight: 700, color: mergePhase === 'complete' ? '#16A34A' : mergePhase === 'failed' ? '#DC2626' : 'var(--accent, #D96B27)' }}>{mergePhase}</span>
+                  {activeRunId ? '' : '（无活跃 Run）'}
+                </div>
+              </div>
+
+              <div style={{ padding: '14px', borderRadius: '8px', background: 'var(--bg-base, #181818)', border: '1px solid var(--border-subtle, #333)' }}>
+                <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--accent, #D96B27)' }}>🚨 Master 实时纠偏干预</div>
+                {interventions.length === 0 ? (
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted, #888)', marginTop: '8px' }}>暂无越界干预（各 Agent 均在职责边界内）。</div>
+                ) : interventions.map((msg, i) => (
+                  <div key={i} style={{ padding: '8px 10px', marginTop: '8px', borderRadius: '6px', background: 'rgba(220, 38, 38, 0.08)', border: '1px solid rgba(220, 38, 38, 0.3)', fontSize: '11px', color: '#FCA5A5' }}>
+                    {msg}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : activeTab === 'roles' ? (
             <div style={{ flex: 1, padding: '20px', overflowY: 'auto' }}>
               {/* Category Filter Pills */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>

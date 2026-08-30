@@ -1,5 +1,5 @@
 ﻿import { getActiveWorkflow, getWorkflowPromptDirectives, getWorkflowAllowedTools, ModularWorkflow } from './services/workflowStore';
-import { loadSavedExecutionMode, saveExecutionModeToStorage, migratePipelineMode, executionModeFromShortcut, buildModePromptSnippet, type ExecutionMode } from './services/executionMode';
+import { loadSavedExecutionMode, saveExecutionModeToStorage, migratePipelineMode, executionModeFromShortcut, buildModePromptSnippet, loadSessionExecutionMode, saveSessionExecutionMode, type ExecutionMode } from './services/executionMode';
 import { createGateSuspensionFromBlock, createGateSuspension, resolveGateDecision, extractTaskBreakdown, extractSpecPath, shouldSuspendDynamicGraphPlanning, type GateSuspension, type StageGateDecision } from './services/stageGate';
 import { sessionActorManager } from './services/sessionActorManager';
 import { assembleCacheOptimizedMessages, recordCacheHitTelemetry, extractFileSymbols, buildCompactRepoMap, buildRepoMapFromTree, buildRepoMapFromFileContents } from './services/cacheEngine';
@@ -278,6 +278,7 @@ export const App: React.FC = () => {
         e.preventDefault();
         setExecutionMode(next);
         saveExecutionModeToStorage(next);
+        saveSessionExecutionMode(currentSessionId, next);
       }
     };
     window.addEventListener('keydown', handleModeShortcut);
@@ -324,6 +325,8 @@ export const App: React.FC = () => {
         saveToDiskStorageAsync('codemind_current_session_id', currentSessionId);
       } catch (e) {}
     }
+    // 模块一 SessionExecutionState：切换会话时恢复该会话的执行模式。
+    setExecutionMode(loadSessionExecutionMode(currentSessionId));
   }, [currentSessionId]);
   const [rightWorkspaceOpen, setRightWorkspaceOpen] = useState<boolean>(false);
   const [workMode, setWorkMode] = useState<WorkMode>('act');
@@ -532,6 +535,7 @@ export const App: React.FC = () => {
   const handleExecutionModeChange = (mode: ExecutionMode) => {
     setExecutionMode(mode);
     saveExecutionModeToStorage(mode);
+    saveSessionExecutionMode(currentSessionId, mode);
   };
 
   const handleGateDecision = (decision: StageGateDecision) => {
