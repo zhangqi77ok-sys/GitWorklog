@@ -4,17 +4,18 @@
 
 **Goal:** 消除桌面宿主（127.0.0.1:8010）的四大安全缺陷——零鉴权+CORS `*`、凭据明文落盘、路径无边界、开放 SSRF 代理，使所有 `/api/*` 接口 fail-closed 鉴权，凭据 DPAPI 加密，文件/代理受策略约束。
 
-**Architecture:** 新增 4 个纯逻辑 Python 模块（`host_auth` / `credential_crypto` / `path_sandbox` / `proxy_policy`），由 `desktop_app.py` 的 `QuietHandler` 统一接入；前端新增 `hostClient.ts` 统一请求助手自动携带 Token，并将存储/代理调用点迁移过去。全部为标准库实现（DPAPI 用 ctypes 直调 crypt32），零新增运行时依赖。
+**Architecture:** 新增 4 个纯逻辑 Python 模块（`host_auth` / `credential_crypto` / `path_sandbox` / `proxy_policy`），由 `desktop_app.py` 的 `QuietHandler` 统一接入；前端在 `main.tsx` 启动时安装全局 `window.fetch` 拦截器统一注入 Token（覆盖全部 30+ 处 `/api/*` 调用点），存储敏感项显式标记、工作区根启动时注册。全部为标准库实现（DPAPI 用 ctypes 直调 crypt32），零新增运行时依赖。
 
-**Tech Stack:** Python 3.12（uv 管理）+ ctypes/DPAPI + http.server；TypeScript/React 19 + Vitest；pytest（仅测试依赖）。
+**Tech Stack:** Python 3.12（uv 管理）+ ctypes/DPAPI + http.server；TypeScript/React 19 + Vitest；pytest（测试 venv 依赖）。
 
 ## Global Constraints
 
-- 目标 Python 解释器：`C:\Users\13605\AppData\Roaming\uv\python\cpython-3.12.14-windows-x86_64-none\python.exe`（PATH 上的 `python` 是 Windows Store 占位 stub，**禁止使用**）。下文统一记作 `$PY`。
+- **构建/打包 Python（`$PY`）**：`C:\Users\13605\AppData\Roaming\uv\python\cpython-3.12.14-windows-x86_64-none\python.exe`（uv 托管，受 PEP 668 保护，**禁止向其 pip 安装包**；仅用于 `build_installer.py`）。
+- **测试 Python（`$VPY`）**：`E:\pro\agent-learning\.venv\Scripts\python.exe`（`uv venv --python $PY --system-site-packages` 创建，已装 pytest；webview 从系统 site-packages 复用）。**所有 pytest 命令必须用 `$VPY`。**
 - 前端测试命令：`node <npm-cli.js> test`（npm.ps1 被执行策略拦截，禁止裸 `npm`）。
 - 版本：`build_installer.VERSION == "1.5.0"`，不得改动。
 - 凭据纪律：源码/测试中不得出现 `sk-[A-Za-z0-9_-]{16,}` 字面量（credentialHygiene 扫描）；测试用假凭据统一写作 `fake-api-key-0123456789abcdef`。
-- 禁止新增运行时依赖；pytest 仅作为开发/测试依赖装入 uv Python，不进 `build_installer.py` 打包。
+- 禁止新增运行时依赖；pytest 仅装入测试 venv，不进 `build_installer.py` 打包。
 - 每个任务完成必须跑绿对应测试并 `git commit`；全部任务完成后按铁律 1.5 打包+安装+真实桌面探活。
 - 所有安全拦截返回结构化 JSON `{"error": "<CODE>", "code": <http>}`，CODE ∈ UNAUTHORIZED / ORIGIN_DENIED / HOST_DENIED / PATH_OUTSIDE_WORKSPACE / PROXY_TARGET_DENIED。
 - `/health` 保持开放（不校验 Token），保证铁律 1.5 探活命令不变。
@@ -30,15 +31,15 @@
 | `src-desktop/path_sandbox.py` | 新增 | 工作区根注册表 + 路径边界校验 |
 | `src-desktop/proxy_policy.py` | 新增 | 上游目标白名单 + 重定向校验 |
 | `src-desktop/desktop_app.py` | 修改 | 接入上述模块；Token 注入 index.html；CORS 收紧；`/api/workspace/register` |
-| `prototype/src/services/hostClient.ts` | 新增 | 统一 fetch 助手（Token 注入） |
-| `prototype/src/types/contracts.ts` | 修改 | `saveToDiskStorageAsync` 支持 `sensitive` 并走 `hostFetch`；`resolveApiEndpoint` 附 Token |
-| `prototype/src/services/hostGateway.ts` | 修改 | 5 处 `fetch` 改走 `hostFetch` |
+| `prototype/src/services/hostClient.ts` | 新增 | Token 作用域判定 + 全局 fetch 拦截器 + 显式 hostFetch |
+| `prototype/src/main.tsx` | 修改 | 启动时安装全局 fetch 拦截器 |
+| `prototype/src/types/contracts.ts` | 修改 | `saveToDiskStorageAsync` 支持 `sensitive`；`resolveApiEndpoint` 附 Token |
 | `prototype/src/services/gateway/store.ts` | 修改 | `saveGatewayState` 标记 `sensitive: true` |
-| `prototype/src/services/workflowStore.ts` | 修改 | `/api/storage` 改走 `hostFetch` |
 | `prototype/src/App.tsx` | 修改 | 挂载时注册已保存工程根 |
-| `tests/test_host_security.py` | 新增 | 纯逻辑单测（host_auth/path_sandbox/proxy_policy/credential_crypto） |
+| `tests/test_credential_crypto.py` | 新增 | DPAPI 加解密/信封单测 |
+| `tests/test_host_security.py` | 新增 | host_auth/path_sandbox/proxy_policy 纯逻辑单测 |
 | `tests/test_host_integration.py` | 新增 | 起真实 HTTP 服务的集成测试（鉴权/路径/代理/存储） |
-| `prototype/tests/hostSecurity.test.ts` | 新增 | 前端 Token 注入与敏感标记断言 |
+| `prototype/tests/hostSecurity.test.ts` | 新增 | 前端 Token 作用域/敏感标记断言 |
 | `README.md` | 修改 | 补一节「本地宿主安全模型」说明 |
 
 ---
@@ -50,28 +51,41 @@
 
 **Interfaces:**
 - Consumes: 无
-- Produces: `$PY -m pytest` 可用；后续所有 Python 任务都用它跑测试
+- Produces: `$VPY -m pytest` 可用；后续所有 Python 任务都用它跑测试
 
-- [ ] **Step 1: 安装 pytest 到目标解释器**
+- [ ] **Step 1: 创建测试 venv 并安装 pytest**
+
+uv 托管的 Python 受 PEP 668 保护，禁止直接 pip 写入；用 `--system-site-packages` 复用 webview 等既有包。
 
 ```powershell
 $PY = "C:\Users\13605\AppData\Roaming\uv\python\cpython-3.12.14-windows-x86_64-none\python.exe"
-& $PY -m pip install pytest
+$uv = "C:\Users\13605\AppData\Local\Programs\uv\uv.exe"
+& $uv venv --python $PY --system-site-packages E:\pro\agent-learning\.venv
+& $uv pip install --python E:\pro\agent-learning\.venv\Scripts\python.exe pytest
 ```
 
-Expected: 安装成功（pytest 版本输出）。
+Expected: 创建 `.venv` 并安装 pytest（版本 9.x）。
 
-- [ ] **Step 2: 验证既有 Python 测试可运行（基线）**
+- [ ] **Step 2: 验证测试 venv 可用（webview 复用 + pytest 可导入）**
 
 ```powershell
-& $PY -m pytest tests -q
+& E:\pro\agent-learning\.venv\Scripts\python.exe -c "import webview, pytest; print('webview ok; pytest', pytest.__version__)"
 ```
 
-Expected: `tests/` 下 `test_build_installer.py`、`test_setup_wizard.py`、`test_window_geometry.py` 全部通过（约 8 个用例）。若 `test_build_installer` 报 `ModuleNotFoundError`，说明 cwd 不在 sys.path，改为 `Push-Location E:\pro\agent-learning; & $PY -m pytest tests -q; Pop-Location`。
+Expected: 输出 `webview ok; pytest 9.x`。
 
-- [ ] **Step 3: 提交环境基线（无代码变更时跳过本步；若新建了 requirements 文件则提交）**
+- [ ] **Step 3: 验证既有 Python 测试基线**
 
-本任务通常无代码变更，直接进入 Task 2。
+```powershell
+$VPY = "E:\pro\agent-learning\.venv\Scripts\python.exe"
+Push-Location E:\pro\agent-learning
+& $VPY -m pytest tests -q
+Pop-Location
+```
+
+Expected: `tests/` 下 `test_build_installer.py`、`test_setup_wizard.py`、`test_window_geometry.py` 全部通过（9 passed）。
+
+- [ ] **Step 4: 提交环境基线（无代码变更时跳过本步）**
 
 ---
 
@@ -134,8 +148,10 @@ def test_plain_dict_is_not_envelope():
 - [ ] **Step 2: 运行测试确认失败（Red）**
 
 ```powershell
-$PY = "C:\Users\13605\AppData\Roaming\uv\python\cpython-3.12.14-windows-x86_64-none\python.exe"
-& $PY -m pytest tests/test_credential_crypto.py -q
+$VPY = "E:\pro\agent-learning\.venv\Scripts\python.exe"
+Push-Location E:\pro\agent-learning
+& $VPY -m pytest tests/test_credential_crypto.py -q
+Pop-Location
 ```
 
 Expected: `ModuleNotFoundError: No module named 'credential_crypto'`（或 collection error）。
@@ -218,7 +234,10 @@ def unwrap_envelope(envelope: dict) -> str:
 - [ ] **Step 4: 运行测试确认通过（Green）**
 
 ```powershell
-& $PY -m pytest tests/test_credential_crypto.py -q
+$VPY = "E:\pro\agent-learning\.venv\Scripts\python.exe"
+Push-Location E:\pro\agent-learning
+& $VPY -m pytest tests/test_credential_crypto.py -q
+Pop-Location
 ```
 
 Expected: 4 passed。
@@ -297,8 +316,10 @@ def test_host_header_validation():
 - [ ] **Step 2: 运行确认失败（Red）**
 
 ```powershell
-$PY = "C:\Users\13605\AppData\Roaming\uv\python\cpython-3.12.14-windows-x86_64-none\python.exe"
-& $PY -m pytest tests/test_host_security.py -q
+$VPY = "E:\pro\agent-learning\.venv\Scripts\python.exe"
+Push-Location E:\pro\agent-learning
+& $VPY -m pytest tests/test_host_security.py -q
+Pop-Location
 ```
 
 Expected: `ModuleNotFoundError: No module named 'host_auth'`。
@@ -365,7 +386,10 @@ def host_is_allowed(host_header: str | None, port: int) -> bool:
 - [ ] **Step 4: 运行确认通过（Green）**
 
 ```powershell
-& $PY -m pytest tests/test_host_security.py -q
+$VPY = "E:\pro\agent-learning\.venv\Scripts\python.exe"
+Push-Location E:\pro\agent-learning
+& $VPY -m pytest tests/test_host_security.py -q
+Pop-Location
 ```
 
 Expected: 4 passed。
@@ -450,8 +474,10 @@ def test_register_roots_dedupes():
 - [ ] **Step 2: 运行确认失败（Red）**
 
 ```powershell
-$PY = "C:\Users\13605\AppData\Roaming\uv\python\cpython-3.12.14-windows-x86_64-none\python.exe"
-& $PY -m pytest tests/test_host_security.py -q
+$VPY = "E:\pro\agent-learning\.venv\Scripts\python.exe"
+Push-Location E:\pro\agent-learning
+& $VPY -m pytest tests/test_host_security.py -q
+Pop-Location
 ```
 
 Expected: `ModuleNotFoundError: No module named 'path_sandbox'`。
@@ -509,7 +535,10 @@ def assert_path_allowed(target: str) -> None:
 - [ ] **Step 4: 运行确认通过（Green）**
 
 ```powershell
-& $PY -m pytest tests/test_host_security.py -q
+$VPY = "E:\pro\agent-learning\.venv\Scripts\python.exe"
+Push-Location E:\pro\agent-learning
+& $VPY -m pytest tests/test_host_security.py -q
+Pop-Location
 ```
 
 Expected: 9 passed（4 host_auth + 5 path_sandbox）。
@@ -534,7 +563,7 @@ git commit -m "feat(security): workspace root registry and path boundary enforce
 - Produces:
   - `DEFAULT_ALLOWED_HOSTS: set[str]`
   - `is_allowed_target(url: str, extra_hosts: set[str] | None = None) -> tuple[bool, str]`（(放行, 拒绝原因)；原因为空串表示放行）
-  - `extract_extra_hosts(providers_payload) -> set[str]`（从 `codemind_providers` 存储载荷提取 baseUrl 主机）
+  - `extract_extra_hosts(providers_payload) -> set[str]`（从存储载荷提取 baseUrl 主机）
 
 - [ ] **Step 1: 追加失败测试**
 
@@ -611,8 +640,10 @@ def test_extract_extra_hosts():
 - [ ] **Step 2: 运行确认失败（Red）**
 
 ```powershell
-$PY = "C:\Users\13605\AppData\Roaming\uv\python\cpython-3.12.14-windows-x86_64-none\python.exe"
-& $PY -m pytest tests/test_host_security.py -q
+$VPY = "E:\pro\agent-learning\.venv\Scripts\python.exe"
+Push-Location E:\pro\agent-learning
+& $VPY -m pytest tests/test_host_security.py -q
+Pop-Location
 ```
 
 Expected: `ModuleNotFoundError: No module named 'proxy_policy'`。
@@ -694,7 +725,10 @@ def extract_extra_hosts(providers_payload) -> set:
 - [ ] **Step 4: 运行确认通过（Green）**
 
 ```powershell
-& $PY -m pytest tests/test_host_security.py -q
+$VPY = "E:\pro\agent-learning\.venv\Scripts\python.exe"
+Push-Location E:\pro\agent-learning
+& $VPY -m pytest tests/test_host_security.py -q
+Pop-Location
 ```
 
 Expected: 17 passed（4 host_auth + 5 path_sandbox + 8 proxy_policy）。
@@ -814,8 +848,10 @@ def test_allowed_origin_preflight_ok():
 - [ ] **Step 2: 运行确认失败（Red）**
 
 ```powershell
-$PY = "C:\Users\13605\AppData\Roaming\uv\python\cpython-3.12.14-windows-x86_64-none\python.exe"
-& $PY -m pytest tests/test_host_integration.py -q
+$VPY = "E:\pro\agent-learning\.venv\Scripts\python.exe"
+Push-Location E:\pro\agent-learning
+& $VPY -m pytest tests/test_host_integration.py -q
+Pop-Location
 ```
 
 Expected: 多数用例失败（无 `SERVER_PORT`、无鉴权、CORS 仍为 `*`、无 Token 注入）。
@@ -945,7 +981,10 @@ def start_local_server(port=PORT):
 - [ ] **Step 4: 运行确认通过（Green）**
 
 ```powershell
-& $PY -m pytest tests/test_host_integration.py -q
+$VPY = "E:\pro\agent-learning\.venv\Scripts\python.exe"
+Push-Location E:\pro\agent-learning
+& $VPY -m pytest tests/test_host_integration.py -q
+Pop-Location
 ```
 
 Expected: 7 passed。
@@ -1044,8 +1083,10 @@ def test_terminal_cwd_boundary():
 - [ ] **Step 2: 运行确认失败（Red）**
 
 ```powershell
-$PY = "C:\Users\13605\AppData\Roaming\uv\python\cpython-3.12.14-windows-x86_64-none\python.exe"
-& $PY -m pytest tests/test_host_integration.py -q
+$VPY = "E:\pro\agent-learning\.venv\Scripts\python.exe"
+Push-Location E:\pro\agent-learning
+& $VPY -m pytest tests/test_host_integration.py -q
+Pop-Location
 ```
 
 Expected: 新增 3 个用例失败（无 register 端点、无边界校验）。
@@ -1069,12 +1110,13 @@ Expected: 新增 3 个用例失败（无 register 端点、无边界校验）。
 ```
 
 3.2 `do_GET` 各分支加入根校验（放在已有「参数缺失/路径不存在」早退分支**之后**，保证空路径仍返回 400/404、真实路径越界才 403）：
-- `/api/fs/tree`：在 `if not target_path or not Path(target_path).exists(): ... 400` 之后插入 `try: path_sandbox.assert_path_allowed(target_path); except path_sandbox.PathSandboxError: self._send_json(403, {"error": "PATH_OUTSIDE_WORKSPACE", "code": 403}); return`
+- `/api/fs/tree`：在 `if not target_path or not Path(target_path).exists(): ... 400` 之后插入
+  `try: path_sandbox.assert_path_allowed(target_path); except path_sandbox.PathSandboxError: self._send_json(403, {"error": "PATH_OUTSIDE_WORKSPACE", "code": 403}); return`
 - `/api/fs/read`：在 `if not file_path or not Path(file_path).is_file(): ... 404` 之后插入同样的校验（`file_path`）
 - `/api/fs/search`：在「参数缺失返回空结果」早退之后插入同样的校验（`target_path`）
 
 3.3 `do_POST` 各分支加入根校验：
-- `/api/fs/write`：校验 `file_path`
+- `/api/fs/write`：`try: path_sandbox.assert_path_allowed(file_path); except ... 403; return`（放在解析出 `file_path` 之后、写盘之前）
 - `/api/terminal/exec`：若 `payload.get('cwd')` 非空则校验之；空则跳过（保持默认 cwd）
 - `/api/git/checkpoint`：校验 `project_path`（`payload.get('projectPath') or os.getcwd()` 之后、使用之前）
 - `/api/git/revert`：校验 `project_path`
@@ -1084,7 +1126,10 @@ Expected: 新增 3 个用例失败（无 register 端点、无边界校验）。
 - [ ] **Step 4: 运行确认通过（Green）**
 
 ```powershell
-& $PY -m pytest tests/test_host_integration.py -q
+$VPY = "E:\pro\agent-learning\.venv\Scripts\python.exe"
+Push-Location E:\pro\agent-learning
+& $VPY -m pytest tests/test_host_integration.py -q
+Pop-Location
 ```
 
 Expected: 10 passed（7 旧 + 3 新）。
@@ -1095,8 +1140,6 @@ Expected: 10 passed（7 旧 + 3 新）。
 git add src-desktop/desktop_app.py tests/test_host_integration.py
 git commit -m "feat(security): enforce workspace path boundary on fs/git/terminal (A3)"
 ```
-
----
 
 ### Task 8: `desktop_app.py` 集成 A4（代理白名单）
 
@@ -1113,9 +1156,6 @@ git commit -m "feat(security): enforce workspace path boundary on fs/git/termina
 在 `tests/test_host_integration.py` 末尾追加：
 
 ```python
-import proxy_policy
-
-
 def test_proxy_allowed_local_target():
     status, data, _ = _request(
         "GET", "/api/proxy",
@@ -1146,8 +1186,10 @@ def test_proxy_denied_unknown_host():
 - [ ] **Step 2: 运行确认失败（Red）**
 
 ```powershell
-$PY = "C:\Users\13605\AppData\Roaming\uv\python\cpython-3.12.14-windows-x86_64-none\python.exe"
-& $PY -m pytest tests/test_host_integration.py -q
+$VPY = "E:\pro\agent-learning\.venv\Scripts\python.exe"
+Push-Location E:\pro\agent-learning
+& $VPY -m pytest tests/test_host_integration.py -q
+Pop-Location
 ```
 
 Expected: 新增 3 个用例失败（`test_proxy_denied_*` 会返回 200/上游错误而非 403）。
@@ -1163,10 +1205,12 @@ Expected: 新增 3 个用例失败（`test_proxy_denied_*` 会返回 200/上游�
                     cfg_path = get_storage_dir() / cfg_file
                     if cfg_path.is_file():
                         payload = json.loads(cfg_path.read_text(encoding='utf-8'))
-                        # 兼容敏感信封
                         if credential_crypto.is_encrypted_envelope(payload):
                             payload = json.loads(credential_crypto.unwrap_envelope(payload))
-                        extra_hosts |= proxy_policy.extract_extra_hosts(payload if isinstance(payload, list) else payload.get('providers') or payload.get('accounts') or [])
+                        extra_hosts |= proxy_policy.extract_extra_hosts(
+                            payload if isinstance(payload, list)
+                            else payload.get('providers') or payload.get('accounts') or []
+                        )
                 except Exception:
                     pass
             ok, reason = proxy_policy.is_allowed_target(target_url, extra_hosts)
@@ -1175,10 +1219,9 @@ Expected: 新增 3 个用例失败（`test_proxy_denied_*` 会返回 200/上游�
                 return
 ```
 
-3.2 在 `urlopen` 成功拿到 `resp` 后、写响应前插入重定向二次校验：
+3.2 在 `urlopen` 成功拿到 `resp` 后、写响应前插入重定向二次校验（在 `with urllib.request.urlopen(...) as resp:` 块内、`while` 循环前）：
 
 ```python
-            try:
                 final_url = resp.geturl()
                 ok_final, _ = proxy_policy.is_allowed_target(final_url, extra_hosts)
                 if not ok_final:
@@ -1192,7 +1235,10 @@ Expected: 新增 3 个用例失败（`test_proxy_denied_*` 会返回 200/上游�
 - [ ] **Step 4: 运行确认通过（Green）**
 
 ```powershell
-& $PY -m pytest tests/test_host_integration.py -q
+$VPY = "E:\pro\agent-learning\.venv\Scripts\python.exe"
+Push-Location E:\pro\agent-learning
+& $VPY -m pytest tests/test_host_integration.py -q
+Pop-Location
 ```
 
 Expected: 13 passed。
@@ -1253,8 +1299,10 @@ def test_storage_nonsensitive_plaintext():
 - [ ] **Step 2: 运行确认失败（Red）**
 
 ```powershell
-$PY = "C:\Users\13605\AppData\Roaming\uv\python\cpython-3.12.14-windows-x86_64-none\python.exe"
-& $PY -m pytest tests/test_host_integration.py -q
+$VPY = "E:\pro\agent-learning\.venv\Scripts\python.exe"
+Push-Location E:\pro\agent-learning
+& $VPY -m pytest tests/test_host_integration.py -q
+Pop-Location
 ```
 
 Expected: `test_storage_sensitive_encrypted_at_rest` 失败（明文落盘，`secret in raw` 为 True）。
@@ -1279,7 +1327,10 @@ Expected: `test_storage_sensitive_encrypted_at_rest` 失败（明文落盘，`se
 - [ ] **Step 4: 运行确认通过（Green）**
 
 ```powershell
-& $PY -m pytest tests/test_host_integration.py -q
+$VPY = "E:\pro\agent-learning\.venv\Scripts\python.exe"
+Push-Location E:\pro\agent-learning
+& $VPY -m pytest tests/test_host_integration.py -q
+Pop-Location
 ```
 
 Expected: 15 passed。
@@ -1439,7 +1490,7 @@ Push-Location E:\pro\agent-learning\prototype
 Pop-Location
 ```
 
-Expected: `Cannot find module '../src/services/hostClient'`（或全部 8 个用例失败）。
+Expected: `Cannot find module '../src/services/hostClient'`（或 8 个用例失败）。
 
 - [ ] **Step 3: 最小实现**
 
@@ -1555,6 +1606,9 @@ Expected: 全量 Vitest 通过（原 282 + 新增 8 ≈ 290）。
 git add prototype/src/services/hostClient.ts prototype/src/main.tsx prototype/src/types/contracts.ts prototype/src/services/gateway/store.ts prototype/src/App.tsx prototype/tests/hostSecurity.test.ts
 git commit -m "feat(security): global token interceptor, sensitive storage marking, workspace registration"
 ```
+
+---
+
 ### Task 11: 全量回归 + 铁律 1.5 真实验收闭环
 
 **Files:**
@@ -1567,8 +1621,10 @@ git commit -m "feat(security): global token interceptor, sensitive storage marki
 - [ ] **Step 1: Python 全量测试**
 
 ```powershell
-$PY = "C:\Users\13605\AppData\Roaming\uv\python\cpython-3.12.14-windows-x86_64-none\python.exe"
-& $PY -m pytest tests -q
+$VPY = "E:\pro\agent-learning\.venv\Scripts\python.exe"
+Push-Location E:\pro\agent-learning
+& $VPY -m pytest tests -q
+Pop-Location
 ```
 
 Expected: 全部通过（既有 3 文件 + `test_credential_crypto.py` + `test_host_security.py` + `test_host_integration.py`）。
@@ -1588,6 +1644,7 @@ Expected: 全绿（含既有 282 项回归）。
 - [ ] **Step 3: 增量打包**
 
 ```powershell
+$PY = "C:\Users\13605\AppData\Roaming\uv\python\cpython-3.12.14-windows-x86_64-none\python.exe"
 Push-Location E:\pro\agent-learning
 & $PY build_installer.py
 Pop-Location
@@ -1623,7 +1680,7 @@ Expected: 两者均 200；`/` 返回 HTML 含 `__TCODE_HOST_TOKEN__`。
 ```powershell
 # 无 Token → 必须 401
 try { Invoke-WebRequest -Uri 'http://127.0.0.1:8010/api/fs/tree' -UseBasicParsing } catch { $_.Exception.Response.StatusCode.value__ }
-# 带注入 Token → 不再 401（400 表示鉴权通过、缺参）
+# 带注入 Token → 不再 401
 $html = (Invoke-WebRequest -Uri 'http://127.0.0.1:8010/' -UseBasicParsing).Content
 $token = [regex]::Match($html, '__TCODE_HOST_TOKEN__ = "([^"]+)"').Groups[1].Value
 Invoke-WebRequest -Uri 'http://127.0.0.1:8010/api/fs/tree' -Headers @{ 'X-Tcode-Token' = $token } -UseBasicParsing | Select-Object StatusCode
@@ -1668,6 +1725,6 @@ Remove-Item -LiteralPath "E:\pro\agent-learning\smoke-security" -Recurse -Force 
 - [ ] Task 7：集成测试 10 项绿（路径边界）。
 - [ ] Task 8：集成测试 13 项绿（代理白名单）。
 - [ ] Task 9：集成测试 15 项绿（存储加密）。
-- [ ] Task 10：前端 hostSecurity.test.ts 6 项绿 + 全量 Vitest 回归绿。
+- [ ] Task 10：前端 hostSecurity.test.ts 8 项绿 + 全量 Vitest 回归绿。
 - [ ] Task 11：打包、静默安装、真实探活、安全行为实弹验证通过；README 已更新。
 - [ ] 全部提交完成，工作区仅剩被 .gitignore 忽略的构建产物。
