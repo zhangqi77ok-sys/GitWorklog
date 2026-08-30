@@ -135,6 +135,11 @@ import { buildPromptRulesSnapshot } from './services/rulesStore';
 import { buildTier1SkillsSystemPrompt } from './services/skillsEngine';
 import { buildMcpToolsModelPrompt, loadSavedMcpConfigs, initializeMcpServer } from './services/mcpGateway';
 import { classifyStreamTermination } from './services/streamProtocol';
+import { gatewayRuntime, platformForProvider, hasGatewayAccountsFor } from './services/gateway/gatewayRuntime';
+import type { PreparedGatewayRequest } from './services/gateway/gateway';
+import { estimateTokens, type GatewayMessage } from './services/gateway/transform';
+import { addUsage } from './services/gateway/usage';
+import type { TokenUsage } from './services/gateway/types';
 import {
   buildGatewayRequestBody,
   buildModelCatalogEntry,
@@ -811,6 +816,11 @@ export const App: React.FC = () => {
       return;
     }
 
+    // Model Gateway v2 state (hoisted for the shared error handler)
+    let gatewayPrepared: PreparedGatewayRequest | null = null;
+    let streamedUsage: TokenUsage | undefined;
+    let controller: AbortController | null = null;
+
     // 🎯 Target-Driven Agent Loop State
     let loopCount = 0;
     let completedWithTarget = false;
@@ -1068,35 +1078,77 @@ ${mcpToolsPromptSnippet}
 
         // Resolve the route from the selected model catalog entry. OpenCode Zen is
         // one Provider; its model metadata chooses the adapter and endpoint.
-        const savedProviders = loadSavedProviders();
-        let provider: any = null;
+        // ── Model Gateway v2: multi-account smart routing (falls back to v1 providers) ──
+        const gatewayPlatform = platformForProvider(streamingModel.providerId, streamingModel.id);
+        gatewayPrepared = hasGatewayAccountsFor(gatewayPlatform)
+          ? gatewayRuntime.facade.prepare({
+              model: streamingModel.id,
+              platform: gatewayPlatform,
+              sessionKey: currentSessionId,
+              messages: cleanHistory as GatewayMessage[],
+              systemPrompt,
+              contextLimit: streamingModel.contextLimit || 128000,
+              defaultMaxOutputTokens: 8192
+            })
+          : null;
 
-        if (streamingModel.providerId) {
-          provider = savedProviders.find(p => p.id === streamingModel.providerId);
-        }
-        if (!provider) {
-          provider = savedProviders.find(p => p.enabled && p.models?.some(m => m.id === streamingModel.id));
-        }
-        if (!provider) {
-          provider = savedProviders.find(p => p.enabled && p.apiKey && p.baseUrl) || savedProviders[0];
-        }
-        if (!provider) throw new Error('没有可用的模型 Provider');
+        let requestUrl: string;
+        let requestHeaders: Record<string, string>;
+        let requestBody: string;
+        let route: any;
 
-        const targetModel = streamingModel.id;
-        const catalogModel = provider.models?.find((model: any) => model.id === targetModel) || {
-          id: targetModel,
-          name: streamingModel.name,
-          enabled: true,
-          contextLimit: streamingModel.contextLimit,
-          adapter: streamingModel.adapter,
-          endpointPath: streamingModel.endpointPath,
-          protocol: streamingModel.protocol,
-          capabilities: []
-        };
-        const catalogEntry = buildModelCatalogEntry(provider, catalogModel);
-        const route = resolveModelRoute(provider, catalogEntry);
-        const { url: requestUrl, headers: proxyHeaders } = resolveApiEndpoint(route.endpointUrl);
-        const controller = new AbortController();
+        if (gatewayPrepared) {
+          requestUrl = gatewayPrepared.url;
+          requestHeaders = gatewayPrepared.headers;
+          requestBody = JSON.stringify(gatewayPrepared.body);
+          route = {
+            adapter: gatewayPrepared.adapter,
+            endpointUrl: gatewayPrepared.url,
+            apiKey: '',
+            providerId: gatewayPlatform,
+            modelId: streamingModel.id
+          };
+          addLog('INFO', 'GatewayV2', `[多账号调度] ${streamingModel.name} → 账号 ${gatewayPrepared.accountId} (${gatewayPrepared.decision.reason}) · ${gatewayPrepared.url}`);
+        } else {
+          // v1 fallback: resolve the route from the selected model catalog entry.
+          const savedProviders = loadSavedProviders();
+          let provider: any = null;
+
+          if (streamingModel.providerId) {
+            provider = savedProviders.find(p => p.id === streamingModel.providerId);
+          }
+          if (!provider) {
+            provider = savedProviders.find(p => p.enabled && p.models?.some(m => m.id === streamingModel.id));
+          }
+          if (!provider) {
+            provider = savedProviders.find(p => p.enabled && p.apiKey && p.baseUrl) || savedProviders[0];
+          }
+          if (!provider) throw new Error('没有可用的模型 Provider');
+
+          const targetModel = streamingModel.id;
+          const catalogModel = provider.models?.find((model: any) => model.id === targetModel) || {
+            id: targetModel,
+            name: streamingModel.name,
+            enabled: true,
+            contextLimit: streamingModel.contextLimit,
+            adapter: streamingModel.adapter,
+            endpointPath: streamingModel.endpointPath,
+            protocol: streamingModel.protocol,
+            capabilities: []
+          };
+          const catalogEntry = buildModelCatalogEntry(provider, catalogModel);
+          route = resolveModelRoute(provider, catalogEntry);
+          const { url, headers } = resolveApiEndpoint(route.endpointUrl);
+          requestUrl = url;
+          requestHeaders = headers;
+          requestBody = JSON.stringify(buildGatewayRequestBody(
+            route,
+            apiMessages as Array<{ role: 'system' | 'user' | 'assistant' | 'tool'; content: string }>,
+            true
+          ));
+        }
+
+        controller = new AbortController();
         abortControllerRef.current = controller;
 
         addLog('INFO', 'AgentLoop', `[Loop #${loopCount}] 调度模型 [${streamingModel.name}] · ${route.adapter} · ${route.endpointUrl}`);
@@ -1111,14 +1163,9 @@ ${mcpToolsPromptSnippet}
           signal: controller.signal,
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${route.apiKey}`,
-            ...proxyHeaders
+            ...requestHeaders
           },
-          body: JSON.stringify(buildGatewayRequestBody(
-            route,
-            apiMessages as Array<{ role: 'system' | 'user' | 'assistant' | 'tool'; content: string }>,
-            true
-          ))
+          body: requestBody
         });
 
         if (!response.ok) {
@@ -1168,6 +1215,15 @@ ${mcpToolsPromptSnippet}
               try {
                 const parsed = JSON.parse(dataStr);
                 const normalized = parseGatewayEvent(route.adapter, parsed);
+                if (gatewayPrepared && parsed.usage) {
+                  const u = parsed.usage;
+                  streamedUsage = addUsage(streamedUsage ?? { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 }, {
+                    inputTokens: Number(u.prompt_tokens ?? u.input_tokens ?? 0),
+                    outputTokens: Number(u.completion_tokens ?? u.output_tokens ?? 0),
+                    cacheReadTokens: Number(u.prompt_tokens_details?.cached_tokens ?? 0),
+                    cacheWriteTokens: 0
+                  });
+                }
                 if (normalized.toolCalls.length > 0) nativeToolCalls.push(...normalized.toolCalls);
                 if (normalized.reasoning) accumulatedThinking += normalized.reasoning;
                 if (normalized.content) accumulatedContent += normalized.content;
@@ -1225,6 +1281,25 @@ ${mcpToolsPromptSnippet}
         }
 
         runCardMsg.content = finalContent;
+
+        // ── Gateway v2: token-level usage & billing ledger ──
+        if (gatewayPrepared) {
+          const usage = streamedUsage ?? {
+            inputTokens: estimateTokens(accumulatedContent),
+            outputTokens: 0,
+            cacheReadTokens: 0,
+            cacheWriteTokens: 0
+          };
+          gatewayRuntime.facade.recordCompletion({
+            accountId: gatewayPrepared.accountId,
+            downstreamKeyId: gatewayRuntime.keys.list()[0]?.key ?? '',
+            model: streamingModel.id,
+            sessionKey: currentSessionId,
+            usage,
+            status: 'ok'
+          });
+          gatewayRuntime.persist();
+        }
 
         // ── Parse target acceptance criteria and deduplicate/merge at Run level ──
         const incomingCriteria = parseAcceptanceCriteria(finalContent);
@@ -1460,6 +1535,17 @@ ${mcpToolsPromptSnippet}
       if (agentLoopCancelledRef.current) {
         addLog('INFO', 'AgentLoop', '用户已停止 Agent Loop，已取消待审批与后续调度');
         return;
+      }
+      if (gatewayPrepared) {
+        gatewayRuntime.facade.recordCompletion({
+          accountId: gatewayPrepared.accountId,
+          downstreamKeyId: gatewayRuntime.keys.list()[0]?.key ?? '',
+          model: streamingModel.id,
+          sessionKey: currentSessionId,
+          usage: streamedUsage ?? { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
+          status: controller?.signal.aborted ? 'cancelled' : 'error'
+        });
+        gatewayRuntime.persist();
       }
       setSessionMessages(prev => {
         const list = prev[currentSessionId] || [];

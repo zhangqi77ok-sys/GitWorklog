@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { loadSavedProfile, saveProfileToStorage, loadSavedAccentColor, saveAccentColorToStorage, DeveloperProfile, DEFAULT_DEVELOPER_PROFILE, AgentSkillItem, loadSavedSkills, saveSkillsToStorage, INITIAL_AGENT_SKILLS } from '../types/contracts';
 import {
   X,
@@ -64,6 +64,7 @@ import {
   resolveApiEndpoint
 } from '../types/contracts';
 import { hostGateway } from '../services/hostGateway';
+import { GatewayAccountManager } from './GatewayAccountManager';
 import { assertProviderCredentials } from '../services/modelGateway';
 import { loadSavedRules, saveRulesToStorage, addManagedRule, toggleRuleState, deleteManagedRule } from '../services/rulesStore';
 import { loadSavedOfficialSkills, toggleOfficialSkillState, addOfficialSkill, deleteOfficialSkill, SkillMetadata } from '../services/skillsEngine';
@@ -792,7 +793,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
             {/* TAB 1: SYMMETRICAL AESTHETIC MODEL PROVIDER WORKBENCH (Top Matrix + Full-Width Balanced Grid) */}
             {activeTab === 'gateway' && (
-              <div style={{ display: 'flex', flexDirection: 'column', height: '500px', margin: '-8px -4px', position: 'relative' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', height: '500px', margin: '-8px -4px', position: 'relative', overflowY: 'auto' }}>
                 {providerToast && (
                   <div style={{
                     position: 'absolute',
@@ -1384,6 +1385,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </div>
                   </div>
                 </div>
+
+                <GatewayAccountManager />
               </div>
             )}
 
@@ -2618,3 +2621,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     </div>
   );
 };
+
+
+

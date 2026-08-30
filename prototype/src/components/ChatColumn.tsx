@@ -117,6 +117,7 @@ import {
 import { RuntimeConfigResolver } from '../services/runtimeConfigResolver';
 import { resolveProviderIdForModelTab, assertProviderCredentials } from '../services/modelGateway';
 import { taskGraphScheduler } from '../services/taskGraphScheduler';
+import { getGatewayModelOptions } from '../services/gateway/gatewayRuntime';
 
 interface ChatColumnProps {
   rightWorkspaceOpen: boolean;
@@ -393,7 +394,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
       scrollToBottom(true);
     }
   }, [messages, isStreaming, promptQueue]);
-  const [availableModelList, setAvailableModelList] = useState<AIModelOption[]>(getAllAvailableModels());
+  const [availableModelList, setAvailableModelList] = useState<AIModelOption[]>(() => [...getAllAvailableModels(), ...getGatewayModelOptions()]);
   const [activeProviderTab, setActiveProviderTab] = useState<string>('opencode');
   const [modelSearchQuery, setModelSearchQuery] = useState('');
   const [isSyncingModels, setIsSyncingModels] = useState(false);
@@ -401,7 +402,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
   // Reactive synchronization of available models when Settings or Providers change
   React.useEffect(() => {
     const handleProvidersUpdated = () => {
-      setAvailableModelList(getAllAvailableModels());
+      setAvailableModelList([...getAllAvailableModels(), ...getGatewayModelOptions()]);
     };
     window.addEventListener('tcode_providers_updated', handleProvidersUpdated);
     window.addEventListener('storage', handleProvidersUpdated);
@@ -453,7 +454,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
           provider.id === p.id ? { ...provider, models: fetchedModels } : provider
         );
         saveProvidersToStorage(updatedProviders);
-        setAvailableModelList(getAllAvailableModels());
+        setAvailableModelList([...getAllAvailableModels(), ...getGatewayModelOptions()]);
         setChangesetToast(`✓ 成功同步并写入 ${fetchedModels.length} 个模型；对话框模型列表已刷新`);
         setTimeout(() => setChangesetToast(null), 3000);
       }
@@ -2658,7 +2659,8 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                           { id: 'anthropic', name: 'Anthropic (Claude)', icon: '🟣', count: availableModelList.filter(m => m.providerId === 'provider-anthropic' || (m.provider === 'Anthropic' && m.providerId !== 'provider-opencode')).length },
                           { id: 'openai', name: 'OpenAI (GPT 系列)', icon: '🟢', count: availableModelList.filter(m => m.providerId === 'provider-openai' || (m.provider === 'OpenAI' && m.providerId !== 'provider-opencode')).length },
                           { id: 'local', name: '本地 Ollama (离线)', icon: '💻', count: availableModelList.filter(m => m.providerId === 'provider-ollama' || m.providerId === 'provider-lmstudio' || m.provider === 'Local').length },
-                          { id: 'auto-router', name: '智能自适应路由', icon: '🧠', count: 4 }
+                          { id: 'auto-router', name: '智能自适应路由', icon: '🧠', count: 4 },
+                          { id: 'gateway-v2', name: '网关 v2 多账号', icon: '🧭', count: availableModelList.filter(m => (m as any).uniqueKey?.startsWith('gateway:')).length }
                         ].map(prov => {
                           const isActive = activeProviderTab === prov.id;
                           return (
@@ -2762,6 +2764,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                                   if (activeProviderTab === 'anthropic') return m.providerId === 'provider-anthropic' || (m.provider === 'Anthropic' && m.providerId !== 'provider-opencode');
                                   if (activeProviderTab === 'openai') return m.providerId === 'provider-openai' || (m.provider === 'OpenAI' && m.providerId !== 'provider-opencode');
                                   if (activeProviderTab === 'local') return m.providerId === 'provider-ollama' || m.providerId === 'provider-lmstudio' || m.provider === 'Local';
+                                  if (activeProviderTab === 'gateway-v2') return (m as any).uniqueKey?.startsWith('gateway:');
                                   return true;
                                 }).length
                               } 个</span>
@@ -2779,6 +2782,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                                 if (activeProviderTab === 'anthropic') return m.providerId === 'provider-anthropic' || (m.provider === 'Anthropic' && m.providerId !== 'provider-opencode');
                                 if (activeProviderTab === 'openai') return m.providerId === 'provider-openai' || (m.provider === 'OpenAI' && m.providerId !== 'provider-opencode');
                                 if (activeProviderTab === 'local') return m.providerId === 'provider-ollama' || m.providerId === 'provider-lmstudio' || m.provider === 'Local';
+                                if (activeProviderTab === 'gateway-v2') return (m as any).uniqueKey?.startsWith('gateway:');
                                 return true;
                               })
                               .map(m => {

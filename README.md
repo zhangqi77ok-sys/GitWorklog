@@ -2,6 +2,23 @@
 
 新一代企业级开源 AI 编程桌面工作台，基于 **Tauri v2 / Python Native Desktop Host + React 19 + TypeScript**，遵循暖米白、工作台米灰与陶土橙的极简桌面设计规范。
 
+
+
+## Model Gateway v2 · 多账号分发网关（参照 sub2api 工程思想）
+
+网关从"单 Provider 直连"升级为**多账号、多协议、可计费、可调度**的真正分发模块：
+
+- **多账号管理**：Codex / Claude / Grok / Gemini / OpenAI / DeepSeek / 兼容平台 / 本地，每个平台可挂载任意数量账号；支持 `api_key`、`oauth`（完整）、`refresh_token`（RT 手动）、`setup_token` 四种凭据类型；
+- **OAuth 生命周期**：Codex（auth.openai.com 换码 + refresh_token 自动刷新）、Claude（claude.ai 授权 + platform.claude.com 换码 + setup token + 组织发现）、Grok（accounts.x.ai SSO + RT 刷新），均可在 Settings 手动粘贴凭据；
+- **API Key 分发**：签发 `sk-tcode-<prefix>-<secret>` 下游 Key，支持分组、模型白名单、每日 Token 预算、吊销与掩码；
+- **精确计费**：Token 级用量追踪（输入/输出/缓存读/缓存写），按模型单价表计算成本，账号与下游 Key 双账本；
+- **智能调度**：粘性会话（1h TTL 保证对话连续性）、用户指定账号、LRU 轮询、健康度/并发/额度过滤、429/5xx/配额故障自动转移（≤2 次重试）；
+- **接口兼容修复**：统一中间表示（Responses 风格 IR），Codex OAuth 剥离 `temperature/max_output_tokens`、强制 `store=false/stream=true`，长对话预算感知裁剪，工具调用 id 归一化（`fc_` ≤64）与流式片段合并，`stream_options.include_usage`，Anthropic `max_tokens` 必填与 `tool_result` 块；
+- **Fail-closed**：云端账号缺凭据在路由前拒绝，不携带空/伪凭据发请求。
+
+Settings → 网关页底部为「模型网关 v2 · 多账号分发」管理面板（平台/账号/密钥/用量）。Agent Loop 在所选模型对应平台存在网关账号时自动走 v2 调度，否则回退 v1 Provider 目录。
+
+实现与验收契约：`docs/technical_reviews/model-gateway-v2-contract.md`。
 ## 核心架构
 
 ### 1. 统一 ModelGateway 与 OpenCode Zen 模型级路由
@@ -111,4 +128,5 @@ npm run dev -- --host 127.0.0.1
 | Agent Loop | 原型契约已覆盖 | `[DONE]`/finish reason 才能完成；异常 EOF、无动作未完成、工具解析失败分别保留真实状态 |
 
 完整契约见 [`docs/technical_reviews/opencode-provider-model-routing-contract.md`](docs/technical_reviews/opencode-provider-model-routing-contract.md) 与 [`docs/technical_reviews/windows-installer-contract.md`](docs/technical_reviews/windows-installer-contract.md)。
+
 

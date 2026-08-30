@@ -902,6 +902,34 @@ ModelRef
 
 ---
 
+
+---
+
+## 4.46 模型网关 v2 多账号分发规约 (Model Gateway v2)
+
+### 4.46.1 定位
+模型网关从单 Provider 直连升级为真正分发模块，参照 sub2api 等中转站工程思想：
+统一中间表示（OpenAI Responses 风格 IR）、Provider-Service-Handler 分层、多账号调度、Token 级计费、下游 Key 分发。
+
+### 4.46.2 多账号与凭据
+- 每个平台（Codex/Claude/Grok/Gemini/OpenAI/DeepSeek/兼容/本地）可挂载多账号；
+- 凭据类型：`api_key`、`oauth`（access+refresh）、`refresh_token`（RT 手动）、`setup_token`；
+- OAuth 生命周期：Codex（auth.openai.com）、Claude（claude.ai + platform.claude.com + setup token + 组织）、Grok（accounts.x.ai），支持换码与自动刷新；
+- 云端账号缺凭据在路由前 fail-closed。
+
+### 4.46.3 调度、计费与 Key 分发
+- 调度：粘性会话（1h TTL）→ 用户指定 → LRU 轮询 → 故障转移（429/5xx/配额，≤2 次重试）；
+- 计费：Token 级用量（输入/输出/缓存读/缓存写）+ 模型单价表成本核算，账号与下游 Key 双账本；
+- Key 分发：`sk-tcode-<prefix>-<secret>` 下游 Key，分组/模型白名单/每日预算/吊销。
+
+### 4.46.4 接口兼容
+- 统一 IR：Responses ↔ Chat ↔ Anthropic 转换；
+- Codex OAuth 剥离 `temperature/max_output_tokens`，强制 `store=false/stream=true`；
+- 长对话预算感知裁剪；工具调用 id 归一化（`fc_` ≤64）与流式片段合并；`stream_options.include_usage`；Anthropic `max_tokens` 必填与 `tool_result` 块。
+
+### 4.46.5 验收
+自动化测试 51 项全绿（billing/scheduler/keys/accounts/transform/oauth/gateway/store），EXE 独立安装后 `/health`、`/` HTTP 200。远程真实调用需用户有效凭据单独验收。
+
 ## 4.45 AST 接口骨架上下文压缩与离线安全脱敏盾规约 (Context Compressor & Security Shield)
 
 ### 4.45.1 AST 接口骨架智能裁剪 (`contextCompressor.ts`)
@@ -1467,3 +1495,4 @@ Tcode 必须区分“环境中发现了工作流工具”和“用户选择并�
 - 默认 Provider 只提供端点和模型目录，禁止内置看似真实的演示 API Key；首次启动的云端 Provider 必须为空凭据、未验证状态。
 - 兼容升级时清除已知历史占位凭据，并将对应 Provider 恢复为 `untested`；用户自行保存的未知凭据不得被覆盖。
 - 真实 HTTP 400/401/403/500、网络异常或缺少凭据必须显示为阻塞/失败原因，不能伪装成健康连接。
+
