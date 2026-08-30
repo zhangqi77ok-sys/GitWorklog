@@ -12,6 +12,14 @@ export const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
   defaultExpanded = false
 }) => {
   const [isExpanded, setIsExpanded] = useState<boolean>(!payload.isThinkingFinished || defaultExpanded);
+  const scrollRef = React.useRef<HTMLDivElement>(null);
+
+  // Auto scroll thinking content container to the latest line (bottom) when streaming or expanded
+  React.useEffect(() => {
+    if (isExpanded && scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [payload.thinkingText, isExpanded]);
 
   if (!payload.thinkingText) return null;
 
@@ -74,20 +82,24 @@ export const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
         </div>
       </div>
 
-      {/* Expanded Thinking Body */}
+      {/* Expanded Thinking Body with Auto Scroll to Latest Bottom */}
       {isExpanded && (
-        <div style={{
-          padding: '10px 14px',
-          fontSize: '11px',
-          color: 'var(--text-secondary)',
-          lineHeight: 1.6,
-          fontFamily: 'var(--font-mono)',
-          whiteSpace: 'pre-wrap',
-          borderTop: '1px solid var(--border-subtle)',
-          maxHeight: '260px',
-          overflowY: 'auto',
-          background: 'rgba(0,0,0,0.02)'
-        }}>
+        <div
+          ref={scrollRef}
+          style={{
+            padding: '10px 14px',
+            fontSize: '11px',
+            color: 'var(--text-secondary)',
+            lineHeight: 1.6,
+            fontFamily: 'var(--font-mono)',
+            whiteSpace: 'pre-wrap',
+            borderTop: '1px solid var(--border-subtle)',
+            maxHeight: '260px',
+            overflowY: 'auto',
+            background: 'rgba(0,0,0,0.02)',
+            scrollBehavior: 'smooth'
+          }}
+        >
           {payload.thinkingText}
         </div>
       )}
