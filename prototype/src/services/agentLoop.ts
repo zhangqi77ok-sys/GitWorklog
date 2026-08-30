@@ -289,8 +289,7 @@ export function parseAcceptanceCriteria(content: string): TargetAcceptanceItem[]
       items.push({
         id: `crit-${idCounter++}`,
         description: desc,
-        status,
-        evidenceDetails: []
+        status
       });
     }
   }
