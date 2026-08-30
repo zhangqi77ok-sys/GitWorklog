@@ -11,9 +11,17 @@ import { agentEventStore } from './agentEventStore';
 import { multiRoleAgentRunner } from './multiRoleAgentRunner';
 import { BUILTIN_AGENT_ROLES, getBuiltinAgentByRole } from './builtinAgents';
 import { RuntimeConfigSnapshot } from './runtimeConfigResolver';
+import { createSwarmRunRuntime, disposeSwarmRunRuntime, type SwarmRunRuntime } from './swarmRuntime';
 
 export class TaskGraphScheduler {
-  private activeRuns: Map<string, { run: SwarmRun; tasks: SwarmTask[]; abortController: AbortController }> = new Map();
+  private activeRuns: Map<string, {
+    run: SwarmRun;
+    tasks: SwarmTask[];
+    abortController: AbortController;
+    projectPath?: string;
+    swarmRuntime?: SwarmRunRuntime;
+    interventions: string[];
+  }> = new Map();
 
   /**
    * Initializes and executes a full Swarm TaskGraph run.
@@ -25,6 +33,7 @@ export class TaskGraphScheduler {
     goal: string;
     configSnapshot: RuntimeConfigSnapshot;
     customTasks?: SwarmTask[];
+    projectPath?: string;
   }): Promise<SwarmRun> {
     const runId = `swarm-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const abortController = new AbortController();
@@ -52,7 +61,7 @@ export class TaskGraphScheduler {
       throw new Error(`Invalid TaskGraph: ${validation.error}`);
     }
 
-    this.activeRuns.set(runId, { run: swarmRun, tasks: initialTasks, abortController });
+    this.activeRuns.set(runId, { run: swarmRun, tasks: initialTasks, abortController, projectPath: params.projectPath, interventions: [] });
 
     agentEventStore.emit({
       sessionId: params.sessionId,
@@ -68,6 +77,28 @@ export class TaskGraphScheduler {
     });
 
     return swarmRun;
+  }
+
+  /**
+   * WP-E: expose the swarm run runtime (master/shadows) for the workbench UI.
+   */
+  public getSwarmRunRuntime(runId: string): SwarmRunRuntime | undefined {
+    return this.activeRuns.get(runId)?.swarmRuntime;
+  }
+
+  public getRunInterventions(runId: string): string[] {
+    return this.activeRuns.get(runId)?.interventions ?? [];
+  }
+
+  private async cleanupSwarmRuntime(runId: string, onBusEvent: (e: any) => void): Promise<void> {
+    window.removeEventListener('tcode_agent_event', onBusEvent);
+    const runData = this.activeRuns.get(runId);
+    if (runData?.swarmRuntime) {
+      try {
+        await disposeSwarmRunRuntime(runData.swarmRuntime);
+      } catch {}
+      runData.swarmRuntime = undefined;
+    }
   }
 
   /**
@@ -284,6 +315,37 @@ export class TaskGraphScheduler {
     const { run, tasks, abortController } = runData;
     run.status = 'running';
 
+    // WP-E 模块六：影子工作区 + Master 纠偏（防御式：非 git 工程/宿主失败自动回退无隔离）
+    if (runData.projectPath) {
+      try {
+        runData.swarmRuntime = await createSwarmRunRuntime(
+          runData.projectPath,
+          tasks.map(task => ({ id: task.id, role: task.role }))
+        );
+      } catch { runData.swarmRuntime = undefined; }
+    }
+    const onBusEvent = (e: any) => {
+      const evt = e?.detail;
+      if (!evt || evt.runId !== runId || evt.type !== 'tool.started') return;
+      const taskId = String(evt.roundId || '').replace(/^round-/, '');
+      if (!taskId || !runData.swarmRuntime) return;
+      const violation = runData.swarmRuntime.master.onSubagentAction(taskId, {
+        type: 'write_file',
+        path: evt.payload?.path || ''
+      });
+      if (violation && !violation.allowed && violation.intervention) {
+        runData.interventions.push(violation.intervention);
+        agentEventStore.emit({
+          sessionId: run.sessionId,
+          runId,
+          type: 'review.requested',
+          source: 'system',
+          payload: { subagentId: taskId, intervention: violation.intervention }
+        });
+      }
+    };
+    window.addEventListener('tcode_agent_event', onBusEvent);
+
     agentEventStore.emit({
       sessionId: run.sessionId,
       runId,
@@ -311,6 +373,7 @@ export class TaskGraphScheduler {
             source: 'system',
             payload: run
           });
+          this.cleanupSwarmRuntime(runId, onBusEvent);
           break;
         }
 
@@ -324,6 +387,7 @@ export class TaskGraphScheduler {
             source: 'system',
             payload: run
           });
+          this.cleanupSwarmRuntime(runId, onBusEvent);
           break;
         }
 
@@ -372,6 +436,7 @@ export class TaskGraphScheduler {
           canDelegate: false
         };
 
+        const shadowPath = runData.swarmRuntime?.shadows.find(s => s.id === `shadow-${task.id}`)?.shadowPath;
         const result = await multiRoleAgentRunner.executeTask({
           runId,
           task,
@@ -379,7 +444,8 @@ export class TaskGraphScheduler {
           inputArtifacts,
           userGoal: goal,
           contextSnapshotMarkdown: configSnapshot.contextSnapshot.systemPromptText,
-          signal: abortController.signal
+          signal: abortController.signal,
+          shadowPath
         });
 
         if (result.success) {
