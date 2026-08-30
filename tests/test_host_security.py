@@ -86,3 +86,69 @@ def test_register_roots_dedupes():
     n1 = path_sandbox.register_roots([r"C:\a", r"C:\a", r"C:\b"])
     assert n1 == 2
     assert path_sandbox.is_within_roots(r"C:\a\x.txt")
+
+import proxy_policy
+
+
+def test_known_vendor_allowed():
+    ok, reason = proxy_policy.is_allowed_target("https://api.openai.com/v1/models")
+    assert ok, reason
+    ok, reason = proxy_policy.is_allowed_target("https://opencode.ai/zen/v1/models")
+    assert ok, reason
+    ok, reason = proxy_policy.is_allowed_target("https://api.anthropic.com/v1/messages")
+    assert ok, reason
+    ok, reason = proxy_policy.is_allowed_target("https://api.deepseek.com/v1/chat/completions")
+    assert ok, reason
+
+
+def test_unknown_host_denied():
+    ok, reason = proxy_policy.is_allowed_target("https://evil.example.com/x")
+    assert not ok
+    assert reason
+
+
+def test_internal_ip_denied():
+    ok, _ = proxy_policy.is_allowed_target("http://192.168.1.10:8080/x")
+    assert not ok
+    ok, _ = proxy_policy.is_allowed_target("http://10.0.0.1/x")
+    assert not ok
+    ok, _ = proxy_policy.is_allowed_target("http://169.254.169.254/latest/meta-data")
+    assert not ok
+
+
+def test_http_only_for_local_hosts():
+    ok, _ = proxy_policy.is_allowed_target("http://127.0.0.1:11434/v1/models")
+    assert ok
+    ok, _ = proxy_policy.is_allowed_target("http://localhost:11434/v1/models")
+    assert ok
+    ok, reason = proxy_policy.is_allowed_target("http://api.openai.com/v1/models")
+    assert not ok
+    assert reason
+
+
+def test_url_with_credentials_denied():
+    ok, _ = proxy_policy.is_allowed_target("https://user:pass@api.openai.com/v1")
+    assert not ok
+
+
+def test_extra_hosts_custom_gateway():
+    ok, _ = proxy_policy.is_allowed_target("https://my-gateway.example.com/v1", extra_hosts={"my-gateway.example.com"})
+    assert ok
+    ok, _ = proxy_policy.is_allowed_target("https://my-gateway.example.com/v1")
+    assert not ok
+
+
+def test_subdomain_allowed():
+    ok, _ = proxy_policy.is_allowed_target("https://sub.opencode.ai/x")
+    assert ok
+
+
+def test_extract_extra_hosts():
+    payload = [
+        {"id": "p1", "baseUrl": "https://my-gateway.example.com/v1"},
+        {"id": "p2", "baseUrl": "http://127.0.0.1:11434/v1"},
+        {"id": "p3", "baseUrl": None},
+    ]
+    hosts = proxy_policy.extract_extra_hosts(payload)
+    assert "my-gateway.example.com" in hosts
+    assert "127.0.0.1" not in hosts  # local hosts already allowed
