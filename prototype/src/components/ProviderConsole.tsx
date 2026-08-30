@@ -14,6 +14,7 @@ const PLATFORMS: Array<{ id: GatewayPlatform; label: string; icon: string; hint:
   { id: 'gemini', label: 'Gemini', icon: '✦', hint: 'OAuth / Key' },
   { id: 'openai', label: 'OpenAI', icon: '◎', hint: 'API Key' },
   { id: 'deepseek', label: 'DeepSeek', icon: '⌬', hint: 'API Key' },
+  { id: 'opencode', label: 'OpenCode', icon: '?', hint: 'API Key' },
   { id: 'openai-compatible', label: 'OpenAI 兼容', icon: '⇄', hint: 'API Key' },
   { id: 'local', label: '本地', icon: '▣', hint: '免 Key' }
 ];

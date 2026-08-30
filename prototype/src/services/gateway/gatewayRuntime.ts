@@ -59,7 +59,7 @@ export function persistGatewayRuntime(): void {
 /** Map a v1 model option (providerId) to the gateway platform it should route through. */
 export function platformForProvider(providerId?: string, modelId?: string): GatewayAccount['platform'] {
   if (!providerId) return 'openai-compatible';
-  if (providerId.includes('opencode')) return 'openai-compatible';
+  if (providerId.includes('opencode')) return 'opencode';
   if (providerId.includes('codex')) return 'codex';
   if (providerId.includes('grok')) return 'grok';
   if (providerId.includes('gemini')) return 'gemini';
@@ -82,6 +82,7 @@ export const DEFAULT_PLATFORM_MODELS: Partial<Record<GatewayAccount['platform'],
   gemini: ['gemini-3-pro', 'gemini-3-flash'],
   openai: ['gpt-5.1-codex', 'gpt-5', 'gpt-4o'],
   deepseek: ['deepseek-v4-flash', 'deepseek-chat', 'deepseek-reasoner'],
+  opencode: ['mimo-v2.5-free', 'deepseek-v4-flash', 'nemotron-3.5-lightning-free'],
   'openai-compatible': ['mimo-v2.5-free', 'deepseek-v4-flash'],
   local: []
 };

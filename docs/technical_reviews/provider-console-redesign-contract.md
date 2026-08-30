@@ -94,3 +94,16 @@ export class AccountProbeScheduler {
 4. 添加账号后调用 `probeAccount`（UI 触发即时探测）；
 5. 三栏控制台渲染：平台导航、账号列表、详情编辑、下游 Key 区块齐全；v1 老列表不再出现在设置网关 Tab；
 6. 全量测试回归 + EXE 真实安装 + 桌面端真实探测/调度验证。
+
+## 4. 平台增补：OpenCode 独立服务商（2026-08-30）
+
+按用户要求新增独立平台 `opencode`：
+
+- `GatewayPlatform` 增加 `'opencode'`；`DEFAULT_BASE_URLS.opencode = 'https://opencode.ai/zen/v1'`；
+- `platformForProvider('provider-opencode')` → `'opencode'`（原为 openai-compatible）；
+- `adapterFor('opencode')` → `'openai-compatible-chat'`；`buildUpstreamRequest` → `{base}/chat/completions` + Bearer；
+- `RequestTransformer` 对 opencode 输出流式 chat_completions 请求体；
+- `DEFAULT_PLATFORM_MODELS.opencode = ['mimo-v2.5-free', 'deepseek-v4-flash', 'nemotron-3.5-lightning-free']`；
+- ProviderConsole 平台导航新增「OpenCode ⚡」。
+
+验收：`tests/gateway/opencode.test.ts`（6 项：映射/默认地址/adapter/上游请求/请求体/默认模型）。

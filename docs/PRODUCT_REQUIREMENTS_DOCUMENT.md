@@ -1533,3 +1533,7 @@ Tcode 必须区分“环境中发现了工作流工具”和“用户选择并�
 6. **下游 Key**：`DownstreamKeyStore.update` 支持启停/改名/白名单修改。
 
 契约见 [`docs/technical_reviews/provider-console-redesign-contract.md`](technical_reviews/provider-console-redesign-contract.md)。
+
+### 4.48.8 平台增补：OpenCode 独立服务商（2026-08-30）
+
+按用户要求新增独立平台 `opencode`：平台导航出现「OpenCode ⚡」，默认 Base URL 为 `https://opencode.ai/zen/v1`，走 OpenAI 兼容 chat_completions 协议 + Bearer 认证，默认模型 mimo-v2.5-free / deepseek-v4-flash / nemotron-3.5-lightning-free；`platformForProvider` 将 opencode 类 provider 路由到该平台。契约见 provider-console-redesign-contract.md §4。

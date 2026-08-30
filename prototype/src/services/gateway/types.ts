@@ -2,7 +2,7 @@
 
 export type GatewayPlatform =
   | 'codex' | 'claude' | 'grok' | 'gemini'
-  | 'openai' | 'deepseek' | 'openai-compatible' | 'local';
+  | 'openai' | 'deepseek' | 'opencode' | 'openai-compatible' | 'local';
 
 export type AccountAuthType =
   | 'api_key'        // standard platform API Key

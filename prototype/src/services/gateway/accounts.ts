@@ -18,6 +18,7 @@ export const DEFAULT_BASE_URLS: Record<GatewayPlatform, string> = {
   gemini: 'https://generativelanguage.googleapis.com',
   openai: 'https://api.openai.com/v1',
   deepseek: 'https://api.deepseek.com/v1',
+  opencode: 'https://opencode.ai/zen/v1',
   'openai-compatible': 'https://opencode.ai/zen/v1',
   local: 'http://127.0.0.1:11434/v1'
 };
