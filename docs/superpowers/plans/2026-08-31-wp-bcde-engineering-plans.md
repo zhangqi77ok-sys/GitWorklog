@@ -163,6 +163,12 @@
 - **WP-E 完善**：✅ Swarm 启动入口（Graph 工作流模板「🐝 Swarm 多智能体协同」→ 发送消息即启动真并发 Run + 自动打开工作台）；工作台新增「影子区与纠偏」控制平面页。
 - **WP-D（模块七）**：✅ 完成并推送（RepoMap 骨架注入 assembleCacheOptimizedMessages 前缀层；TTFT 首字遥测；TokenAnalyticsModal + 顶部 HUD 3 指标：总 Token / KV 命中率 / TTFT；+3 测试）。
 - **WP-E（模块六）**：✅ 控制平面完成（宿主 /api/git/worktree/create|list|remove + 沙箱注册 + 4 项 pytest；worktreeManager 影子生命周期；swarmSteering 角色×路径越界规则；SwarmMaster 遥测总线纠偏；swarmExecution 真并发（每 Agent 独立流 + 影子 cwd）；twoPhaseMerge 2PC 门禁（测试绿灯后才落盘）；swarmRuntime 门面；multiRoleAgentRunner 写入路径重定向影子区；+19 测试）。⏸️ 实时 UI 编排接线（SwarmWorkbench 影子区可视化 + Master 干预消息流）留待后续专项，与 WP-C actor 模型统一。
+## 真实验收证据（2026-08-31）
+
+- ✅ **付费模型真实调用**：经桌面宿主 `POST /api/proxy` → `https://opencode.ai/zen/go/v1/chat/completions`，`Authorization: Bearer <运行时真实凭据>`，模型 `deepseek-v4-pro` 返回真实中文回复，`finish_reason=stop`；错误目标端点 fail-closed 401（绝不静默伪造）。
+- ✅ **免费模型闲聊单轮收敛**：`mimo-v2.5-free` 对「你好」单轮真实回复，`finish_reason=stop`（零工具调用 → 黄金不变量 1 自然终态）。
+- ✅ 铁律 1.5 一键验收 `scripts/run_acceptance.py`：13/13 通过（前端 386 测试 / pytest 53 / lint 0 errors / 打包 / 静默安装 / health / HTML / token 401 / 真实上游 / 403 拒绝 / airgap）。
+
 ## 汇总路线图
 
 | WP | 模块 | 依赖 | 规模/风险 |
