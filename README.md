@@ -38,6 +38,7 @@ ModelRef(providerId:modelId)
 
 技术契约：`docs/technical_reviews/opencode-provider-model-routing-contract.md`。
 
+> **收敛语义（三大黄金不变量）**：本轮无工具调用即自然终结（闲聊单轮秒回，绝不脑补待办项）；有工具调用才驱动下一轮（max 8 轮熔断）；验收清单仅来自显式声明（工作流 spec 或模型 `- [ ]`）。工作流阶段 `allowedTools` 白名单在协议层裁剪 tools 并在运行时硬校验，越权返回结构化 403 反馈引导模型自愈（0 红屏）。
 ### 2. 目标驱动 Agent Loop
 
 - 通过“理解 → 动作 → 观察 → 验收”推进任务，不能因为空 action 或网络 EOF 就伪装成完成；
@@ -184,6 +185,8 @@ npm run dev -- --host 127.0.0.1
 | Agent Loop | 原型契约已覆盖 | `[DONE]`/finish reason 才能完成；异常 EOF、无动作未完成、工具解析失败分别保留真实状态 |
 
 完整契约见 [`docs/technical_reviews/opencode-provider-model-routing-contract.md`](docs/technical_reviews/opencode-provider-model-routing-contract.md) 与 [`docs/technical_reviews/windows-installer-contract.md`](docs/technical_reviews/windows-installer-contract.md)。
+
+
 
 
 
