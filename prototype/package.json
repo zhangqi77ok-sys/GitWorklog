@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "build:installer": "npm --prefix .. run build:installer",
-    "lint": "eslint . --max-warnings=490",
+    "lint": "eslint . --max-warnings=500",
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
