@@ -746,34 +746,116 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
           )}
         </div>
 
-        {/* Center: Honest Closed-Loop Harness Runtime Pipeline */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', overflowX: 'auto', padding: '0 4px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px' }}>
-            <span style={{ fontWeight: 700, color: 'var(--accent)', display: 'flex', alignItems: 'center', gap: '3px' }}>
-              <span>🛡️ Harness 闭环执行器:</span>
-            </span>
-            <span style={{ padding: '1px 5px', borderRadius: '3px', background: 'var(--bg-base)', color: 'var(--text-muted)' }}>
-              📜 规则({activeRules.length})
-            </span>
-            <span style={{ color: 'var(--text-muted)' }}>➔</span>
-            <span style={{ padding: '1px 5px', borderRadius: '3px', background: 'rgba(234, 179, 8, 0.12)', color: '#CA8A04', fontWeight: 600 }}>
-              🧠 推演
-            </span>
-            <span style={{ color: 'var(--text-muted)' }}>➔</span>
-            <span style={{ padding: '1px 5px', borderRadius: '3px', background: 'rgba(37, 99, 235, 0.1)', color: '#2563EB', fontWeight: 600 }}>
-              ⚡ 宿主执行
-            </span>
-            <span style={{ color: 'var(--text-muted)' }}>➔</span>
-            <span style={{ padding: '1px 5px', borderRadius: '3px', background: 'rgba(22, 163, 74, 0.1)', color: '#16A34A', fontWeight: 600 }}>
-              🎯 验收验证
-            </span>
+        {/* Center: Interactive Mode Switch (Harness Single Agent vs Swarm Multi-Agent) */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflowX: 'auto', padding: '0 4px' }}>
+          {/* Mode Switcher Segmented Control */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              background: 'var(--bg-base, #181818)',
+              border: '1px solid var(--border-subtle, #333)',
+              borderRadius: '6px',
+              padding: '2px',
+              gap: '2px'
+            }}
+          >
+            <button
+              onClick={() => {
+                setPipelineMode('harness');
+                setChangesetToast('🛡️ 已切换至 Harness 单智能体闭环模式');
+                setTimeout(() => setChangesetToast(null), 2500);
+              }}
+              style={{
+                padding: '2px 8px',
+                borderRadius: '4px',
+                border: 'none',
+                background: pipelineMode === 'harness' ? 'var(--accent, #D96B27)' : 'transparent',
+                color: pipelineMode === 'harness' ? '#FFF' : 'var(--text-muted)',
+                fontSize: '10px',
+                fontWeight: pipelineMode === 'harness' ? 700 : 500,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                transition: 'all 0.15s ease'
+              }}
+              title="Harness 模式：单模型 Think-Act-Verify 多轮自主闭环"
+            >
+              <span>🛡️ Harness 闭环</span>
+            </button>
+
+            <button
+              onClick={() => {
+                setPipelineMode('swarm');
+                setChangesetToast('🐝 已切换至 Swarm 多智能体异构协同模式');
+                setTimeout(() => setChangesetToast(null), 2500);
+              }}
+              style={{
+                padding: '2px 8px',
+                borderRadius: '4px',
+                border: 'none',
+                background: pipelineMode === 'swarm' ? 'var(--accent, #D96B27)' : 'transparent',
+                color: pipelineMode === 'swarm' ? '#FFF' : 'var(--text-muted)',
+                fontSize: '10px',
+                fontWeight: pipelineMode === 'swarm' ? 700 : 500,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                transition: 'all 0.15s ease'
+              }}
+              title="Swarm 模式：Master 动态调度 11 大专业角色 (PM/UI/Architect/Coder/DBA/Tester/Reviewer)"
+            >
+              <span>🐝 Swarm 协同</span>
+            </button>
           </div>
 
+          {/* Dynamic Pipeline Flow Display */}
+          {pipelineMode === 'harness' ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px' }}>
+              <span style={{ padding: '1px 5px', borderRadius: '3px', background: 'var(--bg-base)', color: 'var(--text-muted)' }}>
+                📜 规则({activeRules.length})
+              </span>
+              <span style={{ color: 'var(--text-muted)' }}>➔</span>
+              <span style={{ padding: '1px 5px', borderRadius: '3px', background: 'rgba(234, 179, 8, 0.12)', color: '#CA8A04', fontWeight: 600 }}>
+                🧠 推演
+              </span>
+              <span style={{ color: 'var(--text-muted)' }}>➔</span>
+              <span style={{ padding: '1px 5px', borderRadius: '3px', background: 'rgba(37, 99, 235, 0.1)', color: '#2563EB', fontWeight: 600 }}>
+                ⚡ 宿主执行
+              </span>
+              <span style={{ color: 'var(--text-muted)' }}>➔</span>
+              <span style={{ padding: '1px 5px', borderRadius: '3px', background: 'rgba(22, 163, 74, 0.1)', color: '#16A34A', fontWeight: 600 }}>
+                🎯 验收验证
+              </span>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px' }}>
+              <span style={{ padding: '1px 5px', borderRadius: '3px', background: 'rgba(217, 107, 39, 0.12)', color: 'var(--accent)', fontWeight: 600 }}>
+                👑 Master 编排
+              </span>
+              <span style={{ color: 'var(--text-muted)' }}>➔</span>
+              <span style={{ padding: '1px 5px', borderRadius: '3px', background: 'rgba(59, 130, 246, 0.1)', color: '#3B82F6', fontWeight: 600 }}>
+                📊 DAG 分工
+              </span>
+              <span style={{ color: 'var(--text-muted)' }}>➔</span>
+              <span style={{ padding: '1px 5px', borderRadius: '3px', background: 'rgba(22, 163, 74, 0.1)', color: '#16A34A', fontWeight: 600 }}>
+                📦 共享产物
+              </span>
+              <span style={{ color: 'var(--text-muted)' }}>➔</span>
+              <span style={{ padding: '1px 5px', borderRadius: '3px', background: 'rgba(168, 85, 247, 0.1)', color: '#A855F7', fontWeight: 600 }}>
+                ⚖️ 终审裁决
+              </span>
+            </div>
+          )}
+
+          {/* Workbench Trigger Button */}
           <button
             onClick={() => setIsSwarmModalOpen(true)}
             style={{
               padding: '2px 8px',
-              borderRadius: '8px',
+              borderRadius: '6px',
               background: 'rgba(217, 107, 39, 0.12)',
               border: '1px solid rgba(217, 107, 39, 0.3)',
               color: 'var(--accent, #D96B27)',
@@ -785,9 +867,9 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
               cursor: 'pointer',
               transition: 'all 0.15s ease'
             }}
-            title="点击打开 Swarm 多智能体异构协同工作台 (TaskGraph DAG 拓扑与共享产物)"
+            title="点击打开 Swarm 多智能体异构协同工作台 (查看 11 大角色与产物库)"
           >
-            <span>🐝 Swarm 协同工作台</span>
+            <span>工作台 ▾</span>
           </button>
         </div>
 
