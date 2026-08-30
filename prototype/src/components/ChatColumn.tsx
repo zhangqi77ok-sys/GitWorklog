@@ -2072,8 +2072,9 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
           overflow: 'visible',
           position: 'relative'
         }}>
-          {/* Self-Learning Lessons Pill & Confirmation Card */}
-          {false && (
+          {/* Self-Learning Lessons Pill & Confirmation Card (feature toggle) */}
+          {// eslint-disable-next-line no-constant-binary-expression
+          false && (
             <div style={{
               position: 'absolute',
               top: '-28px',

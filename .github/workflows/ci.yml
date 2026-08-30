@@ -1,0 +1,44 @@
+﻿name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  frontend:
+    name: Frontend (tsc + vitest + coverage + lint)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: prototype
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: prototype/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: TypeScript build (tsc -b && vite build)
+        run: npm run build
+      - name: Unit tests (Vitest)
+        run: npm test
+      - name: Coverage gate (non-regression floor; target 88%)
+        run: npm run test:coverage
+      - name: ESLint (0 errors, warning budget 490)
+        run: npm run lint
+
+  python:
+    name: Python host tests (pytest)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install test deps
+        run: pip install pytest pywebview
+      - name: Run pytest suite
+        run: pytest tests -q

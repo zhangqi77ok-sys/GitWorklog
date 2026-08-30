@@ -31,10 +31,9 @@ export const SemanticCommitModal: React.FC<SemanticCommitModalProps> = ({
   const [isExecuting, setIsExecuting] = useState(false);
   const [success, setSuccess] = useState(false);
 
-  if (!isOpen) return null;
-
-      
   const [commitHash, setCommitHash] = useState<string | null>(null);
+
+  if (!isOpen) return null;
 
   const handleRun = async () => {
     setIsExecuting(true);

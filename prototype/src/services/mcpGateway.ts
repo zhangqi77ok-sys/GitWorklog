@@ -281,7 +281,7 @@ export async function initializeMcpServer(config: McpServerConfig): Promise<McpS
 
   try {
     // 1. JSON-RPC `initialize` Request Simulation / Fetch
-    let serverCapabilities = { tools: { listChanged: true } };
+    const serverCapabilities = { tools: { listChanged: true } };
     let discovered: McpToolDefinition[] = [];
 
     // Pre-populate built-in tools according to server type

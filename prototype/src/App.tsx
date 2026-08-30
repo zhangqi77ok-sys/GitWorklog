@@ -444,7 +444,7 @@ export const App: React.FC = () => {
         }).catch(() => {})
       );
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, []);
 
 
@@ -925,7 +925,7 @@ export const App: React.FC = () => {
     let loopCount = 0;
     let completedWithTarget = false;
     agentLoopCancelledRef.current = false;
-    let allowLowRiskInSession = false;
+    const allowLowRiskInSession = false;
 
     // Track active target acceptance criteria, step tags & progress history
     let activeAcceptanceItems: TargetAcceptanceItem[] = [];
@@ -973,7 +973,7 @@ export const App: React.FC = () => {
     const frozenRunMode = workMode; // ❄️ Freeze mode for this entire Agent Run
 
     // Keep a synchronous loop-local history; React state is display/persistence only.
-    let conversationSnapshot: ChatMessage[] = [...(sessionMessages[currentSessionId] || []), userMsg];
+    const conversationSnapshot: ChatMessage[] = [...(sessionMessages[currentSessionId] || []), userMsg];
     setSessionMessages(prev => ({
       ...prev,
       [currentSessionId]: [...(prev[currentSessionId] || []), userMsg]
@@ -1328,7 +1328,7 @@ ${modePromptSnippet}
             addLog('INFO', 'GatewayV2', `[多账号调度] ${streamingModel.name} → 账号 ${gatewayPrepared.accountId} (${gatewayPrepared.decision.reason}) · ${gatewayPrepared.url}`);
           } else {
             const savedProviders = loadSavedProviders();
-            let provider = savedProviders.find(p => p.id === streamingModel.providerId)
+            const provider = savedProviders.find(p => p.id === streamingModel.providerId)
               || savedProviders.find(p => p.enabled && p.models?.some(m => m.id === streamingModel.id))
               || savedProviders.find(p => p.enabled && p.apiKey && p.baseUrl)
               || savedProviders[0];

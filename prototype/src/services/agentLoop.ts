@@ -181,7 +181,7 @@ export function parseAgentActions(content: string): AgentAction[] {
   }
 
   // 2. Parse XML tool_call blocks (<tool_call><read_file> / <write_file> / <run_command>)
-  const toolCallRegex = /<tool_call>\s*<([a-zA-Z0-9_\-]+)>([\s\S]*?)<\/\1>\s*<\/tool_call>/gi;
+  const toolCallRegex = /<tool_call>\s*<([a-zA-Z0-9_-]+)>([\s\S]*?)<\/\1>\s*<\/tool_call>/gi;
   let match: RegExpExecArray | null;
 
   while ((match = toolCallRegex.exec(content)) !== null) {
@@ -494,7 +494,7 @@ export function verifyTargetAcceptance(
   testResults.forEach(tr => {
     // 🛡️ Strict Test Output & Failure Parser: Detect FFFF, FAILURES, FAILED, error even if exit code was 0 in compound shell commands
     const combinedOutput = `${tr.output || ''} ${tr.error || ''}`;
-    const hasTestFailurePatterns = /(?:^|\s)(?:FAILED|FAILURES?|ERRORS?|SyntaxError|Traceback|AssertionError|FAIL\s+|[F\.]{3,}F)(?:\s|$|:)/i.test(combinedOutput) ||
+    const hasTestFailurePatterns = /(?:^|\s)(?:FAILED|FAILURES?|ERRORS?|SyntaxError|Traceback|AssertionError|FAIL\s+|[F.]{3,}F)(?:\s|$|:)/i.test(combinedOutput) ||
                                   /tests?\s+failed/i.test(combinedOutput);
 
     const isReallyPassed = tr.status === 'success' && (tr.exitCode === 0 || tr.exitCode === undefined) && !hasTestFailurePatterns;

@@ -189,7 +189,7 @@ export function parseSkillMarkdown(rawContent: string, fallbackName = 'custom-sk
   let description = '';
   let icon = '📦';
   let license: string | undefined = undefined;
-  let allowedTools: string[] | undefined = undefined;
+  const allowedTools: string[] | undefined = undefined;
   let bodyContent = rawContent;
 
   if (match) {

@@ -86,7 +86,7 @@ export function extractFileSymbols(filePath: string, content: string): RepoFileS
     }
 
     // Python def/class matching
-    const pyMatch = line.match(/^(?:async\s+)?def\s+([a-zA-Z0-9_]+)\s*\(|^class\s+([a-zA-Z0-9_]+)\s*[:\(]/);
+    const pyMatch = line.match(/^(?:async\s+)?def\s+([a-zA-Z0-9_]+)\s*\(|^class\s+([a-zA-Z0-9_]+)\s*[:()]/);
     if (pyMatch) {
       const name = pyMatch[1] || pyMatch[2];
       const kind = pyMatch[2] ? 'class' : 'function';

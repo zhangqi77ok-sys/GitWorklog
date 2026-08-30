@@ -2057,7 +2057,7 @@ export const INITIAL_MCP_SERVERS: McpServerItem[] = [
     id: 'mcp-filesystem',
     name: 'Local Filesystem MCP',
     type: 'stdio',
-    endpoint: 'npx -y @modelcontextprotocol/server-filesystem e:\pro',
+    endpoint: 'npx -y @modelcontextprotocol/server-filesystem e:\\pro',
     status: 'running',
     latencyMs: 4,
     toolsCount: 5,
@@ -2484,7 +2484,7 @@ export function evaluateCommandSafety(command: string): CommandSafetyResult {
   const cmd = command.trim().toLowerCase();
 
   const blockedPatterns = [
-    { pattern: /rm\s+-rf\s+[\/\*]/, reason: '危险的根路径全量递归删除' },
+    { pattern: /rm\s+-rf\s+[/*]/, reason: '危险的根路径全量递归删除' },
     { pattern: /drop\s+(database|table|schema)/i, reason: '不可逆的数据库或表结构销毁' },
     { pattern: /format\s+[a-z]:/i, reason: '磁盘驱动器格式化指令' },
     { pattern: /git\s+push\s+.*--force.*main/, reason: '强推覆盖生产主分支' }
@@ -3381,7 +3381,7 @@ export const INITIAL_SWARM_AGENTS: SwarmAgentState[] = [
 export function extractAstSkeleton(fullCode: string): string {
   const lines = fullCode.split('\n');
   const skeletonLines: string[] = [];
-  let insideFunction = false;
+  const insideFunction = false;
 
   for (const line of lines) {
     const trimmed = line.trim();
