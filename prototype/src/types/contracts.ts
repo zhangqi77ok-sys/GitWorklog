@@ -1,47 +1,16 @@
+// Tcode ???????? (SDD Contract)
+
+import type { AIModelOption, AccentColorOption, AgentSkillItem, ArchitectureTopologyNode, AttachedFile, BlastRadiusReport, ChangesetReviewPayload, ChannelItem, ChannelPresetMeta, ChannelType, ChatMessage, CommandSafetyResult, ContextGaugeLevel, DebugProbeItem, DesktopArchType, DesktopPlatformConfig, DesktopPlatformType, DeveloperProfile, DiffNavigationTarget, FileNode, GatewayChannel, KVCacheMetrics, KeybindingItem, LessonRuleItem, LiveLogItem, ManagedRule, McpServerItem, MentionContextItem, MentionSearchResultItem, ModelItem, ModelProviderItem, ModelRoleRouting, ModelRoutingStrategy, OpenedEditorFile, ParsedAgentMessage, ParsedToolCall, PatchApplyResult, PatchChunk, PinnedFileItem, PreFlightCiReport, ProjectGroup, ProjectWorkspaceData, ProviderCategory, PullRequestDraftPayload, RedactionResult, RepoGraphNode, ResizableLayoutState, RoutingStrategyId, RuleItem, SandboxSafetyCheckResult, SearchMatch, SearchResultFile, SemanticCommitItem, SessionItem, ShadowSnapshotMeta, SkillItem, SlashCommandItem, SwarmAgentState, SwarmPipelineStage, SystemSafetyConfig, TerminalTab, ThemeConfig, ThinkingBlockPayload, TokenRoiStats, TokenStats, TrajectoryStepSnapshot, WindowBreakpoint, WorkMode, WorkModeMetadata, WorkbenchIconAction } from './contractsTypes';
+export * from './contractsTypes';
 // Tcode 核心接口规范契约 (SDD Contract)
 
 import { buildModelCatalogEntry, getAvailableModelOptions as getCatalogModelOptions, providerItemsToRecords } from '../services/modelGateway';
 import { hostFetch, getHostToken } from '../services/hostClient';
 
-export type SessionTier1Type = 'global' | 'project';
 
-export interface SessionItem {
-  id: string;
-  tier1: SessionTier1Type;
-  title: string;
-  projectId?: string;
-  projectName?: string;
-  projectPath?: string;
-  gitBranch?: string;
-  filePath?: string;
-  lineRange?: [number, number];
-  tags: string[];
-  messagesCount: number;
-  totalTokens: number;
-  createdAt: number;
-  updatedAt: number;
-}
 
-export interface ProjectGroup {
-  id: string;
-  name: string;
-  path: string;
-  gitBranch: string;
-  isExpanded: boolean;
-}
 
-export interface TokenStats {
-  totalTokens?: number;
-  promptTokens: number;
-  completionTokens: number;
-  cacheHitTokens: number;
-  cacheWriteTokens: number;
-  estimatedCostUsd: number;
-  contextCurrentTokens: number;
-  contextMaxTokens: number;
-}
 
-export type ContextGaugeLevel = 'safe' | 'warning' | 'danger';
 
 export function getContextGaugeLevel(current: number, max: number): ContextGaugeLevel {
   if (max <= 0) return 'safe';
@@ -57,84 +26,16 @@ export function calculateTokenSavingsPercent(stats: TokenStats): number {
   return Math.round((stats.cacheHitTokens / total) * 1000) / 10;
 }
 
-export interface AskOptionItem {
-  id: string;
-  label: string;
-  description?: string;
-  isRecommended?: boolean;
-}
 
-export interface AskOptionsPayload {
-  id: string;
-  question: string;
-  single_select: boolean;
-  options: AskOptionItem[];
-  allow_custom_input?: boolean;
-  resolvedSelection?: string[];
-  customInput?: string;
-  status: 'pending' | 'resolved';
-}
 
-export type PermissionPolicy = 'strict_approval' | 'autonomous_agent' | 'risk_adaptive';
 
-export type WorkMode = 'act' | 'plan' | 'minimal' | 'creator';
 
-export interface TaskPlanStep {
-  id: number;
-  title: string;
-  status: 'pending' | 'in_progress' | 'completed' | 'failed';
-  timeTaken?: string;
-}
 
-export interface TaskPlan {
-  id: string;
-  title: string;
-  steps: TaskPlanStep[];
-  activeStepIndex: number;
-}
 
-export interface ChatMessageTokens {
-  promptTokens: number;
-  completionTokens: number;
-  totalTokens: number;
-}
 
-export type ActionExecutionStatus = 'idle' | 'pending' | 'executing' | 'success' | 'failed' | 'rejected';
 
-export interface AgentPendingAction {
-  id: string;
-  type: 'write_file' | 'run_command' | 'read_file';
-  target: string;
-  code: string;
-  linesCount?: number;
-  isHighRisk?: boolean;
-  messageId?: string;
-  status: ActionExecutionStatus;
-}
 
-// Agent Loop execution result. actionId is the stable link from a rendered action block to its host result.
-export interface ActionResult {
-  actionId: string;
-  type: 'write_file' | 'run_command' | 'read_file';
-  target: string;           // file path or first line of command
-  status: ActionExecutionStatus;
-  output?: string;          // stdout for run_command or read_file content
-  error?: string;           // stderr or error message
-  exitCode?: number;        // for run_command
-  fileSize?: number;        // for write_file or read_file
-}
 
-export interface AgentSkillItem {
-  id: string;
-  name: string;
-  tier: 'capability' | 'skill' | 'mcp'; // 3-Tier: 专精能力, Domain Skill, MCP 工具
-  category: string;
-  icon: string;
-  description: string;
-  promptInstruction: string;
-  enabled: boolean;
-  isCustom?: boolean;
-}
 
 export const INITIAL_AGENT_SKILLS: AgentSkillItem[] = [
   // Tier 1: 专精能力 (Capabilities / 技能)
@@ -302,131 +203,17 @@ export function saveSkillsToStorage(skills: AgentSkillItem[]): void {
   } catch (e) {}
 }
 
-export interface QueuedPromptItem {
-  id: string;
-  text: string;
-  createdAt: number;
-  selectedMentions?: MentionContextItem[];
-}
 
-export interface EvidenceItem {
-  type: 'command' | 'file' | 'test' | 'manual';
-  summary: string;
-  command?: string;
-  exitCode?: number;
-  output?: string;
-  filePath?: string;
-  timestamp?: number;
-}
 
-export interface TargetAcceptanceItem {
-  id: string;
-  description: string;
-  status: 'pending' | 'running' | 'passed' | 'failed' | 'blocked' | 'model_claimed';
-  evidence?: string;                 // Backwards compatible string summary
-  evidenceDetails?: EvidenceItem[]; // 🔬 结构化证据链（命令、退出码、stdout/stderr、文件）
-}
 
-export interface ContextEpoch {
-  id: string;
-  sessionId: string;
-  epochIndex: number;
-  createdAt: number;
-  archivedMessageIds: string[];
-  summaryText: string;
-  summaryTokens: number;
-  systemTokens: number;
-  rulesTokens: number;
-  turnTokens: number;
-  contextLimit: number;
-}
 
-export type LoopTerminationStatus =
-  | 'running'
-  | 'completed'          // ✓ 目标已全部验证通过
-  | 'needs_decision'      // ⏸ 需要用户在备选方案间决策
-  | 'blocked'             // ⚠ 任务被外部条件阻塞（如缺少凭据）
-  | 'no_progress'         // ⚠ 连续无进展/死循环熔断
-  | 'resource_limit';     // ⚠ 达到时间/费用/安全预算熔断
 
-export interface InternalStepTag {
-  turn: number;
-  step: number;
-  phase: 'understand' | 'inspect' | 'modify' | 'verify' | 'fix' | 'done';
-  status: 'running' | 'passed' | 'failed' | 'blocked';
-  label: string;
-}
 
-export interface AgentRoundItem {
-  roundId: number;
-  title: string;
-  status: 'running' | 'passed' | 'failed' | 'blocked';
-  phase: 'understand' | 'plan' | 'inspect' | 'modify' | 'verify' | 'fix' | 'done';
-  content: string;
-  thinkingText?: string;
-  actionResults?: ActionResult[];
-  feedback?: string;
-  timestamp: number;
-}
 
-export interface ChatMessage {
-  id: string;
-  role: 'user' | 'assistant' | 'system';
-  content: string;
-  timestamp: number;
-  optionsPayload?: AskOptionsPayload;
-  taskPlan?: TaskPlan;
-  auditTag?: string;
-  tokensUsed?: number;
-  tokensDetail?: ChatMessageTokens;
-  durationSeconds?: number;
-  permissionPolicy?: PermissionPolicy;
-  actionResults?: ActionResult[];     // Agent Loop execution results for action blocks in this message
-  isAgentFeedback?: boolean;          // True for Agent Loop feedback messages (shown as compact system cards)
-  checkpointRef?: string;             // Git plumbing shadow snapshot reference (e.g. refs/codemind/checkpoints/<sessionId>/<turnIndex>)
-  turnIndex?: number;                 // 1-based user conversational turn index
-  acceptanceItems?: TargetAcceptanceItem[]; // 🎯 目标驱动验收项清单
-  stepTags?: InternalStepTag[];       // 🏷️ 内部执行步骤 Tag 列表
-  rounds?: AgentRoundItem[];           // 🔄 单 Agent Run 内部各轮次历史记录（不覆盖历史，追加存储）
-  activeRoundId?: number;             // 当前正在运行或查看的轮次 ID
-  loopStatus?: LoopTerminationStatus; // 🏁 当前任务终止或进行状态
-  terminationSummary?: string;        // 总结描述（如：4/4 项验收通过 · 测试通过）
-}
 
-// Runtime L2 Session State Snapshot
-export interface SessionRuntimeState {
-  scrollTop: number;
-  activeFilePath?: string;
-  openTabs: string[];
-  terminalHeightPercent?: number;
-  expandedThinkingIds: string[];
-}
 
-// Runtime L3 Agent Loop Checkpoint State
-export interface AgentLoopBreakpoint {
-  sessionId: string;
-  stepIndex: number;
-  totalSteps: number;
-  pendingActions: AgentPendingAction[];
-  executedResults: ActionResult[];
-  isPaused: boolean;
-  timestamp: number;
-}
 
-// DnD Standard Drag Payload
-export interface DnDPayload {
-  dragType: 'file' | 'snippet' | 'tab' | 'panel';
-  payload: any;
-  sourceId: string;
-}
 
-export interface LiveLogItem {
-  id: string;
-  timestamp: number;
-  level: 'INFO' | 'WARN' | 'ERROR' | 'NET';
-  module: string;
-  message: string;
-}
 
 export const liveLogStore: LiveLogItem[] = [
   { id: 'log-1', timestamp: Date.now(), level: 'INFO', module: 'System', message: 'Tcode 内核启动完成，本地同源网关已就绪' }
@@ -445,7 +232,6 @@ export function appendLiveLog(level: 'INFO' | 'WARN' | 'ERROR' | 'NET', module: 
   return item;
 }
 
-export type WindowBreakpoint = 'ultrawide' | 'standard' | 'laptop' | 'split_half';
 
 export function getWindowBreakpoint(width: number): WindowBreakpoint {
   if (width >= 2000) return 'ultrawide';
@@ -499,28 +285,6 @@ export function removeProjectFromWorkspace(projects: ProjectGroup[], projectId: 
 
 
 // AI Models Contract & Registry
-export interface AIModelOption {
-  id: string;
-  name: string;
-  provider: 'Anthropic' | 'DeepSeek' | 'OpenAI' | 'Local';
-  providerId?: string;       // Explicit provider parent ID (e.g. 'provider-opencode', 'provider-deepseek')
-  uniqueKey?: string;        // Fully qualified composite key (e.g. 'provider-opencode:deepseek-v4-flash')
-  contextLimit: number;
-  inputPricePerM: number;
-  outputPricePerM: number;
-  badge?: string;
-  description?: string;
-  adapter?: 'openai-responses' | 'anthropic-messages' | 'google-generative-language' | 'openai-compatible-chat';
-  endpointPath?: string;
-  protocol?: 'responses' | 'anthropic_messages' | 'google_native' | 'chat_completions';
-  capabilities?: {
-    streaming: boolean;
-    toolCalling: boolean;
-    reasoning: boolean;
-    vision: boolean;
-    structuredOutput: boolean;
-  };
-}
 
 export const AVAILABLE_MODELS: AIModelOption[] = [
   {
@@ -756,13 +520,6 @@ export function findModelById(id: string): AIModelOption {
 
 
 // Terminal Management Contract
-export interface TerminalTab {
-  id: string;
-  title: string;
-  shell: string;
-  logs: string[];
-  cwd?: string;
-}
 
 export function createTerminalTab(existing: TerminalTab[], shell: string = 'PowerShell', defaultCwd: string = 'e:/pro/agent-learning'): TerminalTab {
   const num = existing.length + 1;
@@ -806,28 +563,8 @@ export function closeTerminalTab(existing: TerminalTab[], tabId: string): Termin
 
 
 // File Explorer Contract
-export interface FileNode {
-  id: string;
-  name: string;
-  path?: string;
-  type: 'file' | 'directory';
-  children?: FileNode[];
-  extension?: string;
-  isExpanded?: boolean;
-}
 
-// Global Search Contract
-export interface SearchMatch {
-  lineNumber: number;
-  lineContent: string;
-  matchRange: [number, number];
-}
 
-export interface SearchResultFile {
-  filePath: string;
-  fileName: string;
-  matches: SearchMatch[];
-}
 
 export function filterFilesByQuery(query: string, files: Array<{ path: string; content: string }>): SearchResultFile[] {
   if (!query.trim()) return [];
@@ -858,60 +595,11 @@ export function filterFilesByQuery(query: string, files: Array<{ path: string; c
 }
 
 // Git & Shadow Snapshot Contract
-export interface GitFileChange {
-  path: string;
-  status: 'modified' | 'added' | 'deleted' | 'untracked';
-  additions: number;
-  deletions: number;
-}
-
-export interface ShadowSnapshotItem {
-  id: string;
-  timestamp: number;
-  label: string;
-  gitCommitHash: string;
-  changedFilesCount: number;
-  isAiGenerated: boolean;
-}
-
-// Gateway & MCP Contract
-export interface ProviderHealth {
-  id: string;
-  name: string;
-  status: 'healthy' | 'degraded' | 'offline';
-  latencyMs: number;
-  endpoint: string;
-  activeModel: string;
-}
-
-export interface McpServerInfo {
-  id: string;
-  name: string;
-  status: 'connected' | 'disconnected';
-  toolsCount: number;
-  tools: string[];
-}
-
-// Settings Contract
-export interface SystemSettings {
-  airGappedMode: boolean;
-  dailyTokenLimit: number;
-  contextWarnRatio: number;
-  defaultPermission: PermissionPolicy;
-  theme: 'cream' | 'dark_charcoal' | 'system';
-}
 
 
-// Contextual Scoping Data & Helpers
-export interface ProjectWorkspaceData {
-  projectId: string;
-  projectName: string;
-  gitBranch: string;
-  fileTree: FileNode;
-  searchableFiles: Array<{ path: string; content: string }>;
-  gitChanges: GitFileChange[];
-  snapshots: ShadowSnapshotItem[];
-}
+
+
+
 
 export const WORKSPACE_MOCK_DATA: Record<string, ProjectWorkspaceData> = {
   'proj-1': {
@@ -1032,29 +720,8 @@ export function getProjectWorkspaceData(projectId: string): ProjectWorkspaceData
 
 
 // Settings Modal System Contracts
-export interface SkillItem {
-  id: string;
-  name: string;
-  category: 'workflow' | 'architecture' | 'quality' | 'tools';
-  description: string;
-  enabled: boolean;
-  slashCommand?: string;
-}
 
-export interface KeybindingItem {
-  id: string;
-  actionName: string;
-  category: 'chat' | 'editor' | 'navigation' | 'agent';
-  currentKey: string;
-  defaultKey: string;
-}
 
-export interface AccentColorOption {
-  id: string;
-  name: string;
-  hex: string;
-  bgSubtle: string;
-}
 
 export const ACCENT_COLOR_PRESETS: AccentColorOption[] = [
   { id: 'terracotta', name: '陶土暖橙 (默认)', hex: '#D96B27', bgSubtle: 'rgba(217, 107, 39, 0.12)' },
@@ -1073,13 +740,6 @@ export function updateKeybinding(bindings: KeybindingItem[], id: string, newKey:
 
 
 // Attachment & Rules Contracts
-export interface AttachedFile {
-  id: string;
-  name: string;
-  size: number;
-  type: string;
-  dataPreview?: string;
-}
 
 export function addAttachedFile(existing: AttachedFile[], file: { name: string; size?: number; type?: string }): AttachedFile[] {
   const newFile: AttachedFile = {
@@ -1095,14 +755,6 @@ export function removeAttachedFile(existing: AttachedFile[], id: string): Attach
   return existing.filter(f => f.id !== id);
 }
 
-export interface RuleItem {
-  id: string;
-  title: string;
-  scope: 'global' | 'project';
-  content: string;
-  enabled: boolean;
-  priority: number;
-}
 
 export const INITIAL_RULES: RuleItem[] = [
   {
@@ -1141,12 +793,6 @@ export function toggleRuleItem(rules: RuleItem[], ruleId: string): RuleItem[] {
 
 
 // Industrial-Grade Model Gateway Contracts
-export interface ModelRoleRouting {
-  planModelId: string;
-  actModelId: string;
-  inlineModelId: string;
-  fallbackModelId: string;
-}
 
 export const INITIAL_ROLE_ROUTING: ModelRoleRouting = {
   planModelId: 'deepseek-reasoner',
@@ -1163,23 +809,7 @@ export function updateModelRoleRouting(
   return { ...current, [role]: newModelId };
 }
 
-export interface GatewayModelItem {
-  id: string;
-  name: string;
-  enabled: boolean;
-  contextLimit: number;
-}
 
-export interface GatewayChannel {
-  id: string;
-  name: string;
-  protocol: 'openai' | 'anthropic' | 'ollama';
-  baseUrl: string;
-  apiKey: string;
-  status: 'healthy' | 'error' | 'untested';
-  latencyMs: number;
-  models: GatewayModelItem[];
-}
 
 export const INITIAL_CHANNELS: GatewayChannel[] = [
   {
@@ -1263,35 +893,7 @@ export function addCustomChannel(
 // New-API Channels & Standard Gateway Domain Contracts (Ref: E:\pro\new-api)
 // ============================================================================
 
-export type ChannelType =
-  | 1   // OpenAI
-  | 3   // Azure
-  | 4   // Ollama
-  | 8   // Custom
-  | 14  // Anthropic
-  | 16  // Zhipu
-  | 17  // Ali
-  | 20  // OpenRouter
-  | 24  // Gemini
-  | 25  // Moonshot
-  | 33  // AWS Bedrock
-  | 35  // MiniMax
-  | 40  // SiliconFlow
-  | 43  // DeepSeek
-  | 48  // xAI
-  | 60  // OpenCode
-  | 61; // New API / One API
 
-export interface ChannelPresetMeta {
-  type: ChannelType;
-  name: string;
-  icon: string;
-  defaultBaseUrl: string;
-  defaultTestModel: string;
-  recommendedModels: string[];
-  docUrl?: string;
-  description: string;
-}
 
 export const CHANNEL_PRESETS: ChannelPresetMeta[] = [
   {
@@ -1449,26 +1051,6 @@ export const CHANNEL_PRESETS: ChannelPresetMeta[] = [
   }
 ];
 
-export interface ChannelItem {
-  id: string;                            // Unique channel identifier
-  name: string;                          // Human-readable channel name
-  type: ChannelType;                     // Channel type (constant/channel.go)
-  key: string;                           // API key (supports multi-key separated by newline)
-  baseUrl: string;                       // Upstream base URL
-  defaultBaseUrl: string;                // Default base URL for this channel type
-  models: string[];                      // Whitelist models enabled on this channel
-  modelMapping?: Record<string, string>; // Model alias mapping, e.g. {"gpt-4": "claude-3-7-sonnet"}
-  status: 'active' | 'disabled' | 'error' | 'untested';
-  responseTime: number;                  // Latency in ms from last probe
-  testTime?: number;                     // Timestamp of last probe
-  testModel?: string;                    // Model used for connectivity probe
-  priority: number;                      // Routing priority (higher = first)
-  weight: number;                        // Load balance weight
-  group: string;                         // Routing group
-  headerOverride?: Record<string, string>;
-  paramOverride?: Record<string, any>;
-  remark?: string;
-}
 
 export const INITIAL_NEW_API_CHANNELS: ChannelItem[] = [
   {
@@ -1671,36 +1253,8 @@ export function getPresetForChannelType(type: ChannelType): ChannelPresetMeta {
 
 
 // GitHub Benchmark Model Provider Contracts
-export type ProviderCategory = 'all' | 'domestic' | 'international' | 'aggregator' | 'local';
 
-export interface ModelItem {
-  id: string;
-  name: string;
-  enabled: boolean;
-  contextLimit: number;
-  capabilities: string[];
-  outputLimit?: number;
-  endpointPath?: string;
-  adapter?: 'openai-responses' | 'anthropic-messages' | 'google-generative-language' | 'openai-compatible-chat';
-  protocol?: 'responses' | 'anthropic_messages' | 'google_native' | 'chat_completions';
-  description?: string;
-}
 
-export interface ModelProviderItem {
-  id: string;
-  name: string;
-  icon: string;
-  category: 'domestic' | 'international' | 'aggregator' | 'local';
-  enabled: boolean;
-  protocol: 'openai' | 'anthropic' | 'ollama';
-  baseUrl: string;
-  defaultBaseUrl: string;
-  apiKey: string;
-  status: 'healthy' | 'error' | 'untested';
-  latencyMs: number;
-  docUrl?: string;
-  models: ModelItem[];
-}
 
 export const INITIAL_PROVIDERS: ModelProviderItem[] = [
   // 0. OpenCode Go Official Gateway (Go 套餐直连)
@@ -2022,22 +1576,7 @@ export function addCustomModelToProvider(providers: ModelProviderItem[], provide
 // ============================================================================
 
 // 1. MCP Server & Tools Contracts
-export interface McpToolItem {
-  name: string;
-  description: string;
-  parameters: Record<string, any>;
-}
 
-export interface McpServerItem {
-  id: string;
-  name: string;
-  type: 'stdio' | 'sse';
-  endpoint: string;
-  status: 'running' | 'stopped' | 'error';
-  latencyMs: number;
-  toolsCount: number;
-  tools: McpToolItem[];
-}
 
 export const INITIAL_MCP_SERVERS: McpServerItem[] = [
   {
@@ -2112,16 +1651,6 @@ export function toggleMcpServer(servers: McpServerItem[], serverId: string): Mcp
 }
 
 // 4. Workbench Multi-File Tabs
-export interface OpenedEditorFile {
-  id: string;
-  path: string;
-  name: string;
-  language: string;
-  isDirty?: boolean;
-  isModified?: boolean;
-  content?: string;
-  astStatus?: string;
-}
 
 export const INITIAL_OPENED_FILES: OpenedEditorFile[] = [
   {
@@ -2154,14 +1683,7 @@ export function closeEditorFile(
 }
 
 // 5. Appearance Theme Preset Contracts
-export type ThemeMode = 'paper-warm' | 'cyberpunk-dark' | 'clean-white';
 
-export interface ThemeConfig {
-  mode: ThemeMode;
-  fontSize: number; // 12, 13, 14, 15, 16
-  fontFamily: 'JetBrains Mono' | 'Fira Code' | 'PingFang SC' | 'Geist Mono';
-  accentColor: string;
-}
 
 export const INITIAL_THEME_CONFIG: ThemeConfig = {
   mode: 'paper-warm',
@@ -2171,13 +1693,6 @@ export const INITIAL_THEME_CONFIG: ThemeConfig = {
 };
 
 // 6. System & Safety Settings Contracts
-export interface SystemSafetyConfig {
-  dataDesensitization: boolean; // 是否自动脱敏 API Key 与邮箱等 PII 数据
-  gitShadowAutoSnapshot: boolean; // 是否在每次 AI 发起操作前自动打影子快照
-  astDepthLevel: 'shallow' | 'standard' | 'deep'; // AST 符号索引解析深度
-  maxConcurrentTasks: number; // 并发多 Agent 任务最大数
-  localPersistence: boolean; // 是否本地 SQLite 持久化
-}
 
 export const INITIAL_SAFETY_CONFIG: SystemSafetyConfig = {
   dataDesensitization: true,
@@ -2202,15 +1717,6 @@ export const INITIAL_KEYBINDINGS: KeybindingItem[] = [
 // 10. DeepSeek Harness Architecture Integration Contracts
 // ============================================================================
 
-export interface WorkModeMetadata {
-  id: WorkMode;
-  name: string;
-  label: string;
-  icon: string;
-  description: string;
-  badge: string;
-  tokenSavingRate: string;
-}
 
 export const WORK_MODE_CONFIGS: Record<WorkMode, WorkModeMetadata> = {
   act: {
@@ -2319,14 +1825,6 @@ export function filterCompilerNoise(rawLogs: string[]): {
 // 11. DX & PM POWER FEATURES CONTRACTS (@Mentions, Changeset, Pinned, ROI)
 // ============================================================================
 
-export interface MentionContextItem {
-  id: string;
-  type: 'file' | 'symbol' | 'git-diff' | 'terminal';
-  name: string;
-  path?: string;
-  detail: string;
-  snippet?: string;
-}
 
 export const DEFAULT_MENTION_ITEMS: MentionContextItem[] = [
   { id: 'm-file-contracts', type: 'file', name: 'contracts.ts', path: 'src/types/contracts.ts', detail: '核心数据契约与接口' },
@@ -2351,25 +1849,7 @@ export function searchMentionItems(
   );
 }
 
-export interface ChangesetFileItem {
-  path: string;
-  name: string;
-  additions: number;
-  deletions: number;
-  status: 'modified' | 'added' | 'deleted';
-  astVerified: boolean;
-}
 
-export interface ChangesetReviewPayload {
-  id: string;
-  taskId: string;
-  description: string;
-  totalAdditions: number;
-  totalDeletions: number;
-  files: ChangesetFileItem[];
-  status: 'pending' | 'accepted' | 'rejected';
-  createdAt: number;
-}
 
 export const INITIAL_CHANGESET: ChangesetReviewPayload = {
   id: 'cs-001',
@@ -2394,12 +1874,6 @@ export function rejectChangeset(payload: ChangesetReviewPayload): ChangesetRevie
   return { ...payload, status: 'rejected' };
 }
 
-export interface PinnedFileItem {
-  id: string;
-  path: string;
-  name: string;
-  size: number;
-}
 
 export function togglePinnedFile(
   pinnedList: PinnedFileItem[],
@@ -2418,15 +1892,6 @@ export function togglePinnedFile(
   return [...pinnedList, newItem];
 }
 
-export interface TokenRoiStats {
-  promptTokens: number;
-  completionTokens: number;
-  cacheHitTokens: number;
-  cacheHitRatePercent: number;
-  estimatedCostUsd: number;
-  savedCostUsd: number;
-  linesGeneratedApprox: number;
-}
 
 export function calculateTokenRoi(stats: TokenStats): TokenRoiStats {
   const totalTokens = stats.promptTokens + stats.completionTokens + stats.cacheHitTokens;
@@ -2472,13 +1937,7 @@ export function mergeForkSessionToMain(
 }
 
 // 2. Terminal Security Sandbox
-export type CommandSecurityLevel = 'safe' | 'warning' | 'blocked';
 
-export interface CommandSafetyResult {
-  level: CommandSecurityLevel;
-  reason?: string;
-  command: string;
-}
 
 export function evaluateCommandSafety(command: string): CommandSafetyResult {
   const cmd = command.trim().toLowerCase();
@@ -2512,14 +1971,6 @@ export function evaluateCommandSafety(command: string): CommandSafetyResult {
 }
 
 // 3. Multi-Agent Swarm Mode
-export interface SwarmPipelineStage {
-  id: string;
-  role: 'architect' | 'coder' | 'tester';
-  name: string;
-  model: string;
-  task: string;
-  status: 'idle' | 'running' | 'completed' | 'failed';
-}
 
 export const INITIAL_SWARM_STAGES: SwarmPipelineStage[] = [
   { id: 'swarm-1', role: 'architect', name: 'Architect 架构师', model: 'DeepSeek R1 (Reasoning)', task: '任务拆解与 SDD 接口契约定义', status: 'completed' },
@@ -2528,13 +1979,6 @@ export const INITIAL_SWARM_STAGES: SwarmPipelineStage[] = [
 ];
 
 // 4. Local Semantic Repo Graph
-export interface RepoGraphNode {
-  id: string;
-  name: string;
-  type: 'interface' | 'class' | 'function' | 'module';
-  file: string;
-  dependencies: string[];
-}
 
 export const MOCK_REPO_GRAPH: RepoGraphNode[] = [
   { id: 'node-dto', name: 'UserDto', type: 'interface', file: 'src/types/user.ts', dependencies: [] },
@@ -2585,11 +2029,6 @@ export function unmaskSensitiveText(maskedText: string, mapping: Record<string, 
 // 13. RESIZABLE LAYOUT CONTRACTS (Split-Pane Widths & Boundaries)
 // ============================================================================
 
-export interface ResizableLayoutState {
-  leftPanelWidth: number;
-  workbenchWidth: number;
-  terminalHeightPercent: number;
-}
 
 export const DEFAULT_LAYOUT_STATE: ResizableLayoutState = {
   leftPanelWidth: 240,
@@ -2616,15 +2055,6 @@ export function clampTerminalHeightPercent(percent: number): number {
 // 14. SENIOR DEV PRODUCTION FEATURES CONTRACTS (Lessons, CI, Commits, Probes, Blast)
 // ============================================================================
 
-export interface LessonRuleItem {
-  id: string;
-  category: 'architecture' | 'safety' | 'style' | 'performance';
-  title: string;
-  ruleContent: string;
-  source: 'user_correction' | 'manual' | 'ci_failure';
-  appliedCount: number;
-  createdAt: number;
-}
 
 export function appendLessonRule(
   existingRules: LessonRuleItem[],
@@ -2642,16 +2072,6 @@ export function appendLessonRule(
   };
 }
 
-export interface PreFlightCiReport {
-  status: 'passed' | 'failed' | 'running';
-  tsErrorsCount: number;
-  eslintWarningsCount: number;
-  lineCoverage: number;
-  lineCoverageDelta: number;
-  branchCoverage: number;
-  durationMs: number;
-  allowPush: boolean;
-}
 
 export function generatePreFlightCiReport(
   passed: boolean,
@@ -2671,13 +2091,6 @@ export function generatePreFlightCiReport(
   };
 }
 
-export interface SemanticCommitItem {
-  id: string;
-  type: 'feat' | 'fix' | 'test' | 'refactor' | 'chore' | 'docs';
-  scope: string;
-  message: string;
-  files: string[];
-}
 
 export function splitChangesetIntoSemanticCommits(files: Array<{ path: string }>): SemanticCommitItem[] {
   const commits: SemanticCommitItem[] = [];
@@ -2728,14 +2141,6 @@ export function splitChangesetIntoSemanticCommits(files: Array<{ path: string }>
   return commits;
 }
 
-export interface DebugProbeItem {
-  id: string;
-  fileId: string;
-  line: number;
-  variableName: string;
-  capturedValue: string;
-  status: 'active' | 'cleared';
-}
 
 export function toggleDebugProbe(
   probes: DebugProbeItem[],
@@ -2760,17 +2165,7 @@ export function toggleDebugProbe(
   ];
 }
 
-export interface BlastRadiusItem {
-  packagePath: string;
-  impactedSymbolsCount: number;
-  severity: 'low' | 'medium' | 'high';
-}
 
-export interface BlastRadiusReport {
-  sourcePackage: string;
-  impactedDownstream: BlastRadiusItem[];
-  totalAffectedCallsites: number;
-}
 
 export function calculateBlastRadius(sourceFile: string): BlastRadiusReport {
   if (sourceFile.includes('contracts.ts')) {
@@ -2800,12 +2195,6 @@ export function clampLeftPanelWithCollapse(width: number): number {
   return clampLeftPanelWidth(width);
 }
 
-export interface DiffNavigationTarget {
-  fileId: string;
-  filePath: string;
-  targetLine: number;
-  highlightToken: string;
-}
 
 export function createDiffNavigationTarget(
   fileId: string,
@@ -2826,14 +2215,6 @@ export function clampChangesetHeight(height: number): number {
 }
 
 
-export interface WorkbenchIconAction {
-  id: 'blast-radius' | 'preflight-ci' | 'inline-refactor' | 'shadow-snapshot';
-  icon: string;
-  label: string;
-  tooltipTitle: string;
-  tooltipDesc: string;
-  badgeText?: string;
-}
 
 export const WORKBENCH_ICON_ACTIONS: WorkbenchIconAction[] = [
   {
@@ -2872,19 +2253,6 @@ export const WORKBENCH_ICON_ACTIONS: WorkbenchIconAction[] = [
 // 16. PULL REQUEST DRAFT & RULES MEMORY COCKPIT CONTRACTS
 // ============================================================================
 
-export interface PullRequestDraftPayload {
-  branchName: string;
-  targetBranch: string;
-  title: string;
-  motivation: string;
-  decisionLog: string;
-  changedFilesCount: number;
-  ciPassProof: {
-    typescript: string;
-    lint: string;
-    coverage: string;
-  };
-}
 
 export function generatePullRequestDraft(
   branchName: string,
@@ -2906,21 +2274,7 @@ export function generatePullRequestDraft(
   };
 }
 
-export interface ManagedRule {
-  id: string;
-  title: string;
-  description: string;
-  category: 'iron_law' | 'lesson' | 'team_rule' | 'global';
-  scope: 'global' | 'project' | 'session';
-  sourceFile: string;
-  enabled: boolean;
-  priority: number;
-  readonly?: boolean;
-  updatedAt?: number;
-  version?: number;
-}
 
-export type RulesMemoryItem = ManagedRule;
 
 export const INITIAL_MANAGED_RULES: ManagedRule[] = [
   {
@@ -3009,15 +2363,7 @@ export const MOCK_RULES_MEMORY: ManagedRule[] = INITIAL_MANAGED_RULES;
 // 17. AUTO MODEL ROUTER, TRAJECTORY TIME TRAVEL & TOPOLOGY GRAPH CONTRACTS
 // ============================================================================
 
-export type RoutingStrategyId = 'auto' | 'max_reasoning' | 'lightning_fast' | 'cost_saver';
 
-export interface ModelRoutingStrategy {
-  id: RoutingStrategyId;
-  name: string;
-  desc: string;
-  icon: string;
-  defaultModelId: string;
-}
 
 export const MODEL_ROUTING_STRATEGIES: ModelRoutingStrategy[] = [
   {
@@ -3072,15 +2418,6 @@ export function resolveOptimalModel(prompt: string, strategy: RoutingStrategyId)
   return { modelId: 'claude-3-5-sonnet', modelName: 'Claude 3.5 Sonnet', reason: '检测到复杂代码落地意图 ➔ 自动调度 Sonnet 精准实现' };
 }
 
-export interface TrajectoryStepSnapshot {
-  stepIndex: number;
-  totalSteps: number;
-  title: string;
-  status: 'completed' | 'in_progress' | 'pending';
-  timestamp: string;
-  summary: string;
-  snapshotFileCount: number;
-}
 
 export const MOCK_TRAJECTORY_STEPS: TrajectoryStepSnapshot[] = [
   {
@@ -3121,14 +2458,6 @@ export const MOCK_TRAJECTORY_STEPS: TrajectoryStepSnapshot[] = [
   }
 ];
 
-export interface ArchitectureTopologyNode {
-  id: string;
-  name: string;
-  type: 'package' | 'service' | 'module' | 'database';
-  status: 'healthy' | 'impacted' | 'modified';
-  dependencies: string[];
-  impactCount?: number;
-}
 
 export const MOCK_TOPOLOGY_NODES: ArchitectureTopologyNode[] = [
   {
@@ -3170,26 +2499,8 @@ export const MOCK_TOPOLOGY_NODES: ArchitectureTopologyNode[] = [
 // 18. STAGE 2: STREAMING & THINKING BLOCK CONTRACTS
 // ============================================================================
 
-export interface ThinkingBlockPayload {
-  thinkingText: string;
-  contentText: string;
-  isThinkingFinished: boolean;
-  durationSeconds: number;
-  tokensCount: number;
-}
 
-export interface ParsedToolCall {
-  id: string;
-  name: string;
-  parameters: Record<string, string>;
-  raw: string;
-}
 
-export interface ParsedAgentMessage {
-  thinkingText: string;
-  toolCalls: ParsedToolCall[];
-  cleanContent: string;
-}
 
 export function parseAgentMessage(rawText: string): ParsedAgentMessage {
   let text = rawText || '';
@@ -3299,19 +2610,7 @@ export function extractThinkingFromText(rawText: string, elapsedSeconds: number 
 // 19. STAGE 2: FUZZY AST PATCH ENGINE CONTRACTS
 // ============================================================================
 
-export interface PatchChunk {
-  oldStart: number;
-  oldLines: string[];
-  newLines: string[];
-}
 
-export interface PatchApplyResult {
-  success: boolean;
-  patchedContent: string;
-  appliedChunksCount: number;
-  syntaxValid: boolean;
-  errorMessage?: string;
-}
 
 export function applyUnifiedDiffPatch(originalSource: string, chunk: PatchChunk): PatchApplyResult {
   const sourceLines = originalSource.split('\n');
@@ -3360,16 +2659,7 @@ export function applyUnifiedDiffPatch(originalSource: string, chunk: PatchChunk)
 // 20. STAGE 3: MULTI-AGENT SWARM & CONTEXT COMPRESSOR CONTRACTS
 // ============================================================================
 
-export type SwarmRoleType = 'planner' | 'coder' | 'verifier' | 'scribe';
 
-export interface SwarmAgentState {
-  role: SwarmRoleType;
-  name: string;
-  model: string;
-  status: 'idle' | 'running' | 'completed' | 'blocked';
-  progress: number;
-  outputSummary?: string;
-}
 
 export const INITIAL_SWARM_AGENTS: SwarmAgentState[] = [
   { role: 'planner', name: '架构推演者', model: 'DeepSeek-R1', status: 'completed', progress: 100, outputSummary: '完成 AST 依赖拓扑扫描与 4 步重构排期' },
@@ -3402,11 +2692,6 @@ export function extractAstSkeleton(fullCode: string): string {
   return skeletonLines.join('\n');
 }
 
-export interface RedactionResult {
-  redactedText: string;
-  redactedSecretsCount: number;
-  secretMap: Record<string, string>;
-}
 
 export function redactSensitivePii(rawText: string): RedactionResult {
   const secretMap: Record<string, string> = {};
@@ -3453,12 +2738,6 @@ export function unredactSensitivePii(redactedText: string, secretMap: Record<str
 // 22. STAGE 4: SANDBOX GUARD, SHADOW SNAPSHOT & MENTION ENGINE CONTRACTS
 // ============================================================================
 
-export interface SandboxSafetyCheckResult {
-  isSafe: boolean;
-  command: string;
-  hazardReason?: string;
-  requiresSudo: boolean;
-}
 
 export function evaluateSandboxCommandSafety(command: string): SandboxSafetyCheckResult {
   const lower = command.toLowerCase().trim();
@@ -3489,13 +2768,6 @@ export function evaluateSandboxCommandSafety(command: string): SandboxSafetyChec
   };
 }
 
-export interface ShadowSnapshotMeta {
-  snapshotId: string;
-  refPath: string;
-  createdAt: number;
-  filesChangedCount: number;
-  label: string;
-}
 
 export function createShadowGitSnapshot(sessionId: string, stepIndex: number, label: string): ShadowSnapshotMeta {
   return {
@@ -3507,13 +2779,6 @@ export function createShadowGitSnapshot(sessionId: string, stepIndex: number, la
   };
 }
 
-export interface MentionSearchResultItem {
-  id: string;
-  type: 'file' | 'symbol' | 'diff' | 'doc';
-  name: string;
-  detail: string;
-  score: number;
-}
 
 export function searchFuzzyMentions(query: string): MentionSearchResultItem[] {
   const allCandidates: MentionSearchResultItem[] = [
@@ -3540,16 +2805,8 @@ export function searchFuzzyMentions(query: string): MentionSearchResultItem[] {
 // 23. STAGE 5: DESKTOP BUNDLE TARGET & MULTI-PLATFORM CONTRACTS
 // ============================================================================
 
-export type DesktopPlatformType = 'windows' | 'macos' | 'linux';
-export type DesktopArchType = 'x86_64' | 'aarch64' | 'universal';
 
-export interface DesktopPlatformConfig {
-  platform: DesktopPlatformType;
-  arch: DesktopArchType;
-  bundleFormats: string[];
-  nativeEngine: string;
-  isSandboxed: boolean;
-}
+
 
 export function resolveDesktopPlatformConfig(platform: DesktopPlatformType, arch: DesktopArchType = 'x86_64'): DesktopPlatformConfig {
   if (platform === 'windows') {
@@ -3811,14 +3068,6 @@ export function resolveApiEndpoint(targetUrl: string): { url: string; headers: R
 }
 
 // Slash Commands Definition
-export interface SlashCommandItem {
-  id: string;
-  command: string;
-  name: string;
-  description: string;
-  icon: string;
-  promptTemplate: string;
-}
 
 export const SLASH_COMMANDS: SlashCommandItem[] = [
   {
@@ -3904,11 +3153,6 @@ export const SLASH_COMMANDS: SlashCommandItem[] = [
 ];
 
 // Developer Profile Definition
-export interface DeveloperProfile {
-  name: string;
-  avatar: string;
-  roleTitle: string;
-}
 
 export const DEFAULT_DEVELOPER_PROFILE: DeveloperProfile = {
   name: '开发者',
@@ -3955,15 +3199,6 @@ export function saveAccentColorToStorage(color: string): void {
 }
 
 // Real KV Cache Prefix & Token Savings Calculator
-export interface KVCacheMetrics {
-  prefixTokens: number;
-  historyTokens: number;
-  turnCacheHitTokens: number;
-  totalCacheHitTokens: number;
-  savedCostYuan: number;
-  savingsPercentage: number;
-  latencySpeedup: string;
-}
 
 export function calculateKVCacheMetrics(
   messagesCount: number,
