@@ -29,3 +29,31 @@ describe('golden invariant 1 & 2 - loop convergence', () => {
     expect(v).toEqual({ continue: false, reason: 'max_turns' });
   });
 });
+
+import { verifyTargetAcceptance } from '../src/services/agentLoop';
+
+describe('golden invariant 3 - acceptance items are explicit only', () => {
+  it('keyword in description alone never auto-passes an item', () => {
+    const items = [
+      { id: 't1', description: '修改 Store 逻辑并实现完整功能', status: 'model_claimed', criteria: 'pass' }
+    ] as unknown as TargetAcceptanceItem[];
+    const actions = [{ id: 'a1', type: 'write_file', target: 'other.ts' }] as unknown as AgentAction[];
+    const results = [
+      { id: 'r1', actionId: 'a1', type: 'write_file', target: 'other.ts', status: 'success' }
+    ] as unknown as Array<{ id: string; actionId: string; type: string; target: string; status: string }>;
+    const updated = verifyTargetAcceptance(items, actions, results as never, []);
+    expect(updated.items[0].status).toBe('model_claimed');
+  });
+
+  it('explicit target match still associates evidence and passes', () => {
+    const items = [
+      { id: 't1', description: '改造 src/Store.ts', status: 'model_claimed', criteria: 'pass' }
+    ] as unknown as TargetAcceptanceItem[];
+    const actions = [{ id: 'a1', type: 'write_file', target: 'src/Store.ts' }] as unknown as AgentAction[];
+    const results = [
+      { id: 'r1', actionId: 'a1', type: 'write_file', target: 'src/Store.ts', status: 'success' }
+    ] as unknown as Array<{ id: string; actionId: string; type: string; target: string; status: string }>;
+    const updated = verifyTargetAcceptance(items, actions, results as never, []);
+    expect(updated.items[0].status).toBe('passed');
+  });
+});

@@ -543,7 +543,7 @@ export function verifyTargetAcceptance(
     if (wr.status === 'success') {
       evidenceList.push(`代码落盘成功: ${wr.target} (${wr.fileSize ?? 'OK'})`);
       updatedItems.forEach(item => {
-        if (item.description.includes(wr.target) || /写入|修改|实现|修复/i.test(item.description)) {
+        if (item.description.includes(wr.target)) {
           if (item.status !== 'failed') item.status = 'passed';
           item.evidenceDetails = item.evidenceDetails || [];
           item.evidenceDetails.push({
