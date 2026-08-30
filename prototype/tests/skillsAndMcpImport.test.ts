@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+﻿import { describe, it, expect, beforeEach } from 'vitest';
 import {
   parseSkillMarkdown,
   unpackSkillFromZip,
@@ -16,6 +16,7 @@ import {
   importMcpConfigsFromJson,
   deleteMcpServerConfig,
   toggleMcpServerEnabled,
+  saveMcpConfigsToStorage,
   initializeMcpServer,
   buildMcpToolsModelPrompt
 } from '../src/services/mcpGateway';
@@ -167,5 +168,50 @@ describe('MCP Tools Management & URL/JSON Import Engine (2025-06-18 Spec)', () =
     expect(prompt).toContain('【已挂载 MCP 工具集 (Model Context Protocol)】');
     expect(prompt).toContain('read_file');
     expect(prompt).toContain('write_file');
+  });
+});
+
+describe('MCP lifecycle management (toggle/delete/persist round-trip)', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it('toggles MCP server enabled state and persists', () => {
+    const before = loadSavedMcpConfigs();
+    const target = before[0];
+    expect(target.enabled).toBe(true);
+
+    const toggled = toggleMcpServerEnabled(target.id);
+    expect(toggled.find(c => c.id === target.id)?.enabled).toBe(false);
+
+    // persists to storage
+    const reloaded = loadSavedMcpConfigs();
+    expect(reloaded.find(c => c.id === target.id)?.enabled).toBe(false);
+  });
+
+  it('deletes an MCP server config', () => {
+    const before = loadSavedMcpConfigs();
+    const count = before.length;
+    const deleted = deleteMcpServerConfig(before[0].id);
+    expect(deleted.length).toBe(count - 1);
+    expect(deleted.some(c => c.id === before[0].id)).toBe(false);
+  });
+
+  it('save/load round-trip preserves configs', () => {
+    const custom = {
+      id: 'mcp-custom-verify',
+      name: 'Custom Verify Server',
+      transport: 'stdio' as const,
+      command: 'npx',
+      args: ['-y', 'test-server'],
+      enabled: true,
+      tools: []
+    };
+    saveMcpConfigsToStorage([...loadSavedMcpConfigs(), custom]);
+    const loaded = loadSavedMcpConfigs();
+    const found = loaded.find(c => c.id === 'mcp-custom-verify');
+    expect(found).toBeDefined();
+    expect(found?.command).toBe('npx');
+
   });
 });
