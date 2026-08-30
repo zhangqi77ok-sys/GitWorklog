@@ -1,4 +1,4 @@
-global_window = None
+﻿global_window = None
 import os
 import sys
 import json
@@ -639,7 +639,7 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(json.dumps({
                     'success': False,
-                    'error': '命令执行超时 (30s 超时限制)',
+                    'error': '命令执行超时 (60s 超时限制)',
                     'exitCode': 124
                 }).encode('utf-8'))
             except Exception as e:
@@ -1079,3 +1079,4 @@ if __name__ == '__main__':
     webview_data = os.path.join(appdata, APP_STORAGE_KEY, 'webview_profile')
     os.makedirs(webview_data, exist_ok=True)
     webview.start(on_window_ready, debug=False, storage_path=webview_data, private_mode=False)
+
