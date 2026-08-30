@@ -155,7 +155,7 @@
 ## 进度标记（2026-08-31）
 
 - **WP-A（模块二+四）**：✅ 已完成并推送（黄金不变量 + 硬沙箱）。
-- **WP-B（模块五+一）**：✅ 纯逻辑层完成并推送（executionMode/stageGate 契约、策略、迁移、requireUserReview 兼容，16 项新测试）；⏸️ **UI 接线待专项**（B4-B8：ExecutionModeCapsule + Alt+1/2、移除 Harness/Swarm 切换、Graph 动态编排注入、StageGateCard、App 门禁挂起）。
+- **WP-B（模块五+一）**：✅ 纯逻辑层完成并推送（executionMode/stageGate 契约、策略、迁移、requireUserReview 兼容，16 项新测试）；✅ **UI 接线完成并推送**（B4-B8：ExecutionModeCapsule + Alt+1/2、移除 Harness/Swarm 切换与冗余工作流按钮、Graph 动态编排注入 + 动态图谱门禁、StageGateCard、App 门禁挂起 + 输入框意见模式，新增 12 项测试，全量 342 测试绿）。设计文档：`docs/superpowers/specs/2026-08-31-wp-b-ui-wiring-design.md`。
 - **WP-C/D/E**：未开始。
 ## 汇总路线图
 

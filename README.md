@@ -39,6 +39,13 @@ ModelRef(providerId:modelId)
 技术契约：`docs/technical_reviews/opencode-provider-model-routing-contract.md`。
 
 > **收敛语义（三大黄金不变量）**：本轮无工具调用即自然终结（闲聊单轮秒回，绝不脑补待办项）；有工具调用才驱动下一轮（max 8 轮熔断）；验收清单仅来自显式声明（工作流 spec 或模型 `- [ ]`）。工作流阶段 `allowedTools` 白名单在协议层裁剪 tools 并在运行时硬校验，越权返回结构化 403 反馈引导模型自愈（0 红屏）。
+
+### WP-B · 执行模式收敛（⚡ Agent Loop / 🧩 Graph 编排）+ Stage Gate 质量门禁
+
+- **双态执行胶囊**：对话栏顶部 `⚡ Agent Loop`（极速执行，无门禁）与 `🧩 Graph 编排`（阶段图谱 + 门禁审批）双态切换，`Alt+1 / Alt+2` 快捷键；旧的 `Harness / Swarm` 顶层切换与冗余工作流按钮已移除。
+- **Graph 工作流选择**：Graph 态胶囊浮层内选择积木工作流模板（SDD/TDD 等）或「🛰 动态图谱规划（自动）」；未选模板时注入动态 DAG planner 指令，首轮任务图谱产出后挂起门禁终审，批准后才允许写码。
+- **Stage Gate 方案终审卡**：工作流门禁块（`gate-user` / `requireUserReview`）阶段结束自动挂起，弹出终审卡（✅ 批准 / 💬 提修改意见 / ⛔ 终止）；挂起期间输入框切换「输入修改意见」模式；终止绝不写码；快照复用 git checkpoint。
+- **迁移兼容**：旧 `tcode_pipeline_mode`（harness/swarm）自动迁移为 executionMode（act/graph），磁盘恢复与本地存储双向同步。
 ### 2. 目标驱动 Agent Loop
 
 - 通过“理解 → 动作 → 观察 → 验收”推进任务，不能因为空 action 或网络 EOF 就伪装成完成；

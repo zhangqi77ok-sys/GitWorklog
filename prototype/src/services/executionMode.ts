@@ -87,3 +87,36 @@ export function saveExecutionModeToStorage(mode: ExecutionMode): void {
     }
   } catch (e) {}
 }
+
+/**
+ * Map an Alt+<key> keyboard shortcut to an execution mode.
+ * Alt+1 -> 'act' (Agent Loop), Alt+2 -> 'graph' (Graph orchestration).
+ * Returns null when the key does not map to a mode, so callers keep the
+ * current selection untouched.
+ */
+export function executionModeFromShortcut(
+  key: string,
+  _current: ExecutionMode
+): ExecutionMode | null {
+  if (key === '1') return 'act';
+  if (key === '2') return 'graph';
+  return null;
+}
+
+/**
+ * Build the system-prompt snippet that describes the active execution mode.
+ * Replaces the legacy keyword-based ([Harness...]/[Swarm...]) prompt injection.
+ */
+export function buildModePromptSnippet(
+  mode: ExecutionMode,
+  workflowId?: string,
+  workflow?: WorkflowLike
+): string {
+  const policy = resolveExecutionPolicy(mode, workflowId, workflow);
+  const label = mode === 'act'
+    ? '⚡ Agent Loop（极速执行）'
+    : workflow && workflow.blocks.length > 0
+      ? `🧩 Graph 编排 · ${workflow.name}`
+      : '🧩 Graph 动态编排（未选模板）';
+  return `【当前执行架构】: ${label}\n${policy.systemPromptDirectives}`;
+}

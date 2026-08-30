@@ -1,4 +1,6 @@
 ﻿import { getActiveWorkflow, getWorkflowPromptDirectives, getWorkflowAllowedTools, ModularWorkflow } from './services/workflowStore';
+import { loadSavedExecutionMode, saveExecutionModeToStorage, migratePipelineMode, executionModeFromShortcut, buildModePromptSnippet, type ExecutionMode } from './services/executionMode';
+import { createGateSuspensionFromBlock, createGateSuspension, resolveGateDecision, extractTaskBreakdown, extractSpecPath, shouldSuspendDynamicGraphPlanning, type GateSuspension, type StageGateDecision } from './services/stageGate';
 import { assembleCacheOptimizedMessages, recordCacheHitTelemetry, extractFileSymbols, buildCompactRepoMap } from './services/cacheEngine';
 import { hostGateway } from './services/hostGateway';
 import { getContextBudget, getContextTelemetry, compressModelContext } from './services/contextTelemetry';
@@ -225,7 +227,9 @@ export const App: React.FC = () => {
         }
         if (diskPipelineMode && diskPipelineMode.mode) {
           localStorage.setItem('tcode_pipeline_mode', diskPipelineMode.mode);
-          window.dispatchEvent(new CustomEvent('tcode_pipeline_mode_updated', { detail: diskPipelineMode.mode }));
+          const migrated = migratePipelineMode(diskPipelineMode.mode);
+          setExecutionMode(migrated);
+          saveExecutionModeToStorage(migrated);
         }
         if (diskCurrentSessionId && typeof diskCurrentSessionId === 'string') {
           setCurrentSessionId(diskCurrentSessionId);
@@ -255,9 +259,6 @@ export const App: React.FC = () => {
         e.preventDefault();
         setPaletteMode('commands');
         setIsPaletteOpen(true);
-      } else if (e.altKey && e.key === '1') {
-        e.preventDefault();
-        setActiveNav('sessions');
       } else if (e.altKey && e.key === '3') {
         e.preventDefault();
         setRightWorkspaceOpen(prev => !prev);
@@ -266,6 +267,33 @@ export const App: React.FC = () => {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
+
+  // Alt+1 / Alt+2 → execution mode switch (WP-B 模块一)
+  React.useEffect(() => {
+    const handleModeShortcut = (e: KeyboardEvent) => {
+      if (!e.altKey || e.ctrlKey || e.metaKey) return;
+      const next = executionModeFromShortcut(e.key, 'act');
+      if (next) {
+        e.preventDefault();
+        setExecutionMode(next);
+        saveExecutionModeToStorage(next);
+      }
+    };
+    window.addEventListener('keydown', handleModeShortcut);
+    return () => window.removeEventListener('keydown', handleModeShortcut);
+  }, []);
+
+  // Keep App executionMode in sync with external dispatches (Capsule / settings)
+  React.useEffect(() => {
+    const handleModeEvent = (e: any) => {
+      if (e.detail === 'act' || e.detail === 'graph') {
+        setExecutionMode(e.detail);
+      }
+    };
+    window.addEventListener('tcode_execution_mode_updated', handleModeEvent);
+    return () => window.removeEventListener('tcode_execution_mode_updated', handleModeEvent);
+  }, []);
+
   const [accentHex, setAccentHex] = useState('#D96B27');
 
   const handleSelectAccentHex = (hex: string) => {
@@ -298,6 +326,9 @@ export const App: React.FC = () => {
   }, [currentSessionId]);
   const [rightWorkspaceOpen, setRightWorkspaceOpen] = useState<boolean>(false);
   const [workMode, setWorkMode] = useState<WorkMode>('act');
+  const [executionMode, setExecutionMode] = useState<ExecutionMode>(() => loadSavedExecutionMode());
+  const [activeGate, setActiveGate] = useState<GateSuspension | null>(null);
+  const gateDecisionResolveRef = React.useRef<((decision: StageGateDecision) => void) | null>(null);
   const [sessionModelMap, setSessionModelMap] = useState<Record<string, string>>(() => {
     try {
       const raw = localStorage.getItem('codemind_session_models_map');
@@ -500,8 +531,26 @@ export const App: React.FC = () => {
   const abortControllerRef = React.useRef<AbortController | null>(null);
   const agentLoopCancelledRef = React.useRef(false);
 
+  const handleExecutionModeChange = (mode: ExecutionMode) => {
+    setExecutionMode(mode);
+    saveExecutionModeToStorage(mode);
+  };
+
+  const handleGateDecision = (decision: StageGateDecision) => {
+    if (gateDecisionResolveRef.current) {
+      gateDecisionResolveRef.current(decision);
+      gateDecisionResolveRef.current = null;
+    }
+  };
+
   const handleStopGeneration = () => {
     agentLoopCancelledRef.current = true;
+    if (activeGate?.active) {
+      // Stopping while a Stage Gate is suspended terminates the flow (no code written).
+      gateDecisionResolveRef.current?.({ approved: false });
+      gateDecisionResolveRef.current = null;
+      setActiveGate(null);
+    }
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
@@ -1051,35 +1100,8 @@ export const App: React.FC = () => {
     const activeMcpRuntimes = await Promise.all(mcpConfigs.filter(c => c.enabled).map(c => initializeMcpServer(c)));
     const mcpToolsPromptSnippet = buildMcpToolsModelPrompt(activeMcpRuntimes);
 
-    const isSwarmRequested = text.includes('[Swarm 协同多智能体模式]') || text.includes('[Swarm 协同]');
-    const isHarnessRequested = text.includes('[Harness 闭环模式]') || text.includes('[Harness 闭环]');
-
-    const modePromptSnippet = isSwarmRequested ? `
-【🐝 当前执行架构：Swarm 多智能体异构协同模式 (强制一次性完整执行全套 Subagent 协同流)】:
-🚨【强制模式指令】：当前任务处于 Swarm 多角色协同体系。最外层由你作为【👑 Master Agent 调度总规划师】，必须在本次执行中完整输出各 Subagent 的端到端协同流，绝对不可只写完 Master 规划就中断！
-
-请严格按以下 4 阶段顺序完整输出：
-1. 【头部 · 👑 Master 规划与分工图】: 明确任务目标、各 Subagent 角色分工与 DAG 执行顺序。
-2. 【中间 · 各 Subagent 独立协同区】（必须包含各 Subagent 专属标头）：
-   ### 🐝 [Subagent · Architect 系统架构师]
-   > **分工职责**: 系统架构建模与契约设计
-   (分析技术栈、制定接口与文件拓扑)
-
-   ### 🐝 [Subagent · Coder 编码专家]
-   > **分工职责**: 落地核心代码实现
-   (输出具体的代码编写 write_file 块或完整业务代码)
-
-   ### 🐝 [Subagent · QA Tester 测试自愈专家]
-   > **分工职责**: 单元测试与质量验证
-   (输出具体的单元测试断言或 run_command 验证)
-
-3. 【尾部 · 👑 Master 终审汇报与交付】:
-   ### 👑 Master 终审汇报与交付
-   (Master 汇总所有 Subagent 的执行结果，对照验收标准给出最终判定)
-` : `
-【⚡ 当前执行架构：单智能体 Harness 闭环执行模式】:
-🚨【强制模式指令】：当前处于单智能体 Harness 闭环执行模式。无论前序对话历史中是否出现过 Swarm 角色或 Subagent 标头，本轮问答必须 100% 切换为【单智能体 Harness 架构师】直接回答、推演并输出代码 (write_file) 或测试 (run_command)！严禁输出 ### 🐝 [Subagent ...] 标签或 Master 角色分工！
-`;
+    const activeModeWorkflow = getActiveWorkflow();
+    const modePromptSnippet = buildModePromptSnippet(executionMode, activeModeWorkflow.id, activeModeWorkflow);
 
     const systemPrompt = `你是 Tcode (AI Agentic Desktop IDE) 接入的生产级自主 AI Agent 架构师。
 【🚨 全局核心开发铁律（严格执行三步法，违者重构）】:
@@ -1147,9 +1169,11 @@ ${modePromptSnippet}
         role: 'assistant',
         content: '',
         timestamp: Date.now(),
-        auditTag: isSwarmRequested
-          ? `🐝 Swarm 协同 · 多智能体调度 (${streamingModel.name})`
-          : `⚡ ${getActiveWorkflow().name} · Harness 闭环 (${frozenRunMode})`,
+        auditTag: executionMode === 'graph'
+          ? (activeModeWorkflow.blocks.length > 0
+              ? `🧩 Graph 编排 · ${activeModeWorkflow.name} (${frozenRunMode})`
+              : `🧩 Graph 动态编排 · 任务图谱 (${frozenRunMode})`)
+          : `⚡ Agent Loop · 极速执行 (${frozenRunMode})`,
         permissionPolicy,
         stepTags: [],
         acceptanceItems: [],
@@ -1580,25 +1604,77 @@ ${modePromptSnippet}
           label: currentPhase === 'modify' ? `修改 ${actions.filter(a => a.type === 'write_file').length} 个文件` : currentPhase === 'verify' ? '运行测试验证' : '探索项目上下文'
         });
 
-        if (actions.length === 0) {
-          // 🛡️ Anti-Premature Termination Defender (Harness & Swarm Modes):
-          // Check if there are still pending acceptance items that require action:
-          // If in Swarm Act mode, check if the model stopped prematurely after just planning without outputting Subagents:
-          const hasSubagents = finalContent.includes('Subagent') || finalContent.includes('子智能体') || finalContent.includes('### 🐝') || /###\s*[📐💻🧪💾]/.test(finalContent);
-          const isSwarmPrematureStop = isSwarmRequested && frozenRunMode === 'act' && loopCount === 1 && !hasSubagents;
-
-          if (isSwarmPrematureStop && !agentLoopCancelledRef.current) {
-            addLog('WARN', 'SwarmCoordinator', `[Swarm] Master 规划已输出但尚未展开 Subagent，自动调度 Subagent 执行流...`);
-            conversationSnapshot.push({
-              id: `swarm-auto-trigger-${Date.now()}`,
-              role: 'user',
-              content: '【Master 调度总控指令】: 规划已就绪，请立即启动并依次执行各 Subagent (Architect 架构师 / Coder 编码专家 / QA Tester 测试专家)，输出具体的代码编写 (write_file) 与测试 (run_command)，并由 Master Agent 输出最终终审汇报！',
-              timestamp: Date.now(),
-              isAgentFeedback: true
+        // ── Stage Gate: explicit suspension at workflow stage boundaries (WP-B 模块五) ──
+        const gateSuspension = createGateSuspensionFromBlock(currentBlock, {
+          summary: finalContent.slice(0, 600),
+          taskBreakdown: extractTaskBreakdown(finalContent),
+          specPath: extractSpecPath(finalContent)
+        }, loopCount)
+          || (shouldSuspendDynamicGraphPlanning(
+                executionMode,
+                currentActiveWorkflow.blocks.length,
+                loopCount,
+                actions.some(a => a.type === 'write_file')
+              )
+              ? createGateSuspension({
+                  gateId: `dynamic-gate-${loopCount}`,
+                  stageName: '动态任务图谱终审',
+                  summary: finalContent.slice(0, 600),
+                  taskBreakdown: extractTaskBreakdown(finalContent),
+                  specPath: extractSpecPath(finalContent)
+                })
+              : null);
+        if (gateSuspension) {
+          setActiveGate(gateSuspension);
+          addLog('INFO', 'StageGate', `[Gate #${loopCount}] ${currentBlock?.name} 阶段完成，流程挂起等待人工终审...`);
+          const decision = await new Promise<StageGateDecision>(resolve => {
+            gateDecisionResolveRef.current = resolve;
+          });
+          gateDecisionResolveRef.current = null;
+          setActiveGate(null);
+          const outcome = resolveGateDecision(decision);
+          if (outcome.outcome === 'terminate') {
+            currentLoopStatus = 'blocked';
+            terminationSummaryText = `流程已在【${currentBlock?.name}】阶段由用户终止，未写入任何代码。`;
+            accumulatedRounds = accumulatedRounds.map(r => r.roundId === loopCount ? { ...r, status: 'blocked' as const } : r);
+            setSessionMessages(prev => {
+              const list = prev[currentSessionId] || [];
+              const updated = list.map(m => m.id === assistantId ? {
+                ...m,
+                content: finalContent,
+                rounds: [...accumulatedRounds],
+                activeRoundId: loopCount,
+                loopStatus: 'blocked' as const,
+                terminationSummary: terminationSummaryText,
+                stepTags: [...stepTags]
+              } : m);
+              return { ...prev, [currentSessionId]: updated };
             });
+            addLog('WARN', 'StageGate', `[Gate #${loopCount}] 用户终止流程，未写入任何代码。`);
+            break;
+          }
+          if (outcome.outcome === 'revise') {
+            const feedbackMsg: ChatMessage = {
+              id: `gate-feedback-${Date.now()}`,
+              role: 'user',
+              content: `【方案终审修改意见】: ${(decision.feedback || '').trim()}`,
+              timestamp: Date.now(),
+              isAgentFeedback: true,
+              auditTag: `🚦 Gate #${loopCount} 修改意见`
+            };
+            conversationSnapshot.push(feedbackMsg);
+            setSessionMessages(prev => ({
+              ...prev,
+              [currentSessionId]: [...(prev[currentSessionId] || []), feedbackMsg]
+            }));
+            addLog('INFO', 'StageGate', `[Gate #${loopCount}] 收到修改意见，回退至门禁阶段重新推演...`);
+            loopCount--;
             continue;
           }
+          addLog('INFO', 'StageGate', `[Gate #${loopCount}] 用户已批准方案，继续执行后续阶段...`);
+        }
 
+        if (actions.length === 0) {
           // A plain answer may complete a conversational turn, but an explicit unfinished
           // acceptance checklist must remain visible as needs_decision instead of completed.
           const durationSec = parseFloat(((performance.now() - callStartTime) / 1000).toFixed(1));
@@ -2047,6 +2123,12 @@ ${modePromptSnippet}
               onPreemptQueuedPrompt={handlePreemptQueuedPrompt}
               onSendMessage={handleSendMessage}
               onResolveOptions={handleResolveOptions}
+              executionMode={executionMode}
+              onExecutionModeChange={handleExecutionModeChange}
+              activeGate={activeGate}
+              onGateDecision={handleGateDecision}
+              onGateFeedback={(feedback) => handleGateDecision({ approved: false, feedback })}
+              onOpenSpec={handleOpenFile}
               onForkMessage={handleForkSessionFromMessage}
               onNavigateDiff={(target) => {
                 handleOpenFile(target.filePath, undefined, target.targetLine);

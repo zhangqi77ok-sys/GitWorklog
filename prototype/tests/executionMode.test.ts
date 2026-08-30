@@ -4,7 +4,8 @@ import {
   migratePipelineMode,
   loadSavedExecutionMode,
   saveExecutionModeToStorage,
-  type ExecutionMode
+  executionModeFromShortcut,
+  buildModePromptSnippet
 } from '../src/services/executionMode';
 
 const mockStorage: Record<string, string> = {};
@@ -87,5 +88,44 @@ describe('execution mode storage & migration', () => {
   it('save writes new key', () => {
     saveExecutionModeToStorage('graph');
     expect(localStorage.getItem('tcode_execution_mode')).toBe('graph');
+  });
+});
+
+describe('execution mode keyboard shortcut (Alt+1 / Alt+2)', () => {
+  it('Alt+1 maps to act', () => {
+    expect(executionModeFromShortcut('1', 'graph')).toBe('act');
+  });
+
+  it('Alt+2 maps to graph', () => {
+    expect(executionModeFromShortcut('2', 'act')).toBe('graph');
+  });
+
+  it('other keys return null and preserve current mode', () => {
+    expect(executionModeFromShortcut('Enter', 'act')).toBeNull();
+    expect(executionModeFromShortcut('q', 'graph')).toBeNull();
+  });
+
+  it('switching to the same mode still returns the target mode', () => {
+    expect(executionModeFromShortcut('1', 'act')).toBe('act');
+  });
+});
+
+describe('buildModePromptSnippet', () => {
+  it('act mode snippet names Agent Loop and has no workflow name', () => {
+    const snippet = buildModePromptSnippet('act');
+    expect(snippet).toContain('Agent Loop');
+    expect(snippet).not.toContain('SDD');
+  });
+
+  it('graph + workflow snippet names the mounted workflow', () => {
+    const snippet = buildModePromptSnippet('graph', 'sdd', sddWorkflow as never);
+    expect(snippet).toContain('SDD');
+    expect(snippet).toContain('Graph');
+  });
+
+  it('graph without template snippet drives dynamic graph planning', () => {
+    const snippet = buildModePromptSnippet('graph');
+    expect(snippet).toContain('任务图谱');
+    expect(snippet).toContain('门禁');
   });
 });

@@ -92,8 +92,6 @@ import {
   rejectChangeset,
   PinnedFileItem,
   togglePinnedFile,
-  SwarmPipelineStage,
-  INITIAL_SWARM_STAGES,
   mergeForkSessionToMain,
   MOCK_REPO_GRAPH,
   clampChangesetHeight
@@ -111,18 +109,12 @@ import { ManagedRule } from '../types/contracts';
 import { loadSavedRules } from '../services/rulesStore';
 import { loadSavedOfficialSkills, getTier2SkillBody, SkillMetadata } from '../services/skillsEngine';
 import { getContextBudget, ContextBudget, compressModelContext } from '../services/contextTelemetry';
-import {
-  createPipelineState,
-  selectPipelineMode,
-  startPipelineRun,
-  savePipelineModeToStorage,
-  PipelineMode,
-  PipelineState
-} from '../services/pipelineMode';
-import { RuntimeConfigResolver } from '../services/runtimeConfigResolver';
+import { type ExecutionMode } from '../services/executionMode';
+import type { GateSuspension, StageGateDecision } from '../services/stageGate';
 import { resolveProviderIdForModelTab, assertProviderCredentials } from '../services/modelGateway';
-import { taskGraphScheduler } from '../services/taskGraphScheduler';
 import { getGatewayModelOptions } from '../services/gateway/gatewayRuntime';
+import { ExecutionModeCapsule } from './ExecutionModeCapsule';
+import { StageGateCard } from './StageGateCard';
 
 interface ChatColumnProps {
   rightWorkspaceOpen: boolean;
@@ -156,6 +148,12 @@ interface ChatColumnProps {
   onApprovalDecision?: (approvedActionIds: string[], trustGlob?: string) => void;
   onRejectBatchApproval?: () => void;
   onRollbackToCheckpoint?: (checkpointRef: string, messageId: string) => void;
+  executionMode: ExecutionMode;
+  onExecutionModeChange: (mode: ExecutionMode) => void;
+  activeGate?: GateSuspension | null;
+  onGateDecision?: (decision: StageGateDecision) => void;
+  onGateFeedback?: (feedback: string) => void;
+  onOpenSpec?: (path: string) => void;
 }
 
 export const ChatColumn: React.FC<ChatColumnProps> = ({
@@ -187,7 +185,13 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
   pendingApproval,
   onApprovalDecision,
   onRejectBatchApproval,
-  onRollbackToCheckpoint
+  onRollbackToCheckpoint,
+  executionMode,
+  onExecutionModeChange,
+  activeGate = null,
+  onGateDecision,
+  onGateFeedback,
+  onOpenSpec
 }) => {
   const [inputText, setInputText] = useState(() => {
     try {
@@ -333,7 +337,6 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
   React.useEffect(() => {
     const handleChatEsc = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        setShowWorkflowMenu(false);
         setShowSkillMenu(false);
         setShowRulesPopover(false);
         setShowModelMenu(false);
@@ -352,8 +355,6 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
   const [officialSkillsList, setOfficialSkillsList] = useState<SkillMetadata[]>(() => loadSavedOfficialSkills());
   const [selectedSkill, setSelectedSkill] = useState<SkillMetadata | null>(null);
   const [activeModularWorkflow, setActiveModularWorkflow] = useState<ModularWorkflow>(() => getActiveWorkflow());
-  const [showWorkflowMenu, setShowWorkflowMenu] = useState(false);
-  const [workflowSearchQuery, setWorkflowSearchQuery] = useState('');
   const [savedWorkflowsList, setSavedWorkflowsList] = useState<ModularWorkflow[]>(() => loadSavedWorkflows());
 
   useEffect(() => {
@@ -497,24 +498,8 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
   ]);
   const [changeset, setChangeset] = useState<ChangesetReviewPayload | null>(null);
   const [changesetToast, setChangesetToast] = useState<string | null>(null);
-  const [pipelineState, setPipelineState] = useState<PipelineState>(() => createPipelineState());
-  const pipelineMode: PipelineMode = pipelineState.mode;
-
-  useEffect(() => {
-    const handleModeUpdate = (e: any) => {
-      if (e.detail === 'swarm' || e.detail === 'harness') {
-        setPipelineState(prev => ({ ...prev, mode: e.detail }));
-      }
-    };
-    window.addEventListener('tcode_pipeline_mode_updated', handleModeUpdate);
-    return () => window.removeEventListener('tcode_pipeline_mode_updated', handleModeUpdate);
-  }, []);
-  const [swarmGoal, setSwarmGoal] = useState<string>('');
-  const [activeRunId, setActiveRunId] = useState<string | undefined>(undefined);
-  const [swarmStartError, setSwarmStartError] = useState<string | null>(null);
-  const [isStartingSwarm, setIsStartingSwarm] = useState<boolean>(false);
+  const [gateFeedbackMode, setGateFeedbackMode] = useState<boolean>(false);
   const [isForkedSession, setIsForkedSession] = useState<boolean>(false);
-  const [swarmStages, setSwarmStages] = useState<SwarmPipelineStage[]>(INITIAL_SWARM_STAGES);
   const [isCommitModalOpen, setIsCommitModalOpen] = useState<boolean>(false);
   const [isPrModalOpen, setIsPrModalOpen] = useState<boolean>(false);
   const [experienceLearned, setExperienceLearned] = useState<boolean>(false);
@@ -740,55 +725,16 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
     setTimeout(() => setChangesetToast(null), 3500);
   };
 
-  const handlePipelineModeSelect = (mode: PipelineMode) => {
-    setPipelineState(current => selectPipelineMode(current, mode));
-    savePipelineModeToStorage(mode);
-    setSwarmStartError(null);
-    if (mode === 'harness') {
-      setChangesetToast('🛡️ 已选择 Harness：下一条消息将沿主 Agent Loop 执行');
-    } else {
-      setChangesetToast('🐝 已选择 Swarm：尚未启动，请先确认目标并点击“启动 Swarm Run”');
-    }
-    setTimeout(() => setChangesetToast(null), 3000);
-  };
-
-  const handleStartSwarm = async () => {
-    if (!swarmGoal.trim() || isStartingSwarm || activeRunId) return;
-
-    setIsStartingSwarm(true);
-    setSwarmStartError(null);
-
-    try {
-      const configSnapshot = await RuntimeConfigResolver.resolveCurrentConfig(
-        currentModel.provider,
-        currentModel.id,
-        workMode,
-        permissionPolicy,
-        session.projectPath || ''
-      );
-      const run = await taskGraphScheduler.startSwarmRun({
-        sessionId: session.id,
-        userMessageId: `user-${Date.now()}`,
-        goal: swarmGoal,
-        configSnapshot
-      });
-      setActiveRunId(run.id);
-      setPipelineState(current => startPipelineRun(current, { accepted: true, runId: run.id }));
-      setChangesetToast(`🐝 Swarm Run 已启动：${run.id}`);
-      setTimeout(() => setChangesetToast(null), 3500);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : '未知启动错误';
-      setSwarmStartError(message);
-      setPipelineState(current => startPipelineRun(current, { accepted: false }));
-      setChangesetToast('⚠️ Swarm 未启动，当前没有运行中的任务');
-      setTimeout(() => setChangesetToast(null), 3500);
-    } finally {
-      setIsStartingSwarm(false);
-    }
-  };
-
   const handleSend = () => {
     if (!inputText.trim()) return;
+    // While a Stage Gate is active, the composer only accepts revision feedback.
+    if (activeGate?.active && gateFeedbackMode) {
+      onGateFeedback?.(inputText);
+      setInputText('');
+      setGateFeedbackMode(false);
+      return;
+    }
+    if (activeGate?.active) return;
     let fullPrompt = inputText;
 
     // 1. Inject Referenced Session Context if present
@@ -808,12 +754,6 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
       const currentBlock = activeModularWorkflow.blocks[0];
       const executionNote = `【当前生效工作流】: 【${activeModularWorkflow.name}】(${activeModularWorkflow.blocks.length} 阶段积木)\n【阶段 1 初始约束】: ${currentBlock ? currentBlock.promptTemplate : ''}`;
       fullPrompt = `[用户已确认启用积木工作流: ${activeModularWorkflow.name}]\n${executionNote}\n\n${fullPrompt}`;
-    }
-
-    if (pipelineMode === 'swarm') {
-      fullPrompt = `[Swarm 协同多智能体模式]\n${fullPrompt}`;
-    } else {
-      fullPrompt = `[Harness 闭环模式]\n${fullPrompt}`;
     }
 
     onSendMessage(fullPrompt);
@@ -876,113 +816,20 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
           )}
         </div>
 
-        {/* Center: Interactive Mode Switch (Harness Single Agent vs Swarm Multi-Agent) */}
+        {/* Center: Execution Mode Capsule (⚡ Agent Loop / 🧩 Graph 编排) */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflowX: 'auto', padding: '0 4px' }}>
-          {/* Mode Switcher Segmented Control */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              background: 'var(--bg-base, #181818)',
-              border: '1px solid var(--border-subtle, #333)',
-              borderRadius: '6px',
-              padding: '2px',
-              gap: '2px'
+          <ExecutionModeCapsule
+            mode={executionMode}
+            activeWorkflowId={activeModularWorkflow.id}
+            workflows={[NORMAL_WORKFLOW, ...savedWorkflowsList]}
+            onModeChange={onExecutionModeChange}
+            onSelectWorkflow={(wf) => {
+              setActiveWorkflowId(wf.id);
+              setActiveModularWorkflow(wf);
             }}
-          >
-            <button
-              onClick={() => {
-                setPipelineState(prev => ({ ...prev, mode: 'harness' }));
-                savePipelineModeToStorage('harness');
-                setChangesetToast('🛡️ 已切换至 Harness 单智能体闭环模式');
-                setTimeout(() => setChangesetToast(null), 2500);
-              }}
-              style={{
-                padding: '2px 8px',
-                borderRadius: '4px',
-                border: 'none',
-                background: pipelineMode === 'harness' ? 'var(--accent, #D96B27)' : 'transparent',
-                color: pipelineMode === 'harness' ? '#FFF' : 'var(--text-muted)',
-                fontSize: '10px',
-                fontWeight: pipelineMode === 'harness' ? 700 : 500,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px',
-                transition: 'all 0.15s ease'
-              }}
-              title="Harness 模式：单模型 Think-Act-Verify 多轮自主闭环"
-            >
-              <span>🛡️ Harness 闭环</span>
-            </button>
+          />
 
-            <button
-              onClick={() => {
-                setPipelineState(prev => ({ ...prev, mode: 'swarm' }));
-                savePipelineModeToStorage('swarm');
-                setChangesetToast('🐝 已切换至 Swarm 多智能体异构协同模式');
-                setTimeout(() => setChangesetToast(null), 2500);
-              }}
-              style={{
-                padding: '2px 8px',
-                borderRadius: '4px',
-                border: 'none',
-                background: pipelineMode === 'swarm' ? 'var(--accent, #D96B27)' : 'transparent',
-                color: pipelineMode === 'swarm' ? '#FFF' : 'var(--text-muted)',
-                fontSize: '10px',
-                fontWeight: pipelineMode === 'swarm' ? 700 : 500,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px',
-                transition: 'all 0.15s ease'
-              }}
-              title="Swarm 模式：Master 动态调度 11 大专业角色 (PM/UI/Architect/Coder/DBA/Tester/Reviewer)"
-            >
-              <span>🐝 Swarm 协同</span>
-            </button>
-          </div>
-
-          {/* Dynamic Pipeline Flow Display */}
-          {pipelineMode === 'harness' ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px' }}>
-              <span style={{ padding: '1px 5px', borderRadius: '3px', background: 'var(--bg-base)', color: 'var(--text-muted)' }}>
-                📜 规则({activeRules.length})
-              </span>
-              <span style={{ color: 'var(--text-muted)' }}>➔</span>
-              <span style={{ padding: '1px 5px', borderRadius: '3px', background: 'rgba(234, 179, 8, 0.12)', color: '#CA8A04', fontWeight: 600 }}>
-                🧠 推演
-              </span>
-              <span style={{ color: 'var(--text-muted)' }}>➔</span>
-              <span style={{ padding: '1px 5px', borderRadius: '3px', background: 'rgba(37, 99, 235, 0.1)', color: '#2563EB', fontWeight: 600 }}>
-                ⚡ 宿主执行
-              </span>
-              <span style={{ color: 'var(--text-muted)' }}>➔</span>
-              <span style={{ padding: '1px 5px', borderRadius: '3px', background: 'rgba(22, 163, 74, 0.1)', color: '#16A34A', fontWeight: 600 }}>
-                🎯 验收验证
-              </span>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px' }}>
-              <span style={{ padding: '1px 5px', borderRadius: '3px', background: 'rgba(217, 107, 39, 0.12)', color: 'var(--accent)', fontWeight: 600 }}>
-                👑 Master 编排
-              </span>
-              <span style={{ color: 'var(--text-muted)' }}>➔</span>
-              <span style={{ padding: '1px 5px', borderRadius: '3px', background: 'rgba(59, 130, 246, 0.1)', color: '#3B82F6', fontWeight: 600 }}>
-                📊 DAG 分工
-              </span>
-              <span style={{ color: 'var(--text-muted)' }}>➔</span>
-              <span style={{ padding: '1px 5px', borderRadius: '3px', background: 'rgba(22, 163, 74, 0.1)', color: '#16A34A', fontWeight: 600 }}>
-                📦 共享产物
-              </span>
-              <span style={{ color: 'var(--text-muted)' }}>➔</span>
-              <span style={{ padding: '1px 5px', borderRadius: '3px', background: 'rgba(168, 85, 247, 0.1)', color: '#A855F7', fontWeight: 600 }}>
-                ⚖️ 终审裁决
-              </span>
-            </div>
-          )}
-
-          {/* Workbench Trigger Button */}
+          {/* Workbench Trigger Button (Swarm 工作台 · WP-E 衔接) */}
           <button
             onClick={() => setIsSwarmModalOpen(true)}
             style={{
@@ -1657,7 +1504,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                       cursor: 'text'
                     }}>
                       {msg.role === 'assistant' ? (
-                        (msg.auditTag?.includes('Swarm') || pipelineMode === 'swarm') ? (
+                        msg.auditTag?.includes('Swarm') ? (
                           <SwarmSubagentContainer
                             content={parsed.cleanContent || (isLastAssistant ? '正在推演并分析工程结构...' : msg.content)}
                             isStreaming={isLastAssistant && isStreaming}
@@ -2334,6 +2181,17 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
               </div>
             </div>
           )}
+          {activeGate?.active && activeGate.gate && (
+            <div style={{ padding: '8px 12px 0 12px' }}>
+              <StageGateCard
+                gate={activeGate.gate}
+                onDecision={(d) => onGateDecision?.(d)}
+                onEnterFeedback={() => setGateFeedbackMode(true)}
+                onOpenSpec={onOpenSpec}
+              />
+            </div>
+          )}
+
           {/* Draggable Top Handle to resize input box height */}
           <div
             onMouseDown={() => setIsDraggingInputHeight(true)}
@@ -2369,7 +2227,9 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
           >
           <textarea
             placeholder={
-              workMode === 'plan'
+              activeGate?.active && gateFeedbackMode
+                ? `✍️ 输入修改意见：提交后要求 Agent 修订方案（Enter 提交意见）...`
+                : workMode === 'plan'
                 ? `[${currentModel.name} · Plan 模式] 描述你的架构设计或分析意图，AI 将推演方案并制定计划（只读，不改写代码）...`
                 : `[${currentModel.name} · Act 模式] 描述你的开发需求，AI 将直接落地修改代码并运行测试自纠（回车发送）...`
             }
@@ -2839,201 +2699,6 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                 )}
               </div>
 
-                            {/* Active Modular Workflow Interactive Capsule + Popover Modal */}
-              <div style={{ position: 'relative' }}>
-                <div
-                  onClick={() => setShowWorkflowMenu(!showWorkflowMenu)}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '5px',
-                    padding: '2px 8px',
-                    borderRadius: '10px',
-                    background: activeModularWorkflow.id !== 'normal'
-                      ? (showWorkflowMenu ? 'rgba(249, 115, 22, 0.22)' : 'rgba(249, 115, 22, 0.12)')
-                      : (showWorkflowMenu ? 'var(--bg-surface-elevated)' : 'var(--bg-base)'),
-                    border: `1px solid ${
-                      activeModularWorkflow.id !== 'normal'
-                        ? (showWorkflowMenu ? 'var(--accent, #F97316)' : 'rgba(249, 115, 22, 0.3)')
-                        : 'var(--border-subtle)'
-                    }`,
-                    color: activeModularWorkflow.id !== 'normal' ? 'var(--accent, #F97316)' : 'var(--text-secondary)',
-                    fontSize: '10.5px',
-                    fontWeight: activeModularWorkflow.id !== 'normal' ? 700 : 500,
-                    cursor: 'pointer',
-                    transition: 'all 0.15s'
-                  }}
-                  title={activeModularWorkflow.id !== 'normal' ? '已启用工作流 (点击可切换或再次点击取消选中)' : '未启用工作流 (点击可选择工作流)'}
-                >
-                  <span>{activeModularWorkflow.id !== 'normal' ? `${activeModularWorkflow.icon} ${activeModularWorkflow.name}` : '💬 普通任务模式'}</span>
-                  <span style={{ fontSize: '9px', color: 'var(--text-muted)' }}>
-                    {activeModularWorkflow.id !== 'normal' ? `(${activeModularWorkflow.blocks.length} 阶段)` : '(未指定)'}
-                  </span>
-                  <ChevronDown size={11} style={{ transform: showWorkflowMenu ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }} />
-                </div>
-
-                {/* Workflow Quick-Selection Popover Modal */}
-                {showWorkflowMenu && (
-                  <div style={{
-                    position: 'absolute',
-                    bottom: '36px',
-                    left: '0',
-                    width: 'min(420px, calc(100vw - 48px))',
-                    maxHeight: 'min(500px, 68vh)',
-                    background: 'var(--bg-surface-elevated, #1A1D24)',
-                    border: '1px solid var(--border-strong, rgba(255,255,255,0.18))',
-                    borderRadius: '10px',
-                    boxShadow: '0 16px 48px rgba(0,0,0,0.45)',
-                    padding: '12px',
-                    zIndex: 350,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '10px'
-                  }}>
-                    {/* Header with Title and explicit Close [X] button */}
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '8px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <span style={{ fontSize: '14px' }}>🧩</span>
-                        <strong style={{ fontSize: '12px', color: 'var(--text-primary)' }}>选择会话工作流 (单选即生效)</strong>
-                        <span style={{ fontSize: '9.5px', color: 'var(--text-muted)' }}>ESC 可关闭</span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setShowWorkflowMenu(false)}
-                        style={{
-                          border: 'none',
-                          background: 'transparent',
-                          color: 'var(--text-muted)',
-                          cursor: 'pointer',
-                          padding: '2px 4px',
-                          borderRadius: '4px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center'
-                        }}
-                        title="关闭 (ESC)"
-                      >
-                        <X size={14} />
-                      </button>
-                    </div>
-
-                    {/* Search Input */}
-                    <div style={{ position: 'relative' }}>
-                      <Search size={12} color="var(--text-muted)" style={{ position: 'absolute', left: '8px', top: '7px' }} />
-                      <input
-                        type="text"
-                        placeholder="搜索工作流 (如 SDD, TDD, SpecKit)..."
-                        value={workflowSearchQuery}
-                        onChange={(e) => setWorkflowSearchQuery(e.target.value)}
-                        style={{
-                          width: '100%',
-                          padding: '5px 8px 5px 26px',
-                          borderRadius: '6px',
-                          background: 'var(--bg-base, #101216)',
-                          border: '1px solid var(--border-subtle)',
-                          color: 'var(--text-primary)',
-                          fontSize: '11px',
-                          outline: 'none'
-                        }}
-                        autoFocus
-                      />
-                    </div>
-
-                    {/* Workflows List */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', overflowY: 'auto', maxHeight: '280px', paddingRight: '2px' }}>
-                      {savedWorkflowsList
-                        .filter(w => !workflowSearchQuery || w.name.toLowerCase().includes(workflowSearchQuery.toLowerCase()) || w.description.toLowerCase().includes(workflowSearchQuery.toLowerCase()))
-                        .map(w => {
-                          const isSelected = w.id === activeModularWorkflow.id;
-                          return (
-                            <div
-                              key={w.id}
-                              onClick={() => {
-                                if (isSelected) {
-                                  // Click again to deselect back to normal/none mode!
-                                  setActiveWorkflowId('normal');
-                                  setActiveModularWorkflow(NORMAL_WORKFLOW);
-                                } else {
-                                  setActiveWorkflowId(w.id);
-                                  setActiveModularWorkflow(w);
-                                }
-                                setShowWorkflowMenu(false);
-                              }}
-                              style={{
-                                padding: '8px 10px',
-                                borderRadius: '8px',
-                                background: isSelected ? 'rgba(249, 115, 22, 0.12)' : 'var(--bg-surface, #14161C)',
-                                border: isSelected ? '1.5px solid var(--accent, #F97316)' : '1px solid var(--border-subtle)',
-                                cursor: 'pointer',
-                                display: 'flex',
-                                flexDirection: 'column',
-                                gap: '4px',
-                                transition: 'all 0.15s'
-                              }}
-                            >
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                  <span style={{ fontSize: '13px' }}>{w.icon}</span>
-                                  <span style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-primary)' }}>{w.name}</span>
-                                  <span style={{ fontSize: '9.5px', padding: '1px 5px', borderRadius: '4px', background: 'rgba(255,255,255,0.06)', color: 'var(--text-muted)' }}>
-                                    {w.blocks.length} 阶段
-                                  </span>
-                                </div>
-                                {isSelected ? (
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--accent, #F97316)', fontSize: '11px', fontWeight: 700 }} title="再次点击即可取消选中">
-                                    <Check size={12} />
-                                    <span>生效中 (再点取消)</span>
-                                  </div>
-                                ) : (
-                                  <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>点击选中</span>
-                                )}
-                              </div>
-                              <div style={{ fontSize: '10.5px', color: 'var(--text-secondary)' }}>
-                                {w.description}
-                              </div>
-                            </div>
-                          );
-                        })}
-                    </div>
-
-                    {/* Footer: Jump to Block Studio */}
-                    <div style={{
-                      borderTop: '1px solid var(--border-subtle)',
-                      paddingTop: '8px',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center'
-                    }}>
-                      <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
-                        📁 独立存储: .codemind/workflows.json
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setShowWorkflowMenu(false);
-                          window.dispatchEvent(new CustomEvent('tcode_open_settings_tab', { detail: 'workflows' }));
-                        }}
-                        style={{
-                          border: 'none',
-                          background: 'transparent',
-                          color: 'var(--accent, #F97316)',
-                          fontSize: '11px',
-                          fontWeight: 700,
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '4px'
-                        }}
-                      >
-                        <span>🧩 积木拼装工作台 (深度编排) ➔</span>
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-
-
               {/* @ Agent Skills Reference Trigger Button */}
               <div style={{ position: 'relative' }}>
                 <button
@@ -3438,7 +3103,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
               ) : (
                 <button
                   onClick={handleSend}
-                  disabled={!inputText.trim() && attachedFiles.length === 0}
+                  disabled={(activeGate?.active === true && !gateFeedbackMode) || (!inputText.trim() && attachedFiles.length === 0)}
                   style={{
                     width: '28px',
                     height: '28px',
