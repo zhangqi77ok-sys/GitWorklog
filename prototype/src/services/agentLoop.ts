@@ -733,6 +733,31 @@ export function parseNativeToolCalls(toolCalls: NativeToolCallInput[]): AgentAct
   return actions;
 }
 
+export interface LoopContinueVerdict {
+  continue: boolean;
+  reason: 'natural_completion' | 'tool_driven' | 'max_turns';
+}
+
+/**
+ * Golden Invariant 1 & 2: the loop continues ONLY when this round produced
+ * tool calls. Zero tool calls = natural completion (chitchat exits in one
+ * round). acceptanceItems NEVER drive continuation (anti-fabrication).
+ * maxTurns is the hard circuit breaker.
+ */
+export function shouldContinueLoop(params: {
+  actions: AgentAction[];
+  acceptanceItems: TargetAcceptanceItem[];
+  loopCount: number;
+  maxTurns?: number;
+}): LoopContinueVerdict {
+  const maxTurns = params.maxTurns ?? 8;
+  if (params.loopCount >= maxTurns) return { continue: false, reason: 'max_turns' };
+  if (!params.actions || params.actions.length === 0) {
+    return { continue: false, reason: 'natural_completion' };
+  }
+  return { continue: true, reason: 'tool_driven' };
+}
+
 /** Keeps a no-action round honest: explicit unfinished criteria cannot be marked completed. */
 export function resolveNoActionLoopStatus(
   verifierStatus: LoopTerminationStatus,
