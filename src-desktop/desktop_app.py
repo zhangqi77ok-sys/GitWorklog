@@ -792,16 +792,10 @@ def start_local_server(port=PORT):
     t.start()
     return port
 
-if __name__ == '__main__':
-    port = start_local_server()
-    url = f"http://127.0.0.1:{port}/"
-
-    # Use the current Windows work area (not the full screen) so the taskbar
-    # is excluded and the initial window is centered on the usable desktop.
-    win_width = 1440
-    win_height = 900
-    center_x = 0
-    center_y = 0
+def get_center_window_position(
+    window_width: int,
+    window_height: int,
+) -> tuple[int, int]:
     try:
         import ctypes
         from ctypes import wintypes
@@ -811,38 +805,60 @@ if __name__ == '__main__':
 
         class RECT(ctypes.Structure):
             _fields_ = [
-                ('left', wintypes.LONG),
-                ('top', wintypes.LONG),
-                ('right', wintypes.LONG),
-                ('bottom', wintypes.LONG),
+                ("left", wintypes.LONG),
+                ("top", wintypes.LONG),
+                ("right", wintypes.LONG),
+                ("bottom", wintypes.LONG),
             ]
 
-        work_rect = RECT()
-        SPI_GETWORKAREA = 48
-        if user32.SystemParametersInfoW(SPI_GETWORKAREA, 0, ctypes.byref(work_rect), 0):
-            work_area = (
-                int(work_rect.left),
-                int(work_rect.top),
-                int(work_rect.right),
-                int(work_rect.bottom),
-            )
-        else:
-            screen_w = int(user32.GetSystemMetrics(0))
-            screen_h = int(user32.GetSystemMetrics(1))
-            work_area = (0, 0, screen_w, screen_h)
+        work_area = RECT()
 
-        center_x, center_y = center_window(work_area, (win_width, win_height))
+        # SPI_GETWORKAREA = 48
+        # 获取扣除任务栏后的当前主显示器可用工作区
+        success = user32.SystemParametersInfoW(
+            48,
+            0,
+            ctypes.byref(work_area),
+            0,
+        )
+
+        if not success:
+            screen_width = user32.GetSystemMetrics(0)
+            screen_height = user32.GetSystemMetrics(1)
+            work_area.left = 0
+            work_area.top = 0
+            work_area.right = screen_width
+            work_area.bottom = screen_height
+
+        available_width = work_area.right - work_area.left
+        available_height = work_area.bottom - work_area.top
+
+        x = work_area.left + max(0, (available_width - window_width) // 2)
+        y = work_area.top + max(0, (available_height - window_height) // 2)
+
+        return x, y
     except Exception:
-        # A safe fallback is still preferable to passing an invalid position.
-        center_x, center_y = 0, 0
+        return 0, 0
+
+if __name__ == '__main__':
+    port = start_local_server()
+    url = f"http://127.0.0.1:{port}/"
+
+    window_width = 1440
+    window_height = 900
+
+    window_x, window_y = get_center_window_position(
+        window_width,
+        window_height,
+    )
 
     window = webview.create_window(
         title=f"{APP_NAME} - Enterprise AI Agentic IDE",
         url=url,
-        width=win_width,
-        height=win_height,
-        x=center_x,
-        y=center_y,
+        width=window_width,
+        height=window_height,
+        x=window_x,
+        y=window_y,
         min_size=(1024, 640),
         text_select=True,
         zoomable=True,
