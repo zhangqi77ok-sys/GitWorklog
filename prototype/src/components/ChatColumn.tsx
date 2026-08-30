@@ -100,6 +100,7 @@ import { GitPullRequest, RotateCcw } from 'lucide-react';
 import type { AgentAction } from '../services/agentLoop';
 import { ManagedRule } from '../types/contracts';
 import { loadSavedRules } from '../services/rulesStore';
+import { loadSavedOfficialSkills, getTier2SkillBody, SkillMetadata } from '../services/skillsEngine';
 import { getContextBudget, ContextBudget, compressModelContext } from '../services/contextTelemetry';
 
 interface ChatColumnProps {
@@ -326,11 +327,21 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
   }, []);
 
   const [skillQuery, setSkillQuery] = useState('');
-  const [activeSkillTier, setActiveSkillTier] = useState<'capability' | 'skill' | 'mcp'>('capability');
-  const [agentSkills, setAgentSkills] = useState<AgentSkillItem[]>(loadSavedSkills());
-  const [selectedSkill, setSelectedSkill] = useState<AgentSkillItem | null>(null);
+  const [officialSkillsList, setOfficialSkillsList] = useState<SkillMetadata[]>(() => loadSavedOfficialSkills());
+  const [selectedSkill, setSelectedSkill] = useState<SkillMetadata | null>(null);
   const [shareTargetMessage, setShareTargetMessage] = useState<ChatMessage | null>(null);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+
+  // Sync official skills updates
+  React.useEffect(() => {
+    const handleSkillsUpdate = (e: any) => {
+      if (e.detail) {
+        setOfficialSkillsList(e.detail);
+      }
+    };
+    window.addEventListener('tcode_skills_updated', handleSkillsUpdate);
+    return () => window.removeEventListener('tcode_skills_updated', handleSkillsUpdate);
+  }, []);
 
   // Smart auto-scroll: only scroll to bottom when user is near the bottom
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
@@ -667,9 +678,10 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
       fullPrompt = `[已关联前序会话: ${referencedSession.title}]\n--- 前序会话历史对话上下文 ---\n${historySummary || '(前序会话暂无消息)'}\n--- 基于以上背景的继续提问 ---\n${fullPrompt}`;
     }
 
-    // 2. Inject Active Skill Directive if present
+    // 2. Inject Active Skill Directive if present (Progressive Disclosure Tier 2)
     if (selectedSkill) {
-      fullPrompt = `[已激活能力 @${selectedSkill.name}]: ${selectedSkill.promptInstruction}\n\n${fullPrompt}`;
+      const fullSkillBody = getTier2SkillBody(selectedSkill.name);
+      fullPrompt = `[用户显式激活 Skill: @${selectedSkill.name}]\n${fullSkillBody || selectedSkill.description}\n\n${fullPrompt}`;
     }
 
     onSendMessage(fullPrompt);
@@ -2737,55 +2749,13 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                       </button>
                     </div>
 
-                    {/* 3-Tier Navigation Tabs (技能 / Skill / MCP) */}
-                    <div style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      background: 'var(--bg-base)',
-                      borderRadius: '6px',
-                      padding: '2px',
-                      marginBottom: '6px'
-                    }}>
-                      {[
-                        { id: 'capability', label: '🛠️ 技能 (专精能力)' },
-                        { id: 'skill', label: '📦 Skill (领域技能)' },
-                        { id: 'mcp', label: '🔌 MCP (工具集)' }
-                      ].map(tab => (
-                        <button
-                          key={tab.id}
-                          onClick={() => setActiveSkillTier(tab.id as any)}
-                          style={{
-                            flex: 1,
-                            padding: '5px 4px',
-                            border: 'none',
-                            borderRadius: '4px',
-                            background: activeSkillTier === tab.id ? 'var(--bg-surface-elevated)' : 'transparent',
-                            color: activeSkillTier === tab.id ? 'var(--accent)' : 'var(--text-muted)',
-                            fontWeight: activeSkillTier === tab.id ? 700 : 500,
-                            fontSize: '11px',
-                            cursor: 'pointer',
-                            boxShadow: activeSkillTier === tab.id ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
-                            transition: 'all 0.12s ease'
-                          }}
-                        >
-                          {tab.label}
-                        </button>
-                      ))}
-                    </div>
-
                     {/* Search Input */}
                     <div style={{ padding: '2px 2px 6px' }}>
                       <div style={{ position: 'relative' }}>
                         <Search size={12} style={{ position: 'absolute', left: '8px', top: '7px', color: 'var(--text-muted)' }} />
                         <input
                           type="text"
-                          placeholder={
-                            activeSkillTier === 'capability'
-                              ? '搜索专精能力 (如: 架构重构, 单测生成, 安全审计, 性能调优)...'
-                              : activeSkillTier === 'skill'
-                              ? '搜索专属 Skill (如: React TS, Python 后端, Git PR)...'
-                              : '搜索 MCP 工具链 (如: Filesystem, GitHub, Postgres)...'
-                          }
+                          placeholder="搜索 Agent 技能 (如: sdd-tdd-workflow, build-installer)..."
                           value={skillQuery}
                           onChange={e => setSkillQuery(e.target.value)}
                           autoFocus
@@ -2803,18 +2773,17 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                       </div>
                     </div>
 
-                    {/* Skill List (Single Select Only & Close on Click) */}
+                    {/* Official Skill List (Single Select Only & Close on Click) */}
                     <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      {agentSkills
-                        .filter(s => s.tier === activeSkillTier)
+                      {officialSkillsList
+                        .filter(s => s.enabled)
                         .filter(s => !skillQuery || s.name.toLowerCase().includes(skillQuery.toLowerCase()) || s.description.toLowerCase().includes(skillQuery.toLowerCase()))
                         .map(skill => {
-                          const isSelected = selectedSkill?.id === skill.id;
+                          const isSelected = selectedSkill?.name === skill.name;
                           return (
                             <div
-                              key={skill.id}
+                              key={skill.name}
                               onClick={() => {
-                                // Single-select only: click selects, clicking selected deselects, immediately closes popover!
                                 if (isSelected) {
                                   setSelectedSkill(null);
                                 } else {
@@ -2841,14 +2810,14 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                               }}
                             >
                               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
-                                <span style={{ fontSize: '15px' }}>{skill.icon}</span>
+                                <span style={{ fontSize: '15px' }}>{skill.icon || '📦'}</span>
                                 <div>
                                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                    <span style={{ fontWeight: 700, fontSize: '11.5px', color: isSelected ? 'var(--accent)' : 'var(--text-strong)' }}>
+                                    <span style={{ fontWeight: 700, fontSize: '11.5px', color: isSelected ? 'var(--accent)' : 'var(--text-strong)', fontFamily: 'var(--font-mono)' }}>
                                       @{skill.name}
                                     </span>
                                     <span style={{ fontSize: '9px', padding: '0 4px', borderRadius: '3px', background: 'rgba(0,0,0,0.06)', color: 'var(--text-muted)' }}>
-                                      {skill.category}
+                                      {skill.path}
                                     </span>
                                   </div>
                                   <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '2px' }}>

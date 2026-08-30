@@ -1075,3 +1075,84 @@ describe('Managed Rules & Prompt Injection Contract', () => {
   });
 });
 
+import {
+  loadSavedOfficialSkills,
+  buildTier1SkillsSystemPrompt,
+  getTier2SkillBody,
+  toggleOfficialSkillState,
+  addOfficialSkill
+} from '../src/services/skillsEngine';
+import {
+  loadSavedMcpConfigs,
+  initializeMcpServer,
+  callMcpTool,
+  buildMcpToolsModelPrompt,
+  OFFICIAL_PROTOCOL_VERSION
+} from '../src/services/mcpGateway';
+
+describe('Official Agent Skills Specification (agentskills.io) Contract', () => {
+  it('loads official skills and enforces directory-aligned lowercase name & description', () => {
+    const skills = loadSavedOfficialSkills();
+    expect(skills.length).toBeGreaterThanOrEqual(4);
+    for (const s of skills) {
+      expect(s.name).toMatch(/^[a-z0-9-]+$/);
+      expect(s.name.length).toBeLessThanOrEqual(64);
+      expect(s.description.length).toBeLessThanOrEqual(1024);
+      expect(s.path).toContain(s.name);
+    }
+  });
+
+  it('Tier 1: builds ultra-compact prompt with only name + description', () => {
+    const promptSnippet = buildTier1SkillsSystemPrompt();
+    expect(promptSnippet).toContain('【可用 Agent Skills (渐进式加载，遵循 agentskills.io 规范)】');
+    expect(promptSnippet).toContain('sdd-tdd-workflow');
+    expect(promptSnippet).not.toContain('## 铁律规范'); // Tier 2 content NOT leaked into Tier 1
+  });
+
+  it('Tier 2: fetches full SKILL.md body on-demand', () => {
+    const body = getTier2SkillBody('sdd-tdd-workflow');
+    expect(body).not.toBeNull();
+    expect(body).toContain('Specification Driven Workflow');
+  });
+
+  it('supports toggling and adding skills with auto-normalized names', () => {
+    const added = addOfficialSkill({
+      name: 'Custom-API-Docs',
+      description: '自动解析并生成 OpenAPI 接口规范',
+      path: '.agents/skills/custom-api-docs/SKILL.md'
+    });
+    expect(added[0].name).toBe('custom-api-docs');
+  });
+});
+
+describe('Official MCP Specification (2025-06-18) JSON-RPC Lifecycle Contract', () => {
+  it('executes initialize -> initialized -> tools/list lifecycle discovery', async () => {
+    const configs = loadSavedMcpConfigs();
+    const fsConfig = configs.find(c => c.id === 'mcp-filesystem');
+    expect(fsConfig).toBeDefined();
+
+    const runtime = await initializeMcpServer(fsConfig!);
+    expect(runtime.protocolVersion).toBe(OFFICIAL_PROTOCOL_VERSION);
+    expect(runtime.state).toBe('ready');
+    expect(runtime.tools.length).toBeGreaterThan(0);
+    expect(runtime.tools.find(t => t.name === 'read_file')).toBeDefined();
+  });
+
+  it('dispatches tools/call and handles response content correctly', async () => {
+    const configs = loadSavedMcpConfigs();
+    const runtime = await initializeMcpServer(configs[0]);
+    const result = await callMcpTool(runtime, 'read_file', { path: 'package.json' });
+    expect(result.isError).toBe(false);
+    expect(result.content[0].text).toContain('read_file');
+  });
+
+  it('builds valid model tools prompt from active MCP runtimes', async () => {
+    const configs = loadSavedMcpConfigs();
+    const runtimes = await Promise.all(configs.filter(c => c.enabled).map(c => initializeMcpServer(c)));
+    const prompt = buildMcpToolsModelPrompt(runtimes);
+    expect(prompt).toContain('【已挂载 MCP 工具集 (Model Context Protocol)】');
+    expect(prompt).toContain('read_file');
+  });
+});
+
+

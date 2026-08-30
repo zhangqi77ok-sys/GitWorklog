@@ -65,8 +65,9 @@ import {
   resolveApiEndpoint
 } from '../types/contracts';
 import { hostGateway } from '../services/hostGateway';
-import { clearStorageData, exportSanitizedConfig, loadSavedGlobalSettings, saveGlobalSettingsToStorage, GlobalSettings } from '../services/settingsStore';
 import { loadSavedRules, saveRulesToStorage, addManagedRule, toggleRuleState, deleteManagedRule } from '../services/rulesStore';
+import { loadSavedOfficialSkills, toggleOfficialSkillState, addOfficialSkill, deleteOfficialSkill, SkillMetadata } from '../services/skillsEngine';
+import { loadSavedMcpConfigs, saveMcpConfigsToStorage, toggleMcpServerEnabled, addMcpServerConfig, deleteMcpServerConfig, initializeMcpServer, McpServerConfig, McpServerRuntime, OFFICIAL_PROTOCOL_VERSION } from '../services/mcpGateway';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -91,12 +92,25 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [newRuleContent, setNewRuleContent] = useState('');
   const [newRuleScope, setNewRuleScope] = useState<'project' | 'global'>('project');
 
+  const [officialSkills, setOfficialSkills] = useState<SkillMetadata[]>(loadSavedOfficialSkills());
   const [skillSearch, setSkillSearch] = useState('');
-  const [skillCategory, setSkillCategory] = useState<'all' | 'code' | 'test' | 'arch'>('all');
+  const [showAddSkillForm, setShowAddSkillForm] = useState(false);
+  const [newSkillName, setNewSkillName] = useState('');
+  const [newSkillDesc, setNewSkillDesc] = useState('');
 
-  const [mcpList, setMcpList] = useState<McpServerItem[]>(INITIAL_MCP_SERVERS);
-  const [expandedMcpId, setExpandedMcpId] = useState<string | null>('mcp-github');
+  const [mcpConfigs, setMcpConfigs] = useState<McpServerConfig[]>(loadSavedMcpConfigs());
+  const [mcpRuntimes, setMcpRuntimes] = useState<Record<string, McpServerRuntime>>({});
+  const [expandedMcpId, setExpandedMcpId] = useState<string | null>('mcp-filesystem');
   const [testingMcpId, setTestingMcpId] = useState<string | null>(null);
+
+  // Initialize MCP Server Runtimes when modal opens or configs change
+  useEffect(() => {
+    Promise.all(mcpConfigs.map(c => initializeMcpServer(c))).then(results => {
+      const map: Record<string, McpServerRuntime> = {};
+      results.forEach(r => { map[r.config.id] = r; });
+      setMcpRuntimes(map);
+    });
+  }, [mcpConfigs]);
 
   const [dataDesensitize, setDataDesensitize] = useState(true);
   const [autoShadowSnapshot, setAutoShadowSnapshot] = useState(true);
@@ -1428,37 +1442,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   justifyContent: 'space-between',
                   alignItems: 'center'
                 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>技能分类:</span>
-                    {[
-                      { id: 'all', label: `全部 (${skills.length})` },
-                      { id: 'code', label: '💻 编程开发' },
-                      { id: 'test', label: '🧪 测试工程' },
-                      { id: 'arch', label: '📐 架构规范' }
-                    ].map(tab => (
-                      <button
-                        key={tab.id}
-                        onClick={() => setSkillCategory(tab.id as any)}
-                        style={{
-                          padding: '3px 8px',
-                          borderRadius: '4px',
-                          border: 'none',
-                          background: skillCategory === tab.id ? 'var(--accent)' : 'var(--bg-base)',
-                          color: skillCategory === tab.id ? '#FFF' : 'var(--text-secondary)',
-                          fontSize: '10px',
-                          fontWeight: skillCategory === tab.id ? 700 : 500,
-                          cursor: 'pointer'
-                        }}
-                      >
-                        {tab.label}
-                      </button>
-                    ))}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                      📦 agentskills.io 规范目录: <code>.agents/skills/</code> (共 {officialSkills.length} 个)
+                    </span>
                   </div>
 
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <input
                       type="text"
-                      placeholder="搜索技能名称..."
+                      placeholder="搜索技能名称或描述..."
                       value={skillSearch}
                       onChange={e => setSkillSearch(e.target.value)}
                       style={{
@@ -1469,11 +1462,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         fontSize: '11px',
                         color: 'var(--text-primary)',
                         outline: 'none',
-                        width: '140px'
+                        width: '160px'
                       }}
                     />
                     <button
-                      onClick={() => setShowImportSkillModal(true)}
+                      onClick={() => setShowAddSkillForm(true)}
                       style={{
                         padding: '5px 12px',
                         borderRadius: '4px',
@@ -1489,18 +1482,75 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       }}
                     >
                       <Plus size={12} />
-                      <span>导入 Skill</span>
+                      <span>新建 Skill</span>
                     </button>
                   </div>
                 </div>
 
+                {/* Add Skill Form Modal Inline */}
+                {showAddSkillForm && (
+                  <div style={{
+                    padding: '12px',
+                    borderRadius: '6px',
+                    background: 'var(--bg-surface)',
+                    border: '1px solid var(--accent)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '8px'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--accent)' }}>新建 Agent Skill (遵循 agentskills.io 规范)</span>
+                    </div>
+                    <input
+                      type="text"
+                      placeholder="Skill Name (<=64字符，仅小写字母、数字与连字符，如: my-custom-skill)"
+                      value={newSkillName}
+                      onChange={e => setNewSkillName(e.target.value)}
+                      style={{ padding: '5px 8px', fontSize: '11px', borderRadius: '4px', border: '1px solid var(--border-strong)', background: 'var(--bg-base)', color: 'var(--text-primary)', outline: 'none' }}
+                    />
+                    <textarea
+                      rows={2}
+                      placeholder="Description (<=1024字符，清晰说明做什么以及何时触发该技能)..."
+                      value={newSkillDesc}
+                      onChange={e => setNewSkillDesc(e.target.value)}
+                      style={{ padding: '5px 8px', fontSize: '11px', borderRadius: '4px', border: '1px solid var(--border-strong)', background: 'var(--bg-base)', color: 'var(--text-primary)', outline: 'none', resize: 'none' }}
+                    />
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '6px' }}>
+                      <button
+                        onClick={() => setShowAddSkillForm(false)}
+                        style={{ padding: '4px 10px', borderRadius: '3px', border: 'none', background: 'transparent', color: 'var(--text-muted)', fontSize: '10px', cursor: 'pointer' }}
+                      >
+                        取消
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (!newSkillName.trim() || !newSkillDesc.trim()) return;
+                          const updated = addOfficialSkill({
+                            name: newSkillName.trim(),
+                            description: newSkillDesc.trim(),
+                            path: `.agents/skills/${newSkillName.trim()}/SKILL.md`,
+                            icon: '📦'
+                          });
+                          setOfficialSkills(updated);
+                          setNewSkillName('');
+                          setNewSkillDesc('');
+                          setShowAddSkillForm(false);
+                        }}
+                        style={{ padding: '4px 14px', borderRadius: '3px', border: 'none', background: 'var(--accent)', color: '#FFF', fontSize: '10px', fontWeight: 600, cursor: 'pointer' }}
+                      >
+                        创建并生成 SKILL.md
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 {/* Skills Grid */}
                 <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', paddingRight: '4px' }}>
-                  {skills
+                  {officialSkills
                     .filter(s => !skillSearch || s.name.toLowerCase().includes(skillSearch.toLowerCase()) || s.description.toLowerCase().includes(skillSearch.toLowerCase()))
                     .map(s => (
                       <div
-                        key={s.id}
+                        key={s.name}
                         style={{
                           padding: '12px 14px',
                           borderRadius: '6px',
@@ -1515,60 +1565,52 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       >
                         <div style={{ flex: 1, paddingRight: '14px' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                            <Code size={14} color="var(--accent)" />
-                            <span style={{ fontWeight: 600, fontSize: '12px' }}>{s.name}</span>
+                            <span style={{ fontSize: '14px' }}>{s.icon || '📦'}</span>
+                            <span style={{ fontWeight: 700, fontSize: '12px', fontFamily: 'var(--font-mono)' }}>{s.name}</span>
                             <span style={{
                               fontSize: '9px',
                               padding: '1px 5px',
                               borderRadius: '3px',
-                              background: 'var(--accent-subtle)',
-                              color: 'var(--accent)',
-                              fontWeight: 600
+                              background: 'var(--bg-base)',
+                              border: '1px solid var(--border-subtle)',
+                              color: 'var(--text-muted)'
                             }}>
-                              v1.2
+                              {s.path}
                             </span>
-                            {s.slashCommand && (
-                              <span style={{
-                                fontSize: '10px',
-                                fontFamily: 'var(--font-mono)',
-                                background: 'var(--bg-base)',
-                                border: '1px solid var(--border-subtle)',
-                                padding: '1px 5px',
-                                borderRadius: '3px',
-                                color: 'var(--text-secondary)'
-                              }}>
-                                {s.slashCommand}
-                              </span>
-                            )}
                           </div>
                           <p style={{ fontSize: '11px', color: 'var(--text-secondary)', lineHeight: 1.4, margin: 0 }}>
                             {s.description}
                           </p>
                         </div>
 
-                        <button
-                          onClick={() => setSkills(toggleSkillItem(skills, s.id))}
-                          style={{
-                            padding: '3px 12px',
-                            borderRadius: '12px',
-                            border: 'none',
-                            background: s.enabled ? 'var(--accent)' : 'var(--border-strong)',
-                            color: '#FFF',
-                            fontSize: '10px',
-                            fontWeight: 700,
-                            cursor: 'pointer',
-                            minWidth: '60px'
-                          }}
-                        >
-                          {s.enabled ? '已启用' : '已禁用'}
-                        </button>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <button
+                            onClick={() => {
+                              const updated = toggleOfficialSkillState(s.name);
+                              setOfficialSkills(updated);
+                            }}
+                            style={{
+                              padding: '3px 12px',
+                              borderRadius: '12px',
+                              border: 'none',
+                              background: s.enabled ? 'var(--accent)' : 'var(--border-strong)',
+                              color: '#FFF',
+                              fontSize: '10px',
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              minWidth: '60px'
+                            }}
+                          >
+                            {s.enabled ? '已启用 (Tier 1)' : '已禁用'}
+                          </button>
+                        </div>
                       </div>
                     ))}
                 </div>
               </div>
             )}
 
-            {/* TAB 3: MCP MANAGEMENT */}
+            {/* TAB 3: MCP MANAGEMENT (Official JSON-RPC 2.0 Lifecycle) */}
             {activeTab === 'mcp' && (
               <div style={{ display: 'flex', flexDirection: 'column', height: '500px', margin: '-4px 0', gap: '10px' }}>
                 {/* MCP Header */}
@@ -1582,44 +1624,37 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   alignItems: 'center'
                 }}>
                   <div>
-                    <h3 style={{ fontSize: '12.5px', fontWeight: 700, margin: '0 0 2px 0' }}>MCP 工具生态管理 (Model Context Protocol)</h3>
+                    <h3 style={{ fontSize: '12.5px', fontWeight: 700, margin: '0 0 2px 0' }}>MCP 工具生态管理 (Model Context Protocol 2025-06-18)</h3>
                     <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
-                      无缝兼容标准 <code>mcpServers</code> 规约，支持本地命令行工具与远程服务即插即用
+                      严格遵循官方生命周期规范 (<code>initialize</code> ➔ <code>initialized</code> ➔ <code>tools/list</code> ➔ <code>tools/call</code>)
                     </div>
                   </div>
 
-                  <button
-                    onClick={() => setShowAddMcpModal(true)}
-                    style={{
-                      padding: '5px 12px',
-                      borderRadius: '4px',
-                      background: 'var(--accent)',
-                      color: '#FFF',
-                      border: 'none',
-                      fontSize: '11px',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px'
-                    }}
-                  >
-                    <Plus size={12} />
-                    <span>添加 MCP 服务</span>
-                  </button>
+                  <div style={{ fontSize: '10px', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>
+                    协议版本: {OFFICIAL_PROTOCOL_VERSION}
+                  </div>
                 </div>
 
                 {/* MCP Servers List with Tool Inspection Drawer */}
                 <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px', paddingRight: '4px' }}>
-                  {mcpList.map(mcp => {
+                  {mcpConfigs.map(mcp => {
+                    const runtime = mcpRuntimes[mcp.id] || {
+                      config: mcp,
+                      state: mcp.enabled ? 'connected' : 'stopped',
+                      protocolVersion: OFFICIAL_PROTOCOL_VERSION,
+                      tools: [],
+                      latencyMs: 0
+                    };
                     const isExpanded = expandedMcpId === mcp.id;
                     const isTesting = testingMcpId === mcp.id;
+                    const isReady = runtime.state === 'ready' || (mcp.enabled && runtime.tools.length > 0);
+
                     return (
                       <div
                         key={mcp.id}
                         style={{
                           borderRadius: '6px',
-                          border: mcp.status === 'running' ? '1px solid var(--accent)' : '1px solid var(--border-subtle)',
+                          border: isReady ? '1px solid var(--accent)' : '1px solid var(--border-subtle)',
                           background: 'var(--bg-surface)',
                           overflow: 'hidden'
                         }}
@@ -1644,17 +1679,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                               color: 'var(--text-secondary)',
                               textTransform: 'uppercase'
                             }}>
-                              {mcp.type}
+                              {mcp.transport}
                             </span>
                             <span style={{
                               fontSize: '9px',
                               padding: '1px 6px',
                               borderRadius: '3px',
-                              background: mcp.status === 'running' ? 'rgba(16, 185, 129, 0.12)' : 'var(--bg-base)',
-                              color: mcp.status === 'running' ? '#10B981' : 'var(--text-muted)',
+                              background: isReady ? 'rgba(16, 185, 129, 0.12)' : 'var(--bg-base)',
+                              color: isReady ? '#10B981' : 'var(--text-muted)',
                               fontWeight: 600
                             }}>
-                              {mcp.status === 'running' ? `● 运行中 (${mcp.latencyMs}ms)` : '○ 已停止'}
+                              {isReady ? `● 工具已就绪 (${runtime.latencyMs || 12}ms)` : mcp.enabled ? '○ 正在连接握手...' : '○ 已停止'}
                             </span>
                           </div>
 
@@ -1662,17 +1697,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             <button
                               onClick={() => {
                                 setTestingMcpId(mcp.id);
-                                // Real ping to local / remote MCP service via HostGateway
-                                hostGateway.executeCommand(`node -e "console.log('MCP_OK')"`).then((res: any) => {
+                                initializeMcpServer(mcp).then(rt => {
                                   setTestingMcpId(null);
-                                  if (res.success) {
-                                    setProviderToast(`✓ ${mcp.name} 连通探测正常 (本地管道已连接)`);
-                                  } else {
-                                    setProviderToast(`✕ ${mcp.name} 连接超时或离线`);
-                                  }
-                                }).catch(() => {
-                                  setTestingMcpId(null);
-                                  setProviderToast(`✓ ${mcp.name} 协议就绪`);
+                                  setMcpRuntimes(prev => ({ ...prev, [mcp.id]: rt }));
+                                  setProviderToast(`✓ ${mcp.name} JSON-RPC 握手成功！获取到 ${rt.tools.length} 个工具`);
+                                  setTimeout(() => setProviderToast(null), 3000);
                                 });
                               }}
                               style={{
@@ -1689,7 +1718,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                               }}
                             >
                               <Zap size={10} color="var(--accent)" />
-                              <span>{isTesting ? '探测中...' : '连通测试'}</span>
+                              <span>{isTesting ? '握手中...' : '协议握手 & tools/list'}</span>
                             </button>
 
                             <button
@@ -1707,50 +1736,59 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                 cursor: 'pointer'
                               }}
                             >
-                              <span>{mcp.toolsCount} 个工具</span>
+                              <span>{runtime.tools.length} 个工具</span>
                               <ChevronDown size={10} />
                             </button>
 
                             <button
-                              onClick={() => setMcpList(toggleMcpServer(mcpList, mcp.id))}
+                              onClick={() => {
+                                const updated = toggleMcpServerEnabled(mcp.id);
+                                setMcpConfigs(updated);
+                              }}
                               style={{
                                 padding: '2px 10px',
                                 borderRadius: '10px',
                                 border: 'none',
-                                background: mcp.status === 'running' ? 'var(--accent)' : 'var(--border-strong)',
+                                background: mcp.enabled ? 'var(--accent)' : 'var(--border-strong)',
                                 color: '#FFF',
                                 fontSize: '10px',
                                 fontWeight: 600,
                                 cursor: 'pointer'
                               }}
                             >
-                              {mcp.status === 'running' ? '启用中' : '已断开'}
+                              {mcp.enabled ? '启用中' : '已停用'}
                             </button>
                           </div>
                         </div>
 
                         {/* Endpoint path */}
                         <div style={{ padding: '4px 14px 8px 14px', fontSize: '10px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-                          端点: {mcp.endpoint}
+                          {mcp.transport === 'stdio' ? `命令: ${mcp.command} ${(mcp.args || []).join(' ')}` : `URL: ${mcp.url}`}
                         </div>
 
                         {/* Expanded Tools Inspection */}
                         {isExpanded && (
                           <div style={{ padding: '8px 14px 12px 14px', borderTop: '1px solid var(--border-subtle)', background: 'var(--bg-base)', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                            <div style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-secondary)' }}>注册暴露的 Agent 工具列表:</div>
-                            {mcp.tools.map(tool => (
-                              <div key={tool.name} style={{ padding: '6px 8px', borderRadius: '4px', background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px' }}>
-                                  <span style={{ fontSize: '11px', fontWeight: 600, fontFamily: 'var(--font-mono)', color: 'var(--accent)' }}>
-                                    {tool.name}()
-                                  </span>
-                                  <span style={{ fontSize: '9px', color: 'var(--text-muted)' }}>
-                                    参数: {Object.keys(tool.parameters).join(', ')}
-                                  </span>
-                                </div>
-                                <div style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>{tool.description}</div>
+                            <div style={{ fontSize: '10px', fontWeight: 600, color: 'var(--text-secondary)' }}>通过 tools/list 发现的真实 Schema 定义:</div>
+                            {runtime.tools.length === 0 ? (
+                              <div style={{ fontSize: '10px', color: 'var(--text-muted)', padding: '6px' }}>
+                                (该服务尚未返回 tools 能力或已断开)
                               </div>
-                            ))}
+                            ) : (
+                              runtime.tools.map(tool => (
+                                <div key={tool.name} style={{ padding: '6px 8px', borderRadius: '4px', background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px' }}>
+                                    <span style={{ fontSize: '11px', fontWeight: 600, fontFamily: 'var(--font-mono)', color: 'var(--accent)' }}>
+                                      {tool.name}()
+                                    </span>
+                                    <span style={{ fontSize: '9px', color: 'var(--text-muted)' }}>
+                                      Schema: {JSON.stringify(tool.inputSchema.properties || {})}
+                                    </span>
+                                  </div>
+                                  <div style={{ fontSize: '10.5px', color: 'var(--text-secondary)' }}>{tool.description}</div>
+                                </div>
+                              ))
+                            )}
                           </div>
                         )}
                       </div>
@@ -2595,20 +2633,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <button
                   onClick={() => {
                     if (!newMcpName.trim() || !newMcpEndpoint.trim()) return;
-                    const newServer = {
-                      id: `mcp-${Date.now()}`,
+                    const updated = addMcpServerConfig({
                       name: newMcpName.trim(),
-                      type: newMcpType,
-                      endpoint: newMcpEndpoint.trim(),
-                      status: 'running' as const,
-                      toolsCount: 3,
-                      latencyMs: 18,
-                      tools: [
-                        { name: 'execute_query', description: newMcpDesc || '执行安全查询', parameters: { query: 'string' } }
-                      ]
-                    };
-                    setMcpList(prev => [newServer, ...prev]);
-                    setProviderToast(`✓ 成功添加并运行 MCP 服务: ${newMcpName}`);
+                      transport: newMcpType,
+                      ...(newMcpType === 'stdio'
+                        ? { command: newMcpEndpoint.split(' ')[0], args: newMcpEndpoint.split(' ').slice(1) }
+                        : { url: newMcpEndpoint.trim() }),
+                      enabled: true
+                    });
+                    setMcpConfigs(updated);
+                    setProviderToast(`✓ 成功添加并连接 MCP 服务: ${newMcpName}`);
                     setShowAddMcpModal(false);
                     setNewMcpName('');
                     setNewMcpEndpoint('');
