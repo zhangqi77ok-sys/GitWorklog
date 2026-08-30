@@ -852,6 +852,13 @@ if __name__ == '__main__':
         window_height,
     )
 
+    def on_window_ready(win):
+        try:
+            cx, cy = get_center_window_position(window_width, window_height)
+            win.move(cx, cy)
+        except Exception:
+            pass
+
     window = webview.create_window(
         title=f"{APP_NAME} - Enterprise AI Agentic IDE",
         url=url,
@@ -869,4 +876,4 @@ if __name__ == '__main__':
     appdata = os.environ.get('LOCALAPPDATA', os.path.expanduser('~'))
     webview_data = os.path.join(appdata, APP_STORAGE_KEY, 'webview_profile')
     os.makedirs(webview_data, exist_ok=True)
-    webview.start(debug=False, storage_path=webview_data, private_mode=False)
+    webview.start(on_window_ready, window, debug=False, storage_path=webview_data, private_mode=False)

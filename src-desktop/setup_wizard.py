@@ -111,12 +111,29 @@ class SetupWizard(tk.Tk):
         self.geometry("540x380")
         self.resizable(False, False)
         
-        # Center window
+        # Center window using DPI-aware WorkArea
         self.update_idletasks()
-        w = self.winfo_width()
-        h = self.winfo_height()
-        x = (self.winfo_screenwidth() // 2) - (w // 2)
-        y = (self.winfo_screenheight() // 2) - (h // 2)
+        w = 540
+        h = 380
+        try:
+            import ctypes
+            from ctypes import wintypes
+            user32 = ctypes.windll.user32
+            user32.SetProcessDPIAware()
+            class RECT(ctypes.Structure):
+                _fields_ = [("left", wintypes.LONG), ("top", wintypes.LONG), ("right", wintypes.LONG), ("bottom", wintypes.LONG)]
+            wa = RECT()
+            if user32.SystemParametersInfoW(48, 0, ctypes.byref(wa), 0):
+                avail_w = wa.right - wa.left
+                avail_h = wa.bottom - wa.top
+                x = wa.left + max(0, (avail_w - w) // 2)
+                y = wa.top + max(0, (avail_h - h) // 2)
+            else:
+                x = (self.winfo_screenwidth() // 2) - (w // 2)
+                y = (self.winfo_screenheight() // 2) - (h // 2)
+        except Exception:
+            x = (self.winfo_screenwidth() // 2) - (w // 2)
+            y = (self.winfo_screenheight() // 2) - (h // 2)
         self.geometry(f"{w}x{h}+{x}+{y}")
         
         self.configure(bg="#F8FAFC")
