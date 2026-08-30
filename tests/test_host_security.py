@@ -39,3 +39,50 @@ def test_host_header_validation():
     assert not host_auth.host_is_allowed("evil.example.com:8010", 8010)
     assert not host_auth.host_is_allowed("127.0.0.1:9999", 8010)
     assert not host_auth.host_is_allowed(None, 8010)
+
+import os
+import path_sandbox
+
+
+def test_path_within_root_allowed():
+    path_sandbox.clear_roots()
+    path_sandbox.register_roots([r"C:\workspace\proj"])
+    assert path_sandbox.is_within_roots(r"C:\workspace\proj")
+    assert path_sandbox.is_within_roots(r"C:\workspace\proj\src\a.ts")
+    assert path_sandbox.is_within_roots(r"C:\workspace\proj\sub\deep\b.ts")
+
+
+def test_path_escape_rejected():
+    path_sandbox.clear_roots()
+    path_sandbox.register_roots([r"C:\workspace\proj"])
+    assert not path_sandbox.is_within_roots(r"C:\workspace\proj2\secret.txt")
+    assert not path_sandbox.is_within_roots(r"C:\workspace\other")
+    assert not path_sandbox.is_within_roots(r"C:\Windows\system32\cmd.exe")
+    assert not path_sandbox.is_within_roots("")
+    assert not path_sandbox.is_within_roots(None)
+
+
+def test_path_case_insensitive_on_windows():
+    path_sandbox.clear_roots()
+    path_sandbox.register_roots([r"c:\workspace\proj"])
+    if os.name == "nt":
+        assert path_sandbox.is_within_roots(r"C:\Workspace\Proj\file.txt")
+    else:
+        assert not path_sandbox.is_within_roots(r"C:\Workspace\Proj\file.txt")
+
+
+def test_assert_path_allowed_raises():
+    path_sandbox.clear_roots()
+    path_sandbox.register_roots([r"C:\workspace\proj"])
+    try:
+        path_sandbox.assert_path_allowed(r"C:\Windows\system32")
+        assert False, "should have raised"
+    except path_sandbox.PathSandboxError:
+        pass
+
+
+def test_register_roots_dedupes():
+    path_sandbox.clear_roots()
+    n1 = path_sandbox.register_roots([r"C:\a", r"C:\a", r"C:\b"])
+    assert n1 == 2
+    assert path_sandbox.is_within_roots(r"C:\a\x.txt")
