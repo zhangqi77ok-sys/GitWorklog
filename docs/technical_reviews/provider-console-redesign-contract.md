@@ -107,3 +107,67 @@ export class AccountProbeScheduler {
 - ProviderConsole 平台导航新增「OpenCode ⚡」。
 
 验收：`tests/gateway/opencode.test.ts`（6 项：映射/默认地址/adapter/上游请求/请求体/默认模型）。
+
+## 5. 动态平台配置 Schema（每服务商独立配置项，2026-08-30）
+
+用户需求：**opencode 只有 API Key，没有其他的；每一个服务商都不一样，配置项必须动态、每平台独立。**
+
+### 5.1 数据契约
+
+```ts
+export type CredentialFieldKey =
+  | 'apiKey' | 'accessToken' | 'refreshToken' | 'setupToken' | 'orgId' | 'cookie';
+
+export interface ProviderFieldDef {
+  key: CredentialFieldKey;
+  label: string;
+  type: 'text' | 'password' | 'number';
+  required?: boolean;
+  placeholder?: string;
+  help?: string;
+}
+
+export interface ProviderAuthTypeDef {
+  id: AccountAuthType;
+  label: string;
+  description?: string;
+  fields: ProviderFieldDef[];          // 该鉴权方式需要填写的凭据字段
+}
+
+export interface ProviderSchema {
+  platform: GatewayPlatform;
+  label: string;
+  icon: string;
+  hint: string;
+  defaultBaseUrl: string;
+  authTypes: ProviderAuthTypeDef[];    // 每平台独立，可为空（本地免 Key）
+  oauthAuthorizeUrl?: string;          // 手动授权地址（可选）
+  isLocal?: boolean;
+}
+
+export const PROVIDER_SCHEMAS: Record<GatewayPlatform, ProviderSchema>;
+export function getProviderSchema(platform: GatewayPlatform): ProviderSchema;
+```
+
+### 5.2 各平台配置项矩阵
+
+| 平台 | 鉴权方式（动态） | 凭据字段 |
+| --- | --- | --- |
+| opencode | api_key | API Key |
+| codex | api_key / oauth / refresh_token | Key；OAuth/RT：Access + Refresh |
+| claude | api_key / oauth / setup_token | Key；OAuth：Access + Refresh + Org ID；Setup Token |
+| grok | api_key / oauth / refresh_token | Key；OAuth/RT：Access + Refresh |
+| gemini | api_key / oauth | Key；OAuth：Access + Refresh |
+| openai | api_key / oauth | Key；OAuth：Access + Refresh |
+| deepseek | api_key | API Key |
+| openai-compatible | api_key | API Key（自定义 Base URL） |
+| local | （无鉴权，免 Key） | 仅 Base URL |
+
+### 5.3 前端行为
+- 鉴权方式下拉只展示当前平台 `authTypes`；
+- 凭据字段按所选鉴权方式动态渲染（`fields` 驱动）；
+- opencode 平台不出现 OAuth / RT / Setup 选项；
+- 本地平台不出现任何凭据字段，仅 Base URL。
+
+### 5.4 验收
+`tests/gateway/providerSchema.test.ts`：每平台 authTypes 独立、opencode 仅 api_key、claude 含 setup_token 且 oauth 含 orgId、local 无凭据字段、getProviderSchema 兜底存在。

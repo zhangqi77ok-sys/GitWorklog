@@ -124,6 +124,15 @@ npm run dev -- --host 127.0.0.1
 
 真实桌面端验证（真实 Key 仅运行时注入、不入库）：`/health` 200、`/` 200；经宿主 `/api/proxy` 对 OpenCode Zen `mimo-v2.5-free` 非流式 HTTP 200 真实 chat completion（token usage 252/16/268）、流式 `text/event-stream` 24 chunks / 13 data 事件正常 [DONE] 终结。付费模型（`deepseek-v4-flash`/`gpt-5.1-codex`）返回 401 `CreditsError: Insufficient balance`（Key 有效但余额不足，属上游/额度边界）。契约见 `docs/technical_reviews/runengine-p0-hardening-contract.md`。
 
+## 动态平台配置 Schema（每服务商独立配置项，2026-08-30）
+
+用户需求：**opencode 只有 API Key，没有其他的；每个服务商都不一样，配置项必须动态、每平台独立。**
+
+- 新增 `providerSchema.ts`：每个平台定义自己独立的鉴权方式集合（`authTypes`）与凭据字段（`fields`），表单按所选平台动态渲染；
+- 平台配置矩阵：**opencode**（仅 API Key）、**codex**（API Key/OAuth/RT）、**claude**（API Key/OAuth+OrgID/Setup Token）、**grok**（API Key/OAuth/RT）、**gemini/openai**（API Key/OAuth）、**deepseek/openai-compatible**（仅 API Key）、**local**（免 Key，仅 Base URL）；
+- 鉴权下拉只显示当前平台支持的选项；opencode 不再出现 OAuth/RT/Setup；本地平台隐藏全部凭据字段；
+- 测试：`tests/gateway/providerSchema.test.ts`（8 项：平台全覆盖/默认地址同步/opencode 仅 api_key/codex 三方式/claude 含 setup+orgId/local 免 Key/每鉴权至少一字段）。
+
 ## 模型服务商控制台 v2（三栏 Master-Detail，2026-08-30）
 
 按用户要求对「模型服务商」前后端整体重设计：

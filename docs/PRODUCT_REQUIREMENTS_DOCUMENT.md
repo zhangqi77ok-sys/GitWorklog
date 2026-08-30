@@ -1537,3 +1537,7 @@ Tcode 必须区分“环境中发现了工作流工具”和“用户选择并�
 ### 4.48.8 平台增补：OpenCode 独立服务商（2026-08-30）
 
 按用户要求新增独立平台 `opencode`：平台导航出现「OpenCode ⚡」，默认 Base URL 为 `https://opencode.ai/zen/v1`，走 OpenAI 兼容 chat_completions 协议 + Bearer 认证，默认模型 mimo-v2.5-free / deepseek-v4-flash / nemotron-3.5-lightning-free；`platformForProvider` 将 opencode 类 provider 路由到该平台。契约见 provider-console-redesign-contract.md §4。
+
+### 4.48.9 动态平台配置 Schema（每服务商独立配置项，2026-08-30）
+
+按用户要求，每个服务商的配置项必须动态、彼此独立（opencode 只有 API Key，没有其他）。新增 `providerSchema.ts`：每平台定义独立鉴权方式集合与凭据字段，表单按所选平台动态渲染。平台矩阵：opencode（仅 API Key）、codex（API Key/OAuth/RT）、claude（API Key/OAuth+OrgID/Setup Token）、grok（API Key/OAuth/RT）、gemini/openai（API Key/OAuth）、deepseek/openai-compatible（仅 API Key）、local（免 Key）。契约见 provider-console-redesign-contract.md §5。

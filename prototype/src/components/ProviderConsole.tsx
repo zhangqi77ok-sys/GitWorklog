@@ -2,8 +2,7 @@
 import { Plus, RefreshCw, Trash2, Save, Activity, KeyRound, Copy, CheckCircle2, XCircle, AlertTriangle, PauseCircle } from 'lucide-react';
 import { gatewayRuntime, persistGatewayRuntime } from '../services/gateway/gatewayRuntime';
 import { probeAccount, AccountProbeScheduler } from '../services/gateway/probe';
-import { DEFAULT_BASE_URLS } from '../services/gateway/accounts';
-import { OAUTH_ENDPOINTS, buildAuthorizeUrl } from '../services/gateway/oauth';
+import { getProviderSchema, authTypeLabel } from '../services/gateway/providerSchema';
 import { resolveApiEndpoint } from '../types/contracts';
 import type { AccountAuthType, GatewayAccount, GatewayPlatform } from '../services/gateway/types';
 
@@ -17,13 +16,6 @@ const PLATFORMS: Array<{ id: GatewayPlatform; label: string; icon: string; hint:
   { id: 'opencode', label: 'OpenCode', icon: '?', hint: 'API Key' },
   { id: 'openai-compatible', label: 'OpenAI 兼容', icon: '⇄', hint: 'API Key' },
   { id: 'local', label: '本地', icon: '▣', hint: '免 Key' }
-];
-
-const AUTH_TYPES: Array<{ id: AccountAuthType; label: string }> = [
-  { id: 'api_key', label: 'API Key' },
-  { id: 'oauth', label: 'OAuth 完整' },
-  { id: 'refresh_token', label: 'RT 手动' },
-  { id: 'setup_token', label: 'Setup Token' }
 ];
 
 function statusMeta(status: GatewayAccount['status']) {
@@ -58,6 +50,7 @@ interface DraftState {
   refreshToken: string;
   setupToken: string;
   orgId: string;
+  cookie: string;
   baseUrl: string;
   models: string;
   concurrencyMax: string;
@@ -66,7 +59,7 @@ interface DraftState {
 
 const emptyDraft = (): DraftState => ({
   label: '', authType: 'api_key', apiKey: '', accessToken: '', refreshToken: '',
-  setupToken: '', orgId: '', baseUrl: '', models: '', concurrencyMax: '4', stickyTtlMs: '3600000'
+  setupToken: '', orgId: '', cookie: '', baseUrl: '', models: '', concurrencyMax: '4', stickyTtlMs: '3600000'
 });
 
 function draftFromAccount(a: GatewayAccount): DraftState {
@@ -78,7 +71,8 @@ function draftFromAccount(a: GatewayAccount): DraftState {
     refreshToken: a.credential.refreshToken ?? '',
     setupToken: a.credential.setupToken ?? '',
     orgId: a.credential.orgId ?? '',
-    baseUrl: a.baseUrl === DEFAULT_BASE_URLS[a.platform] ? '' : a.baseUrl,
+    cookie: a.credential.cookie ?? '',
+    baseUrl: a.baseUrl === getProviderSchema(a.platform).defaultBaseUrl ? '' : a.baseUrl,
     models: (a.models ?? []).join(', '),
     concurrencyMax: String(a.concurrency.max),
     stickyTtlMs: String(a.stickySessionTtlMs)
@@ -92,11 +86,12 @@ function draftToCredential(d: DraftState): GatewayAccount['credential'] {
   if (d.refreshToken.trim()) c.refreshToken = d.refreshToken.trim();
   if (d.setupToken.trim()) c.setupToken = d.setupToken.trim();
   if (d.orgId.trim()) c.orgId = d.orgId.trim();
+  if (d.cookie.trim()) c.cookie = d.cookie.trim();
   return c;
 }
 
 export const ProviderConsole: React.FC = () => {
-  const [activePlatform, setActivePlatform] = useState<GatewayPlatform>('openai-compatible');
+  const [activePlatform, setActivePlatform] = useState<GatewayPlatform>('opencode');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState<DraftState>(emptyDraft());
@@ -106,6 +101,7 @@ export const ProviderConsole: React.FC = () => {
   const [showKeys, setShowKeys] = useState(false);
 
   const registry = gatewayRuntime.registry;
+  const schema = getProviderSchema(activePlatform);
   const keys = gatewayRuntime.keys;
   const accounts = useMemo(() => registry.byPlatform(activePlatform), [registry, activePlatform, version]);
   const selected = selectedId ? registry.get(selectedId) : undefined;
@@ -170,7 +166,7 @@ export const ProviderConsole: React.FC = () => {
         registry.update(selectedId, {
           label: d.label.trim() || existing.label,
           credential: draftToCredential(d),
-          baseUrl: d.baseUrl.trim() || DEFAULT_BASE_URLS[platform],
+          baseUrl: d.baseUrl.trim() || schema.defaultBaseUrl,
           models: d.models.split(',').map(s => s.trim()).filter(Boolean),
           concurrency: { ...existing.concurrency, max: Math.max(1, Number(d.concurrencyMax) || 4) }
         });
@@ -237,42 +233,24 @@ export const ProviderConsole: React.FC = () => {
   };
 
   const authFields = (d: DraftState, save: (u: Partial<DraftState>) => void) => {
-    const showOAuth = d.authType === 'oauth' || d.authType === 'refresh_token';
+    const authTypeDef = schema.authTypes.find(t => t.id === d.authType);
     return (
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-        {d.authType === 'api_key' && (
-          <div>
-            <span style={labelStyle}>API Key</span>
-            <input type="password" style={inputStyle} placeholder="sk-..." value={d.apiKey} onChange={e => save({ apiKey: e.target.value })} />
+        {(authTypeDef?.fields ?? []).map(f => (
+          <div key={f.key}>
+            <span style={labelStyle}>{f.label}{f.required ? '' : '（可选）'}</span>
+            <input
+              type={f.type}
+              style={inputStyle}
+              placeholder={f.placeholder}
+              value={(d as unknown as Record<string, string>)[f.key] ?? ''}
+              onChange={e => save({ [f.key]: e.target.value } as Partial<DraftState>)}
+            />
           </div>
-        )}
-        {d.authType === 'setup_token' && (
-          <div>
-            <span style={labelStyle}>Setup Token</span>
-            <input type="password" style={inputStyle} placeholder="setup-token..." value={d.setupToken} onChange={e => save({ setupToken: e.target.value })} />
-          </div>
-        )}
-        {showOAuth && (
-          <>
-            <div>
-              <span style={labelStyle}>Access Token</span>
-              <input type="password" style={inputStyle} placeholder="access token" value={d.accessToken} onChange={e => save({ accessToken: e.target.value })} />
-            </div>
-            <div>
-              <span style={labelStyle}>Refresh Token</span>
-              <input type="password" style={inputStyle} placeholder="refresh token" value={d.refreshToken} onChange={e => save({ refreshToken: e.target.value })} />
-            </div>
-          </>
-        )}
-        {d.authType === 'oauth' && (
-          <div>
-            <span style={labelStyle}>Org ID（可选）</span>
-            <input style={inputStyle} placeholder="org_..." value={d.orgId} onChange={e => save({ orgId: e.target.value })} />
-          </div>
-        )}
+        ))}
         <div>
           <span style={labelStyle}>Base URL（留空用平台默认）</span>
-          <input style={inputStyle} placeholder={DEFAULT_BASE_URLS[activePlatform]} value={d.baseUrl} onChange={e => save({ baseUrl: e.target.value })} />
+          <input style={inputStyle} placeholder={schema.defaultBaseUrl} value={d.baseUrl} onChange={e => save({ baseUrl: e.target.value })} />
         </div>
         <div>
           <span style={labelStyle}>模型白名单（逗号分隔，留空=全部）</span>
@@ -290,13 +268,12 @@ export const ProviderConsole: React.FC = () => {
     );
   };
 
-  const oauthHint = (platform: GatewayPlatform) => {
-    if (!OAUTH_ENDPOINTS[platform]) return null;
-    const url = buildAuthorizeUrl(platform, { clientId: 'tcode-app', redirectUri: 'http://127.0.0.1:8010/oauth/callback' });
+  const oauthHint = () => {
+    if (!schema.oauthAuthorizeUrl) return null;
     return (
       <div style={{ fontSize: '10px', color: 'var(--text-muted)', lineHeight: 1.5, wordBreak: 'break-all', padding: '6px 8px', borderRadius: '5px', background: 'var(--accent-subtle)' }}>
         <span style={{ color: 'var(--accent)', fontWeight: 600 }}>手动授权</span>：打开地址完成授权后，将回调 code / token 填入上方字段
-        <div style={{ color: 'var(--accent)', marginTop: '2px', cursor: 'pointer' }} onClick={() => void navigator.clipboard?.writeText(url).catch(() => undefined)} title="点击复制">{url}</div>
+        <div style={{ color: 'var(--accent)', marginTop: '2px', cursor: 'pointer' }} onClick={() => void navigator.clipboard?.writeText(schema.oauthAuthorizeUrl ?? '').catch(() => undefined)} title="点击复制">{schema.oauthAuthorizeUrl}</div>
       </div>
     );
   };
@@ -333,7 +310,7 @@ export const ProviderConsole: React.FC = () => {
             return (
               <div
                 key={p.id}
-                onClick={() => setActivePlatform(p.id)}
+                onClick={() => { setActivePlatform(p.id); setDraft(emptyDraft()); setSelectedId(null); setAdding(false); }}
                 style={{
                   display: 'flex', alignItems: 'center', gap: '7px', padding: '6px 8px', borderRadius: '5px', cursor: 'pointer',
                   background: active ? 'var(--accent-subtle)' : 'transparent',
@@ -380,7 +357,7 @@ export const ProviderConsole: React.FC = () => {
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: a.enabled ? meta.color : 'var(--border-strong)' }} />
                     <span style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-primary)', flex: 1 }}>{a.label}</span>
-                    <span style={{ fontSize: '9px', padding: '1px 6px', borderRadius: '8px', background: 'var(--accent-subtle)', color: 'var(--accent)' }}>{AUTH_TYPES.find(t => t.id === a.authType)?.label}</span>
+                    <span style={{ fontSize: '9px', padding: '1px 6px', borderRadius: '8px', background: 'var(--accent-subtle)', color: 'var(--accent)' }}>{authTypeLabel(a.authType)}</span>
                     <span style={{ fontSize: '9.5px', color: meta.color, fontWeight: 600 }}>{a.enabled ? meta.label : '停用'}</span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -418,15 +395,17 @@ export const ProviderConsole: React.FC = () => {
                   <span style={labelStyle}>账号名称</span>
                   <input style={inputStyle} placeholder="如 codex-主号" value={draft.label} onChange={e => saveDraft({ label: e.target.value })} />
                 </div>
-                <div>
-                  <span style={labelStyle}>鉴权方式</span>
-                  <select style={inputStyle} value={draft.authType} onChange={e => saveDraft({ authType: e.target.value as AccountAuthType })}>
-                    {AUTH_TYPES.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
-                  </select>
-                </div>
+                {schema.authTypes.length > 0 && (
+                  <div>
+                    <span style={labelStyle}>鉴权方式</span>
+                    <select style={inputStyle} value={draft.authType} onChange={e => saveDraft({ authType: e.target.value as AccountAuthType })}>
+                      {schema.authTypes.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
+                    </select>
+                  </div>
+                )}
               </div>
               {authFields(draft, saveDraft)}
-              {oauthHint(activePlatform)}
+              {oauthHint()}
               <div style={{ display: 'flex', gap: '6px', alignItems: 'center', paddingTop: '2px' }}>
                 <button style={{ ...btnBase, background: 'var(--accent)', color: '#FFF', border: 'none' }} onClick={submitAccount}>
                   <Save size={11} /> {adding ? '创建并探测' : '保存'}
