@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { loadSavedProfile, saveProfileToStorage, loadSavedAccentColor, saveAccentColorToStorage, DeveloperProfile, DEFAULT_DEVELOPER_PROFILE, AgentSkillItem, loadSavedSkills, saveSkillsToStorage, INITIAL_AGENT_SKILLS } from '../types/contracts';
+import { loadSavedProfile, saveProfileToStorage, loadSavedAccentColor, saveAccentColorToStorage, DeveloperProfile, DEFAULT_DEVELOPER_PROFILE, AgentSkillItem, loadSavedSkills, saveSkillsToStorage, INITIAL_AGENT_SKILLS, inferModelContextLimit } from '../types/contracts';
 import {
   X,
   Search,
@@ -284,7 +284,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           id: m.id,
           name: m.name || m.id,
           enabled: true,
-          contextLimit: m.contextLimit || m.context_length || 128000,
+          contextLimit: m.contextLimit || m.context_length || m.context_window || m.max_tokens || m.max_context_tokens || inferModelContextLimit(m.id),
           outputLimit: m.outputLimit || m.max_output_tokens,
           endpointPath: m.endpointPath || m.endpoint || m.endpoint_path,
           adapter: m.adapter || m.sdk || m.adapterId,

@@ -67,6 +67,19 @@ export function calculateKVCacheHitRate(stats: TokenStats): number {
   return Math.min(100, Math.max(0, Math.round(rate)));
 }
 
+// 3. Infer standard context limit from model ID
+export function inferModelContextLimit(modelId: string = ''): number {
+  const id = modelId.toLowerCase();
+  if (id.includes('gemini-1.5-pro') || id.includes('gemini-2.0-pro') || id.includes('gemini-2.5-pro')) return 2000000;
+  if (id.includes('gemini-1.5-flash') || id.includes('gemini-2.0-flash') || id.includes('gemini-2.5-flash')) return 1000000;
+  if (id.includes('mimo')) return 1000000;
+  if (id.includes('claude-3') || id.includes('claude-3-5') || id.includes('claude-3-7') || id.includes('sonnet') || id.includes('opus')) return 200000;
+  if (id.includes('deepseek') || id.includes('r1') || id.includes('qwen') || id.includes('glm-4') || id.includes('moonshot')) return 131072;
+  if (id.includes('gpt-4o') || id.includes('gpt-4-turbo') || id.includes('o1') || id.includes('o3') || id.includes('chatgpt')) return 128000;
+  if (id.includes('llama-3.1') || id.includes('llama-3.2') || id.includes('llama-3.3')) return 131072;
+  return 128000;
+}
+
 
 
 

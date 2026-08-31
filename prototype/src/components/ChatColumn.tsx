@@ -883,6 +883,14 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
 • 负载构成：对话 ${convRatio}% · 工具/代码 ${toolRatio}% · 规则 ${sysRatio}%
 • 状态：${budget.epochIndex > 1 ? `🍃 Epoch #${budget.epochIndex} 新上下文周期 (从 0% 起步)` : budget.isCompressed ? '🍃 已启用非破坏性智能压缩' : '完整原始上下文'}`;
 
+            const displayPercent = (budget.usagePercent || 0).toFixed(1);
+            const clampedRatio = Math.min(1, Math.max(0, (budget.usagePercent || 0) / 100));
+            const ringSize = 13;
+            const strokeW = 2.0;
+            const radius = (ringSize - strokeW) / 2;
+            const circumference = 2 * Math.PI * radius;
+            const strokeDashoffset = circumference - clampedRatio * circumference;
+
             return (
               <div
                 title={detailedTooltip}
@@ -890,24 +898,50 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                   display: 'flex',
                   alignItems: 'center',
                   gap: '5px',
-                  padding: '2px 8px',
+                  padding: '2px 7px',
                   borderRadius: '10px',
                   background: 'var(--chat-user-bg)',
                   border: '1px solid var(--border-subtle)',
                   fontSize: '10px',
                   fontFamily: 'var(--font-mono)',
                   color: 'var(--text-primary)',
-                  cursor: 'default'
+                  cursor: 'default',
+                  userSelect: 'none'
                 }}
               >
-                <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: statusColor }} />
-                <span style={{ fontWeight: 700 }}>上下文 {totalPercent}%</span>
+                {/* Micro Circular Progress Ring */}
+                <svg width={ringSize} height={ringSize} style={{ transform: 'rotate(-90deg)', flexShrink: 0 }}>
+                  <circle
+                    cx={ringSize / 2}
+                    cy={ringSize / 2}
+                    r={radius}
+                    fill="none"
+                    stroke="rgba(0, 0, 0, 0.12)"
+                    strokeWidth={strokeW}
+                  />
+                  <circle
+                    cx={ringSize / 2}
+                    cy={ringSize / 2}
+                    r={radius}
+                    fill="none"
+                    stroke={statusColor}
+                    strokeWidth={strokeW}
+                    strokeDasharray={circumference}
+                    strokeDashoffset={strokeDashoffset}
+                    strokeLinecap="round"
+                    style={{ transition: 'stroke-dashoffset 0.3s ease' }}
+                  />
+                </svg>
+
+                <span style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '10px' }}>
+                  {displayPercent}%
+                </span>
+
                 {budget.epochIndex > 1 ? (
                   <span style={{ fontSize: '9px', color: '#16A34A', fontWeight: 600 }}>🍃Epoch #{budget.epochIndex}</span>
                 ) : budget.isCompressed ? (
                   <span style={{ fontSize: '9px', color: '#16A34A', fontWeight: 600 }}>🍃已压缩</span>
                 ) : null}
-                <span style={{ fontSize: '9px', color: 'var(--text-muted)' }}>({convRatio}% / {toolRatio}% / {sysRatio}%)</span>
               </div>
             );
           })()}
