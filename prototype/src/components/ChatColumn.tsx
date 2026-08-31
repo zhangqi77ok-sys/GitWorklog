@@ -834,42 +834,6 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
           )}
         </div>
 
-        {/* Center: Execution Mode Capsule (⚡ Agent Loop / 🧩 Graph 编排) */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflowX: 'auto', padding: '0 4px' }}>
-          <ExecutionModeCapsule
-            mode={executionMode}
-            activeWorkflowId={activeModularWorkflow.id}
-            workflows={[NORMAL_WORKFLOW, SWARM_WORKFLOW, ...savedWorkflowsList]}
-            onModeChange={onExecutionModeChange}
-            onSelectWorkflow={(wf) => {
-              setActiveWorkflowId(wf.id);
-              setActiveModularWorkflow(wf);
-            }}
-          />
-
-          {/* Workbench Trigger Button (Swarm 工作台 · WP-E 衔接) */}
-          <button
-            onClick={() => setIsSwarmModalOpen(true)}
-            style={{
-              padding: '2px 8px',
-              borderRadius: '6px',
-              background: 'rgba(217, 107, 39, 0.12)',
-              border: '1px solid rgba(217, 107, 39, 0.3)',
-              color: 'var(--accent, #D96B27)',
-              fontSize: '10px',
-              fontWeight: 600,
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-              cursor: 'pointer',
-              transition: 'all 0.15s ease'
-            }}
-            title="点击打开 Swarm 多智能体异构协同工作台 (查看 11 大角色与产物库)"
-          >
-            <span>工作台 ▾</span>
-          </button>
-        </div>
-
         {/* Right: Merge to Main Pill & Toggle Workbench */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
           {isForkedSession && (
@@ -2242,6 +2206,32 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
             <div style={{ width: '28px', height: '2px', background: 'var(--border-subtle)', borderRadius: '1px' }} />
           </div>
 
+          {/* 1.5 DUAL EXECUTION ENGINE CAPSULE (⚡ Agent Loop / 🐝 Swarm) */}
+          <div style={{
+            padding: '6px 10px 4px 10px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            borderBottom: '1px solid rgba(0, 0, 0, 0.04)',
+            background: 'rgba(0, 0, 0, 0.015)'
+          }}>
+            <ExecutionModeCapsule
+              mode={executionMode}
+              onModeChange={onExecutionModeChange}
+              onOpenSwarmWorkbench={() => setIsSwarmModalOpen(true)}
+            />
+            <span style={{
+              fontSize: '10px',
+              color: 'var(--text-muted)',
+              fontFamily: 'var(--font-mono)',
+              padding: '1px 5px',
+              borderRadius: '3px',
+              background: 'var(--bg-base)'
+            }}>
+              {executionMode === 'act' ? 'Alt+1 极速闭环' : 'Alt+2 团队协同'}
+            </span>
+          </div>
+
           {/* 2. BORDERLESS RESIZABLE TEXTAREA (Supports File/Snippet DnD Drop) */}
           <div
             onDragOver={e => {
@@ -2261,9 +2251,9 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
             placeholder={
               activeGate?.active && gateFeedbackMode
                 ? `✍️ 输入修改意见：提交后要求 Agent 修订方案（Enter 提交意见）...`
-                : workMode === 'plan'
-                ? `[${currentModel.name} · Plan 模式] 描述你的架构设计或分析意图，AI 将推演方案并制定计划（只读，不改写代码）...`
-                : `[${currentModel.name} · Act 模式] 描述你的开发需求，AI 将直接落地修改代码并运行测试自纠（回车发送）...`
+                : executionMode === 'swarm'
+                ? `[${currentModel.name} · 🐝 Swarm 协同] 描述团队开发任务，多智能体将并发分工协同实现 (Enter 发送)...`
+                : `[${currentModel.name} · ⚡ Agent Loop] 描述开发需求，单智能体将自主闭环落地代码并自愈测试 (Enter 发送)...`
             }
             value={inputText}
             onChange={handleInputChange}

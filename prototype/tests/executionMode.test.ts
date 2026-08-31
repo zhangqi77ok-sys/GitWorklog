@@ -1,4 +1,4 @@
-﻿import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import {
   resolveExecutionPolicy,
   migratePipelineMode,
@@ -18,14 +18,6 @@ if (typeof (globalThis as any).localStorage === 'undefined') {
   };
 }
 
-const sddWorkflow = {
-  name: 'SDD',
-  blocks: [
-    { name: '现状审查', allowedTools: ['read_file'], promptTemplate: 'p1' },
-    { name: '契约生成', allowedTools: ['write_file'], promptTemplate: 'p2' }
-  ]
-};
-
 describe('execution mode policy', () => {
   it('act -> 1-node micro loop, no stage gate, act toolset', () => {
     const p = resolveExecutionPolicy('act');
@@ -35,27 +27,18 @@ describe('execution mode policy', () => {
     expect(p.systemPromptDirectives).toContain('Agent Loop');
   });
 
-  it('graph + workflow -> n-node workflow with stage gate and first-block tools', () => {
-    const p = resolveExecutionPolicy('graph', 'sdd', sddWorkflow as never);
-    expect(p.dagType).toBe('n-node-workflow');
-    expect(p.enableStageGate).toBe(true);
-    expect(p.allowedToolSet).toEqual(['read_file']);
-    expect(p.systemPromptDirectives).toContain('SDD');
-  });
-
-  it('graph without template -> dynamic graph planning directives', () => {
-    const p = resolveExecutionPolicy('graph');
-    expect(p.dagType).toBe('n-node-workflow');
-    expect(p.enableStageGate).toBe(true);
-    expect(p.systemPromptDirectives).toContain('任务图谱');
-    expect(p.allowedToolSet).toEqual(['read_file', 'grep_search', 'find_by_name']);
+  it('swarm -> multi-agent concurrent collaboration policy', () => {
+    const p = resolveExecutionPolicy('swarm');
+    expect(p.dagType).toBe('multi-agent-swarm');
+    expect(p.enableStageGate).toBe(false);
+    expect(p.systemPromptDirectives).toContain('Swarm');
   });
 });
 
 describe('pipeline mode migration', () => {
-  it('harness -> act, swarm -> graph, undefined -> act', () => {
+  it('harness -> act, swarm -> swarm, undefined -> act', () => {
     expect(migratePipelineMode('harness')).toBe('act');
-    expect(migratePipelineMode('swarm')).toBe('graph');
+    expect(migratePipelineMode('swarm')).toBe('swarm');
     expect(migratePipelineMode(undefined)).toBe('act');
     expect(migratePipelineMode('bogus' as never)).toBe('act');
   });
@@ -67,8 +50,8 @@ describe('execution mode storage & migration', () => {
   });
 
   it('reads new key when present', () => {
-    localStorage.setItem('tcode_execution_mode', 'graph');
-    expect(loadSavedExecutionMode()).toBe('graph');
+    localStorage.setItem('tcode_execution_mode', 'swarm');
+    expect(loadSavedExecutionMode()).toBe('swarm');
   });
 
   it('migrates legacy pipeline mode harness -> act', () => {
@@ -76,9 +59,9 @@ describe('execution mode storage & migration', () => {
     expect(loadSavedExecutionMode()).toBe('act');
   });
 
-  it('migrates legacy pipeline mode swarm -> graph', () => {
+  it('migrates legacy pipeline mode swarm -> swarm', () => {
     localStorage.setItem('tcode_pipeline_mode', 'swarm');
-    expect(loadSavedExecutionMode()).toBe('graph');
+    expect(loadSavedExecutionMode()).toBe('swarm');
   });
 
   it('defaults to act when nothing stored', () => {
@@ -86,23 +69,23 @@ describe('execution mode storage & migration', () => {
   });
 
   it('save writes new key', () => {
-    saveExecutionModeToStorage('graph');
-    expect(localStorage.getItem('tcode_execution_mode')).toBe('graph');
+    saveExecutionModeToStorage('swarm');
+    expect(localStorage.getItem('tcode_execution_mode')).toBe('swarm');
   });
 });
 
 describe('execution mode keyboard shortcut (Alt+1 / Alt+2)', () => {
   it('Alt+1 maps to act', () => {
-    expect(executionModeFromShortcut('1', 'graph')).toBe('act');
+    expect(executionModeFromShortcut('1', 'swarm')).toBe('act');
   });
 
-  it('Alt+2 maps to graph', () => {
-    expect(executionModeFromShortcut('2', 'act')).toBe('graph');
+  it('Alt+2 maps to swarm', () => {
+    expect(executionModeFromShortcut('2', 'act')).toBe('swarm');
   });
 
   it('other keys return null and preserve current mode', () => {
     expect(executionModeFromShortcut('Enter', 'act')).toBeNull();
-    expect(executionModeFromShortcut('q', 'graph')).toBeNull();
+    expect(executionModeFromShortcut('q', 'swarm')).toBeNull();
   });
 
   it('switching to the same mode still returns the target mode', () => {
@@ -111,21 +94,13 @@ describe('execution mode keyboard shortcut (Alt+1 / Alt+2)', () => {
 });
 
 describe('buildModePromptSnippet', () => {
-  it('act mode snippet names Agent Loop and has no workflow name', () => {
+  it('act mode snippet names Agent Loop', () => {
     const snippet = buildModePromptSnippet('act');
     expect(snippet).toContain('Agent Loop');
-    expect(snippet).not.toContain('SDD');
   });
 
-  it('graph + workflow snippet names the mounted workflow', () => {
-    const snippet = buildModePromptSnippet('graph', 'sdd', sddWorkflow as never);
-    expect(snippet).toContain('SDD');
-    expect(snippet).toContain('Graph');
-  });
-
-  it('graph without template snippet drives dynamic graph planning', () => {
-    const snippet = buildModePromptSnippet('graph');
-    expect(snippet).toContain('任务图谱');
-    expect(snippet).toContain('门禁');
+  it('swarm mode snippet names Swarm', () => {
+    const snippet = buildModePromptSnippet('swarm');
+    expect(snippet).toContain('Swarm');
   });
 });

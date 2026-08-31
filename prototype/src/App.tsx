@@ -1,4 +1,4 @@
-﻿import { getActiveWorkflow, getWorkflowPromptDirectives, getWorkflowAllowedTools, ModularWorkflow } from './services/workflowStore';
+import { getActiveWorkflow, getWorkflowPromptDirectives, getWorkflowAllowedTools, ModularWorkflow } from './services/workflowStore';
 import { RuntimeConfigResolver } from './services/runtimeConfigResolver';
 import { taskGraphScheduler } from './services/taskGraphScheduler';
 import { loadSavedExecutionMode, saveExecutionModeToStorage, migratePipelineMode, executionModeFromShortcut, buildModePromptSnippet, loadSessionExecutionMode, saveSessionExecutionMode, type ExecutionMode } from './services/executionMode';
@@ -1008,9 +1008,8 @@ export const App: React.FC = () => {
       return;
     }
 
-    // 🐝 WP-E 模块六：Graph 模式下选中 Swarm 工作流 -> 真并发 Swarm Run（影子区 + Master 纠偏 + 2PC）。
-    const activeWorkflowForRun = getActiveWorkflow();
-    if (executionMode === 'graph' && activeWorkflowForRun.id === 'swarm') {
+    // 🐝 Swarm 模式下直接进入多智能体并发协同 Run（影子区 + Master 纠偏 + 2PC）。
+    if (executionMode === 'swarm') {
       await runSwarmTurn(text, mentions);
       return;
     }
@@ -1173,8 +1172,7 @@ export const App: React.FC = () => {
     const activeMcpRuntimes = await Promise.all(mcpConfigs.filter(c => c.enabled).map(c => initializeMcpServer(c)));
     const mcpToolsPromptSnippet = buildMcpToolsModelPrompt(activeMcpRuntimes);
 
-    const activeModeWorkflow = getActiveWorkflow();
-    const modePromptSnippet = buildModePromptSnippet(executionMode, activeModeWorkflow.id, activeModeWorkflow);
+    const modePromptSnippet = buildModePromptSnippet(executionMode);
 
     const systemPrompt = `你是 Tcode (AI Agentic Desktop IDE) 接入的生产级自主 AI Agent 架构师。
 【🚨 全局核心开发铁律（严格执行三步法，违者重构）】:
@@ -1242,11 +1240,7 @@ ${modePromptSnippet}
         role: 'assistant',
         content: '',
         timestamp: Date.now(),
-        auditTag: executionMode === 'graph'
-          ? (activeModeWorkflow.blocks.length > 0
-              ? `🧩 Graph 编排 · ${activeModeWorkflow.name} (${frozenRunMode})`
-              : `🧩 Graph 动态编排 · 任务图谱 (${frozenRunMode})`)
-          : `⚡ Agent Loop · 极速执行 (${frozenRunMode})`,
+        auditTag: `⚡ Agent Loop · 极速执行 (${frozenRunMode})`,
         permissionPolicy,
         stepTags: [],
         acceptanceItems: [],

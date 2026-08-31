@@ -1,4 +1,4 @@
-﻿import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import {
   parseSkillMarkdown,
   unpackSkillFromZip,
@@ -89,13 +89,14 @@ Provides async SQLAlchemy session management guidelines.`;
   it('generates Tier 1 progressive disclosure prompt with token frugality', () => {
     const prompt = buildTier1SkillsSystemPrompt();
     expect(prompt).toContain('【可用 Agent Skills (渐进式加载，遵循 agentskills.io 规范)】');
-    expect(prompt).toContain('sdd-tdd-workflow');
+    expect(prompt).toContain('spec-driven-development');
+    expect(prompt).toContain('test-driven-development');
   });
 
   it('retrieves Tier 2 full SKILL.md body on demand', () => {
-    const body = getTier2SkillBody('sdd-tdd-workflow');
+    const body = getTier2SkillBody('spec-driven-development');
     expect(body).not.toBeNull();
-    expect(body).toContain('SDD & TDD Specification Driven Workflow');
+    expect(body).toContain('Spec-Driven Development (SDD) Specification');
   });
 });
 

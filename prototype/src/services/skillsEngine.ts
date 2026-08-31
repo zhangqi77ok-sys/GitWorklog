@@ -33,22 +33,161 @@ const STORAGE_KEY_SKILLS = 'tcode_agent_skills_v2';
 
 export const INITIAL_OFFICIAL_SKILLS: SkillMetadata[] = [
   {
-    name: 'sdd-tdd-workflow',
-    description: '严格遵循 SDD 规格驱动开发与 Vitest/Pytest TDD 闭环验收流程，先补全断言测试再执行功能落盘',
-    metadata: { author: 'Tcode Core', version: '2.0.0', category: 'workflow' },
-    path: '.agents/skills/sdd-tdd-workflow/SKILL.md',
+    name: 'spec-driven-development',
+    description: '严格遵循 SDD 规格驱动开发范式：先定义数据模型、API 契约与详细方案，获得确认后再编写代码',
+    metadata: { author: 'superpowers', version: '2.1.0', category: 'architecture' },
+    path: '.agents/skills/spec-driven-development/SKILL.md',
+    icon: '📝',
+    enabled: true,
+    bodyContent: `# Spec-Driven Development (SDD) Specification
+
+## 核心法则
+1. 严禁跳过规格直接编码。必须先输出完整的 Specification 与接口定义。
+2. 架构契约先行 (Contract-First)：先定义 Models, DTOs, API 契约与状态机。
+3. 方案必须经过影响范围分析、边界条件与异常流推演。`
+  },
+  {
+    name: 'test-driven-development',
+    description: '严格遵循 TDD 红-绿-重构 (Red-Green-Refactor) 循环：先写失败测试，编写最小代码通过，再进行架构重构',
+    metadata: { author: 'superpowers', version: '2.1.0', category: 'testing' },
+    path: '.agents/skills/test-driven-development/SKILL.md',
     icon: '🧪',
     enabled: true,
-    bodyContent: `# SDD & TDD Specification Driven Workflow
+    bodyContent: `# Test-Driven Development (TDD) Specification
 
-## 目标与原则
-1. 任何核心功能变更前，必须在 tests/ 下编写完整的行为契约测试 (Contracts Test)。
-2. 先运行测试确保红灯 (Red)，编写最小代码使其绿灯 (Green)，最后重构 (Refactor)。
-3. 在 Agent Loop 回复中，必须明确提供已通过的测试断言证据。`
+## 核心流程
+1. Red：在修改生产代码前，先编写稳定的单元测试或回归测试，验证预期失败。
+2. Green：编写恰好能让测试通过的最小代码，确保 100% 绿灯。
+3. Refactor：在测试套件保护下清理代码、消除重复，重构中保持测试全程通过。`
+  },
+  {
+    name: 'brainstorming',
+    description: '结构化方案头脑风暴：在复杂决策前进行多维发散推演、权衡取舍 (Trade-offs) 与收敛决策',
+    metadata: { author: 'superpowers', version: '2.0.0', category: 'ideation' },
+    path: '.agents/skills/brainstorming/SKILL.md',
+    icon: '💡',
+    enabled: true,
+    bodyContent: `# Structured Brainstorming & Architecture Ideation
+
+## 执行规范
+1. 发散阶段：列出至少 3 种不同维度的备选架构方案（极简、可扩展、高性能）。
+2. 权衡分析：评估各方案的复杂度、学习成本、维护成本与潜在隐患。
+3. 决策收敛：依据奥卡姆剃刀与当前项目约束，给出最推荐方案并明确理由。`
+  },
+  {
+    name: 'steelman-review',
+    description: '钢人原则与双向抗压推演：为各备选方案构建最强版本，深度挖掘隐性假设并进行反脆弱压力测试',
+    metadata: { author: 'Steelman Skill', version: '1.5.0', category: 'dialectic' },
+    path: '.agents/skills/steelman-review/SKILL.md',
+    icon: '🛡️',
+    enabled: true,
+    bodyContent: `# Steelman Skill & Dialectic Pressure Testing
+
+## 核心准则
+1. 构建最强版本 (Steelmanning)：在否定任何方案前，先为其构建最合理、最有说服力的最强论点。
+2. 双向抗压 (Dual Steelmanning)：为所有备选方案建立最强论据，全面暴露盲区。
+3. 极限抗压测试：模拟极限边界、高并发、断网与故障恢复场景。`
+  },
+  {
+    name: 'thermo-nuclear-review',
+    description: '严苛代码架构审查与 Code Judo：降维简化、杜绝特殊特判与面条代码、硬性规模门禁审查',
+    metadata: { author: 'Code Quality Guard', version: '2.0.0', category: 'review' },
+    path: '.agents/skills/thermo-nuclear-review/SKILL.md',
+    icon: '🔬',
+    enabled: true,
+    bodyContent: `# Thermo-Nuclear Code Quality Review
+
+## 审查门禁
+1. Code Judo 降维简化：主动探寻更优领域建模以大幅减少代码量和冗余层。
+2. 零容忍打补丁特判：必须在类型系统或状态机源头完成建模。
+3. 硬性指标：函数 <= 50 行、文件 <= 300 行、圈复杂度 <= 10、嵌套深度 <= 3。`
+  },
+  {
+    name: 'systematic-debugging',
+    description: '科学假设与最小复现调试：基于证据提出科学假说，建立精准断言，杜绝盲目试错与静默降级',
+    metadata: { author: 'superpowers', version: '2.0.0', category: 'debugging' },
+    path: '.agents/skills/systematic-debugging/SKILL.md',
+    icon: '🐞',
+    enabled: true,
+    bodyContent: `# Systematic Scientific Debugging
+
+## 调试准则
+1. 禁止盲目猜测：结论必须基于现有日志、堆栈跟踪或代码断点证据。
+2. 最小复现：编写单测或独立脚本稳定复现 Bug。
+3. 杜绝静默降级：禁止吞异常或用虚假默认值掩盖真实根因。`
+  },
+  {
+    name: 'writing-skills',
+    description: 'Agent 技能自举与编写规范：按照 agentskills.io 标准构建高质量、自愈型 SKILL.md 技能包',
+    metadata: { author: 'superpowers', version: '1.2.0', category: 'meta' },
+    path: '.agents/skills/writing-skills/SKILL.md',
+    icon: '⚡',
+    enabled: true,
+    bodyContent: `# Writing Agent Skills Standard
+
+## 编写规范
+1. 遵循 Progressive Disclosure 渐进式三层披露模型（Frontmatter -> Body -> Scripts）。
+2. 明确 Trigger 触发条件与 Non-Goals 负向边界。
+3. 嵌入确定性的验证命令与质量门禁 checklist。`
+  },
+  {
+    name: 'swarm-orchestration',
+    description: 'Swarm 多智能体并发协同网络：Lead Agent 动态任务拆解，专业 Subagents 角色分工与消息传递',
+    metadata: { author: 'Swarm Team', version: '2.0.0', category: 'concurrency' },
+    path: '.agents/skills/swarm-orchestration/SKILL.md',
+    icon: '🐝',
+    enabled: true,
+    bodyContent: `# Swarm Multi-Agent Concurrency & Orchestration
+
+## 协同拓扑
+1. Lead Agent：负责全局规划、任务分解与拓扑调度。
+2. Worker Subagents：架构师、前端工程师、测试官、安全审查员并发执行。
+3. 消息机制：结构化 JSON 事件总线与成果归集看板。`
+  },
+  {
+    name: 'worktree-isolation',
+    description: 'Git Worktree 物理隔离沙箱：在独立分支与工作树中进行高危探索与破坏性重构，隔离主分支',
+    metadata: { author: 'Git Sandbox', version: '1.0.0', category: 'safety' },
+    path: '.agents/skills/worktree-isolation/SKILL.md',
+    icon: '🌳',
+    enabled: true,
+    bodyContent: `# Git Worktree Isolation Sandbox
+
+## 隔离规则
+1. 高危操作、大型重构或破坏性变更必须在独立 git worktree 中执行。
+2. 验证全部通过后方可合并至主工作区，避免未提交污染。`
+  },
+  {
+    name: 'credential-hygiene',
+    description: '凭据安全与零泄漏守卫：检测敏感密钥、Token，强制 Fail-Closed 机制，阻止硬编码落盘',
+    metadata: { author: 'Security Team', version: '1.0.0', category: 'security' },
+    path: '.agents/skills/credential-hygiene/SKILL.md',
+    icon: '🔐',
+    enabled: true,
+    bodyContent: `# Credential Hygiene & Zero Leakage Standard
+
+## 安全红线
+1. 严禁在源码、配置或提示词中硬编码 API Key、私钥或密码。
+2. 运行时凭据必须使用系统密钥环或环境变量注入。
+3. 缺少凭据时明确报错并阻断，严禁静默 fallback 到测试 Key。`
+  },
+  {
+    name: 'ui-ux-design-first',
+    description: 'UI/UX 设计先行与人机工程学：严格执行 60-30-10 配色法则、16:9 人体工程学布局与全状态覆盖',
+    metadata: { author: 'UI/UX Team', version: '2.0.0', category: 'frontend' },
+    path: '.agents/skills/ui-ux-design-first/SKILL.md',
+    icon: '🎨',
+    enabled: true,
+    bodyContent: `# UI/UX Design-First Specification
+
+## 设计法则
+1. 编码前必须先输出 UI/UX 设计方案并获得用户确认。
+2. 遵循暖米白 (#FAF8F5) 与陶土暖橙 (#D96B27) 视觉规范。
+3. 交互全状态覆盖：Default, Hover, Active, Focus, Disabled, Loading 骨架屏。`
   },
   {
     name: 'build-installer',
-    description: 'Windows 生产级安装包自动化流水线，执行前端构建、单元测试门禁、PyInstaller 编译与单文件打包',
+    description: 'Windows 生产级安装包流水线：前端构建、单测门禁、PyInstaller 编译与单文件 exe/zip 打包',
     metadata: { author: 'Tcode Core', version: '1.5.0', category: 'packaging' },
     path: '.agents/skills/build-installer/SKILL.md',
     icon: '📦',
@@ -62,20 +201,6 @@ export const INITIAL_OFFICIAL_SKILLS: SkillMetadata[] = [
 4. 发布归档：生成 release/ 目录单文件 exe 与 zip 归档`
   },
   {
-    name: 'security-audit',
-    description: '全面检测硬编码密钥、SQL注入、XSS跨站脚本、反序列化与鉴权缺陷，提供安全补丁',
-    metadata: { author: 'Security Team', version: '1.0.0', category: 'security' },
-    path: '.agents/skills/security-audit/SKILL.md',
-    icon: '🔍',
-    enabled: true,
-    bodyContent: `# Security Audit & Remediation Guide
-
-## 检查项
-- 严禁在源码中硬编码 API Key、私钥或凭据（必须使用环境变量或系统安全存储）
-- 终端指令必须经过 SandboxGuard 过滤与 Sudo 授权校验
-- 外部输入必须通过类型系统过滤与转义`
-  },
-  {
     name: 'react-ts-architecture',
     description: 'React 18+ 状态下沉、Custom Hooks 解耦、Memoization 与严格 TypeScript 类型规范',
     metadata: { author: 'Frontend Team', version: '1.0.0', category: 'frontend' },
@@ -86,7 +211,7 @@ export const INITIAL_OFFICIAL_SKILLS: SkillMetadata[] = [
 
 ## 铁律规范
 1. 严禁使用 any 类型，所有 Props 与 State 必须有严格 TypeScript Interface
-2. 弹窗与高频浮层状态必须下沉至子组件内部，严禁全局状态滥用导致整树重渲染
+2. 弹窗与高频浮层状态必须下沉至子组件内部，严禁全局状态滥用
 3. 耗时计算与回调函数必须合理使用 useMemo / useCallback`
   },
   {

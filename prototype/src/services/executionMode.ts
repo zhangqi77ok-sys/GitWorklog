@@ -1,64 +1,46 @@
-﻿/**
- * Execution mode convergence (模块一): unify the user-facing intent into
- * 'act' (Agent Loop, fast) vs 'graph' (workflow graph with stage gates).
- * Replaces the legacy PipelineMode 'harness' | 'swarm' top-level toggle.
+/**
+ * Execution Mode: Dual Engine Architecture (Agent Loop vs Swarm)
+ * - 'act' (Agent Loop): Single autonomous agent micro-loop (Think → Tool Call → Observe → Verify)
+ * - 'swarm': Multi-agent concurrent collaboration network
+ * 
+ * Note: Engineering methodologies (SDD, TDD, Brainstorming, Code Review) belong to Skills Engine (.agents/skills/).
  */
-export type ExecutionMode = 'act' | 'graph';
+export type ExecutionMode = 'act' | 'swarm';
 
 export interface ExecutionPolicy {
-  dagType: '1-node-micro-loop' | 'n-node-workflow';
+  dagType: '1-node-micro-loop' | 'multi-agent-swarm';
   systemPromptDirectives: string;
   allowedToolSet: string[];
   enableStageGate: boolean;
-  workflowName?: string;
-}
-
-export interface WorkflowLike {
-  name: string;
-  blocks: Array<{ name?: string; allowedTools?: string[]; promptTemplate?: string }>;
+  engineName: string;
 }
 
 const ACT_TOOLSET = ['read_file', 'write_file', 'run_command', 'grep_search', 'find_by_name'];
-const EXPLORE_TOOLSET = ['read_file', 'grep_search', 'find_by_name'];
 
-export function resolveExecutionPolicy(
-  mode: ExecutionMode,
-  workflowId?: string,
-  workflow?: WorkflowLike
-): ExecutionPolicy {
-  if (mode === 'act') {
+export function resolveExecutionPolicy(mode: ExecutionMode): ExecutionPolicy {
+  if (mode === 'swarm') {
     return {
-      dagType: '1-node-micro-loop',
+      dagType: 'multi-agent-swarm',
       systemPromptDirectives:
-        '【Agent Loop 自主闭环模式】: 直接分析并定位问题，使用工具落地代码并自愈测试。无需产出冗余 Spec 文档。',
+        '【Swarm 多智能体并发协同模式】: 这是一个复杂团队工程任务。Lead Agent 负责任务拆解与调度，各专业 Subagents（架构师、编码员、测试自愈官、安全审查员）并发分工协作并归集交付！',
       allowedToolSet: ACT_TOOLSET,
-      enableStageGate: false
+      enableStageGate: false,
+      engineName: '🐝 Swarm 多智能体协同'
     };
   }
 
-  if (workflow && workflow.blocks.length > 0) {
-    const first = workflow.blocks[0];
-    return {
-      dagType: 'n-node-workflow',
-      systemPromptDirectives: `【Graph 工作流编排模式】: 已挂载积木工作流【${workflow.name}】，按阶段契约与门禁审批执行。`,
-      allowedToolSet: first.allowedTools && first.allowedTools.length > 0 ? first.allowedTools : EXPLORE_TOOLSET,
-      enableStageGate: true,
-      workflowName: workflow.name
-    };
-  }
-
-  // Graph mode without an explicit template -> autonomous dynamic graph planning.
   return {
-    dagType: 'n-node-workflow',
+    dagType: '1-node-micro-loop',
     systemPromptDirectives:
-      '【Graph 动态编排模式】: 这是一个复杂工程任务。在修改源码前，你必须先输出结构化任务图谱（Task Plan / DAG），对关键设计进行门禁确认，分步骤执行并在完成后给出测试自愈验证！',
-    allowedToolSet: EXPLORE_TOOLSET,
-    enableStageGate: true
+      '【Agent Loop 自主闭环模式】: 直接分析并定位问题，使用工具落地代码并自愈测试。以极速单智能体闭环交付。',
+    allowedToolSet: ACT_TOOLSET,
+    enableStageGate: false,
+    engineName: '⚡ Agent Loop 极速执行'
   };
 }
 
-export function migratePipelineMode(saved: 'harness' | 'swarm' | undefined): ExecutionMode {
-  if (saved === 'swarm') return 'graph';
+export function migratePipelineMode(saved: string | undefined): ExecutionMode {
+  if (saved === 'swarm' || saved === 'graph') return 'swarm';
   return 'act';
 }
 
@@ -69,8 +51,9 @@ export function loadSavedExecutionMode(): ExecutionMode {
   try {
     if (typeof localStorage !== 'undefined') {
       const saved = localStorage.getItem(STORAGE_KEY_EXECUTION_MODE);
-      if (saved === 'act' || saved === 'graph') return saved;
-      const legacy = localStorage.getItem(LEGACY_KEY_PIPELINE_MODE) as 'harness' | 'swarm' | null;
+      if (saved === 'act' || saved === 'swarm') return saved;
+      if (saved === 'graph') return 'swarm';
+      const legacy = localStorage.getItem(LEGACY_KEY_PIPELINE_MODE);
       if (legacy) return migratePipelineMode(legacy);
     }
   } catch (e) {}
@@ -111,13 +94,9 @@ function writeSessionModes(modes: Record<string, ExecutionMode>): void {
   } catch (e) {}
 }
 
-/**
- * 模块一 SessionExecutionState：每会话执行模式覆盖。
- * 缺省回退到全局模式（tcode_execution_mode）。
- */
 export function loadSessionExecutionMode(sessionId: string): ExecutionMode {
   const modes = readSessionModes();
-  if (modes[sessionId] === 'act' || modes[sessionId] === 'graph') {
+  if (modes[sessionId] === 'act' || modes[sessionId] === 'swarm') {
     return modes[sessionId];
   }
   return loadSavedExecutionMode();
@@ -131,7 +110,7 @@ export function saveSessionExecutionMode(sessionId: string, mode: ExecutionMode)
 
 export function resolveSessionExecutionMode(sessionId: string, globalMode: ExecutionMode): ExecutionMode {
   const modes = readSessionModes();
-  if (modes[sessionId] === 'act' || modes[sessionId] === 'graph') {
+  if (modes[sessionId] === 'act' || modes[sessionId] === 'swarm') {
     return modes[sessionId];
   }
   return globalMode;
@@ -143,33 +122,21 @@ export function clearSessionExecutionModes(): void {
 
 /**
  * Map an Alt+<key> keyboard shortcut to an execution mode.
- * Alt+1 -> 'act' (Agent Loop), Alt+2 -> 'graph' (Graph orchestration).
- * Returns null when the key does not map to a mode, so callers keep the
- * current selection untouched.
+ * Alt+1 -> 'act' (Agent Loop), Alt+2 -> 'swarm' (Swarm Concurrency).
  */
 export function executionModeFromShortcut(
   key: string,
   _current: ExecutionMode
 ): ExecutionMode | null {
   if (key === '1') return 'act';
-  if (key === '2') return 'graph';
+  if (key === '2') return 'swarm';
   return null;
 }
 
 /**
- * Build the system-prompt snippet that describes the active execution mode.
- * Replaces the legacy keyword-based ([Harness...]/[Swarm...]) prompt injection.
+ * Build the system-prompt snippet that describes the active execution engine.
  */
-export function buildModePromptSnippet(
-  mode: ExecutionMode,
-  workflowId?: string,
-  workflow?: WorkflowLike
-): string {
-  const policy = resolveExecutionPolicy(mode, workflowId, workflow);
-  const label = mode === 'act'
-    ? '⚡ Agent Loop（极速执行）'
-    : workflow && workflow.blocks.length > 0
-      ? `🧩 Graph 编排 · ${workflow.name}`
-      : '🧩 Graph 动态编排（未选模板）';
-  return `【当前执行架构】: ${label}\n${policy.systemPromptDirectives}`;
+export function buildModePromptSnippet(mode: ExecutionMode): string {
+  const policy = resolveExecutionPolicy(mode);
+  return `【当前执行引擎】: ${policy.engineName}\n${policy.systemPromptDirectives}`;
 }

@@ -1,4 +1,4 @@
-﻿# Tcode 全景产品需求与架构设计规范 (PRD 终极精粹整合版)
+# Tcode 全景产品需求与架构设计规范 (PRD 终极精粹整合版)
 
 > **产品代号**：Tcode  
 > **产品定位**：新一代企业级开源极简 AI 编程桌面工作台 (Cursor-Alternative Native Desktop IDE)  
@@ -1441,27 +1441,28 @@ Tcode 必须区分“环境中发现了工作流工具”和“用户选择并�
 5. Provider 的文件、命令、网络动作必须继续通过 Tcode 宿主安全网关与人机审批。
 
 
-## 4.46 Harness / Swarm 执行引擎显式选择与启动
+## 4.46 Agent Loop / Swarm 二元执行引擎与 Skills 范式归位
 
-### 产品规则
+### 产品核心理念与架构收敛
 
-1. Harness 与 Swarm 是用户可见的**执行引擎**选择，不是隐藏的自动策略；首次进入会话默认 Harness，因为当前主 Agent Loop 只有 Harness 链路已接入。
-2. 选择 Swarm 只改变“下一次任务使用的引擎”，不会自动创建 Run、不会因为任务关键词/复杂度/项目规则/已安装 Provider 而触发。
-3. Swarm 必须经过“选择 Swarm → 查看目标 → 点击启动 Swarm Run”三步。只有调度器返回真实 `runId` 后才能显示运行中。
-4. 未接入或启动失败时必须显示“未接入/不可用”或错误状态，禁止展示虚假的运行进度。
-5. 如未来增加自动建议，必须作为独立选项并在启动前等待用户确认；不得覆盖用户手动选择。
+1. **执行引擎二元收敛 (Dual Execution Engine)**：
+   - **`⚡ Agent Loop`（单智能体极速闭环）**：单模型自主循环（Think → Tool Use → Observe → Continue → Verify），极速开发、精准落盘与测试自愈。
+   - **`🐝 Swarm`（多智能体协同网络）**：多智能体并发协作（Lead Agent 任务拆解 + 专业 Subagents 角色分工 + 拓扑看板协同）。
+   - **输入框就近切换原则**：执行模式选择控件从顶部 Header 彻底下沉至**输入控制台 (Input Box) 正上方**，符合用户输入 Prompt 时的就近心智决策模型，顶部 Header 保持纯粹干净。
 
-### 验收标准
+2. **方法论与工程范式全面归位为 Skills (技能)**：
+   - 彻底废除顶层独立、割裂的“积木工作流 / Graph 编排”模式；
+   - **`SDD 规格驱动开发 (Spec-Driven)`**、**`TDD 测试红绿重构 (Test-Driven)`**、**`头脑风暴 (Brainstorming)`**、**`Steelman 钢人思辨`**、**`代码质量严苛审查 (Thermo-Nuclear Review)`** 等工程方法论，全面沉淀为标准 **Agent Skills（.agents/skills/）**；
+   - 技能在运行时可通过输入框 `@技能引用`、系统自动意图激活或项目规则前置注入，赋予 Agent Loop 与 Swarm 统一的专精能力扩展。
 
-- 顶部显示“执行引擎：Harness / Swarm”，两个选项在窄窗口下仍可感知；
-- 默认显示 Harness「已选择 · 可直接发送」；
-- Swarm「已选择 · 等待启动」时发送需求不会偷偷进入 Harness；
-- 仅点击 Swarm 工作台内的“启动 Swarm Run”才允许调用 Swarm 调度器；
-- 工作台打开但未启动时没有 `activeRunId`、没有“运行中”文案；
-- Harness/Swarm 切换不影响已运行任务；
-- Provider 发现、SDD/TDD 选择与执行引擎选择彼此独立，已安装工具不等于已启用或已执行。
+### 交互与体验标准
 
-技术契约见：`docs/technical_reviews/harness-swarm-mode-contract.md`。
+- **输入框顶部胶囊**：采用暖色微型双态胶囊 `[ ⚡ Agent Loop ]  [ 🐝 Swarm 协同 ]`；
+- **快捷键映射**：`Alt+1` 快速切至 Agent Loop，`Alt+2` 快速切至 Swarm 协同；
+- **动态 Placeholder**：根据激活模式即时更新输入引导词；
+- **技能选择器**：底栏 `@ 技能引用` 弹窗内置丰富的前沿开源范式技能，支持单选与一键检索引用。
+
+技术契约见：`docs/technical_reviews/agent-loop-contract.md`。
 
 
 ## 4.48 本轮真实验收与配置阻塞边界（2026-08-30）

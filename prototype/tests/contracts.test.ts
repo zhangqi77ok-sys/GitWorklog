@@ -1088,14 +1088,14 @@ describe('Official Agent Skills Specification (agentskills.io) Contract', () => 
   it('Tier 1: builds ultra-compact prompt with only name + description', () => {
     const promptSnippet = buildTier1SkillsSystemPrompt();
     expect(promptSnippet).toContain('【可用 Agent Skills (渐进式加载，遵循 agentskills.io 规范)】');
-    expect(promptSnippet).toContain('sdd-tdd-workflow');
-    expect(promptSnippet).not.toContain('## 铁律规范'); // Tier 2 content NOT leaked into Tier 1
+    expect(promptSnippet).toContain('spec-driven-development');
+    expect(promptSnippet).not.toContain('## 核心法则'); // Tier 2 content NOT leaked into Tier 1
   });
 
   it('Tier 2: fetches full SKILL.md body on-demand', () => {
-    const body = getTier2SkillBody('sdd-tdd-workflow');
+    const body = getTier2SkillBody('spec-driven-development');
     expect(body).not.toBeNull();
-    expect(body).toContain('Specification Driven Workflow');
+    expect(body).toContain('Spec-Driven Development (SDD) Specification');
   });
 
   it('supports toggling and adding skills with auto-normalized names', () => {
