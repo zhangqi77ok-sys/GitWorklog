@@ -1563,20 +1563,36 @@ Tcode 必须区分“环境中发现了工作流工具”和“用户选择并�
    - **`@ 会话引用` (Sessions)**：快速调起历史会话与关联项目会话列表，点击选择后在输入框插入 `@会话名称` 并在发送时自动注入前序会话的上下文摘要；
    - 输入框顶部实时呈现已挂载引用的高亮徽标胶囊，支持一键 `✕` 快速取消。
 
-### 4.48.12 系统级微型任务完成与异常弹窗通知规范 (280×120 System Toast Notification, 2026-08-31)
+### 4.48.12 系统级双通道任务完成与异常通知规范 (Dual-Channel System Notification, 2026-08-31 修订)
 
-1. **微型物理尺寸与系统定位**：
-   - **固定尺寸**：精确 `280px` 宽 $\times$ `120px` 高，磨砂亚克力毛玻璃质感（`backdrop-filter: blur(12px)`）；
-   - **物理定位**：置于 Windows 操作系统屏幕右下角（系统任务栏托盘上方）；
-   - **置顶层级**：高层级置顶（`zIndex: 99999`），主应用最小化或处于后台时依然稳定弹出。
-2. **双模态全生命周期状态覆盖**：
-   - **完成态 (Success)**：发光翡翠绿胶囊 `✓ 任务已完成`，展示关联项目徽标 `📂 project`，并提取核心产出摘要；
-   - **异常/失败态 (Error)**：发光珊瑚红胶囊 `✕ 执行遇到异常`，展示发生异常的项目与核心错误根因。
-3. **5 秒悬停暂停与双按钮交互**：
-   - **底边倒计时进度条**：5 秒发光倒计时轨道；
-   - **鼠标悬停 (Hover)**：鼠标进入卡片区域立即暂停倒计时，鼠标移出继续倒计时；
-   - **操作按钮**：
-     - `[ 忽略 ]`：立即关闭并滑出销毁弹窗；
-     - `[ 查看会话 → ]` / `[ 排查修复 → ]`：一键激活唤醒 Tcode 主窗口并精准跳转至触发该任务的项目与会话。
+1. **双通道触发策略**：
+   - **应用内通道（窗口聚焦）**：沿用 280×120 微型 Toast（`SystemTaskNotification`，磨砂毛玻璃质感），精确 `280px` 宽 $\times$ `120px` 高，置于窗口右下角，`zIndex: 99999`；
+   - **系统级通道（窗口后台/最小化）**：由桌面宿主（`desktop_app.py`）通过 PowerShell 5.1 + `System.Windows.Forms.NotifyIcon` 在 Windows 屏幕物理右下角（任务栏上方）弹出**原生系统通知**，与 Tcode 窗口边界完全解耦——窗口最小化、切走或全屏遮挡时依然稳定弹出。
+2. **触发时机与内容**：
+   - Agent Loop 任务正常闭环 → `success` 通知，携带项目名、会话标题与核心产出摘要；
+   - Agent Loop 异常/失败 → `error` 通知，携带项目名、会话标题与错误根因摘要。
+3. **宿主 API 契约**：
+   - `POST /api/notify/system`：入参 `{ status: success|error, projectName?, sessionTitle?, sessionId, summary? }`，Token 鉴权；入参非法返回 400，宿主通知失败返回 500 并记录日志（禁止静默吞错）；
+   - `GET /api/window/restore?sessionId=`：恢复并前置 Tcode 窗口，并通过 `evaluate_js` 分发 `tcode_activate_session` 事件。
+4. **点击唤醒闭环**：
+   - 点击系统通知 → PowerShell 事件回调 `Invoke-RestMethod` 调宿主 `/api/window/restore?sessionId=<会话>`（携带宿主 token）→ 前端监听 `tcode_activate_session` 自动切换至对应会话。
+5. **通道选型说明（2026-08-31 修订）**：
+   - 原方案计划使用 WinRT Toast（`[Windows.UI.Notifications]`）；实测 **PowerShell 5.1 无法订阅 WinRT 事件**（`Register-ObjectEvent` 报 "cannot subscribe to Windows RT events"），点击回调不可用；
+   - 故改用 `NotifyIcon` 气球通知：同为 Windows 原生右下角通知、点击回调为 .NET 事件（PowerShell 可订阅），**零新增依赖**；
+   - 若后续需要现代版 Toast 样式，可切换至 Python `winrt` 包（需新增构建依赖并适配 PyInstaller）。
+6. **失败可见性**：
+   - 宿主通知脚本错误写入 `%LOCALAPPDATA%\Tcode\notify\notify_error.log`；
+   - 前端 `requestSystemNotification` 失败时 `console.error` 并返回 false，不静默降级。
 
 
+### 4.48.13 Swarm 真并发多角色结构化协同规约 (Concurrent Multi-Role Swarm, 2026-08-31)
+
+1. **三段式结构化协议**：
+   - **Phase 1 Master 拆解**：一次 LLM 调用产出全局任务拆解与四角色分工规划（不再要求模型输出角色标记）；
+   - **Phase 2 四角色真并发**：架构师 / 核心开发工程师 / 质量测试专家 / 代码审计与安全员 四个 Subagent **各自独立流式调用 LLM**（`Promise.allSettled`），逐字回调渲染到独立角色卡片；
+   - **Phase 3 Master 终审**：汇总四角色产出做质量仲裁与最终交付总结。
+2. **数据契约**：`ChatMessage.swarm?: SwarmChatState { masterPlanning, roles: SwarmRoleStream[], masterSummary }`；`SwarmRoleStream { id, name, icon, duty?, content, status: running|passed|error, error? }`。
+3. **渲染**：`SwarmSubagentContainer` 结构化 `swarm` 字段优先；旧消息（无 `swarm`）走正文正则解析回退（角色标记 `### 📐 [Subagent · 系统架构师]` 等）。
+4. **失败隔离与取消**：单个角色失败不阻塞其余角色，失败卡片显式标红并附错误信息；`AbortController` 全链路传播，停止会话即中止全部并发调用。
+5. **v1 范围界定**：Subagent 仅输出分析/设计/测试用例/安全审计文本，不直接执行工具；核心开发角色的代码块在 Master 终审中呈现，由用户决定是否应用。并发角色工具执行、动态角色选取留待后续迭代。
+6. **生产流式通道**：`createGatewayStreamChat` 与主 Agent Loop 同口径（Gateway v2 多账号优先，v1 Provider 目录兜底），SSE 增量逐字回调。

@@ -6,6 +6,9 @@ import { sessionActorManager } from './services/sessionActorManager';
 import { enqueueItem, withdrawItem, editItem, moveItem } from './services/promptQueueStore';
 import { assembleCacheOptimizedMessages, recordCacheHitTelemetry, extractFileSymbols, buildCompactRepoMap, buildRepoMapFromTree, buildRepoMapFromFileContents, prioritizeActiveFiles, recordActiveFile, getActiveFiles } from './services/cacheEngine';
 import { hostGateway } from './services/hostGateway';
+import { requestSystemNotification } from './services/systemNotify';
+import { runSwarmChat, createGatewayStreamChat, SWARM_ROLES } from './services/swarmChatExecutor';
+import type { SwarmChatState } from './types/contracts';
 import { getContextBudget, getContextTelemetry, compressModelContext } from './services/contextTelemetry';
 // ────────────────────────────────────────────────────────────
 // 🧠 CONTEXT TELEMETRY & SMART AUTO-COMPRESSION ENGINE
@@ -459,6 +462,18 @@ export const App: React.FC = () => {
     };
     window.addEventListener('tcode_task_notification', handleTaskNotify);
     return () => window.removeEventListener('tcode_task_notification', handleTaskNotify);
+  }, []);
+
+  // OS 原生通知点击唤醒会话（宿主 evaluate_js 分发 tcode_activate_session）
+  React.useEffect(() => {
+    const handleActivateSession = (e: any) => {
+      const sessionId = e?.detail?.sessionId;
+      if (sessionId) {
+        setCurrentSessionId(sessionId);
+      }
+    };
+    window.addEventListener('tcode_activate_session', handleActivateSession);
+    return () => window.removeEventListener('tcode_activate_session', handleActivateSession);
   }, []);
 
   const handleLeftPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -1218,17 +1233,24 @@ ${executionMode === 'swarm' ? `
 
       // Initial single assistant message container with rounds[]
       let accumulatedRounds: AgentRoundItem[] = [];
+      const isSwarmRun = executionMode === 'swarm';
+      const initialSwarm: SwarmChatState = {
+        masterPlanning: '',
+        roles: SWARM_ROLES.map(r => ({ ...r, content: '', status: 'running' as const })),
+        masterSummary: '',
+      };
       const runCardMsg: ChatMessage = {
         id: singleRunCardId,
         role: 'assistant',
         content: '',
         timestamp: Date.now(),
-        auditTag: executionMode === 'swarm' ? '🐝 Swarm 团队协同 (多角色并发)' : `⚡ Agent Loop · 极速执行 (${frozenRunMode})`,
+        auditTag: isSwarmRun ? '🐝 Swarm 团队协同 (多角色并发)' : `⚡ Agent Loop · 极速执行 (${frozenRunMode})`,
         permissionPolicy,
         stepTags: [],
         acceptanceItems: [],
         rounds: [],
-        activeRoundId: 1
+        activeRoundId: 1,
+        ...(isSwarmRun ? { swarm: initialSwarm } : {})
       };
 
       conversationSnapshot.push(runCardMsg);
@@ -1237,8 +1259,80 @@ ${executionMode === 'swarm' ? `
         [currentSessionId]: [...(prev[currentSessionId] || []), runCardMsg]
       }));
 
+      // ── Swarm 真并发多角色分支（结构化协议：Master 拆解 -> 4 角色并发 -> Master 终审） ──
+      if (isSwarmRun) {
+        let swarmState: SwarmChatState = {
+          masterPlanning: '',
+          roles: SWARM_ROLES.map(r => ({ ...r, content: '', status: 'running' as const })),
+          masterSummary: '',
+        };
+        // 每次增量同步到会话卡片（不可变更新，保证 React 重新渲染）
+        const syncSwarmCard = () => {
+          const cardId = singleRunCardId;
+          setSessionMessages(prev => ({
+            ...prev,
+            [currentSessionId]: (prev[currentSessionId] || []).map(m =>
+              m.id === cardId ? { ...m, swarm: { ...swarmState, roles: swarmState.roles.map(r => ({ ...r })) } } : m
+            ),
+          }));
+        };
+        controller = new AbortController();
+        sessionActorManager.setAbortController(currentSessionId, controller);
+        const streamChat = createGatewayStreamChat({
+          streamingModel,
+          sessionKey: currentSessionId,
+          gatewayRuntime,
+          hasGatewayAccountsFor,
+          platformForProvider,
+          loadSavedProviders,
+          buildModelCatalogEntry,
+          resolveModelRoute,
+          buildGatewayRequestBody,
+          parseGatewayEvent,
+          resolveApiEndpoint,
+          addLog,
+        });
+        const finalState = await runSwarmChat(
+          {
+            userGoal: contextualizedUserContent,
+            contextSnapshotMarkdown: activeSession.projectPath
+              ? `项目: ${activeSession.projectName} (${activeSession.projectPath})\n分支: ${activeSession.gitBranch || 'main'}`
+              : '',
+            modelId: streamingModel.id,
+            signal: controller?.signal,
+            streamChat,
+          },
+          {
+            onMasterPlanning: (planning) => {
+              swarmState = { ...swarmState, masterPlanning: planning };
+              syncSwarmCard();
+            },
+            onRoleStatus: (roleId, status, error) => {
+              swarmState = { ...swarmState, roles: swarmState.roles.map(r => (r.id === roleId ? { ...r, status, error } : r)) };
+              syncSwarmCard();
+            },
+            onRoleDelta: (roleId, delta) => {
+              swarmState = { ...swarmState, roles: swarmState.roles.map(r => (r.id === roleId ? { ...r, content: r.content + delta } : r)) };
+              syncSwarmCard();
+            },
+            onMasterSummary: (summary) => {
+              swarmState = { ...swarmState, masterSummary: summary };
+              syncSwarmCard();
+            },
+          },
+        );
+        lastAssistantContent = finalState.masterSummary || finalState.masterPlanning || '';
+        // 最终状态落盘（持久化到磁盘）
+        setSessionMessages(prev => {
+          const list = prev[currentSessionId] || [];
+          const next = list.map(m => (m.id === singleRunCardId ? { ...m, swarm: finalState } : m));
+          saveSessionMessagesToStorage({ ...prev, [currentSessionId]: next });
+          return { ...prev, [currentSessionId]: next };
+        });
+      }
+
       // ── Target-Driven Agent Loop: Understand → Breakdown → Act → Verify → Closed-loop Done ──
-      while (sessionActorManager.isSessionRunning(currentSessionId)) {
+      while (!isSwarmRun && sessionActorManager.isSessionRunning(currentSessionId)) {
         loopCount++;
         sessionActorManager.bumpLoop(currentSessionId);
         const assistantId = singleRunCardId;
@@ -1925,14 +2019,19 @@ ${executionMode === 'swarm' ? `
       // ── Trigger System 280x120 Task Completion Notification ──
       const targetSession = sessions.find(s => s.id === currentSessionId) || activeSession;
       const cleanSummary = (lastAssistantContent || '').replace(/```[\s\S]*?```/g, '').replace(/[#*`_\n]/g, ' ').trim().slice(0, 60);
-      setActiveNotification({
-        id: `notify-${Date.now()}`,
+      const notifyPayload: Omit<TaskNotificationData, 'id' | 'createdAt'> = {
         status: currentLoopStatus === 'no_progress' ? 'error' : 'success',
         projectName: targetSession?.projectName || targetSession?.title || 'Tcode',
         sessionTitle: targetSession?.title || '会话任务',
         sessionId: currentSessionId,
         summary: cleanSummary || (completedWithTarget ? '✓ 任务已成功完成并通过独立验证。' : '✓ 模型回复已生成完毕。'),
-        createdAt: Date.now()
+      };
+      // 双通道：窗口后台时由宿主弹 Windows 原生右下角通知
+      void requestSystemNotification(notifyPayload);
+      setActiveNotification({
+        id: `notify-${Date.now()}`,
+        createdAt: Date.now(),
+        ...notifyPayload
       });
 
     } catch (err: any) {
@@ -1967,14 +2066,19 @@ ${executionMode === 'swarm' ? `
 
       // ── Trigger System 280x120 Task Error Notification ──
       const targetSession = sessions.find(s => s.id === currentSessionId) || activeSession;
-      setActiveNotification({
-        id: `notify-${Date.now()}`,
+      const notifyPayload: Omit<TaskNotificationData, 'id' | 'createdAt'> = {
         status: 'error',
         projectName: targetSession?.projectName || targetSession?.title || 'Tcode',
         sessionTitle: targetSession?.title || '会话任务',
         sessionId: currentSessionId,
         summary: `错误根因: ${err.message || '大模型网络或鉴权异常'}`,
-        createdAt: Date.now()
+      };
+      // 双通道：窗口后台时由宿主弹 Windows 原生右下角通知
+      void requestSystemNotification(notifyPayload);
+      setActiveNotification({
+        id: `notify-${Date.now()}`,
+        createdAt: Date.now(),
+        ...notifyPayload
       });
     } finally {
       sessionActorManager.completeSession(currentSessionId);

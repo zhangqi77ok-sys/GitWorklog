@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Layers, ChevronRight, CheckCircle2, Clock, Zap, Eye, Sparkles, UserCheck, ShieldAlert } from 'lucide-react';
 import { MarkdownCard } from './MarkdownCard';
 import { ActionResult } from '../types/contracts';
+import type { SwarmChatState } from '../types/contracts';
 
 interface SubagentSection {
   id: string;
@@ -11,6 +12,7 @@ interface SubagentSection {
   duty?: string;
   content: string;
   status: 'passed' | 'running' | 'pending';
+  error?: string;
 }
 
 interface SwarmParsedData {
@@ -26,7 +28,8 @@ export function parseSwarmContent(rawText: string, isStreaming?: boolean): Swarm
   }
 
   // Regex pattern for subagent delimiter matching all common formats:
-  const subagentHeaderRegex = /(?:###|##)\s*(?:[🐝🤖📐💻🧪💾📋🛡️📝⚡]\s*)?\[?(?:Subagent\s*[·:：\-_ ]|子智能体\s*[·:：\-_ ])?\s*([A-Za-z0-9\u4e00-\u9fa5\-_ ]*?(?:Architect|Coder|Developer|Engineer|Tester|QA|DBA|Security|Designer|Docs|Writer|架构|编码|开发|测试|审计|审查|数据库|文档)[^\]\n]*)\]?/gi;
+  // 注: emoji 用字面量交替而非字符类——无 u 标志时字符类按 UTF-16 码元匹配，代理对 emoji（如 📐）无法整体命中。
+  const subagentHeaderRegex = /(?:###|##)\s*(?:(?:🐝|🤖|📐|💻|🧪|💾|📋|🛡\uFE0F?|📝|⚡)\s*)?\[?(?:Subagent\s*[·:：\-_ ]|子智能体\s*[·:：\-_ ])?\s*([A-Za-z0-9\u4e00-\u9fa5\-_ ]*?(?:Architect|Coder|Developer|Engineer|Tester|QA|DBA|Security|Designer|Docs|Writer|架构|编码|开发|测试|审计|审查|数据库|文档)[^\]\n]*)\]?/gi;
 
   const matches: { index: number; fullMatch: string; name: string }[] = [];
   let m: RegExpExecArray | null;
@@ -51,7 +54,7 @@ export function parseSwarmContent(rawText: string, isStreaming?: boolean): Swarm
   const subagents: SubagentSection[] = [];
 
   // Check for Master final summary marker at the end
-  const summaryMarkerRegex = /(?:###|##)\s*(?:👑|⚖️|🎯)?\s*(?:Master\s*(?:终审|总结|汇报|交付)|终审裁决|验收交付|总结与交付)[^\n]*/gi;
+  const summaryMarkerRegex = /(?:###|##)\s*(?:👑|⚖️|🎯)?\s*\[?(?:Master\s*(?:终审|总结|汇报|交付)|终审裁决|验收交付|总结与交付)[^\]\n]*\]?/gi;
 
   for (let i = 0; i < matches.length; i++) {
     const cur = matches[i];
@@ -105,7 +108,7 @@ export function parseSwarmContent(rawText: string, isStreaming?: boolean): Swarm
   // Get master summary if any
   let masterSummary = '';
   const lastSubagentRaw = rawText.slice(matches[matches.length - 1].index);
-  const sumMatch = lastSubagentRaw.match(/(?:###|##)\s*(?:👑|⚖️|🎯)\s*(?:Master\s*(?:终审|总结|汇报|交付)|终审裁决|验收交付|总结与交付)[\s\S]*/i);
+  const sumMatch = lastSubagentRaw.match(/(?:###|##)\s*(?:👑|⚖️|🎯)?\s*\[?(?:Master\s*(?:终审|总结|汇报|交付)|终审裁决|验收交付|总结与交付)[^\]\n]*\]?[\s\S]*/i);
   if (sumMatch) {
     masterSummary = sumMatch[0].trim();
   }
@@ -118,8 +121,28 @@ export function parseSwarmContent(rawText: string, isStreaming?: boolean): Swarm
   };
 }
 
+export function normalizeSwarmState(swarm: SwarmChatState): SwarmParsedData {
+  const subagents: SubagentSection[] = swarm.roles.map(r => ({
+    id: r.id,
+    name: r.name,
+    icon: r.icon,
+    role: r.name,
+    duty: r.duty,
+    content: r.content,
+    status: r.status === 'running' ? 'running' : 'passed',
+    error: r.error
+  }));
+  return {
+    masterPlanning: swarm.masterPlanning,
+    subagents,
+    masterSummary: swarm.masterSummary,
+    isSwarmFormatted: subagents.length > 0
+  };
+}
+
 interface SwarmSubagentContainerProps {
   content: string;
+  swarm?: SwarmChatState;
   isStreaming?: boolean;
   actionResults?: ActionResult[];
   onOpenFile?: (filePath: string, line?: number) => void;
@@ -127,20 +150,25 @@ interface SwarmSubagentContainerProps {
 
 export const SwarmSubagentContainer: React.FC<SwarmSubagentContainerProps> = ({
   content,
+  swarm,
   isStreaming,
   actionResults,
   onOpenFile
 }) => {
-  const parsed = parseSwarmContent(content, isStreaming);
+  // 结构化 swarmRoles 优先；旧消息（无 swarm 字段）走正文正则解析回退
+  const parsed = swarm
+    ? normalizeSwarmState(swarm)
+    : parseSwarmContent(content, isStreaming);
+  const streaming = swarm ? swarm.roles.some(r => r.status === 'running') : isStreaming;
   const [activeTab, setActiveTab] = useState<string>('all');
 
   // Auto-focus the latest active subagent during streaming
   useEffect(() => {
-    if (parsed.subagents.length > 0 && isStreaming) {
+    if (parsed.subagents.length > 0 && streaming) {
       const latest = parsed.subagents[parsed.subagents.length - 1];
       setActiveTab(latest.id);
     }
-  }, [parsed.subagents.length, isStreaming]);
+  }, [parsed.subagents.length, streaming]);
 
   // If not formatted with subagents, fallback to normal MarkdownCard
   if (!parsed.isSwarmFormatted || parsed.subagents.length === 0) {
@@ -193,7 +221,7 @@ export const SwarmSubagentContainer: React.FC<SwarmSubagentContainerProps> = ({
           </span>
         </div>
 
-        {isStreaming && (
+        {streaming && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10.5px', color: 'var(--accent)', fontWeight: 600 }}>
             <Zap size={12} style={{ animation: 'spin 1.5s linear infinite' }} />
             <span>协同调度中...</span>
@@ -328,11 +356,11 @@ export const SwarmSubagentContainer: React.FC<SwarmSubagentContainerProps> = ({
                     fontSize: '10px',
                     padding: '1px 6px',
                     borderRadius: '4px',
-                    background: sub.status === 'running' ? 'var(--accent-subtle)' : 'rgba(22, 163, 74, 0.1)',
-                    color: sub.status === 'running' ? 'var(--accent)' : '#16A34A',
+                    background: sub.error ? 'rgba(220, 38, 38, 0.1)' : (sub.status === 'running' ? 'var(--accent-subtle)' : 'rgba(22, 163, 74, 0.1)'),
+                    color: sub.error ? '#DC2626' : (sub.status === 'running' ? 'var(--accent)' : '#16A34A'),
                     fontWeight: 600
                   }}>
-                    {sub.status === 'running' ? '执行中...' : '已完成'}
+                    {sub.error ? '失败' : (sub.status === 'running' ? '执行中...' : '已完成')}
                   </span>
                 </div>
 
@@ -340,10 +368,25 @@ export const SwarmSubagentContainer: React.FC<SwarmSubagentContainerProps> = ({
                 <div style={{ padding: '10px 12px' }}>
                   <MarkdownCard
                     content={sub.content}
-                    isStreaming={isStreaming && idx === parsed.subagents.length - 1}
+                    isStreaming={sub.status === 'running'}
                     actionResults={actionResults}
                     onOpenFile={onOpenFile}
                   />
+                  {sub.error && (
+                    <div style={{
+                      marginTop: '8px',
+                      padding: '6px 10px',
+                      borderRadius: '6px',
+                      background: 'rgba(220, 38, 38, 0.08)',
+                      border: '1px solid rgba(220, 38, 38, 0.25)',
+                      color: '#DC2626',
+                      fontSize: '11px',
+                      lineHeight: 1.5,
+                      whiteSpace: 'pre-wrap'
+                    }}>
+                      ✕ {sub.error}
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
@@ -383,11 +426,11 @@ export const SwarmSubagentContainer: React.FC<SwarmSubagentContainerProps> = ({
                 fontSize: '10.5px',
                 padding: '2px 8px',
                 borderRadius: '4px',
-                background: selectedSubagent.status === 'running' ? 'var(--accent-subtle)' : 'rgba(22, 163, 74, 0.12)',
-                color: selectedSubagent.status === 'running' ? 'var(--accent)' : '#16A34A',
+                background: selectedSubagent.error ? 'rgba(220, 38, 38, 0.1)' : (selectedSubagent.status === 'running' ? 'var(--accent-subtle)' : 'rgba(22, 163, 74, 0.12)'),
+                color: selectedSubagent.error ? '#DC2626' : (selectedSubagent.status === 'running' ? 'var(--accent)' : '#16A34A'),
                 fontWeight: 700
               }}>
-                {selectedSubagent.status === 'running' ? '⏳ 正在独立推演与执行' : '✓ 阶段产出就绪'}
+                {selectedSubagent.error ? '✕ 执行失败' : (selectedSubagent.status === 'running' ? '⏳ 正在独立推演与执行' : '✓ 阶段产出就绪')}
               </span>
             </div>
 
@@ -395,10 +438,25 @@ export const SwarmSubagentContainer: React.FC<SwarmSubagentContainerProps> = ({
             <div style={{ padding: '12px' }}>
               <MarkdownCard
                 content={selectedSubagent.content}
-                isStreaming={isStreaming && selectedSubagent.id === parsed.subagents[parsed.subagents.length - 1]?.id}
+                isStreaming={selectedSubagent.status === 'running'}
                 actionResults={actionResults}
                 onOpenFile={onOpenFile}
               />
+              {selectedSubagent.error && (
+                <div style={{
+                  marginTop: '8px',
+                  padding: '6px 10px',
+                  borderRadius: '6px',
+                  background: 'rgba(220, 38, 38, 0.08)',
+                  border: '1px solid rgba(220, 38, 38, 0.25)',
+                  color: '#DC2626',
+                  fontSize: '11px',
+                  lineHeight: 1.5,
+                  whiteSpace: 'pre-wrap'
+                }}>
+                  ✕ {selectedSubagent.error}
+                </div>
+              )}
             </div>
           </div>
         ) : null}

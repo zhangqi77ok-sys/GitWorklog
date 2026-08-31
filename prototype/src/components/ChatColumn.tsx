@@ -1512,6 +1512,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                         msg.auditTag?.includes('Swarm') ? (
                           <SwarmSubagentContainer
                             content={parsed.cleanContent || (isLastAssistant ? '正在推演并分析工程结构...' : msg.content)}
+                            swarm={msg.swarm}
                             isStreaming={isLastAssistant && isStreaming}
                             actionResults={msg.actionResults}
                             onOpenFile={(path) => {

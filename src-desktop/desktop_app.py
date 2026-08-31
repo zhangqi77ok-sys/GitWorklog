@@ -10,6 +10,7 @@ import credential_crypto
 import path_sandbox
 import proxy_policy
 import airgap
+import notifications
 CREATE_NO_WINDOW = 0x08000000
 APP_NAME = 'Tcode Studio'
 APP_STORAGE_KEY = 'Tcode'
@@ -539,6 +540,25 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
                 threading.Timer(0.1, global_window.destroy).start()
             return
 
+        # 6b. Restore & Foreground the Frameless Window (OS Toast click activation)
+        if parsed.path == '/api/window/restore':
+            if global_window:
+                global_window.restore()
+                global_window.show()
+                qs = urllib.parse.parse_qs(parsed.query)
+                session_id = qs.get('sessionId', [None])[0]
+                if session_id:
+                    js = (
+                        "window.dispatchEvent(new CustomEvent('tcode_activate_session',"
+                        f"{{detail:{{sessionId: {json.dumps(session_id)}}}}}));"
+                    )
+                    try:
+                        global_window.evaluate_js(js)
+                    except Exception as e:
+                        print(f"[Notify] activate-session evaluate_js failed: {e}")
+            self._send_json(200, {'success': True})
+            return
+
         # 5. Persistent Local Storage Read from Disk (Never lost on upgrade)
         if parsed.path == '/api/storage':
             qs = urllib.parse.parse_qs(parsed.query)
@@ -632,6 +652,30 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
 
         if self.path.startswith('/api/git/worktree'):
             self._handle_worktree('POST')
+            return
+
+        # 1b. Native Windows OS Toast Notification (System Task Completion / Error)
+        if self.path == '/api/notify/system':
+            length = int(self.headers.get('Content-Length', 0))
+            try:
+                body = json.loads(self.rfile.read(length).decode('utf-8')) if length else {}
+            except Exception as e:
+                self._send_json(400, {'error': 'INVALID_JSON', 'code': 400, 'detail': str(e)})
+                return
+            status = body.get('status')
+            session_id = body.get('sessionId')
+            if status not in ('success', 'error'):
+                self._send_json(400, {'error': 'INVALID_STATUS', 'code': 400})
+                return
+            if not isinstance(session_id, str) or not session_id:
+                self._send_json(400, {'error': 'MISSING_SESSION_ID', 'code': 400})
+                return
+            try:
+                notifications.show_system_notification(body, SERVER_PORT)
+            except Exception as e:
+                self._send_json(500, {'error': 'NOTIFY_FAILED', 'code': 500, 'detail': str(e)})
+                return
+            self._send_json(200, {'success': True})
             return
 
         # 1. Real File Write to Disk

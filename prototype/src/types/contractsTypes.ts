@@ -189,6 +189,24 @@ export interface AgentRoundItem {
   timestamp: number;
 }
 
+/** 🐝 Swarm 真并发多角色：单个 Subagent 的流式运行态。 */
+export interface SwarmRoleStream {
+  id: string;       // 角色稳定 id（architect/dev/qa/security）
+  name: string;     // 角色显示名（如 系统架构师）
+  icon: string;     // 角色徽标（📐 💻 🧪 🛡️）
+  duty?: string;    // 分工职责一句话
+  content: string;  // 该角色已累积的流式内容
+  status: 'running' | 'passed' | 'error';
+  error?: string;   // status=error 时的错误信息
+}
+
+/** 🐝 Swarm 会话级结构化协同状态（Master 拆解 -> 多角色并发 -> Master 终审）。 */
+export interface SwarmChatState {
+  masterPlanning: string;
+  roles: SwarmRoleStream[];
+  masterSummary: string;
+}
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant' | 'system';
@@ -211,6 +229,7 @@ export interface ChatMessage {
   activeRoundId?: number;             // 当前正在运行或查看的轮次 ID
   loopStatus?: LoopTerminationStatus; // 🏁 当前任务终止或进行状态
   terminationSummary?: string;        // 总结描述（如：4/4 项验收通过 · 测试通过）
+  swarm?: SwarmChatState;            // 🐝 Swarm 真并发多角色结构化状态（存在时优先于正文正则解析）
 }
 
 // Runtime L2 Session State Snapshot

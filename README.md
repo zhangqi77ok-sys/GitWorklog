@@ -62,6 +62,20 @@ ModelRef(providerId:modelId)
 - 前端：`worktreeManager` 影子生命周期、`swarmSteering` 角色×路径越界规则（如前端改 server/ → Master 纠偏指令）、`SwarmMaster` 遥测总线实时记录干预、`swarmExecution` 真并发（每 Agent 独立请求流 + 影子 cwd）、`twoPhaseMerge` 两阶段提交（测试绿灯后才 git apply 落盘）。
 - 说明：控制平面与宿主能力已交付并测试；Swarm 工作台实时可视化接线留待后续专项（与 WP-C actor 模型统一）。
 
+### WP-F · 系统级双通道任务通知（原生右下角）
+- **双通道策略**：窗口聚焦时沿用应用内 280×120 完成/异常 Toast（悬停暂停 + 双按钮）；窗口最小化或后台时由桌面宿主弹出 **Windows 原生右下角通知**（任务完成/异常均触发）。
+- **宿主 API**：`POST /api/notify/system`（入参 status/projectName/sessionTitle/sessionId/summary，Token 鉴权）；`GET /api/window/restore?sessionId=`（恢复并前置窗口）。
+- **点击唤醒**：系统通知点击 → 宿主 `window.restore()/show()` 并 `evaluate_js` 分发 `tcode_activate_session` 事件 → 前端自动切换至对应会话。
+- **通道选型说明**：实测 PowerShell 5.1 无法订阅 WinRT Toast 事件（点击回调不可用），故采用 `System.Windows.Forms.NotifyIcon` 气球通知（.NET 事件可订阅，零新增依赖）。
+- **失败策略**：宿主通知失败显式写日志并返回 5xx，前端 `console.error`，禁止静默吞错。
+
+### WP-G · Swarm 真并发多角色协同（会话级，Chat 直通）
+- **三段式协议**：Master 拆解 → 四角色（📐架构师 / 💻开发 / 🧪测试 / 🛡️安全）**各自独立并发流式调用 LLM** → Master 终审仲裁交付；不再依赖单模型输出角色标记。
+- **结构化数据**：`ChatMessage.swarm`（`SwarmChatState`）驱动 `SwarmSubagentContainer` 逐角色独立卡片流式渲染；旧消息走正则解析回退。
+- **执行器**：`swarmChatExecutor.runSwarmChat`（纯编排，可注入 streamChat）；`createGatewayStreamChat` 复用主 Loop 调度口径（Gateway v2 → v1 Provider）。
+- **失败隔离**：单角色失败显式标红不阻塞其余；`AbortController` 全链路取消。
+- **v1 边界**：角色仅产出分析文本；工具执行与动态角色选取留待后续。
+
 - **双态执行胶囊**：对话栏顶部 `⚡ Agent Loop`（极速执行，无门禁）与 `🧩 Graph 编排`（阶段图谱 + 门禁审批）双态切换，`Alt+1 / Alt+2` 快捷键；旧的 `Harness / Swarm` 顶层切换与冗余工作流按钮已移除。
 - **Graph 工作流选择**：Graph 态胶囊浮层内选择积木工作流模板（SDD/TDD 等）或「🛰 动态图谱规划（自动）」；未选模板时注入动态 DAG planner 指令，首轮任务图谱产出后挂起门禁终审，批准后才允许写码。
 - **Stage Gate 方案终审卡**：工作流门禁块（`gate-user` / `requireUserReview`）阶段结束自动挂起，弹出终审卡（✅ 批准 / 💬 提修改意见 / ⛔ 终止）；挂起期间输入框切换「输入修改意见」模式；终止绝不写码；快照复用 git checkpoint。
