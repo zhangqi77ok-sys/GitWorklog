@@ -1,4 +1,3 @@
-import { getActiveWorkflow, setActiveWorkflowId, loadSavedWorkflows, ModularWorkflow, NORMAL_WORKFLOW, SWARM_WORKFLOW } from '../services/workflowStore';
 import { TargetStepProgressCard } from './TargetStepProgressCard';
 import { ActionApprovalModal } from './ActionApprovalModal';
 import { ShareCardModal } from './ShareCardModal';
@@ -26,6 +25,8 @@ import {
   Paperclip,
   ScrollText,
   X as XIcon,
+  MessageSquare,
+  Boxes,
 
   Zap,
   ChevronDown,
@@ -369,24 +370,13 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
     return () => window.removeEventListener('keydown', handleChatEsc);
   }, []);
 
-  const [skillQuery, setSkillQuery] = useState('');
-  const [officialSkillsList, setOfficialSkillsList] = useState<SkillMetadata[]>(() => loadSavedOfficialSkills());
+  // Dual @ Mention / Reference State: 'skill' (Agent Skills) or 'session' (Conversation Context)
+  const [mentionTab, setMentionTab] = useState<'skill' | 'session'>('skill');
+  const [showMentionMenu, setShowMentionMenu] = useState(false);
+  const [mentionQuery, setMentionQuery] = useState('');
   const [selectedSkill, setSelectedSkill] = useState<SkillMetadata | null>(null);
-  const [activeModularWorkflow, setActiveModularWorkflow] = useState<ModularWorkflow>(() => getActiveWorkflow());
-  const [savedWorkflowsList, setSavedWorkflowsList] = useState<ModularWorkflow[]>(() => loadSavedWorkflows());
-
-  useEffect(() => {
-    const handleWfChange = () => {
-      setActiveModularWorkflow(getActiveWorkflow());
-      setSavedWorkflowsList(loadSavedWorkflows());
-    };
-    window.addEventListener('tcode_active_workflow_changed', handleWfChange);
-    window.addEventListener('tcode_workflows_updated', handleWfChange);
-    return () => {
-      window.removeEventListener('tcode_active_workflow_changed', handleWfChange);
-      window.removeEventListener('tcode_workflows_updated', handleWfChange);
-    };
-  }, []);
+  const [selectedSessionContext, setSelectedSessionContext] = useState<SessionItem | null>(null);
+  const [officialSkillsList, setOfficialSkillsList] = useState<SkillMetadata[]>(() => loadSavedOfficialSkills());
 
   const [shareTargetMessage, setShareTargetMessage] = useState<ChatMessage | null>(null);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
@@ -768,18 +758,12 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
       fullPrompt = `[用户显式激活 Skill: @${selectedSkill.name}]\n${fullSkillBody || selectedSkill.description}\n\n${fullPrompt}`;
     }
 
-    if (activeModularWorkflow && activeModularWorkflow.id !== 'normal') {
-      const currentBlock = activeModularWorkflow.blocks[0];
-      const executionNote = `【当前生效工作流】: 【${activeModularWorkflow.name}】(${activeModularWorkflow.blocks.length} 阶段积木)\n【阶段 1 初始约束】: ${currentBlock ? currentBlock.promptTemplate : ''}`;
-      fullPrompt = `[用户已确认启用积木工作流: ${activeModularWorkflow.name}]\n${executionNote}\n\n${fullPrompt}`;
-    }
-
     onSendMessage(fullPrompt);
     setInputText('');
     setSelectedSkill(null);
     setReferencedSession(null);
     setShowSlashMenu(false);
-    setShowSessionMenu(false);
+    setShowMentionMenu(false);
   };
 
   return (
@@ -2008,14 +1992,58 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
             </div>
           )}
 
-          {/* 1. ATTACHED FILES CHIPS (Inside Top of Card) */}
-          {attachedFiles.length > 0 && (
+          {/* 1. ATTACHED FILES & ACTIVE MENTION CHIPS (Inside Top of Card) */}
+          {(attachedFiles.length > 0 || selectedSkill || referencedSession) && (
             <div style={{
               display: 'flex',
               flexWrap: 'wrap',
               gap: '6px',
               padding: '8px 12px 0 12px'
             }}>
+              {selectedSkill && (
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  padding: '2px 8px',
+                  borderRadius: '4px',
+                  background: 'var(--accent-subtle)',
+                  border: '1px solid var(--accent)',
+                  color: 'var(--accent)',
+                  fontSize: '11px',
+                  fontWeight: 600
+                }}>
+                  <Sparkles size={11} />
+                  <span>@技能: {selectedSkill.name}</span>
+                  <XIcon
+                    size={12}
+                    style={{ cursor: 'pointer', marginLeft: '2px' }}
+                    onClick={() => setSelectedSkill(null)}
+                  />
+                </div>
+              )}
+              {referencedSession && (
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  padding: '2px 8px',
+                  borderRadius: '4px',
+                  background: 'rgba(59, 130, 246, 0.1)',
+                  border: '1px solid rgba(59, 130, 246, 0.4)',
+                  color: '#2563EB',
+                  fontSize: '11px',
+                  fontWeight: 600
+                }}>
+                  <MessageSquare size={11} />
+                  <span>@会话: {referencedSession.title}</span>
+                  <XIcon
+                    size={12}
+                    style={{ cursor: 'pointer', marginLeft: '2px' }}
+                    onClick={() => setReferencedSession(null)}
+                  />
+                </div>
+              )}
               {attachedFiles.map(f => (
                 <div
                   key={f.id}
@@ -2721,11 +2749,13 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                 )}
               </div>
 
-              {/* @ Agent Skills Reference Trigger Button */}
-              <div style={{ position: 'relative' }}>
+              {/* Dual @ Reference Controls: @ 技能引用 and @ 会话引用 */}
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                {/* 1. @ Skill Button */}
                 <button
                   onClick={() => {
-                    setShowSkillMenu(!showSkillMenu);
+                    setMentionTab('skill');
+                    setShowMentionMenu(showMentionMenu && mentionTab === 'skill' ? false : true);
                     setShowModelMenu(false);
                     setShowRulesPopover(false);
                   }}
@@ -2744,22 +2774,49 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                   title="引用应用配置的 Agent 专精能力与技能 (Skills)"
                 >
                   <Sparkles size={12} color="var(--accent)" />
-                  <span>{selectedSkill ? `@ ${selectedSkill.name}` : '@ 技能引用'}</span>
+                  <span>{selectedSkill ? `@ 技能: ${selectedSkill.name}` : '@ 技能引用'}</span>
                 </button>
 
-                {showSkillMenu && (
+                {/* 2. @ Session Reference Button */}
+                <button
+                  onClick={() => {
+                    setMentionTab('session');
+                    setShowMentionMenu(showMentionMenu && mentionTab === 'session' ? false : true);
+                    setShowModelMenu(false);
+                    setShowRulesPopover(false);
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '3px 8px',
+                    borderRadius: '4px',
+                    background: referencedSession ? 'rgba(59, 130, 246, 0.1)' : 'var(--bg-base)',
+                    border: referencedSession ? '1px solid #3B82F6' : '1px solid var(--border-subtle)',
+                    fontSize: '11px',
+                    cursor: 'pointer',
+                    color: referencedSession ? '#2563EB' : 'var(--text-secondary)'
+                  }}
+                  title="引用历史会话的上下文作为本轮对话的参考"
+                >
+                  <MessageSquare size={12} color={referencedSession ? '#2563EB' : 'var(--text-muted)'} />
+                  <span>{referencedSession ? `@ 会话: ${referencedSession.title.slice(0, 10)}${referencedSession.title.length > 10 ? '...' : ''}` : '@ 会话引用'}</span>
+                </button>
+
+                {/* Unified Tabbed @ Mention Popover (Left-aligned) */}
+                {showMentionMenu && (
                   <div style={{
                     position: 'absolute',
                     bottom: '36px',
                     left: 0,
                     right: 'auto',
-                    width: 'min(480px, calc(100vw - 48px))',
+                    width: 'min(500px, calc(100vw - 48px))',
                     maxWidth: 'calc(100vw - 48px)',
-                    height: '380px',
-                    maxHeight: 'min(500px, 75vh)',
+                    height: '400px',
+                    maxHeight: 'min(520px, 75vh)',
                     resize: 'both',
                     minWidth: '340px',
-                    minHeight: '260px',
+                    minHeight: '280px',
                     background: 'var(--bg-surface-elevated)',
                     border: '1px solid var(--border-strong)',
                     borderRadius: '8px',
@@ -2770,7 +2827,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                     flexDirection: 'column',
                     overflow: 'hidden'
                   }}>
-                    {/* Top Header with Close Button */}
+                    {/* Top Header with Tab Switcher & Close Button */}
                     <div style={{
                       display: 'flex',
                       alignItems: 'center',
@@ -2779,14 +2836,52 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                       borderBottom: '1px solid var(--border-subtle)',
                       marginBottom: '6px'
                     }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <Sparkles size={13} color="var(--accent)" />
-                        <span style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-strong)' }}>
-                          引用 Agent 专精能力与技能
-                        </span>
+                      {/* Tabs: Skills vs Sessions */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'var(--bg-base)', padding: '2px', borderRadius: '5px', border: '1px solid var(--border-subtle)' }}>
+                        <button
+                          onClick={() => setMentionTab('skill')}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            padding: '3px 8px',
+                            borderRadius: '3px',
+                            border: 'none',
+                            background: mentionTab === 'skill' ? 'var(--bg-surface-elevated)' : 'transparent',
+                            color: mentionTab === 'skill' ? 'var(--accent)' : 'var(--text-secondary)',
+                            fontWeight: mentionTab === 'skill' ? 700 : 500,
+                            fontSize: '11px',
+                            cursor: 'pointer',
+                            boxShadow: mentionTab === 'skill' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
+                          }}
+                        >
+                          <Boxes size={12} />
+                          <span>📦 技能引用 (Skills)</span>
+                        </button>
+                        <button
+                          onClick={() => setMentionTab('session')}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            padding: '3px 8px',
+                            borderRadius: '3px',
+                            border: 'none',
+                            background: mentionTab === 'session' ? 'var(--bg-surface-elevated)' : 'transparent',
+                            color: mentionTab === 'session' ? '#2563EB' : 'var(--text-secondary)',
+                            fontWeight: mentionTab === 'session' ? 700 : 500,
+                            fontSize: '11px',
+                            cursor: 'pointer',
+                            boxShadow: mentionTab === 'session' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
+                          }}
+                        >
+                          <MessageSquare size={12} />
+                          <span>💬 会话引用 (Sessions)</span>
+                        </button>
                       </div>
+
                       <button
-                        onClick={() => setShowSkillMenu(false)}
+                        onClick={() => setShowMentionMenu(false)}
                         title="关闭 (ESC)"
                         style={{
                           background: 'transparent',
@@ -2811,9 +2906,9 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                         <Search size={12} style={{ position: 'absolute', left: '8px', top: '7px', color: 'var(--text-muted)' }} />
                         <input
                           type="text"
-                          placeholder="搜索 Agent 技能 (如: sdd-tdd-workflow, build-installer)..."
-                          value={skillQuery}
-                          onChange={e => setSkillQuery(e.target.value)}
+                          placeholder={mentionTab === 'skill' ? "搜索 Agent 技能 (如: sdd-tdd-workflow, build-installer)..." : "搜索历史会话 (如: 主工程会话, 自由探索)..."}
+                          value={mentionQuery}
+                          onChange={e => setMentionQuery(e.target.value)}
                           autoFocus
                           style={{
                             width: '100%',
@@ -2829,69 +2924,137 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                       </div>
                     </div>
 
-                    {/* Official Skill List (Single Select Only & Close on Click) */}
-                    <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      {officialSkillsList
-                        .filter(s => s.enabled)
-                        .filter(s => !skillQuery || s.name.toLowerCase().includes(skillQuery.toLowerCase()) || s.description.toLowerCase().includes(skillQuery.toLowerCase()))
-                        .map(skill => {
-                          const isSelected = selectedSkill?.name === skill.name;
-                          return (
-                            <div
-                              key={skill.name}
-                              onClick={() => {
-                                if (isSelected) {
-                                  setSelectedSkill(null);
-                                } else {
-                                  setSelectedSkill(skill);
-                                }
-                                setShowSkillMenu(false);
-                              }}
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'space-between',
-                                padding: '6px 10px',
-                                borderRadius: '6px',
-                                background: isSelected ? 'var(--accent-subtle)' : 'var(--bg-surface)',
-                                border: isSelected ? '1px solid var(--accent)' : '1px solid var(--border-subtle)',
-                                cursor: 'pointer',
-                                transition: 'all 0.12s ease'
-                              }}
-                              onMouseEnter={e => {
-                                if (!isSelected) e.currentTarget.style.background = 'var(--bg-surface-elevated)';
-                              }}
-                              onMouseLeave={e => {
-                                if (!isSelected) e.currentTarget.style.background = 'var(--bg-surface)';
-                              }}
-                            >
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
-                                <span style={{ fontSize: '15px' }}>{skill.icon || '📦'}</span>
-                                <div>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                    <span style={{ fontWeight: 700, fontSize: '11.5px', color: isSelected ? 'var(--accent)' : 'var(--text-strong)', fontFamily: 'var(--font-mono)' }}>
-                                      @{skill.name}
-                                    </span>
-                                    <span style={{ fontSize: '9px', padding: '0 4px', borderRadius: '3px', background: 'rgba(0,0,0,0.06)', color: 'var(--text-muted)' }}>
-                                      {skill.path}
-                                    </span>
-                                  </div>
-                                  <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                                    {skill.description}
+                    {/* TAB CONTENT: SKILLS */}
+                    {mentionTab === 'skill' && (
+                      <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        {officialSkillsList
+                          .filter(s => s.enabled)
+                          .filter(s => !mentionQuery || s.name.toLowerCase().includes(mentionQuery.toLowerCase()) || s.description.toLowerCase().includes(mentionQuery.toLowerCase()))
+                          .map(skill => {
+                            const isSelected = selectedSkill?.name === skill.name;
+                            return (
+                              <div
+                                key={skill.name}
+                                onClick={() => {
+                                  if (isSelected) {
+                                    setSelectedSkill(null);
+                                  } else {
+                                    setSelectedSkill(skill);
+                                  }
+                                  setShowMentionMenu(false);
+                                }}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  padding: '6px 10px',
+                                  borderRadius: '6px',
+                                  background: isSelected ? 'var(--accent-subtle)' : 'var(--bg-surface)',
+                                  border: isSelected ? '1px solid var(--accent)' : '1px solid var(--border-subtle)',
+                                  cursor: 'pointer',
+                                  transition: 'all 0.12s ease'
+                                }}
+                                onMouseEnter={e => {
+                                  if (!isSelected) e.currentTarget.style.background = 'var(--bg-surface-elevated)';
+                                }}
+                                onMouseLeave={e => {
+                                  if (!isSelected) e.currentTarget.style.background = 'var(--bg-surface)';
+                                }}
+                              >
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
+                                  <span style={{ fontSize: '15px' }}>{skill.icon || '📦'}</span>
+                                  <div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                      <span style={{ fontWeight: 700, fontSize: '11.5px', color: isSelected ? 'var(--accent)' : 'var(--text-strong)', fontFamily: 'var(--font-mono)' }}>
+                                        @{skill.name}
+                                      </span>
+                                      <span style={{ fontSize: '9px', padding: '0 4px', borderRadius: '3px', background: 'rgba(0,0,0,0.06)', color: 'var(--text-muted)' }}>
+                                        {skill.path}
+                                      </span>
+                                    </div>
+                                    <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                                      {skill.description}
+                                    </div>
                                   </div>
                                 </div>
+                                {isSelected && <Check size={14} color="var(--accent)" />}
                               </div>
-                              {isSelected && <Check size={14} color="var(--accent)" />}
-                            </div>
-                          );
-                        })}
-                    </div>
+                            );
+                          })}
+                      </div>
+                    )}
+
+                    {/* TAB CONTENT: SESSIONS */}
+                    {mentionTab === 'session' && (
+                      <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        {sessions
+                          .filter(s => s.id !== session.id)
+                          .filter(s => !mentionQuery || s.title.toLowerCase().includes(mentionQuery.toLowerCase()) || (s.projectName || '').toLowerCase().includes(mentionQuery.toLowerCase()))
+                          .map(sess => {
+                            const isSelected = referencedSession?.id === sess.id;
+                            const msgCount = (sessionMessagesMap[sess.id] || []).length || sess.messagesCount || 0;
+                            return (
+                              <div
+                                key={sess.id}
+                                onClick={() => {
+                                  if (isSelected) {
+                                    setReferencedSession(null);
+                                  } else {
+                                    setReferencedSession(sess);
+                                  }
+                                  setShowMentionMenu(false);
+                                }}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  padding: '6px 10px',
+                                  borderRadius: '6px',
+                                  background: isSelected ? 'rgba(59, 130, 246, 0.1)' : 'var(--bg-surface)',
+                                  border: isSelected ? '1px solid #3B82F6' : '1px solid var(--border-subtle)',
+                                  cursor: 'pointer',
+                                  transition: 'all 0.12s ease'
+                                }}
+                                onMouseEnter={e => {
+                                  if (!isSelected) e.currentTarget.style.background = 'var(--bg-surface-elevated)';
+                                }}
+                                onMouseLeave={e => {
+                                  if (!isSelected) e.currentTarget.style.background = 'var(--bg-surface)';
+                                }}
+                              >
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
+                                  <MessageSquare size={14} color={isSelected ? '#2563EB' : 'var(--text-muted)'} />
+                                  <div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                      <span style={{ fontWeight: 700, fontSize: '11.5px', color: isSelected ? '#2563EB' : 'var(--text-strong)' }}>
+                                        {sess.title}
+                                      </span>
+                                      <span style={{ fontSize: '9px', padding: '0 4px', borderRadius: '3px', background: 'rgba(0,0,0,0.06)', color: 'var(--text-muted)' }}>
+                                        {sess.tier1 === 'project' ? (sess.projectName || '工程会话') : '自由会话'}
+                                      </span>
+                                    </div>
+                                    <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                                      {sess.projectPath ? `${sess.projectPath} · ` : ''}{msgCount} 条消息
+                                    </div>
+                                  </div>
+                                </div>
+                                {isSelected && <Check size={14} color="#2563EB" />}
+                              </div>
+                            );
+                          })}
+                        {sessions.filter(s => s.id !== session.id).length === 0 && (
+                          <div style={{ textAlign: 'center', padding: '24px 12px', color: 'var(--text-muted)', fontSize: '11px' }}>
+                            暂无可引用的其他历史会话
+                          </div>
+                        )}
+                      </div>
+                    )}
 
                     {/* Footer Tip with Explicit Close Button */}
                     <div style={{ padding: '6px 4px 2px', borderTop: '1px solid var(--border-subtle)', fontSize: '10px', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span>💡 单选模式：点击任一能力立即装载并关闭</span>
+                      <span>💡 单选模式：点击任一选项立即装载并关闭</span>
                       <button
-                        onClick={() => setShowSkillMenu(false)}
+                        onClick={() => setShowMentionMenu(false)}
                         style={{
                           padding: '2px 8px',
                           borderRadius: '3px',

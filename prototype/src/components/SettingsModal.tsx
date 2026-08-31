@@ -1,4 +1,3 @@
-import { ModularWorkflowStudio } from './ModularWorkflowStudio';
 import React, { useState, useEffect } from 'react';
 import { loadSavedProfile, saveProfileToStorage, loadSavedAccentColor, saveAccentColorToStorage, DeveloperProfile, DEFAULT_DEVELOPER_PROFILE, AgentSkillItem, loadSavedSkills, saveSkillsToStorage, INITIAL_AGENT_SKILLS } from '../types/contracts';
 import {
@@ -483,7 +482,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     { id: 'rules', label: 'Rule 规则管理', icon: ScrollText },
     { id: 'skills', label: 'Skill 技能库', icon: Boxes },
     { id: 'mcp', label: 'MCP 工具管理', icon: Server },
-    { id: 'workflows', label: '🧩 积木工作流编排', icon: Shuffle },
     { id: 'cache', label: '⚡ 缓存与代码索引', icon: Zap },
     { id: 'appearance', label: '自定义外观颜色', icon: Palette },
     { id: 'keybindings', label: '自定义快捷键', icon: Keyboard },
@@ -1707,12 +1705,7 @@ ${s.description}`;
               </div>
             )}
 
-                        {/* TAB: MODULAR LEGO WORKFLOW STUDIO */}
-            {activeTab === ('workflows' as any) && (
-              <ModularWorkflowStudio />
-            )}
-
-{/* TAB: PROMPT CACHE & REPOMAP ACCELERATION */}
+                        {/* TAB: PROMPT CACHE & REPOMAP ACCELERATION */}
             {activeTab === ('cache' as any) && (
               <div style={{ display: 'flex', flexDirection: 'column', height: '500px', margin: '-4px 0', gap: '14px', overflowY: 'auto' }}>
                 <div style={{

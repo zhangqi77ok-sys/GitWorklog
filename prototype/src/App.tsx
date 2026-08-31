@@ -1,4 +1,3 @@
-import { getActiveWorkflow, getWorkflowPromptDirectives, getWorkflowAllowedTools, ModularWorkflow } from './services/workflowStore';
 import { RuntimeConfigResolver } from './services/runtimeConfigResolver';
 import { taskGraphScheduler } from './services/taskGraphScheduler';
 import { loadSavedExecutionMode, saveExecutionModeToStorage, migratePipelineMode, executionModeFromShortcut, buildModePromptSnippet, loadSessionExecutionMode, saveSessionExecutionMode, type ExecutionMode } from './services/executionMode';
@@ -1270,13 +1269,11 @@ ${modePromptSnippet}
         const assistantId = singleRunCardId;
 
         // Initialize incremental streaming round for loopCount
-        const currentActiveWorkflow = getActiveWorkflow();
-        const currentBlock = currentActiveWorkflow.blocks[Math.min(loopCount - 1, currentActiveWorkflow.blocks.length - 1)];
         const currentStreamingRound: AgentRoundItem = {
           roundId: loopCount,
-          title: currentBlock ? `${currentBlock.icon} 步骤 ${loopCount}: ${currentBlock.name}` : (loopCount === 1 ? '分析与探查' : `第 ${loopCount} 阶段推演与执行`),
+          title: loopCount === 1 ? '🔍 目标拆解与现状探查' : (loopCount === 2 ? '⚡ 编码落地与工具执行' : `🛠️ 第 ${loopCount} 轮自愈与验证`),
           status: 'running',
-          phase: (currentBlock?.category as any) || 'inspect',
+          phase: loopCount === 1 ? 'inspect' : 'modify',
           content: '',
           thinkingText: '',
           timestamp: Date.now()
@@ -1344,8 +1341,7 @@ ${modePromptSnippet}
           ...currentRunRoundsHistory
         ];
 
-        const workflowDirectives = getWorkflowPromptDirectives(currentActiveWorkflow, loopCount - 1);
-        const dynamicSystemPrompt = `${systemPrompt}\n\n${workflowDirectives}`;
+        const dynamicSystemPrompt = systemPrompt;
 
         const apiMessages = assembleCacheOptimizedMessages({
           baseSystemPrompt: dynamicSystemPrompt,
@@ -1690,29 +1686,24 @@ ${modePromptSnippet}
           label: currentPhase === 'modify' ? `修改 ${actions.filter(a => a.type === 'write_file').length} 个文件` : currentPhase === 'verify' ? '运行测试验证' : '探索项目上下文'
         });
 
-        // ── Stage Gate: explicit suspension at workflow stage boundaries (WP-B 模块五) ──
-        const gateSuspension = createGateSuspensionFromBlock(currentBlock, {
-          summary: finalContent.slice(0, 600),
-          taskBreakdown: extractTaskBreakdown(finalContent),
-          specPath: extractSpecPath(finalContent)
-        }, loopCount)
-          || (shouldSuspendDynamicGraphPlanning(
-                executionMode,
-                currentActiveWorkflow.blocks.length,
-                loopCount,
-                actions.some(a => a.type === 'write_file')
-              )
-              ? createGateSuspension({
-                  gateId: `dynamic-gate-${loopCount}`,
-                  stageName: '动态任务图谱终审',
-                  summary: finalContent.slice(0, 600),
-                  taskBreakdown: extractTaskBreakdown(finalContent),
-                  specPath: extractSpecPath(finalContent)
-                })
-              : null);
+        // ── Stage Gate: explicit suspension at stage boundaries ──
+        const gateSuspension = (shouldSuspendDynamicGraphPlanning(
+              executionMode,
+              4,
+              loopCount,
+              actions.some(a => a.type === 'write_file')
+            )
+            ? createGateSuspension({
+                gateId: `dynamic-gate-${loopCount}`,
+                stageName: '动态任务终审',
+                summary: finalContent.slice(0, 600),
+                taskBreakdown: extractTaskBreakdown(finalContent),
+                specPath: extractSpecPath(finalContent)
+              })
+            : null);
         if (gateSuspension) {
           sessionActorManager.setGate(currentSessionId, gateSuspension);
-          addLog('INFO', 'StageGate', `[Gate #${loopCount}] ${currentBlock?.name} 阶段完成，流程挂起等待人工终审...`);
+          addLog('INFO', 'StageGate', `[Gate #${loopCount}] 第 ${loopCount} 阶段推演完成，流程挂起等待人工终审...`);
           const decision = await new Promise<StageGateDecision>(resolve => {
             sessionActorManager.registerGateResolve(currentSessionId, resolve);
           });
@@ -1720,7 +1711,7 @@ ${modePromptSnippet}
           const outcome = resolveGateDecision(decision);
           if (outcome.outcome === 'terminate') {
             currentLoopStatus = 'blocked';
-            terminationSummaryText = `流程已在【${currentBlock?.name}】阶段由用户终止，未写入任何代码。`;
+            terminationSummaryText = `流程已在第【${loopCount}】阶段由用户终止，未写入任何代码。`;
             accumulatedRounds = accumulatedRounds.map(r => r.roundId === loopCount ? { ...r, status: 'blocked' as const } : r);
             setSessionMessages(prev => {
               const list = prev[currentSessionId] || [];
@@ -1841,7 +1832,7 @@ ${modePromptSnippet}
           }
         }
 
-        const allowedTools = resolveAllowedTools(currentBlock, frozenRunMode);
+        const allowedTools = resolveAllowedTools(undefined, frozenRunMode);
         for (const action of actions) {
           if (!sessionActorManager.isSessionRunning(currentSessionId)) break;
           let result: ActionResult;
