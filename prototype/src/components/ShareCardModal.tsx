@@ -108,13 +108,15 @@ export const ShareCardModal: React.FC<ShareCardModalProps> = ({
       }
 
       const lineHeight = 22;
-      const maxLinesToRender = Math.min(lines.length, 60);
+      // 完整渲染全部内容（不截断），内容超长时降采样保证 canvas 不超限
+      if (lines.length === 0) lines.push('（无内容可导出）');
+      const maxLinesToRender = lines.length;
       const contentHeight = maxLinesToRender * lineHeight + 40;
       const headerHeight = 110;
       const footerHeight = 60;
       const height = headerHeight + contentHeight + footerHeight;
 
-      const scale = 2;
+      const scale = height * 2 > 32000 ? 1 : 2;
       canvas.width = width * scale;
       canvas.height = height * scale;
       ctx.scale(scale, scale);
@@ -190,12 +192,6 @@ export const ShareCardModal: React.FC<ShareCardModalProps> = ({
         }
         ctx.fillText(line, padding, y);
         y += lineHeight;
-      }
-
-      if (lines.length > maxLinesToRender) {
-        ctx.fillStyle = '#78716C';
-        ctx.font = 'italic 12px sans-serif';
-        ctx.fillText(`... (已截取前 ${maxLinesToRender} 行，完整内容请在 IDE 中查看)`, padding, y + 10);
       }
 
       // 4. Draw Footer
