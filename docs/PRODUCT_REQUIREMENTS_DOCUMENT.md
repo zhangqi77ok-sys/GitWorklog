@@ -1542,3 +1542,12 @@ Tcode 必须区分“环境中发现了工作流工具”和“用户选择并�
 ### 4.48.9 动态平台配置 Schema（每服务商独立配置项，2026-08-30）
 
 按用户要求，每个服务商的配置项必须动态、彼此独立（opencode 只有 API Key，没有其他）。新增 `providerSchema.ts`：每平台定义独立鉴权方式集合与凭据字段，表单按所选平台动态渲染。平台矩阵：opencode（仅 API Key）、codex（API Key/OAuth/RT）、claude（API Key/OAuth+OrgID/Setup Token）、grok（API Key/OAuth/RT）、gemini/openai（API Key/OAuth）、deepseek/openai-compatible（仅 API Key）、local（免 Key）。契约见 provider-console-redesign-contract.md §5。
+
+### 4.48.10 模型服务商初始状态与统一删除确认规范（2026-08-31）
+
+1. **初始状态归零原则**：
+   - 默认安装或无本地存储配置时，模型服务商渠道列表严格保持为空（`[]`），不内置任何未授权或虚构的占位渠道；
+   - 提供友好的空状态引导卡片（带 `+ 立即添加首个渠道` 快捷动作）。
+2. **统一暖色删除确认 Modal**：
+   - 彻底禁用浏览器粗糙的原生 `window.confirm` 对话框；
+   - 采用 Tcode 统一人机工程学确认浮层：包含危险操作红色警示图标、渠道名称高亮、关联模型影响说明、`取消 (Esc)` 与 `确认删除 (Enter)` 快捷键交互。

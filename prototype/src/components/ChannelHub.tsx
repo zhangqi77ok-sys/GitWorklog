@@ -37,6 +37,7 @@ export const ChannelHub: React.FC = () => {
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingChannel, setEditingChannel] = useState<ChannelItem | null>(null);
+  const [deletingChannel, setDeletingChannel] = useState<{ id: string; name: string } | null>(null);
 
   // Toast notification
   const [toast, setToast] = useState<string | null>(null);
@@ -51,6 +52,17 @@ export const ChannelHub: React.FC = () => {
     return () => window.removeEventListener('tcode_channels_updated', handleUpdate);
   }, []);
 
+  useEffect(() => {
+    if (!deletingChannel) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setDeletingChannel(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [deletingChannel]);
+
   const showToast = (msg: string) => {
     setToast(msg);
     setTimeout(() => setToast(null), 3500);
@@ -59,20 +71,20 @@ export const ChannelHub: React.FC = () => {
   // Filtered channels
   const filteredChannels = useMemo(() => {
     return channels.filter(c => {
-      const matchSearch =
-        !searchQuery.trim() ||
-        c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        c.baseUrl.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        c.models.some(m => m.toLowerCase().includes(searchQuery.toLowerCase()));
-      
-      const matchType = typeFilter === 'all' || String(c.type) === typeFilter;
-      const matchStatus =
-        statusFilter === 'all' ||
-        (statusFilter === 'active' && c.status === 'active') ||
-        (statusFilter === 'disabled' && c.status === 'disabled') ||
-        (statusFilter === 'error' && c.status === 'error');
-
-      return matchSearch && matchType && matchStatus;
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const matchName = c.name.toLowerCase().includes(q);
+        const matchUrl = c.baseUrl.toLowerCase().includes(q);
+        const matchModels = c.models.some(m => m.toLowerCase().includes(q));
+        if (!matchName && !matchUrl && !matchModels) return false;
+      }
+      if (typeFilter !== 'all' && String(c.type) !== typeFilter) {
+        return false;
+      }
+      if (statusFilter !== 'all' && c.status !== statusFilter) {
+        return false;
+      }
+      return true;
     });
   }, [channels, searchQuery, typeFilter, statusFilter]);
 
@@ -115,11 +127,16 @@ export const ChannelHub: React.FC = () => {
   };
 
   const handleDelete = (id: string, name: string) => {
-    if (!window.confirm(`确定要删除渠道 [${name}] 吗？`)) return;
-    const updated = channels.filter(c => c.id !== id);
+    setDeletingChannel({ id, name });
+  };
+
+  const handleConfirmDelete = () => {
+    if (!deletingChannel) return;
+    const updated = channels.filter(c => c.id !== deletingChannel.id);
     setChannels(updated);
     saveChannelsToStorage(updated);
-    showToast(`✓ 渠道 [${name}] 已删除`);
+    showToast(`✓ 渠道 [${deletingChannel.name}] 已删除`);
+    setDeletingChannel(null);
   };
 
   const handleClone = (c: ChannelItem) => {
@@ -364,10 +381,51 @@ export const ChannelHub: React.FC = () => {
       {/* Channels List Table / Cards View */}
       <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', paddingRight: '2px' }}>
         {filteredChannels.length === 0 ? (
-          <div style={{ padding: '32px 16px', textAlign: 'center', borderRadius: '8px', border: '1px dashed var(--border-strong)', background: 'var(--bg-surface)' }}>
-            <span style={{ fontSize: '20px', display: 'block', marginBottom: '6px' }}>🔍</span>
-            <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>没有找到匹配的服务商渠道</div>
-            <div style={{ fontSize: '10.5px', color: 'var(--text-muted)', marginTop: '2px' }}>请尝试调整搜索词，或点击上方「添加渠道」进行挂载</div>
+          <div style={{
+            padding: '40px 20px',
+            textAlign: 'center',
+            borderRadius: '8px',
+            border: '1px dashed var(--border-strong)',
+            background: 'var(--bg-surface)',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '8px'
+          }}>
+            <span style={{ fontSize: '28px', lineHeight: 1 }}>📡</span>
+            <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
+              {channels.length === 0 ? '暂无已配置的模型服务商渠道' : '没有找到匹配的服务商渠道'}
+            </div>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', maxWidth: '380px', lineHeight: 1.5 }}>
+              {channels.length === 0
+                ? '默认不内置任何第三方占位通道。点击下方按钮快速接入 New-API、One-API、OpenAI、Claude、DeepSeek 或私有 Ollama 服务。'
+                : '请尝试调整上方搜索关键词或平台筛选条件'}
+            </div>
+            {channels.length === 0 && (
+              <button
+                type="button"
+                onClick={handleOpenAdd}
+                style={{
+                  marginTop: '8px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '6px 16px',
+                  borderRadius: '6px',
+                  background: 'var(--accent)',
+                  border: 'none',
+                  color: '#FFF',
+                  fontSize: '11.5px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 8px rgba(217, 107, 39, 0.3)'
+                }}
+              >
+                <Plus size={13} />
+                <span>立即添加首个渠道</span>
+              </button>
+            )}
           </div>
         ) : (
           filteredChannels.map(c => {
@@ -497,40 +555,36 @@ export const ChannelHub: React.FC = () => {
                   )}
                 </div>
 
-                {/* Right: Latency Badge + Actions */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  {/* Latency Pill */}
+                {/* Right: Latency Badge & Operations */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <span
                     style={{
                       fontSize: '10px',
-                      fontWeight: 700,
-                      padding: '2px 8px',
-                      borderRadius: '10px',
+                      fontFamily: 'var(--font-mono)',
+                      padding: '2px 6px',
+                      borderRadius: '4px',
                       background: latencyBg,
                       color: latencyColor,
-                      fontFamily: 'var(--font-mono)',
-                      minWidth: '52px',
-                      textAlign: 'center'
+                      fontWeight: 600
                     }}
                   >
-                    {isProbing ? '探测中...' : latencyText}
+                    {latencyText}
                   </span>
 
-                  {/* Actions buttons */}
                   <button
                     onClick={() => handleProbeChannel(c)}
-                    title="测试连通性"
                     disabled={isProbing}
+                    title="单渠道连通性与测速"
                     style={{
                       padding: '4px',
                       borderRadius: '4px',
                       border: '1px solid var(--border-subtle)',
                       background: 'var(--bg-base)',
-                      color: 'var(--text-secondary)',
+                      color: 'var(--accent)',
                       cursor: 'pointer'
                     }}
                   >
-                    <Activity size={12} color="var(--accent)" className={isProbing ? 'animate-spin' : ''} />
+                    <Zap size={12} className={isProbing ? 'animate-spin' : ''} />
                   </button>
 
                   <button
@@ -610,6 +664,133 @@ export const ChannelHub: React.FC = () => {
           onClose={() => setIsModalOpen(false)}
           onSave={handleSaveChannel}
         />
+      )}
+
+      {/* Tcode Unified Delete Confirmation Modal */}
+      {deletingChannel && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.45)',
+            backdropFilter: 'blur(3px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000
+          }}
+          onClick={() => setDeletingChannel(null)}
+        >
+          <div
+            style={{
+              width: '420px',
+              maxWidth: 'calc(100vw - 32px)',
+              background: 'var(--bg-surface-elevated, #FAF8F5)',
+              border: '1px solid var(--border-strong, #E5DFD7)',
+              borderRadius: '10px',
+              boxShadow: '0 16px 40px rgba(0, 0, 0, 0.22)',
+              overflow: 'hidden'
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div style={{
+              padding: '12px 16px',
+              borderBottom: '1px solid var(--border-subtle)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              background: 'var(--bg-surface)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{
+                  width: '24px',
+                  height: '24px',
+                  borderRadius: '50%',
+                  background: 'rgba(239, 68, 68, 0.12)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  <Trash2 size={13} color="#EF4444" />
+                </div>
+                <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                  删除模型服务商渠道
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDeletingChannel(null)}
+                style={{
+                  border: 'none',
+                  background: 'transparent',
+                  color: 'var(--text-muted)',
+                  cursor: 'pointer',
+                  padding: '4px',
+                  borderRadius: '4px',
+                  fontSize: '13px'
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div style={{ padding: '16px', fontSize: '12px', lineHeight: 1.6, color: 'var(--text-secondary)' }}>
+              <div>
+                确定要删除渠道 <strong style={{ color: 'var(--text-primary)' }}>【{deletingChannel.name}】</strong> 吗？
+              </div>
+              <div style={{ marginTop: '6px', fontSize: '11px', color: 'var(--text-muted)' }}>
+                ⚠️ 此操作将同时移除该渠道挂载的所有模型映射，不可撤销。
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div style={{
+              padding: '10px 16px 14px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'flex-end',
+              gap: '8px',
+              background: 'var(--bg-base)'
+            }}>
+              <button
+                type="button"
+                onClick={() => setDeletingChannel(null)}
+                style={{
+                  padding: '5px 14px',
+                  borderRadius: '5px',
+                  border: '1px solid var(--border-strong)',
+                  background: 'var(--bg-surface)',
+                  color: 'var(--text-secondary)',
+                  fontSize: '11.5px',
+                  fontWeight: 500,
+                  cursor: 'pointer'
+                }}
+              >
+                取消 (Esc)
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                autoFocus
+                style={{
+                  padding: '5px 16px',
+                  borderRadius: '5px',
+                  border: 'none',
+                  background: '#DC2626',
+                  color: '#FFFFFF',
+                  fontSize: '11.5px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 6px rgba(220, 38, 38, 0.35)'
+                }}
+              >
+                确认删除
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

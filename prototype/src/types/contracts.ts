@@ -983,157 +983,7 @@ export const CHANNEL_PRESETS: ChannelPresetMeta[] = [
   }
 ];
 
-export const INITIAL_NEW_API_CHANNELS: ChannelItem[] = [
-  {
-    id: 'chan-opencode-go',
-    name: 'OpenCode (Go 套餐直连)',
-    type: 60,
-    key: '',
-    baseUrl: 'https://opencode.ai/zen/go/v1',
-    defaultBaseUrl: 'https://opencode.ai/zen/go/v1',
-    models: [
-      'mimo-v2.5-free',
-      'nemotron-3.5-lightning-free',
-      'ling-3.0-flash-fin-free',
-      'nemotron-3-ultra-free',
-      'deepseek-v4-flash-free',
-      'laguna-s-2.1-free'
-    ],
-    status: 'untested',
-    responseTime: 0,
-    testModel: 'mimo-v2.5-free',
-    priority: 10,
-    weight: 10,
-    group: 'default',
-    remark: 'OpenCode Go 套餐官方免配置直连通道'
-  },
-  {
-    id: 'chan-opencode-zen',
-    name: 'OpenCode (Zen 旗舰套餐)',
-    type: 60,
-    key: '',
-    baseUrl: 'https://opencode.ai/zen/v1',
-    defaultBaseUrl: 'https://opencode.ai/zen/v1',
-    models: [
-      'claude-sonnet-4-6',
-      'deepseek-v4-flash',
-      'claude-opus-4-6',
-      'gemini-3.7-flash'
-    ],
-    status: 'untested',
-    responseTime: 0,
-    testModel: 'deepseek-v4-flash',
-    priority: 5,
-    weight: 10,
-    group: 'default',
-    remark: 'OpenCode Zen 专业旗舰聚合网关'
-  },
-  {
-    id: 'chan-deepseek',
-    name: 'DeepSeek (深度求索官方)',
-    type: 43,
-    key: '',
-    baseUrl: 'https://api.deepseek.com',
-    defaultBaseUrl: 'https://api.deepseek.com',
-    models: ['deepseek-chat', 'deepseek-reasoner'],
-    status: 'untested',
-    responseTime: 0,
-    testModel: 'deepseek-chat',
-    priority: 10,
-    weight: 10,
-    group: 'default'
-  },
-  {
-    id: 'chan-siliconflow',
-    name: '硅基流动 (SiliconFlow)',
-    type: 40,
-    key: '',
-    baseUrl: 'https://api.siliconflow.cn',
-    defaultBaseUrl: 'https://api.siliconflow.cn',
-    models: ['deepseek-ai/DeepSeek-V3', 'deepseek-ai/DeepSeek-R1', 'Qwen/Qwen2.5-Coder-32B-Instruct'],
-    status: 'untested',
-    responseTime: 0,
-    testModel: 'deepseek-ai/DeepSeek-V3',
-    priority: 8,
-    weight: 10,
-    group: 'default'
-  },
-  {
-    id: 'chan-zhipu',
-    name: '智谱 AI (GLM / CodeGeeX)',
-    type: 16,
-    key: '',
-    baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
-    defaultBaseUrl: 'https://open.bigmodel.cn/api/paas/v4',
-    models: ['glm-4-plus', 'glm-4-flash', 'codegeex-4'],
-    status: 'untested',
-    responseTime: 0,
-    testModel: 'glm-4-flash',
-    priority: 5,
-    weight: 10,
-    group: 'default'
-  },
-  {
-    id: 'chan-ali',
-    name: '阿里通义千问 (DashScope)',
-    type: 17,
-    key: '',
-    baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-    defaultBaseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-    models: ['qwen-max', 'qwen-plus', 'qwen-coder-plus'],
-    status: 'untested',
-    responseTime: 0,
-    testModel: 'qwen-plus',
-    priority: 5,
-    weight: 10,
-    group: 'default'
-  },
-  {
-    id: 'chan-claude',
-    name: 'Anthropic (Claude 官方)',
-    type: 14,
-    key: '',
-    baseUrl: 'https://api.anthropic.com',
-    defaultBaseUrl: 'https://api.anthropic.com',
-    models: ['claude-3-7-sonnet', 'claude-3-5-sonnet', 'claude-3-5-haiku'],
-    status: 'untested',
-    responseTime: 0,
-    testModel: 'claude-3-5-haiku',
-    priority: 10,
-    weight: 10,
-    group: 'default'
-  },
-  {
-    id: 'chan-openai',
-    name: 'OpenAI (官方平台)',
-    type: 1,
-    key: '',
-    baseUrl: 'https://api.openai.com',
-    defaultBaseUrl: 'https://api.openai.com',
-    models: ['gpt-4o', 'gpt-4o-mini', 'o3-mini'],
-    status: 'untested',
-    responseTime: 0,
-    testModel: 'gpt-4o-mini',
-    priority: 8,
-    weight: 10,
-    group: 'default'
-  },
-  {
-    id: 'chan-ollama',
-    name: '本地私有 Ollama (离线隔离)',
-    type: 4,
-    key: '',
-    baseUrl: 'http://localhost:11434',
-    defaultBaseUrl: 'http://localhost:11434',
-    models: ['qwen2.5-coder:32b', 'deepseek-r1:14b'],
-    status: 'untested',
-    responseTime: 0,
-    testModel: 'qwen2.5-coder:32b',
-    priority: 0,
-    weight: 10,
-    group: 'default'
-  }
-];
+export const INITIAL_NEW_API_CHANNELS: ChannelItem[] = [];
 
 export function loadSavedChannels(): ChannelItem[] {
   try {
@@ -1141,13 +991,13 @@ export function loadSavedChannels(): ChannelItem[] {
       const saved = localStorage.getItem('tcode_channels_v2');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
+        if (Array.isArray(parsed)) {
           return parsed;
         }
       }
     }
   } catch (e) {}
-  return INITIAL_NEW_API_CHANNELS;
+  return [];
 }
 
 export function saveChannelsToStorage(channels: ChannelItem[]): void {

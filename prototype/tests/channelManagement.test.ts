@@ -44,12 +44,10 @@ describe('New-API Channel Contracts & Presets (Ref: E:\\pro\\new-api)', () => {
     expect(siliconflowPreset.defaultBaseUrl).toBe('https://api.siliconflow.cn');
   });
 
-  it('loads INITIAL_NEW_API_CHANNELS when storage is empty', () => {
+  it('returns empty array when storage is empty (zero dummy channels)', () => {
     const loaded = loadSavedChannels();
-    expect(loaded.length).toBeGreaterThan(0);
-    expect(loaded.some(c => c.name.includes('OpenCode'))).toBe(true);
-    expect(loaded.some(c => c.type === 60)).toBe(true);
-    expect(loaded.some(c => c.type === 43)).toBe(true);
+    expect(loaded).toEqual([]);
+    expect(loaded.length).toBe(0);
   });
 
   it('saves and restores channel items with model mapping and priorities', () => {
