@@ -580,7 +580,7 @@ export const App: React.FC = () => {
     const contentTokens = Math.round(totalChars * 0.75);
     const promptTokens = Math.round(contentTokens * 0.45) + kv.prefixTokens;
     const completionTokens = Math.round(contentTokens * 0.55);
-    const totalTokens = promptTokens + completionTokens;
+    const totalTokens = promptTokens + completionTokens + kv.totalCacheHitTokens;
     
     const costUsd = Number(((promptTokens * 0.0000008) + (completionTokens * 0.000002) - (kv.totalCacheHitTokens * 0.00000072)).toFixed(4));
     
@@ -592,7 +592,7 @@ export const App: React.FC = () => {
       cacheWriteTokens: kv.prefixTokens,
       estimatedCostUsd: Math.max(0.001, costUsd),
       // Keep overflow visible in the titlebar analytics; do not flatten it to the model limit.
-      contextCurrentTokens: totalTokens,
+      contextCurrentTokens: promptTokens + completionTokens,
       contextMaxTokens: currentModel.contextLimit || 128000
     });
   }, [messages, currentModel]);

@@ -34,32 +34,37 @@ export function calculateKVCacheMetrics(
 }
 
 export function calculateTokenRoi(stats: TokenStats): TokenRoiStats {
-  const totalTokens = stats.promptTokens + stats.completionTokens + stats.cacheHitTokens;
+  const totalTokens = (stats.promptTokens || 0) + (stats.completionTokens || 0) + (stats.cacheHitTokens || 0);
   const cacheHitRate = totalTokens > 0 ? (stats.cacheHitTokens / totalTokens) * 100 : 0;
+  const boundedHitRate = Math.min(100, Math.max(0, Math.round(cacheHitRate * 10) / 10));
   const savedCost = (stats.cacheHitTokens / 1000000) * 2.5; // ~$2.5 per 1M tokens saved
-  const linesGenerated = Math.round(stats.completionTokens / 12);
+  const linesGenerated = Math.round((stats.completionTokens || 0) / 12);
 
   return {
     promptTokens: stats.promptTokens,
     completionTokens: stats.completionTokens,
     cacheHitTokens: stats.cacheHitTokens,
-    cacheHitRatePercent: Math.round(cacheHitRate * 10) / 10,
+    cacheHitRatePercent: boundedHitRate,
     estimatedCostUsd: stats.estimatedCostUsd,
     savedCostUsd: Math.round(savedCost * 1000) / 1000,
     linesGeneratedApprox: linesGenerated
   };
 }
 
-
-// ============================================================================
-// 12. ADVANCED 5-KILLER FEATURES CONTRACTS (Merge Fork, Sandbox, Swarm, Graph, PII)
-// ============================================================================
-
-// 1. Fork Branch Merging
+// 1. Calculate percentage of input tokens saved by KV Cache (Strictly bounded [0, 100])
 export function calculateTokenSavingsPercent(stats: TokenStats): number {
-  const total = stats.promptTokens + stats.cacheHitTokens;
-  if (total <= 0) return 0;
-  return Math.round((stats.cacheHitTokens / total) * 1000) / 10;
+  const totalPrompt = (stats.promptTokens || 0) + (stats.cacheHitTokens || 0);
+  if (totalPrompt <= 0) return 0;
+  const rate = (stats.cacheHitTokens / totalPrompt) * 100;
+  return Math.min(100, Math.max(0, Math.round(rate * 10) / 10));
+}
+
+// 2. Standard KV Cache Hit Rate (Integer percentage bounded [0, 100])
+export function calculateKVCacheHitRate(stats: TokenStats): number {
+  const totalPrompt = (stats.promptTokens || 0) + (stats.cacheHitTokens || 0);
+  if (totalPrompt <= 0) return 0;
+  const rate = (stats.cacheHitTokens / totalPrompt) * 100;
+  return Math.min(100, Math.max(0, Math.round(rate)));
 }
 
 

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { X, Zap, ShieldCheck, DollarSign, Database, Sparkles, Check, ArrowRight } from 'lucide-react';
-import { TokenStats, AIModelOption, calculateKVCacheMetrics } from '../types/contracts';
+import { TokenStats, AIModelOption, calculateKVCacheMetrics, calculateKVCacheHitRate } from '../types/contracts';
 
 interface TokenAnalyticsModalProps {
   isOpen: boolean;
@@ -33,9 +33,7 @@ export const TokenAnalyticsModal: React.FC<TokenAnalyticsModalProps> = ({
   if (!isOpen) return null;
 
   const kv = calculateKVCacheMetrics(messagesCount);
-  const cacheRatio = (tokenStats.totalTokens || (tokenStats.promptTokens + tokenStats.completionTokens)) > 0 
-    ? Math.round((tokenStats.cacheHitTokens / (tokenStats.totalTokens || (tokenStats.promptTokens + tokenStats.completionTokens))) * 100)
-    : 0;
+  const cacheRatio = calculateKVCacheHitRate(tokenStats);
 
   return (
     <div style={{

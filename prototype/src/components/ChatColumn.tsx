@@ -55,6 +55,7 @@ import {
   AgentSkillItem,
   INITIAL_AGENT_SKILLS,
   loadSavedSkills,
+  calculateKVCacheHitRate,
   MODEL_ROUTING_STRATEGIES,
   ModelRoutingStrategy,
   RoutingStrategyId,
@@ -912,8 +913,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
           })()}
 
           {tokenStats ? (() => {
-            const totalKv = (tokenStats.totalTokens ?? tokenStats.promptTokens + tokenStats.completionTokens + tokenStats.cacheHitTokens) || 0;
-            const kvRate = totalKv > 0 ? Math.round((tokenStats.cacheHitTokens / totalKv) * 100) : 0;
+            const kvRate = calculateKVCacheHitRate(tokenStats);
             return (
               <span title="KV-Cache 命中率 / 首字响应延迟 (TTFT)" style={{
                 display: 'flex', alignItems: 'center', gap: '4px', padding: '1px 7px', borderRadius: '10px',

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { loadSavedOfficialSkills } from '../src/services/skillsEngine';
-import { SessionItem } from '../src/types/contracts';
+import { SessionItem, calculateKVCacheHitRate, calculateTokenSavingsPercent } from '../src/types/contracts';
 
 describe('Dual @ Mention Reference Feature', () => {
   it('should list all enabled official skills for @ skill mention', () => {
@@ -84,5 +84,35 @@ describe('Dual @ Mention Reference Feature', () => {
     expect(fullPrompt).toContain('[已关联前序会话: 历史讨论：权限模型]');
     expect(fullPrompt).toContain('我们需要支持 RBAC 模型吗？');
     expect(fullPrompt).toContain('请基于上次的结论生成具体的 SQL 建表语句');
+  });
+
+  it('should ensure KV Cache hit rate never exceeds 100% even under large cache hit counts', () => {
+    // Test case from user bug: huge cacheHitTokens relative to prompt
+    const statsHugeHit = {
+      promptTokens: 2000,
+      completionTokens: 500,
+      cacheHitTokens: 16000,
+      cacheWriteTokens: 1000,
+      totalTokens: 18500,
+      estimatedCostUsd: 0.01,
+      contextCurrentTokens: 2500,
+      contextMaxTokens: 128000
+    };
+
+    const hitRate = calculateKVCacheHitRate(statsHugeHit);
+    const savingsPercent = calculateTokenSavingsPercent(statsHugeHit);
+
+    expect(hitRate).toBeLessThanOrEqual(100);
+    expect(hitRate).toBeGreaterThanOrEqual(0);
+    expect(hitRate).toBe(89); // 16000 / (2000 + 16000) = 88.88% -> 89%
+
+    expect(savingsPercent).toBeLessThanOrEqual(100);
+    expect(savingsPercent).toBeGreaterThanOrEqual(0);
+    expect(savingsPercent).toBe(88.9);
+
+    // Extreme zero case
+    const zeroStats = { promptTokens: 0, completionTokens: 0, cacheHitTokens: 0, cacheWriteTokens: 0, totalTokens: 0, estimatedCostUsd: 0, contextCurrentTokens: 0, contextMaxTokens: 128000 };
+    expect(calculateKVCacheHitRate(zeroStats)).toBe(0);
+    expect(calculateTokenSavingsPercent(zeroStats)).toBe(0);
   });
 });
