@@ -1,7 +1,6 @@
 import { TargetStepProgressCard } from './TargetStepProgressCard';
 import { ActionApprovalModal } from './ActionApprovalModal';
 import { ShareCardModal } from './ShareCardModal';
-import { SwarmWorkbenchModal } from './SwarmWorkbenchModal';
 import React, { useState, useEffect } from 'react';
 import { MarkdownCard } from './MarkdownCard';
 import { agentRuntimeController } from '../services/agentRuntimeController';
@@ -271,14 +270,6 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
   const [showRulesPopover, setShowRulesPopover] = useState(false);
   const [selectedRoundByMsgId, setSelectedRoundByMsgId] = useState<Record<string, number>>({});
   const [userToggledRounds, setUserToggledRounds] = useState<Record<string, boolean>>({});
-  const [isSwarmModalOpen, setIsSwarmModalOpen] = useState(false);
-
-  // WP-E：App 发起 Swarm Run 后自动打开工作台
-  useEffect(() => {
-    const openWorkbench = () => setIsSwarmModalOpen(true);
-    window.addEventListener('tcode_open_swarm_workbench', openWorkbench);
-    return () => window.removeEventListener('tcode_open_swarm_workbench', openWorkbench);
-  }, []);
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
     setInputText(val);
@@ -2280,7 +2271,6 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
             <ExecutionModeCapsule
               mode={executionMode}
               onModeChange={onExecutionModeChange}
-              onOpenSwarmWorkbench={() => setIsSwarmModalOpen(true)}
             />
             <span style={{
               fontSize: '10px',
@@ -3419,13 +3409,6 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
           if (onOpenFile) onOpenFile(path);
           else if (onNavigateDiff) onNavigateDiff({ fileId: path, filePath: path, targetLine: 1 });
         }}
-      />
-
-      {/* 🐝 Swarm Multi-Agent Workbench Modal */}
-      <SwarmWorkbenchModal
-        isOpen={isSwarmModalOpen}
-        onClose={() => setIsSwarmModalOpen(false)}
-        activeRunId={swarmRunId}
       />
     </div>
   );

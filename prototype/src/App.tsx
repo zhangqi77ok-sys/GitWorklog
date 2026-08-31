@@ -972,66 +972,10 @@ export const App: React.FC = () => {
   };
 
 
-  const runSwarmTurn = async (text: string, mentions?: MentionContextItem[]) => {
-    const activeSessionForRun = sessions.find(s => s.id === currentSessionId) || sessions[0];
-    const userMsg: ChatMessage = {
-      id: `user-${Date.now()}`,
-      role: 'user',
-      content: text,
-      timestamp: Date.now(),
-      permissionPolicy,
-      turnIndex: 1
-    };
-    setSessionMessages(prev => ({
-      ...prev,
-      [currentSessionId]: [...(prev[currentSessionId] || []), userMsg]
-    }));
-    try {
-      const configSnapshot = await RuntimeConfigResolver.resolveCurrentConfig(
-        currentModel.provider,
-        currentModel.id,
-        workMode,
-        permissionPolicy,
-        activeSessionForRun?.projectPath || ''
-      );
-      const run = await taskGraphScheduler.startSwarmRun({
-        sessionId: currentSessionId,
-        userMessageId: userMsg.id,
-        goal: text,
-        configSnapshot,
-        projectPath: activeSessionForRun?.projectPath
-      });
-      setSwarmRunId(run.id);
-      addLog('INFO', 'Swarm', `[Swarm Run] 已启动: ${run.id}`);
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('tcode_open_swarm_workbench'));
-      }
-    } catch (err: any) {
-      addLog('ERROR', 'Swarm', `[Swarm Run] 启动失败: ${err?.message || String(err)}`);
-      const errMsg: ChatMessage = {
-        id: `swarm-error-${Date.now()}`,
-        role: 'assistant',
-        content: `✕ Swarm Run 启动失败: ${err?.message || String(err)}`,
-        timestamp: Date.now(),
-        auditTag: '⚠️ Swarm 异常'
-      };
-      setSessionMessages(prev => ({
-        ...prev,
-        [currentSessionId]: [...(prev[currentSessionId] || []), errMsg]
-      }));
-    }
-  };
-
   const handleSendMessage = async (text: string, mentions?: MentionContextItem[]) => {
     if (!text.trim()) return;
     if (sessionActorManager.isSessionRunning(currentSessionId)) {
       handleEnqueuePrompt(currentSessionId, text, mentions);
-      return;
-    }
-
-    // 🐝 Swarm 模式下直接进入多智能体并发协同 Run（影子区 + Master 纠偏 + 2PC）。
-    if (executionMode === 'swarm') {
-      await runSwarmTurn(text, mentions);
       return;
     }
 
@@ -1219,7 +1163,24 @@ ${skillsPromptSnippet}
 ${mcpToolsPromptSnippet}
 ${modePromptSnippet}
 【当前工作模式】: ${workMode === 'act' ? 'Act 落地模式 (自主执行模式)' : 'Plan 规划模式'}
+${executionMode === 'swarm' ? `
+【Swarm 多智能体异构团队协同规范】:
+你当前代表一个具备 11 类异构专家的顶级 AI 研发工程团队。作为 Master 协同调度中枢，你必须采用清晰的多角色分工推演格式：
+1. 首先以 Master 视角输出顶层架构规划与任务分解；
+2. 调度相应专业角色分别输出见解与实现，角色标题必须遵循以下格式（可按需选择 2~4 个最贴切的角色）：
+### 📐 [架构师 Architect]
+架构与契约设计分析...
 
+### 💻 [核心开发 Dev]
+具体逻辑实现与核心代码...
+
+### 🧪 [质量测试 QA]
+测试用例设计与边界验证...
+
+### 🛡️ [安全审查 Reviewer]
+代码审查、坏味道指出与改进建议...
+3. 最后输出 ### 🎯 [Master 终审交付]，对全流程进行质量仲裁与交付总结。
+` : ''}
 【Tcode Agent Loop 协议】:
 你是 Tcode Agent Loop 中的 AI 决策核心。你深度接入了宿主操作系统的文件系统与 PowerShell 终端。
 
@@ -1262,7 +1223,7 @@ ${modePromptSnippet}
         role: 'assistant',
         content: '',
         timestamp: Date.now(),
-        auditTag: `⚡ Agent Loop · 极速执行 (${frozenRunMode})`,
+        auditTag: executionMode === 'swarm' ? '🐝 Swarm 团队协同 (多角色并发)' : `⚡ Agent Loop · 极速执行 (${frozenRunMode})`,
         permissionPolicy,
         stepTags: [],
         acceptanceItems: [],

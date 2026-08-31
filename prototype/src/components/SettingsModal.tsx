@@ -12,6 +12,7 @@ import {
   ScrollText,
   Check,
   Zap,
+  Users,
   Shuffle,
   Plus,
   Lock,
@@ -68,6 +69,7 @@ import {
   loadSavedThemeMode,
   saveThemeModeToStorage
 } from '../types/contracts';
+import { BUILTIN_AGENT_ROLES } from '../services/builtinAgents';
 import { hostGateway } from '../services/hostGateway';
 import { ChannelHub } from './ChannelHub';
 import { assertProviderCredentials } from '../services/modelGateway';
@@ -88,7 +90,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   currentAccentHex,
   onSelectAccentHex
 }) => {
-  const [activeTab, setActiveTab] = useState<'gateway' | 'rules' | 'skills' | 'mcp' | 'appearance' | 'keybindings' | 'system'>('gateway');
+  const [activeTab, setActiveTab] = useState<'gateway' | 'rules' | 'skills' | 'mcp' | 'cache' | 'swarm' | 'appearance' | 'keybindings' | 'system'>('gateway');
   const [searchFilter, setSearchFilter] = useState('');
   // Resizable & Maximizable Modal state
   const [modalWidth, setModalWidth] = useState<number>(980);
@@ -482,6 +484,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     { id: 'rules', label: 'Rule 规则管理', icon: ScrollText },
     { id: 'skills', label: 'Skill 技能库', icon: Boxes },
     { id: 'mcp', label: 'MCP 工具管理', icon: Server },
+    { id: 'swarm', label: '🐝 Swarm 团队协同', icon: Users },
     { id: 'cache', label: '⚡ 缓存与代码索引', icon: Zap },
     { id: 'appearance', label: '自定义外观颜色', icon: Palette },
     { id: 'keybindings', label: '自定义快捷键', icon: Keyboard },
@@ -1705,7 +1708,81 @@ ${s.description}`;
               </div>
             )}
 
-                        {/* TAB: PROMPT CACHE & REPOMAP ACCELERATION */}
+            {/* TAB: SWARM MULTI-AGENT TEAM COLLABORATION */}
+            {activeTab === 'swarm' && (
+              <div style={{ display: 'flex', flexDirection: 'column', height: '500px', margin: '-4px 0', gap: '12px', overflowY: 'auto' }}>
+                <div style={{
+                  padding: '12px 14px',
+                  borderRadius: '6px',
+                  background: 'var(--bg-surface)',
+                  border: '1px solid var(--border-subtle)',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center'
+                }}>
+                  <div>
+                    <h3 style={{ fontSize: '13px', fontWeight: 700, margin: '0 0 2px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span>🐝 Swarm 多智能体团队异构协同配置</span>
+                      <span style={{ fontSize: '10px', background: 'rgba(217, 107, 39, 0.12)', color: 'var(--accent, #D96B27)', padding: '1px 6px', borderRadius: '4px', fontWeight: 600 }}>11 类内置角色</span>
+                    </h3>
+                    <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                      在输入框切换为「Swarm 协同」时自动启用，Master 智能体中枢自动进行任务拆解与多角色并发协作
+                    </div>
+                  </div>
+                </div>
+
+                {/* Builtin Agent Roles Grid */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '8px' }}>
+                  {BUILTIN_AGENT_ROLES.map((role) => (
+                    <div
+                      key={role.id}
+                      style={{
+                        padding: '10px 12px',
+                        borderRadius: '6px',
+                        background: 'var(--bg-surface)',
+                        border: '1px solid var(--border-subtle)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '4px'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <span style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                          {role.name}
+                        </span>
+                        <span style={{ fontSize: '9px', padding: '1px 5px', borderRadius: '4px', background: 'var(--chat-user-bg)', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                          {role.id}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '10px', color: 'var(--text-secondary)', lineHeight: 1.3 }}>
+                        {role.description}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Swarm Infrastructure & Safety Isolation */}
+                <div style={{
+                  padding: '12px 14px',
+                  borderRadius: '6px',
+                  background: 'var(--bg-surface)',
+                  border: '1px solid var(--border-subtle)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '6px'
+                }}>
+                  <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>🛡️ 协同安全隔离与合并门禁</span>
+                  </div>
+                  <div style={{ fontSize: '10px', color: 'var(--text-muted)', lineHeight: 1.4 }}>
+                    • <b>影子环境隔离 (Shadow Worktree)</b>: 每个并发子智能体在独立的轻量影子工作区执行修改，杜绝未经验证直接污染主工程。<br/>
+                    • <b>两阶段提交 (2PC Merge Gate)</b>: 仅当所有子任务验收通过并通过独立代码审查后，才安全合并至工作区。
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* TAB: PROMPT CACHE & REPOMAP ACCELERATION */}
             {activeTab === ('cache' as any) && (
               <div style={{ display: 'flex', flexDirection: 'column', height: '500px', margin: '-4px 0', gap: '14px', overflowY: 'auto' }}>
                 <div style={{

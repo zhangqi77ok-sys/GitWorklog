@@ -5,7 +5,6 @@ import type { ExecutionMode } from '../services/executionMode';
 interface ExecutionModeCapsuleProps {
   mode: ExecutionMode;
   onModeChange: (mode: ExecutionMode) => void;
-  onOpenSwarmWorkbench?: () => void;
 }
 
 /**
@@ -14,8 +13,7 @@ interface ExecutionModeCapsuleProps {
  */
 export const ExecutionModeCapsule: React.FC<ExecutionModeCapsuleProps> = ({
   mode,
-  onModeChange,
-  onOpenSwarmWorkbench
+  onModeChange
 }) => {
   const isAgentLoop = mode === 'act';
   const isSwarm = mode === 'swarm';
@@ -86,31 +84,6 @@ export const ExecutionModeCapsule: React.FC<ExecutionModeCapsuleProps> = ({
           <span>Swarm 协同</span>
         </button>
       </div>
-
-      {/* Swarm Mode Hint & Workbench Quick Access */}
-      {isSwarm && onOpenSwarmWorkbench && (
-        <button
-          type="button"
-          onClick={onOpenSwarmWorkbench}
-          title="点击打开 Swarm 多智能体协同工作台与拓扑面板"
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '4px',
-            padding: '2px 7px',
-            borderRadius: '4px',
-            background: 'rgba(217, 107, 39, 0.1)',
-            border: '1px solid rgba(217, 107, 39, 0.25)',
-            color: 'var(--accent, #D96B27)',
-            fontSize: '10px',
-            fontWeight: 600,
-            cursor: 'pointer',
-            transition: 'all 0.12s ease'
-          }}
-        >
-          <span>🐝 团队协同面板 ↗</span>
-        </button>
-      )}
     </div>
   );
 };

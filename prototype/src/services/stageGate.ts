@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Stage Gate (模块五): explicit workflow suspension at stage boundaries with
  * human-in-the-loop adjudication (approve / revise-with-feedback / terminate).
  */
@@ -94,7 +94,7 @@ export function createGateSuspensionFromBlock(
  * is written. Template workflows gate via their own gate blocks instead.
  */
 export function shouldSuspendDynamicGraphPlanning(
-  mode: 'act' | 'graph',
+  mode: string,
   workflowBlocksLength: number,
   loopCount: number,
   hasWriteActions: boolean
