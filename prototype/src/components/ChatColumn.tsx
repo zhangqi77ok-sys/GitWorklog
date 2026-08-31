@@ -2751,8 +2751,8 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                   <div style={{
                     position: 'absolute',
                     bottom: '36px',
-                    right: 0,
-                    left: 'auto',
+                    left: 0,
+                    right: 'auto',
                     width: 'min(480px, calc(100vw - 48px))',
                     maxWidth: 'calc(100vw - 48px)',
                     height: '380px',
@@ -2966,8 +2966,8 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                   <div style={{
                     position: 'absolute',
                     bottom: '34px',
-                    right: 0,
-                    left: 'auto',
+                    left: 0,
+                    right: 'auto',
                     width: 'min(360px, calc(100vw - 48px))',
                     maxWidth: 'calc(100vw - 48px)',
                     maxHeight: 'min(360px, 60vh)',
