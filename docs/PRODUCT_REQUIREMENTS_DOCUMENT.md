@@ -1591,10 +1591,11 @@ Tcode 必须区分“环境中发现了工作流工具”和“用户选择并�
    - 角色目录 `SWARM_ROLE_CATALOG` 提供 8 个可选 Subagent：架构师 📐 / 核心开发 💻 / 质量测试 🧪 / 代码审计与安全 🛡️ / 前端 🎨 / 后端 ⚙️ / 数据库 💾 / 文档 📝；
    - **Master 拆解阶段**：一次 LLM 调用返回严格 JSON `{ "planning": "...", "roles": ["architect", "dev", "..."] }`，由 Master **按任务实际需要动态挑选 2~4 个**角色（不预先固定、不贪多）；
    - 前端在拆解完成前显示「Master 正在分析任务并组建 Subagent 团队」骨架，拆解完成后按实际选中角色实例化卡片。
-2. **三段式结构化执行**：
-   - Phase 1 Master 拆解（JSON 组队）→ Phase 2 仅对**选中的角色**各自独立流式调用 LLM（`Promise.allSettled`，逐字回调）→ Phase 3 Master 终审汇总实际选中角色产出做质量仲裁与交付。
+2. **三段式结构化执行（全链路流式）**：
+   - Phase 1 Master 拆解（JSON 组队，**逐字流式上屏**）→ Phase 2 仅对**选中的角色**各自独立流式调用 LLM（`Promise.allSettled`，逐字回调）→ Phase 3 Master 终审汇总实际选中角色产出（**逐字流式上屏**）做质量仲裁与交付；
+   - `SwarmChatState.phase: planning | roles | summary | done` 驱动前端流式光标/骨架/完成态切换。
 3. **数据契约**：`ChatMessage.swarm?: SwarmChatState { masterPlanning, roles: SwarmRoleStream[], masterSummary }`；`roles` 为动态数组，由拆解结果决定。
 4. **失败边界（fail-closed）**：拆解 JSON 解析失败、包含未知角色 id、或数量不在 2~4 之间 → **显式抛错**并在界面显示协议错误，不静默回退；单个角色执行失败不阻塞其余角色，失败卡片显式标红附错误信息。
-5. **渲染规范（暖色极简）**：`SwarmSubagentContainer` 采用米白表面 + 极细边框 + 克制控件的平铺布局；自上而下为 Master 总控头部条（单行紧凑）、Master 拆解（可折叠）、Subagent 平铺卡片（每卡可独立折叠，含图标/名称/职责/状态徽标，running 流式、error 红块）、Master 终审交付区；旧消息（无 `swarm` 字段）走正则解析回退。
+5. **渲染规范（暖色极简）**：`SwarmSubagentContainer` 采用米白表面 + 极细边框 + 克制控件的平铺布局；自上而下为 Master 总控头部条（单行紧凑）、Master 拆解（可折叠，**拆解期逐字流式**）、Subagent 平铺卡片（**内容默认展开**，可独立折叠；含图标/名称/职责/状态徽标，running 流式并显示「推演中…」占位，error 红块）、Master 终审交付区（**终审期逐字流式**）；旧消息（无 `swarm` 字段）走正则解析回退。
 6. **v1 范围界定**：Subagent 仅输出分析/设计/测试用例/安全审计文本，不直接执行工具；核心开发角色的代码块在 Master 终审中呈现，由用户决定是否应用。
 7. **生产流式通道**：`swarmGatewayStream.createGatewayStreamChat` 与主 Agent Loop 同口径（New-API 渠道直连 → Gateway v2 多账号 → v1 Provider 目录），SSE 增量逐字回调。

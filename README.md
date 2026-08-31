@@ -71,10 +71,10 @@ ModelRef(providerId:modelId)
 
 ### WP-G · Swarm 真并发多角色协同（会话级，Chat 直通，Master 动态组队）
 - **Master 动态组队**：8 角色目录（架构/开发/测试/安全/前端/后端/数据库/文档），Master 拆解返回 JSON `{planning, roles[]}` 按任务**动态挑选 2~4 个**执行，不再固定角色。
-- **三段式协议**：拆解 → 仅对选中角色各自独立并发流式调用 LLM → 终审仲裁交付；拆解非法（非 JSON/未知角色/数量越界）显式报错，fail-closed。
+- **三段式协议（全链路流式）**：拆解（逐字流式）→ 仅对选中角色各自独立并发流式调用 LLM → 终审（逐字流式）仲裁交付；`phase` 驱动流式光标；拆解非法（非 JSON/未知角色/数量越界）显式报错，fail-closed。
 - **结构化数据**：`ChatMessage.swarm`（`SwarmChatState`）驱动 `SwarmSubagentContainer` 平铺渲染；拆解中显示组队骨架；旧消息走正则回退。
 - **执行器**：`swarmChatExecutor.runSwarmChat`（纯编排，可注入 streamChat）；`swarmGatewayStream.createGatewayStreamChat` 复用主 Loop 调度口径（渠道 → Gateway v2 → v1）。
-- **渲染**：暖色极简（米白表面/细边框/克制控件），Master 拆解与 Subagent 卡片均可折叠，running/error 状态清晰。
+- **渲染**：暖色极简（米白表面/细边框/克制控件），Subagent 卡片**内容默认展开**、可独立折叠，拆解/终审逐字流式，running 显示「推演中…」占位，error 状态清晰。
 - **v1 边界**：角色仅产出分析文本；工具执行留待后续。
 
 ### 2. 目标驱动 Agent Loop

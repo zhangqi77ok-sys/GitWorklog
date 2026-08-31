@@ -201,7 +201,11 @@ export interface SwarmRoleStream {
 }
 
 /** 🐝 Swarm 会话级结构化协同状态（Master 拆解 -> 多角色并发 -> Master 终审）。 */
+export type SwarmPhase = 'planning' | 'roles' | 'summary' | 'done';
+
 export interface SwarmChatState {
+  /** 当前协同阶段（前端据此决定流式光标/骨架展示）。 */
+  phase: SwarmPhase;
   masterPlanning: string;
   roles: SwarmRoleStream[];
   masterSummary: string;

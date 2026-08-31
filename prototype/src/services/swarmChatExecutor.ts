@@ -35,11 +35,15 @@ export interface SwarmChatInput {
 
 export interface SwarmChatCallbacks {
   onMasterPlanning: (planning: string) => void;
+  /** Master 拆解流式增量（逐字）。 */
+  onMasterPlanningDelta?: (delta: string) => void;
   /** Master 拆解完成后，将实际选中的角色（初始 running 态）投影到前端。 */
   onRolesSelected: (roles: SwarmRoleStream[]) => void;
   onRoleStatus: (roleId: string, status: 'running' | 'passed' | 'error', error?: string) => void;
   onRoleDelta: (roleId: string, delta: string) => void;
   onMasterSummary: (summary: string) => void;
+  /** Master 终审流式增量（逐字）。 */
+  onMasterSummaryDelta?: (delta: string) => void;
 }
 
 const MASTER_SYSTEM = `你是 Tcode 桌面 IDE 的 Swarm Master 协同调度中枢。
@@ -137,7 +141,7 @@ export async function runSwarmChat(
     user: buildPlanningPrompt(input),
     modelId: input.modelId,
     signal: input.signal,
-    onDelta: () => {},
+    onDelta: (delta) => callbacks.onMasterPlanningDelta?.(delta),
   });
   const { planning, roleIds } = parseDecomposition(raw);
   callbacks.onMasterPlanning(planning);
@@ -179,9 +183,9 @@ export async function runSwarmChat(
     user: buildSummaryPrompt(input, selectedRoles),
     modelId: input.modelId,
     signal: input.signal,
-    onDelta: () => {},
+    onDelta: (delta) => callbacks.onMasterSummaryDelta?.(delta),
   });
   callbacks.onMasterSummary(masterSummary);
 
-  return { masterPlanning: planning, roles: selectedRoles, masterSummary };
+  return { phase: 'done' as const, masterPlanning: planning, roles: selectedRoles, masterSummary };
 }

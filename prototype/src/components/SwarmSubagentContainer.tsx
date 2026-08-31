@@ -43,28 +43,42 @@ export const SwarmSubagentContainer: React.FC<SwarmSubagentContainerProps> = ({
   const parsed = swarm
     ? normalizeSwarmState(swarm)
     : parseSwarmContent(content, isStreaming);
-  const streaming = swarm ? swarm.roles.some(r => r.status === 'running') : isStreaming;
+  // 全链路流式：拆解(planning) / 角色并发(roles) / 终审(summary) 均为流式中
+  const streaming = swarm
+    ? swarm.phase === 'planning' || swarm.phase === 'roles' || swarm.phase === 'summary'
+    : isStreaming;
+  const planningStreaming = swarm ? swarm.phase === 'planning' : isStreaming;
+  const summaryStreaming = swarm ? swarm.phase === 'summary' : false;
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const toggle = (key: string) => setCollapsed(prev => ({ ...prev, [key]: !prev[key] }));
 
-  // Master 拆解中（角色尚未由 Master 动态组队）→ 骨架状态
+  // Master 拆解中（角色尚未由 Master 动态组队）：有拆解内容则流式展示，否则骨架
   if (!parsed.isSwarmFormatted || parsed.subagents.length === 0) {
     if (streaming) {
       return (
         <div style={{
-          display: 'flex', alignItems: 'center', gap: '8px',
+          display: 'flex', flexDirection: 'column', gap: '6px',
           padding: '10px 14px', borderRadius: '8px',
           border: '1px solid var(--border-subtle, rgba(0,0,0,0.08))',
-          background: 'var(--bg-surface-elevated, #FFFFFF)',
-          fontSize: '12px', color: 'var(--text-secondary, #57534E)'
+          background: 'var(--bg-surface-elevated, #FFFFFF)'
         }}>
-          <span style={{ fontSize: '13px' }}>👑</span>
-          <span>Master 正在分析任务并组建 Subagent 团队</span>
-          <span style={{
-            width: '7px', height: '7px', borderRadius: '50%',
-            background: 'var(--accent, #D96B27)',
-            animation: 'tcodePulse 1.2s ease-in-out infinite'
-          }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: 'var(--text-secondary, #57534E)' }}>
+            <span style={{ fontSize: '13px' }}>👑</span>
+            <span>{parsed.masterPlanning ? 'Master 正在拆解任务并组建 Subagent 团队' : 'Master 正在分析任务并组建 Subagent 团队'}</span>
+            <span style={{
+              width: '7px', height: '7px', borderRadius: '50%',
+              background: 'var(--accent, #D96B27)',
+              animation: 'tcodePulse 1.2s ease-in-out infinite'
+            }} />
+          </div>
+          {parsed.masterPlanning && (
+            <MarkdownCard
+              content={parsed.masterPlanning}
+              isStreaming={true}
+              actionResults={actionResults}
+              onOpenFile={onOpenFile}
+            />
+          )}
         </div>
       );
     }
@@ -145,7 +159,7 @@ export const SwarmSubagentContainer: React.FC<SwarmSubagentContainerProps> = ({
             <div style={{ marginTop: '4px' }}>
               <MarkdownCard
                 content={parsed.masterPlanning}
-                isStreaming={false}
+                isStreaming={planningStreaming}
                 actionResults={actionResults}
                 onOpenFile={onOpenFile}
               />
@@ -195,12 +209,26 @@ export const SwarmSubagentContainer: React.FC<SwarmSubagentContainerProps> = ({
             </button>
             {!collapsed[sub.id] && (
               <div style={{ padding: '0 10px 10px 10px' }}>
-                <MarkdownCard
-                  content={sub.content}
-                  isStreaming={sub.status === 'running'}
-                  actionResults={actionResults}
-                  onOpenFile={onOpenFile}
-                />
+                {sub.status === 'running' && !sub.content.trim() ? (
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: '6px',
+                    fontSize: '11px', color: 'var(--text-muted, #78716C)', padding: '6px 2px'
+                  }}>
+                    <span style={{
+                      width: '6px', height: '6px', borderRadius: '50%',
+                      background: 'var(--accent, #D96B27)',
+                      animation: 'tcodePulse 1.2s ease-in-out infinite'
+                    }} />
+                    <span>{sub.name} 正在推演…</span>
+                  </div>
+                ) : (
+                  <MarkdownCard
+                    content={sub.content}
+                    isStreaming={sub.status === 'running'}
+                    actionResults={actionResults}
+                    onOpenFile={onOpenFile}
+                  />
+                )}
                 {sub.error && (
                   <div style={{
                     marginTop: '8px', padding: '6px 10px', borderRadius: '6px',
@@ -233,7 +261,7 @@ export const SwarmSubagentContainer: React.FC<SwarmSubagentContainerProps> = ({
           </div>
           <MarkdownCard
             content={parsed.masterSummary}
-            isStreaming={false}
+            isStreaming={summaryStreaming}
             actionResults={actionResults}
             onOpenFile={onOpenFile}
           />

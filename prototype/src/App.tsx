@@ -1237,6 +1237,7 @@ ${executionMode === 'swarm' ? `
       const isSwarmRun = executionMode === 'swarm';
       // 角色由 Master 拆解后动态决定，初始为空（UI 显示拆解中状态）
       const initialSwarm: SwarmChatState = {
+        phase: 'planning',
         masterPlanning: '',
         roles: [],
         masterSummary: '',
@@ -1264,6 +1265,7 @@ ${executionMode === 'swarm' ? `
       // ── Swarm 真并发多角色分支（结构化协议：Master 拆解 -> 4 角色并发 -> Master 终审） ──
       if (isSwarmRun) {
         let swarmState: SwarmChatState = {
+          phase: 'planning',
           masterPlanning: '',
           roles: [],
           masterSummary: '',
@@ -1307,12 +1309,17 @@ ${executionMode === 'swarm' ? `
           },
           {
             onMasterPlanning: (planning) => {
-              swarmState = { ...swarmState, masterPlanning: planning };
+              swarmState = { ...swarmState, phase: 'planning', masterPlanning: planning };
+              syncSwarmCard();
+            },
+            onMasterPlanningDelta: (delta) => {
+              // Master 拆解逐字流式上屏
+              swarmState = { ...swarmState, phase: 'planning', masterPlanning: swarmState.masterPlanning + delta };
               syncSwarmCard();
             },
             onRolesSelected: (roles) => {
-              // Master 已按任务动态组队：投影实际选中的角色卡片（初始 running 态）
-              swarmState = { ...swarmState, roles };
+              // Master 已按任务动态组队：进入角色并发阶段，投影实际选中角色卡片
+              swarmState = { ...swarmState, phase: 'roles', roles };
               syncSwarmCard();
             },
             onRoleStatus: (roleId, status, error) => {
@@ -1324,7 +1331,12 @@ ${executionMode === 'swarm' ? `
               syncSwarmCard();
             },
             onMasterSummary: (summary) => {
-              swarmState = { ...swarmState, masterSummary: summary };
+              swarmState = { ...swarmState, phase: 'summary', masterSummary: summary };
+              syncSwarmCard();
+            },
+            onMasterSummaryDelta: (delta) => {
+              // Master 终审逐字流式上屏
+              swarmState = { ...swarmState, phase: 'summary', masterSummary: swarmState.masterSummary + delta };
               syncSwarmCard();
             },
           },

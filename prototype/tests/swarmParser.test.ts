@@ -46,6 +46,7 @@ describe('parseSwarmContent (legacy single-stream regex fallback)', () => {
 describe('normalizeSwarmState (structured concurrent roles)', () => {
   it('maps structured roles into render model', () => {
     const swarm: SwarmChatState = {
+      phase: 'roles',
       masterPlanning: 'Master 拆解计划',
       roles: [
         { id: 'architect', name: '系统架构师', icon: '📐', content: '架构输出', status: 'passed' },
@@ -65,6 +66,7 @@ describe('normalizeSwarmState (structured concurrent roles)', () => {
 
   it('preserves role error message', () => {
     const swarm: SwarmChatState = {
+      phase: 'summary',
       masterPlanning: '',
       roles: [
         { id: 'qa', name: '质量测试专家', icon: '🧪', content: '', status: 'error', error: '模型超时' },
@@ -77,7 +79,7 @@ describe('normalizeSwarmState (structured concurrent roles)', () => {
   });
 
   it('returns not-formatted when no roles', () => {
-    const parsed = normalizeSwarmState({ masterPlanning: '', roles: [], masterSummary: '' });
+    const parsed = normalizeSwarmState({ phase: 'planning', masterPlanning: '', roles: [], masterSummary: '' });
     expect(parsed.isSwarmFormatted).toBe(false);
   });
 });
