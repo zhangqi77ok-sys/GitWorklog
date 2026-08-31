@@ -131,13 +131,13 @@ def build() -> Path:
     with zipfile.ZipFile(ZIP_OUTPUT, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         zf.write(INSTALLER_OUTPUT, arcname=INSTALLER_OUTPUT.name)
 
-    print(f"\n✨ Successfully generated Windows installer: {INSTALLER_OUTPUT} ({INSTALLER_OUTPUT.stat().st_size:,} bytes)")
-    print(f"✨ Successfully generated Zip archive: {ZIP_OUTPUT} ({ZIP_OUTPUT.stat().st_size:,} bytes)")
+    print(f"\n[OK] Successfully generated Windows installer: {INSTALLER_OUTPUT} ({INSTALLER_OUTPUT.stat().st_size:,} bytes)")
+    print(f"[OK] Successfully generated Zip archive: {ZIP_OUTPUT} ({ZIP_OUTPUT.stat().st_size:,} bytes)")
     return INSTALLER_OUTPUT
 
 if __name__ == "__main__":
     try:
         build()
     except Exception as e:
-        print(f"\n✕ Build failed: {e}", file=sys.stderr)
+        print(f"\n[ERROR] Build failed: {e}", file=sys.stderr)
         sys.exit(1)
