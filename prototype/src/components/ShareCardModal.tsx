@@ -3,6 +3,7 @@ import { X, Check, Copy, Download, Share2, Sparkles, Image as ImageIcon, ShieldC
 import { ChatMessage, SessionItem } from '../types/contracts';
 import { MarkdownCard } from './MarkdownCard';
 import { buildCleanConversationText } from '../services/shareText';
+import { isDesktopHost } from '../services/systemNotify';
 
 interface ShareCardModalProps {
   isOpen: boolean;
@@ -53,8 +54,26 @@ export const ShareCardModal: React.FC<ShareCardModalProps> = ({
     setTimeout(() => setCopiedText(false), 2500);
   };
 
-  // High-DPI Canvas PNG Card Generator
-  const handleSaveAsImage = () => {
+
+  // High-DPI Canvas PNG Card Generator (桌面宿主真实落盘; 浏览器 dev 环境 Blob 下载)
+  const canvasToPngBase64 = (canvas: HTMLCanvasElement): Promise<string> =>
+    new Promise((resolve, reject) => {
+      canvas.toBlob((blob) => {
+        if (!blob) {
+          reject(new Error('Canvas 转 PNG 失败'));
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = () => {
+          const dataUrl = reader.result as string;
+          resolve(dataUrl.split(',')[1] || '');
+        };
+        reader.onerror = () => reject(new Error('读取图片数据失败'));
+        reader.readAsDataURL(blob);
+      }, 'image/png');
+    });
+
+  const handleSaveAsImage = async () => {
     setIsGeneratingImage(true);
     try {
       const canvas = document.createElement('canvas');
@@ -64,8 +83,7 @@ export const ShareCardModal: React.FC<ShareCardModalProps> = ({
       const width = 800;
       const padding = 32;
       const contentWidth = width - padding * 2;
-      
-      // Calculate wrapped lines
+
       ctx.font = '14px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
       const rawLines = cleanContent.split('\n');
       const lines: string[] = [];
@@ -96,7 +114,6 @@ export const ShareCardModal: React.FC<ShareCardModalProps> = ({
       const footerHeight = 60;
       const height = headerHeight + contentHeight + footerHeight;
 
-      // Scale for Retina / High-DPI
       const scale = 2;
       canvas.width = width * scale;
       canvas.height = height * scale;
@@ -106,7 +123,6 @@ export const ShareCardModal: React.FC<ShareCardModalProps> = ({
       ctx.fillStyle = '#1A1816';
       ctx.fillRect(0, 0, width, height);
 
-      // Card border
       ctx.strokeStyle = '#38332E';
       ctx.lineWidth = 1;
       ctx.strokeRect(0, 0, width, height);
@@ -118,17 +134,19 @@ export const ShareCardModal: React.FC<ShareCardModalProps> = ({
       ctx.fillStyle = grad;
       ctx.fillRect(0, 0, width, 5);
 
-      // Logo Icon Box
       ctx.fillStyle = '#D96B27';
       ctx.beginPath();
-      ctx.roundRect(padding, 24, 28, 28, 6);
+      if (typeof ctx.roundRect === 'function') {
+        ctx.roundRect(padding, 24, 28, 28, 6);
+      } else {
+        ctx.rect(padding, 24, 28, 28);
+      }
       ctx.fill();
 
       ctx.fillStyle = '#FFFFFF';
       ctx.font = 'bold 16px sans-serif';
       ctx.fillText('T', padding + 8, 44);
 
-      // Brand Title
       ctx.fillStyle = '#FFFFFF';
       ctx.font = 'bold 16px sans-serif';
       ctx.fillText('Tcode', padding + 38, 38);
@@ -137,7 +155,6 @@ export const ShareCardModal: React.FC<ShareCardModalProps> = ({
       ctx.font = '11px sans-serif';
       ctx.fillText('AI Agentic Desktop IDE', padding + 38, 52);
 
-      // Project & Time (Right-aligned)
       ctx.fillStyle = '#E7E5E4';
       ctx.font = 'bold 12px sans-serif';
       ctx.textAlign = 'right';
@@ -148,7 +165,6 @@ export const ShareCardModal: React.FC<ShareCardModalProps> = ({
       ctx.fillText(cardDate, width - padding, 52);
       ctx.textAlign = 'left';
 
-      // Divider
       ctx.strokeStyle = '#292524';
       ctx.beginPath();
       ctx.moveTo(padding, headerHeight - 15);
@@ -158,7 +174,7 @@ export const ShareCardModal: React.FC<ShareCardModalProps> = ({
       // 3. Draw Message Content
       ctx.fillStyle = '#F5F5F4';
       ctx.font = '14px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-      
+
       let y = headerHeight + 10;
       for (let i = 0; i < maxLinesToRender; i++) {
         const line = lines[i];
@@ -197,21 +213,46 @@ export const ShareCardModal: React.FC<ShareCardModalProps> = ({
       ctx.textAlign = 'right';
       ctx.fillText('https://github.com/zhangqi77ok-sys/agent-learning', width - padding, footerY + 15);
 
-      // 5. Download as PNG
-      const link = document.createElement('a');
-      link.download = `Tcode-Share-Card-${Date.now()}.png`;
-      link.href = canvas.toDataURL('image/png');
-      link.click();
+      const dataBase64 = await canvasToPngBase64(canvas);
+      const filename = `Tcode-Share-Card-${Date.now()}.png`;
 
-      setImageGeneratedToast('✨ 已成功生成并下载精美图片卡片 (PNG)！');
-      setTimeout(() => setImageGeneratedToast(null), 3500);
+      if (isDesktopHost()) {
+        // 桌面宿主：真实落盘（WebView2 的 <a download> 默认不触发，改走宿主写文件）
+        const res = await fetch('/api/share/save_image', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filename, dataBase64 }),
+        });
+        if (!res.ok) {
+          const detail = await res.text().catch(() => '');
+          throw new Error(`保存失败: HTTP ${res.status} ${detail.slice(0, 120)}`);
+        }
+        const payload = await res.json();
+        setImageGeneratedToast(`✨ 已保存卡片图片：${payload.path}`);
+        setTimeout(() => setImageGeneratedToast(null), 5000);
+      } else {
+        // 浏览器 dev 环境：Blob 下载
+        const blob = await (await fetch(`data:image/png;base64,${dataBase64}`)).blob();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.download = filename;
+        link.href = url;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+        setImageGeneratedToast('✨ 已生成并下载卡片图片 (PNG)！');
+        setTimeout(() => setImageGeneratedToast(null), 3500);
+      }
     } catch (e) {
-      setImageGeneratedToast('❌ 生成图片失败，请重试');
-      setTimeout(() => setImageGeneratedToast(null), 3000);
+      setImageGeneratedToast(`❌ 保存卡片图片失败: ${e instanceof Error ? e.message : String(e)}`);
+      setTimeout(() => setImageGeneratedToast(null), 4000);
     } finally {
       setIsGeneratingImage(false);
     }
   };
+
+
 
   return (
     <div style={{

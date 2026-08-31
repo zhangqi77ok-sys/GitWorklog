@@ -1,6 +1,7 @@
 global_window = None
 import os
 import sys
+import base64
 import json
 import re
 import subprocess
@@ -79,6 +80,13 @@ from pathlib import Path
 def get_storage_dir():
     appdata = os.environ.get('LOCALAPPDATA', os.path.expanduser('~'))
     base = Path(appdata) / APP_STORAGE_KEY / 'storage'
+    base.mkdir(parents=True, exist_ok=True)
+    return base
+
+
+def get_share_dir():
+    # 分享卡片图片保存目录（LOCALAPPDATA/Tcode/storage/share）
+    base = get_storage_dir() / 'share'
     base.mkdir(parents=True, exist_ok=True)
     return base
 
@@ -652,6 +660,39 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
 
         if self.path.startswith('/api/git/worktree'):
             self._handle_worktree('POST')
+            return
+
+        # 1a. Save Share Card Image (PNG) to Local Disk
+        if self.path == '/api/share/save_image':
+            length = int(self.headers.get('Content-Length', 0))
+            try:
+                body = json.loads(self.rfile.read(length).decode('utf-8')) if length else {}
+            except Exception as e:
+                self._send_json(400, {'error': 'INVALID_JSON', 'code': 400, 'detail': str(e)})
+                return
+            filename = body.get('filename')
+            data_b64 = body.get('dataBase64')
+            if not isinstance(filename, str) or not filename or not isinstance(data_b64, str) or not data_b64:
+                self._send_json(400, {'error': 'INVALID_PAYLOAD', 'code': 400})
+                return
+            if not re.fullmatch(r'[A-Za-z0-9._-]+\.png', filename):
+                self._send_json(400, {'error': 'INVALID_FILENAME', 'code': 400})
+                return
+            try:
+                raw = base64.b64decode(data_b64, validate=True)
+            except Exception:
+                self._send_json(400, {'error': 'INVALID_BASE64', 'code': 400})
+                return
+            if not raw.startswith(b'\x89PNG'):
+                self._send_json(400, {'error': 'NOT_PNG', 'code': 400})
+                return
+            try:
+                target = get_share_dir() / filename
+                target.write_bytes(raw)
+            except Exception as e:
+                self._send_json(500, {'error': 'SAVE_FAILED', 'code': 500, 'detail': str(e)})
+                return
+            self._send_json(200, {'success': True, 'path': str(target)})
             return
 
         # 1b. Native Windows OS Toast Notification (System Task Completion / Error)
