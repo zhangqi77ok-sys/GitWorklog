@@ -110,7 +110,7 @@ export class HostGatewayService {
   /**
    * File write through Host Gateway with Mode Capability & boundary check
    */
-  public async writeFile(path: string, content: string, options: { mode?: WorkMode } = {}): Promise<{ success: boolean; size?: number; error?: string; isPolicyDenied?: boolean }> {
+  public async writeFile(path: string, content: string, options: { mode?: WorkMode; cwd?: string } = {}): Promise<{ success: boolean; size?: number; error?: string; isPolicyDenied?: boolean }> {
     const mode = options.mode || 'act';
     const policy = getRuntimePolicy(mode);
     if (!policy.capabilities.writeFiles) {
@@ -125,7 +125,7 @@ export class HostGatewayService {
       const res = await fetch('/api/fs/write', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path, content })
+        body: JSON.stringify({ path, content, cwd: options.cwd })
       });
       const data = await res.json();
       return data;
@@ -142,9 +142,13 @@ export class HostGatewayService {
   /**
    * Read file content through Host Gateway
    */
-  public async readFile(path: string): Promise<{ success: boolean; content?: string; error?: string }> {
+  public async readFile(path: string, options: { cwd?: string } = {}): Promise<{ success: boolean; content?: string; error?: string }> {
     try {
-      const res = await fetch(`/api/fs/read?path=${encodeURIComponent(path)}`);
+      const qs = new URLSearchParams({ path });
+      if (options.cwd) {
+        qs.set('cwd', options.cwd);
+      }
+      const res = await fetch(`/api/fs/read?${qs.toString()}`);
       const data = await res.json();
       return data;
     } catch {

@@ -474,9 +474,10 @@ export const App: React.FC = () => {
   // Multi-Project Groups (Clean initial state, loaded from local storage)
   const [projects, setProjects] = useState<ProjectGroup[]>(loadSavedProjects());
 
-  // Register persisted workspace roots with the desktop host (path sandbox)
-  React.useEffect(() => {
-    const paths = (loadSavedProjects() || []).map(p => p.path).filter(Boolean) as string[];
+  // Dynamically register workspace roots with desktop host path sandbox
+  const syncWorkspaceRootsToHost = React.useCallback((targetProjects?: ProjectGroup[]) => {
+    const projs = targetProjects || projects;
+    const paths = (projs || []).map(p => p.path).filter(Boolean) as string[];
     if (paths.length > 0 && typeof window !== 'undefined' && window.location.protocol === 'http:') {
       import('../src/services/hostClient').then(({ hostFetch }) =>
         hostFetch('/api/workspace/register', {
@@ -486,8 +487,12 @@ export const App: React.FC = () => {
         }).catch(() => {})
       );
     }
-     
-  }, []);
+  }, [projects]);
+
+  // Register persisted workspace roots with the desktop host (path sandbox)
+  React.useEffect(() => {
+    syncWorkspaceRootsToHost(projects);
+  }, [projects, syncWorkspaceRootsToHost]);
 
 
   // Token Stats (Clean initial state: 0 tokens until conversation starts)
@@ -694,6 +699,7 @@ export const App: React.FC = () => {
     const { projects: updatedProjects, newProject } = addProjectToWorkspace(projects, folderPath, 'main');
     setProjects(updatedProjects);
     saveProjectsToStorage(updatedProjects);
+    syncWorkspaceRootsToHost(updatedProjects);
 
     // Create a dedicated clean initial session under this new project (0 messages, completely isolated)
     const newSessionId = `session-proj-${Date.now()}`;
@@ -732,6 +738,7 @@ export const App: React.FC = () => {
     setProjects(prev => {
       const updated = removeProjectFromWorkspace(prev, projectId);
       saveProjectsToStorage(updated);
+      syncWorkspaceRootsToHost(updated);
       return updated;
     });
   };
@@ -873,25 +880,27 @@ export const App: React.FC = () => {
 
   // Execute one parsed action on the host via unified HostGateway with Mode Policy, SandboxGuard & SecurityShield.
   const executeActionOnHost = async (action: AgentAction, runMode: WorkMode = 'act'): Promise<ActionResult> => {
+    const activeSession = sessions.find(s => s.id === currentSessionId) || sessions[0];
+    const cwd = activeSession?.projectPath;
+
     if (action.target) {
       recordActiveFile(action.target);
     }
     if (action.type === 'read_file') {
-      const res = await hostGateway.readFile(action.target);
+      const res = await hostGateway.readFile(action.target, { cwd });
       return res.success && res.content !== undefined
         ? createActionResult(action, 'success', { output: res.content, fileSize: res.content.length })
         : createActionResult(action, 'failed', { error: res.error || '读取文件失败' });
     }
 
     if (action.type === 'write_file') {
-      const res = await hostGateway.writeFile(action.target, action.code, { mode: runMode });
+      const res = await hostGateway.writeFile(action.target, action.code, { mode: runMode, cwd });
       return res.success
         ? createActionResult(action, 'success', { fileSize: res.size })
         : createActionResult(action, 'failed', { error: res.error || '写入失败' });
     }
 
-    const activeSession = sessions.find(s => s.id === currentSessionId) || sessions[0];
-    const execRes = await hostGateway.executeCommand(action.code, { cwd: activeSession.projectPath, mode: runMode });
+    const execRes = await hostGateway.executeCommand(action.code, { cwd, mode: runMode });
     return createActionResult(action, execRes.success ? 'success' : 'failed', {
       output: execRes.stdout,
       error: execRes.stderr || execRes.error,

@@ -462,18 +462,34 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
         # 3. Real File Read from Disk
         if parsed.path == '/api/fs/read':
             qs = urllib.parse.parse_qs(parsed.query)
-            file_path = qs.get('path', [None])[0]
-            if not file_path or not Path(file_path).is_file():
+            raw_path = qs.get('path', [None])[0]
+            cwd = qs.get('cwd', [None])[0]
+            if not raw_path:
+                self._send_json(400, {'error': 'Missing path parameter'})
+                return
+
+            # If cwd is provided and is a valid directory, ensure it is in sandbox allowlist
+            if cwd and os.path.isdir(cwd):
+                path_sandbox.register_roots([cwd])
+
+            # Resolve relative path using cwd if available
+            if cwd and not os.path.isabs(raw_path):
+                file_path = os.path.normpath(os.path.join(cwd, raw_path))
+            else:
+                file_path = os.path.normpath(raw_path)
+
+            if not Path(file_path).is_file():
                 self.send_response(404)
                 self._apply_cors()
                 self.send_header('Content-Type', 'application/json')
                 self.end_headers()
-                self.wfile.write(json.dumps({'error': 'File not found on disk'}).encode('utf-8'))
+                self.wfile.write(json.dumps({'error': f'File not found on disk: {file_path}'}).encode('utf-8'))
                 return
+
             try:
                 path_sandbox.assert_path_allowed(file_path)
             except path_sandbox.PathSandboxError:
-                self._send_json(403, {'error': 'PATH_OUTSIDE_WORKSPACE', 'code': 403})
+                self._send_json(403, {'error': 'PATH_OUTSIDE_WORKSPACE', 'code': 403, 'path': file_path})
                 return
 
             try:
@@ -624,14 +640,24 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
             body = self.rfile.read(length)
             try:
                 data = json.loads(body.decode('utf-8'))
-                file_path = data.get('path')
+                raw_path = data.get('path')
                 content = data.get('content', '')
-                if not file_path:
+                cwd = data.get('cwd')
+                if not raw_path:
                     raise Exception('Missing file path')
+
+                if cwd and os.path.isdir(cwd):
+                    path_sandbox.register_roots([cwd])
+
+                if cwd and not os.path.isabs(raw_path):
+                    file_path = os.path.normpath(os.path.join(cwd, raw_path))
+                else:
+                    file_path = os.path.normpath(raw_path)
+
                 try:
                     path_sandbox.assert_path_allowed(file_path)
                 except path_sandbox.PathSandboxError:
-                    self._send_json(403, {'error': 'PATH_OUTSIDE_WORKSPACE', 'code': 403})
+                    self._send_json(403, {'error': 'PATH_OUTSIDE_WORKSPACE', 'code': 403, 'path': file_path})
                     return
                 p = Path(file_path)
                 p.parent.mkdir(parents=True, exist_ok=True)
