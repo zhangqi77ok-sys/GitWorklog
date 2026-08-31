@@ -3,6 +3,7 @@ import { X, Check, Copy, Download, Share2, Sparkles, Image as ImageIcon, ShieldC
 import { ChatMessage, SessionItem } from '../types/contracts';
 import { MarkdownCard } from './MarkdownCard';
 import { buildCleanConversationText } from '../services/shareText';
+import html2canvas from 'html2canvas';
 import { isDesktopHost } from '../services/systemNotify';
 
 interface ShareCardModalProps {
@@ -55,7 +56,7 @@ export const ShareCardModal: React.FC<ShareCardModalProps> = ({
   };
 
 
-  // High-DPI Canvas PNG Card Generator (桌面宿主真实落盘; 浏览器 dev 环境 Blob 下载)
+  // 保存为卡片图片：对预览卡片 DOM 截图（Markdown 已渲染，所见即所得）
   const canvasToPngBase64 = (canvas: HTMLCanvasElement): Promise<string> =>
     new Promise((resolve, reject) => {
       canvas.toBlob((blob) => {
@@ -76,144 +77,26 @@ export const ShareCardModal: React.FC<ShareCardModalProps> = ({
   const handleSaveAsImage = async () => {
     setIsGeneratingImage(true);
     try {
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      if (!ctx) throw new Error('Canvas 2D 不可用');
+      const node = cardRef.current;
+      if (!node) throw new Error('卡片预览不可用');
 
-      const width = 800;
-      const padding = 32;
-      const contentWidth = width - padding * 2;
-
-      ctx.font = '14px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-      const rawLines = cleanContent.split('\n');
-      const lines: string[] = [];
-
-      for (const rLine of rawLines) {
-        if (!rLine) {
-          lines.push('');
-          continue;
-        }
-        let current = '';
-        for (const char of rLine) {
-          const testLine = current + char;
-          const metrics = ctx.measureText(testLine);
-          if (metrics.width > contentWidth && current !== '') {
-            lines.push(current);
-            current = char;
-          } else {
-            current = testLine;
-          }
-        }
-        if (current) lines.push(current);
-      }
-
-      const lineHeight = 22;
-      // 完整渲染全部内容（不截断），内容超长时降采样保证 canvas 不超限
-      if (lines.length === 0) lines.push('（无内容可导出）');
-      const maxLinesToRender = lines.length;
-      const contentHeight = maxLinesToRender * lineHeight + 40;
-      const headerHeight = 110;
-      const footerHeight = 60;
-      const height = headerHeight + contentHeight + footerHeight;
-
-      const scale = height * 2 > 32000 ? 1 : 2;
-      canvas.width = width * scale;
-      canvas.height = height * scale;
-      ctx.scale(scale, scale);
-
-      // 1. Draw Card Background
-      ctx.fillStyle = '#1A1816';
-      ctx.fillRect(0, 0, width, height);
-
-      ctx.strokeStyle = '#38332E';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(0, 0, width, height);
-
-      // 2. Draw Header Banner
-      const grad = ctx.createLinearGradient(0, 0, width, 0);
-      grad.addColorStop(0, '#D96B27');
-      grad.addColorStop(1, '#9333EA');
-      ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, width, 5);
-
-      ctx.fillStyle = '#D96B27';
-      ctx.beginPath();
-      if (typeof ctx.roundRect === 'function') {
-        ctx.roundRect(padding, 24, 28, 28, 6);
-      } else {
-        ctx.rect(padding, 24, 28, 28);
-      }
-      ctx.fill();
-
-      ctx.fillStyle = '#FFFFFF';
-      ctx.font = 'bold 16px sans-serif';
-      ctx.fillText('T', padding + 8, 44);
-
-      ctx.fillStyle = '#FFFFFF';
-      ctx.font = 'bold 16px sans-serif';
-      ctx.fillText('Tcode', padding + 38, 38);
-
-      ctx.fillStyle = '#A8A29E';
-      ctx.font = '11px sans-serif';
-      ctx.fillText('AI Agentic Desktop IDE', padding + 38, 52);
-
-      ctx.fillStyle = '#E7E5E4';
-      ctx.font = 'bold 12px sans-serif';
-      ctx.textAlign = 'right';
-      ctx.fillText(`📁 ${session.projectName || '主工程'} (${session.gitBranch || 'main'})`, width - padding, 38);
-
-      ctx.fillStyle = '#78716C';
-      ctx.font = '11px sans-serif';
-      ctx.fillText(cardDate, width - padding, 52);
-      ctx.textAlign = 'left';
-
-      ctx.strokeStyle = '#292524';
-      ctx.beginPath();
-      ctx.moveTo(padding, headerHeight - 15);
-      ctx.lineTo(width - padding, headerHeight - 15);
-      ctx.stroke();
-
-      // 3. Draw Message Content
-      ctx.fillStyle = '#F5F5F4';
-      ctx.font = '14px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-
-      let y = headerHeight + 10;
-      for (let i = 0; i < maxLinesToRender; i++) {
-        const line = lines[i];
-        if (line.startsWith('```') || line.startsWith('#')) {
-          ctx.fillStyle = '#D96B27';
-          ctx.font = 'bold 14px Consolas, monospace';
-        } else if (line.startsWith('- ') || line.startsWith('● ')) {
-          ctx.fillStyle = '#E7E5E4';
-          ctx.font = '14px sans-serif';
-        } else {
-          ctx.fillStyle = '#D6D3D1';
-          ctx.font = '14px sans-serif';
-        }
-        ctx.fillText(line, padding, y);
-        y += lineHeight;
-      }
-
-      // 4. Draw Footer
-      const footerY = height - footerHeight + 15;
-      ctx.strokeStyle = '#292524';
-      ctx.beginPath();
-      ctx.moveTo(padding, footerY - 10);
-      ctx.lineTo(width - padding, footerY - 10);
-      ctx.stroke();
-
-      ctx.fillStyle = '#78716C';
-      ctx.font = '11px sans-serif';
-      ctx.fillText('✨ 由 Tcode 智能体生成 · 经 AST 语法校验与离线脱敏认证', padding, footerY + 15);
-
-      ctx.textAlign = 'right';
-      ctx.fillText('https://github.com/zhangqi77ok-sys/agent-learning', width - padding, footerY + 15);
+      // 对预览卡片（已含 MarkdownCard 渲染）整卡截图，完整内容不截断
+      const canvas = await html2canvas(node, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: null,
+        scrollX: 0,
+        scrollY: 0,
+        windowWidth: node.scrollWidth,
+        windowHeight: node.scrollHeight,
+      });
 
       const dataBase64 = await canvasToPngBase64(canvas);
       const filename = `Tcode-Share-Card-${Date.now()}.png`;
 
       if (isDesktopHost()) {
-        // 桌面宿主：真实落盘（WebView2 的 <a download> 默认不触发，改走宿主写文件）
+        // 桌面宿主：真实落盘 + 写入系统剪贴板（Ctrl+V 直接粘贴渲染后的图片）
         const res = await fetch('/api/share/save_image', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -251,7 +134,6 @@ export const ShareCardModal: React.FC<ShareCardModalProps> = ({
       setIsGeneratingImage(false);
     }
   };
-
 
 
   return (
