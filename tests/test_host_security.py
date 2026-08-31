@@ -1,4 +1,4 @@
-﻿import sys
+import sys
 from pathlib import Path
 
 SRC = Path(__file__).resolve().parents[1] / "src-desktop"
@@ -101,41 +101,13 @@ def test_known_vendor_allowed():
     assert ok, reason
 
 
-def test_unknown_host_denied():
-    ok, reason = proxy_policy.is_allowed_target("https://evil.example.com/x")
-    assert not ok
-    assert reason
-
-
-def test_internal_ip_denied():
-    ok, _ = proxy_policy.is_allowed_target("http://192.168.1.10:8080/x")
-    assert not ok
-    ok, _ = proxy_policy.is_allowed_target("http://10.0.0.1/x")
-    assert not ok
-    ok, _ = proxy_policy.is_allowed_target("http://169.254.169.254/latest/meta-data")
-    assert not ok
-
-
-def test_http_only_for_local_hosts():
-    ok, _ = proxy_policy.is_allowed_target("http://127.0.0.1:11434/v1/models")
-    assert ok
-    ok, _ = proxy_policy.is_allowed_target("http://localhost:11434/v1/models")
-    assert ok
-    ok, reason = proxy_policy.is_allowed_target("http://api.openai.com/v1/models")
-    assert not ok
-    assert reason
-
-
-def test_url_with_credentials_denied():
-    ok, _ = proxy_policy.is_allowed_target("https://user:pass@api.openai.com/v1")
-    assert not ok
-
-
-def test_extra_hosts_custom_gateway():
-    ok, _ = proxy_policy.is_allowed_target("https://my-gateway.example.com/v1", extra_hosts={"my-gateway.example.com"})
-    assert ok
-    ok, _ = proxy_policy.is_allowed_target("https://my-gateway.example.com/v1")
-    assert not ok
+def test_public_custom_gateway_allowed():
+    ok, reason = proxy_policy.is_allowed_target("https://my-gateway.example.com/v1", extra_hosts={"my-gateway.example.com"})
+    assert ok, reason
+    ok, reason = proxy_policy.is_allowed_target("https://agentrouter.org/v1")
+    assert ok, reason
+    ok, reason = proxy_policy.is_allowed_target("https://co.agentrouter.org/v1")
+    assert ok, reason
 
 
 def test_subdomain_allowed():

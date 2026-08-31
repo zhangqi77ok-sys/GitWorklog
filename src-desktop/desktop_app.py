@@ -447,6 +447,204 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
             self.wfile.write(json.dumps({'success': True, 'results': results}).encode('utf-8'))
             return
 
+        # Real Host & Workspace Profile Probe
+        if parsed.path == '/api/workspace/profile':
+            qs = urllib.parse.parse_qs(parsed.query)
+            raw_path = qs.get('path', [None])[0]
+            target_path = raw_path if raw_path and os.path.isdir(raw_path) else os.getcwd()
+            
+            is_windows = os.name == 'nt'
+            is_mac = sys.platform == 'darwin'
+            os_type = 'windows' if is_windows else ('macos' if is_mac else 'linux')
+            os_name = f"Windows {sys.getwindowsversion().major} (NT {sys.getwindowsversion().major}.{sys.getwindowsversion().minor})" if is_windows else ('macOS (Darwin)' if is_mac else 'Linux / POSIX')
+            shell_type = 'powershell' if is_windows else 'bash'
+            shell_path = 'powershell.exe' if is_windows else '/bin/bash'
+
+            toolchains = [f"python {sys.version.split()[0]}"]
+            try:
+                res_node = run_silent_cmd(['node', '--version'], timeout=3)
+                if res_node.returncode == 0 and res_node.stdout.strip():
+                    toolchains.append(f"node {res_node.stdout.strip()}")
+            except Exception:
+                pass
+
+            try:
+                res_git = run_silent_cmd(['git', '--version'], timeout=3)
+                if res_git.returncode == 0 and res_git.stdout.strip():
+                    toolchains.append("git")
+            except Exception:
+                pass
+
+            languages = []
+            frameworks = []
+            package_mgr = 'unknown'
+            test_framework = 'none'
+            test_command = ''
+
+            root = Path(target_path)
+            pkg_json_candidates = [root / 'package.json', root / 'prototype' / 'package.json', root / 'frontend' / 'package.json']
+            found_pkg = None
+            for cand in pkg_json_candidates:
+                if cand.is_file():
+                    found_pkg = cand
+                    break
+
+            if found_pkg:
+                try:
+                    pkg_data = json.loads(found_pkg.read_text(encoding='utf-8', errors='ignore'))
+                    deps = {**pkg_data.get('dependencies', {}), **pkg_data.get('devDependencies', {})}
+                    scripts = pkg_data.get('scripts', {})
+                    if 'typescript' in deps or (found_pkg.parent / 'tsconfig.json').is_file():
+                        languages.append('TypeScript')
+                    else:
+                        languages.append('JavaScript')
+
+                    if 'react' in deps: frameworks.append('React')
+                    if 'vue' in deps: frameworks.append('Vue')
+                    if 'vite' in deps: frameworks.append('Vite')
+                    if 'next' in deps: frameworks.append('Next.js')
+                    if 'express' in deps: frameworks.append('Express')
+
+                    if (found_pkg.parent / 'pnpm-lock.yaml').is_file(): package_mgr = 'pnpm'
+                    elif (found_pkg.parent / 'yarn.lock').is_file(): package_mgr = 'yarn'
+                    else: package_mgr = 'npm'
+
+                    if 'vitest' in deps or 'vitest' in scripts.get('test', ''):
+                        test_framework = 'vitest'
+                        test_command = 'npm test' if package_mgr == 'npm' else f'{package_mgr} test'
+                    elif 'jest' in deps or 'jest' in scripts.get('test', ''):
+                        test_framework = 'jest'
+                        test_command = 'npm test' if package_mgr == 'npm' else f'{package_mgr} test'
+                    elif 'test' in scripts:
+                        test_framework = 'custom'
+                        test_command = f"{package_mgr} test"
+                except Exception:
+                    pass
+
+            py_indicators = [root / 'pyproject.toml', root / 'requirements.txt', root / 'setup.py', root / 'src-desktop' / 'requirements.txt']
+            if any(p.is_file() for p in py_indicators) or any(root.glob('*.py')):
+                languages.append('Python')
+                if (root / 'pyproject.toml').is_file() or (root / 'uv.lock').is_file():
+                    if package_mgr == 'unknown': package_mgr = 'uv'
+                if test_framework == 'none':
+                    test_framework = 'pytest'
+                    test_command = 'pytest'
+
+            if (root / 'Cargo.toml').is_file() or any(root.glob('*.rs')):
+                languages.append('Rust')
+                if package_mgr == 'unknown': package_mgr = 'cargo'
+                if test_framework == 'none':
+                    test_framework = 'cargo-test'
+                    test_command = 'cargo test'
+
+            if (root / 'go.mod').is_file() or any(root.glob('*.go')):
+                languages.append('Go')
+                if package_mgr == 'unknown': package_mgr = 'go'
+                if test_framework == 'none':
+                    test_framework = 'go-test'
+                    test_command = 'go test ./...'
+
+            if (root / 'build.zig').is_file() or (root / 'build.zig.zon').is_file() or any(root.glob('*.zig')):
+                languages.append('Zig')
+                if test_framework == 'none':
+                    test_framework = 'custom'
+                    test_command = 'zig build test'
+
+            if (root / 'CMakeLists.txt').is_file() or (root / 'Makefile').is_file() or any(root.glob('*.cpp')) or any(root.glob('*.c')):
+                languages.append('C / C++')
+                if test_framework == 'none':
+                    test_framework = 'custom'
+                    test_command = 'ctest'
+
+            if (root / 'pubspec.yaml').is_file() or any(root.glob('*.dart')):
+                languages.append('Dart / Flutter')
+                if test_framework == 'none':
+                    test_framework = 'custom'
+                    test_command = 'dart test'
+
+            if (root / 'mix.exs').is_file() or any(root.glob('*.ex')):
+                languages.append('Elixir')
+                if test_framework == 'none':
+                    test_framework = 'custom'
+                    test_command = 'mix test'
+
+            if (root / 'Package.swift').is_file() or any(root.glob('*.swift')):
+                languages.append('Swift')
+                if test_framework == 'none':
+                    test_framework = 'custom'
+                    test_command = 'swift test'
+
+            if (root / 'composer.json').is_file() or any(root.glob('*.php')):
+                languages.append('PHP')
+                if test_framework == 'none':
+                    test_framework = 'custom'
+                    test_command = 'composer test'
+
+            if (root / 'Gemfile').is_file() or any(root.glob('*.rb')):
+                languages.append('Ruby')
+                if test_framework == 'none':
+                    test_framework = 'custom'
+                    test_command = 'bundle exec rspec'
+
+            if (root / 'pom.xml').is_file() or (root / 'build.gradle').is_file() or (root / 'build.gradle.kts').is_file() or any(root.glob('*.java')) or any(root.glob('*.kt')):
+                languages.append('Java / Kotlin')
+                if test_framework == 'none':
+                    test_framework = 'custom'
+                    test_command = 'mvn test'
+
+            if any(root.glob('*.cs')) or any(root.glob('*.csproj')) or any(root.glob('*.sln')):
+                languages.append('C# (.NET)')
+                if test_framework == 'none':
+                    test_framework = 'custom'
+                    test_command = 'dotnet test'
+
+            if (root / 'Project.toml').is_file() or any(root.glob('*.jl')):
+                languages.append('Julia')
+                if test_framework == 'none':
+                    test_framework = 'custom'
+                    test_command = 'julia --project -e "using Pkg; Pkg.test()"'
+
+            if (root / 'stack.yaml').is_file() or any(root.glob('*.hs')):
+                languages.append('Haskell')
+                if test_framework == 'none':
+                    test_framework = 'custom'
+                    test_command = 'stack test'
+
+            if any(root.glob('*.sol')) or (root / 'hardhat.config.js').is_file() or (root / 'foundry.toml').is_file():
+                languages.append('Solidity')
+                if test_framework == 'none':
+                    test_framework = 'custom'
+                    test_command = 'forge test'
+
+            if any(root.glob('*.lua')):
+                languages.append('Lua')
+
+            if not languages:
+                languages = ['Custom / Multi-Stack']
+                test_framework = 'custom'
+                test_command = ''
+
+            profile_data = {
+                'os': os_type,
+                'osName': os_name,
+                'shell': shell_type,
+                'shellPath': shell_path,
+                'languages': list(dict.fromkeys(languages)),
+                'frameworks': list(dict.fromkeys(frameworks)),
+                'packageManager': package_mgr,
+                'testFramework': test_framework,
+                'testCommand': test_command,
+                'installedToolchains': toolchains,
+                'activeWorkspacePath': str(root).replace('\\', '/')
+            }
+
+            self.send_response(200)
+            self._apply_cors()
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({'success': True, 'profile': profile_data}).encode('utf-8'))
+            return
+
         # Real Git Status from Disk
         if parsed.path == '/api/git/status':
             qs = urllib.parse.parse_qs(parsed.query)
@@ -488,6 +686,52 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
             self.send_header('Content-Type', 'application/json')
             self.end_headers()
             self.wfile.write(json.dumps({'success': True, 'branch': branch, 'changes': changes}).encode('utf-8'))
+            return
+
+        # Real Git Checkpoints List from Disk
+        if parsed.path == '/api/git/checkpoints':
+            qs = urllib.parse.parse_qs(parsed.query)
+            target_path = qs.get('path', [None])[0] or str(get_dist_path().parent.parent)
+            session_id = qs.get('sessionId', [None])[0]
+            explicit_path = qs.get('path', [None])[0]
+            if explicit_path:
+                try:
+                    path_sandbox.assert_path_allowed(explicit_path)
+                except path_sandbox.PathSandboxError:
+                    self._send_json(403, {'error': 'PATH_OUTSIDE_WORKSPACE', 'code': 403})
+                    return
+            checkpoints = []
+            try:
+                p = Path(target_path)
+                if (p / '.git').exists():
+                    ref_prefix = f"refs/codemind/checkpoints/{session_id}" if session_id else "refs/codemind/checkpoints"
+                    cmd = ['git', 'for-each-ref', '--format=%(refname)|%(objectname:short)|%(contents:subject)|%(authordate:iso8601)', ref_prefix]
+                    res = run_silent_cmd(cmd, cwd=target_path, timeout=10)
+                    if res.returncode == 0 and res.stdout.strip():
+                        for line in res.stdout.splitlines():
+                            parts = line.split('|')
+                            if len(parts) >= 4:
+                                ref_name = parts[0].strip()
+                                commit_hash = parts[1].strip()
+                                subject = parts[2].strip().replace('checkpoint: ', '')
+                                auth_date = parts[3].strip()
+                                ref_tokens = ref_name.split('/')
+                                turn_idx = ref_tokens[-1] if len(ref_tokens) > 0 else '0'
+                                checkpoints.append({
+                                    'ref': ref_name,
+                                    'commitHash': commit_hash,
+                                    'summary': subject or 'Auto Checkpoint',
+                                    'timestamp': auth_date,
+                                    'turnIndex': turn_idx
+                                })
+            except Exception:
+                pass
+
+            self.send_response(200)
+            self._apply_cors()
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({'success': True, 'checkpoints': checkpoints}).encode('utf-8'))
             return
 
         # 3. Real File Read from Disk
@@ -640,11 +884,15 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
                 return
 
             req = urllib.request.Request(target_url, method='GET')
-            if 'opencode' in target_url:
-                req.add_header('User-Agent', 'OpenCode/1.0')
-            else:
-                req.add_header('User-Agent', 'Tcode/1.5.0')
-            if auth_header:
+            # Forward all standard auth, anthropic, openai and stainless client headers
+            for h_key, h_val in self.headers.items():
+                lower_h = h_key.lower()
+                if lower_h in ('authorization', 'x-api-key', 'anthropic-version', 'anthropic-beta', 'openai-organization', 'openai-project') or lower_h.startswith('x-stainless-') or lower_h.startswith('x-cursor-'):
+                    req.add_header(h_key, h_val)
+
+            if not req.has_header('User-Agent'):
+                req.add_header('User-Agent', 'opencode/1.0')
+            if auth_header and not req.has_header('Authorization'):
                 req.add_header('Authorization', auth_header)
                 
             try:
@@ -977,6 +1225,48 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
                 self.wfile.write(json.dumps({'error': str(e)}).encode('utf-8'))
             return
 
+        # 6b. Real Git Commit
+        if self.path == '/api/git/commit':
+            length = int(self.headers.get('Content-Length', 0))
+            body = self.rfile.read(length)
+            try:
+                payload = json.loads(body.decode('utf-8'))
+                project_path = payload.get('projectPath') or os.getcwd()
+                try:
+                    path_sandbox.assert_path_allowed(project_path)
+                except path_sandbox.PathSandboxError:
+                    self._send_json(403, {'error': 'PATH_OUTSIDE_WORKSPACE', 'code': 403})
+                    return
+                message = payload.get('message', 'update changes')
+                
+                si = get_silent_startupinfo()
+                c_flags = CREATE_NO_WINDOW if os.name == 'nt' else 0
+                
+                # git add -A
+                subprocess.run(['git', 'add', '-A'], cwd=project_path, capture_output=True, startupinfo=si if os.name == 'nt' else None, creationflags=c_flags)
+                # git commit -m <message>
+                proc = subprocess.run(['git', 'commit', '-m', message], cwd=project_path, capture_output=True, text=True, startupinfo=si if os.name == 'nt' else None, creationflags=c_flags)
+                
+                proc_rev = subprocess.run(['git', 'rev-parse', '--short', 'HEAD'], cwd=project_path, capture_output=True, text=True, startupinfo=si if os.name == 'nt' else None, creationflags=c_flags)
+                commit_hash = proc_rev.stdout.strip() if proc_rev.returncode == 0 else ''
+
+                self.send_response(200)
+                self._apply_cors()
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({
+                    'success': proc.returncode == 0 or 'nothing to commit' in (proc.stdout or ''),
+                    'commitHash': commit_hash,
+                    'output': proc.stdout or proc.stderr
+                }).encode('utf-8'))
+            except Exception as e:
+                self.send_response(500)
+                self._apply_cors()
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'error': str(e)}).encode('utf-8'))
+            return
+
         # 6. Real Git Plumbing Shadow Revert
         if self.path == '/api/git/revert':
             length = int(self.headers.get('Content-Length', 0))
@@ -1067,6 +1357,75 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_header('Content-Type', 'application/json')
                 self.end_headers()
                 self.wfile.write(json.dumps({'success': True, 'key': key}).encode('utf-8'))
+            except Exception as e:
+                self.send_response(500)
+                self._apply_cors()
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'error': str(e)}).encode('utf-8'))
+            return
+
+        # 3b. LSP / Compiler Diagnostics Check (for Self-Healing Feedback Loop)
+        if self.path == '/api/diagnostics/check':
+            length = int(self.headers.get('Content-Length', 0))
+            body = self.rfile.read(length)
+            try:
+                payload = json.loads(body.decode('utf-8'))
+                file_path = payload.get('filePath', '')
+                workspace_path = payload.get('workspacePath', '.')
+                
+                errors = []
+                ext = os.path.splitext(file_path)[1].lower()
+                si = get_silent_startupinfo()
+                c_flags = CREATE_NO_WINDOW if os.name == 'nt' else 0
+
+                # 1. Python Syntax / Compiler Check
+                if ext == '.py':
+                    full_p = os.path.join(workspace_path, file_path) if not os.path.isabs(file_path) else file_path
+                    if os.path.exists(full_p):
+                        proc = subprocess.run([sys.executable, '-m', 'py_compile', full_p], capture_output=True, text=True, startupinfo=si if os.name == 'nt' else None, creationflags=c_flags)
+                        if proc.returncode != 0:
+                            err_msg = proc.stderr.strip() or proc.stdout.strip()
+                            errors.append({
+                                'filePath': file_path,
+                                'line': 1,
+                                'column': 1,
+                                'code': 'SyntaxError',
+                                'message': err_msg,
+                                'source': 'py_compile'
+                            })
+
+                # 2. TypeScript / JavaScript Type & Syntax Check
+                elif ext in ('.ts', '.tsx', '.js', '.jsx'):
+                    npx_cmd = 'npx.cmd' if os.name == 'nt' else 'npx'
+                    # Run lightweight type check
+                    proc = subprocess.run([npx_cmd, 'tsc', '--noEmit', '--pretty', 'false'], cwd=workspace_path, capture_output=True, text=True, startupinfo=si if os.name == 'nt' else None, creationflags=c_flags)
+                    if proc.returncode != 0:
+                        lines = (proc.stdout or '').splitlines() + (proc.stderr or '').splitlines()
+                        for l in lines:
+                            l = l.strip()
+                            m = re.match(r'^(.*?)\((\d+),(\d+)\):\s*error\s*(\w+):\s*(.*)$', l)
+                            if m:
+                                err_f, err_line, err_col, err_code, err_text = m.groups()
+                                if not file_path or err_f.replace('\\', '/').endswith(file_path.replace('\\', '/')) or file_path.replace('\\', '/').endswith(err_f.replace('\\', '/')):
+                                    errors.append({
+                                        'filePath': err_f,
+                                        'line': int(err_line),
+                                        'column': int(err_col),
+                                        'code': err_code,
+                                        'message': err_text,
+                                        'source': 'tsc'
+                                    })
+
+                self.send_response(200)
+                self._apply_cors()
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({
+                    'success': True,
+                    'hasErrors': len(errors) > 0,
+                    'errors': errors[:10]
+                }).encode('utf-8'))
             except Exception as e:
                 self.send_response(500)
                 self._apply_cors()
@@ -1199,13 +1558,16 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
 
             req = urllib.request.Request(target_url, data=body_bytes, method='POST')
             req.add_header('Content-Type', 'application/json')
-            # OpenCode requires User-Agent: opencode/1.0 to bypass Cloudflare protection
-            if 'opencode' in target_url:
-                req.add_header('User-Agent', 'OpenCode/1.0')
-            else:
-                req.add_header('User-Agent', 'Tcode/1.5.0')
+            # Forward all standard auth, anthropic, openai and stainless client headers
+            for h_key, h_val in self.headers.items():
+                lower_h = h_key.lower()
+                if lower_h in ('authorization', 'x-api-key', 'anthropic-version', 'anthropic-beta', 'openai-organization', 'openai-project') or lower_h.startswith('x-stainless-') or lower_h.startswith('x-cursor-'):
+                    req.add_header(h_key, h_val)
 
-            if auth_header:
+            if not req.has_header('User-Agent'):
+                req.add_header('User-Agent', 'opencode/1.0')
+
+            if auth_header and not req.has_header('Authorization'):
                 req.add_header('Authorization', auth_header)
             
             try:

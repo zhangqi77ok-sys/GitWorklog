@@ -2,11 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { BookOpen, Search, Shield, Sparkles, Code2, Plus, Check, Edit3, Trash2, Globe, FolderGit2 } from 'lucide-react';
 import { ManagedRule } from '../../types/contracts';
 import { loadSavedRules, saveRulesToStorage, toggleRuleState, addManagedRule, updateManagedRule, deleteManagedRule } from '../../services/rulesStore';
+import { loadSavedMemories, deleteMemory, MemoryEntry } from '../../services/memoryStore';
 
 export const RulesMemoryPanel: React.FC = () => {
   const [rules, setRules] = useState<ManagedRule[]>(loadSavedRules());
+  const [memories, setMemories] = useState<MemoryEntry[]>(loadSavedMemories());
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeCategory, setActiveCategory] = useState<'all' | 'iron_law' | 'lesson' | 'team_rule' | 'global'>('all');
+  const [activeCategory, setActiveCategory] = useState<'all' | 'iron_law' | 'lesson' | 'team_rule' | 'global' | 'learned_memory'>('all');
   const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
   const [editPrompt, setEditPrompt] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
@@ -20,8 +22,15 @@ export const RulesMemoryPanel: React.FC = () => {
     const handleRulesUpdated = (e: any) => {
       if (e.detail) setRules(e.detail);
     };
+    const handleMemoriesUpdated = (e: any) => {
+      if (e.detail) setMemories(e.detail);
+    };
     window.addEventListener('codemind_rules_updated', handleRulesUpdated);
-    return () => window.removeEventListener('codemind_rules_updated', handleRulesUpdated);
+    window.addEventListener('tcode_memories_updated', handleMemoriesUpdated);
+    return () => {
+      window.removeEventListener('codemind_rules_updated', handleRulesUpdated);
+      window.removeEventListener('tcode_memories_updated', handleMemoriesUpdated);
+    };
   }, []);
 
   const filteredRules = rules.filter(r => {
@@ -198,12 +207,74 @@ export const RulesMemoryPanel: React.FC = () => {
           >
             团队规范
           </button>
+          <button
+            onClick={() => setActiveCategory('learned_memory')}
+            style={{
+              padding: '2px 7px',
+              borderRadius: '3px',
+              border: activeCategory === 'learned_memory' ? '1px solid #16A34A' : '1px solid var(--border-subtle)',
+              background: activeCategory === 'learned_memory' ? 'rgba(22, 163, 74, 0.12)' : 'transparent',
+              color: activeCategory === 'learned_memory' ? '#16A34A' : 'var(--text-muted)',
+              fontSize: '10px',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            🧠 长期记忆 ({memories.length})
+          </button>
         </div>
       </div>
 
-      {/* Rules List */}
+      {/* Rules & Memories List */}
       <div style={{ flex: 1, padding: '8px 10px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        {filteredRules.map(r => (
+        {activeCategory === 'learned_memory' ? (
+          memories.length === 0 ? (
+            <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '11px' }}>
+              暂无已学习的跨会话长期记忆。Agent 将在会话结束时自动沉淀您的习惯与约定。
+            </div>
+          ) : (
+            memories.map(m => (
+              <div
+                key={m.id}
+                style={{
+                  padding: '8px 10px',
+                  borderRadius: '6px',
+                  background: 'var(--bg-surface)',
+                  border: '1px solid var(--border-subtle)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '4px'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Sparkles size={12} color="#16A34A" />
+                    <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                      {m.summary}
+                    </span>
+                    <span style={{ fontSize: '9px', padding: '1px 4px', borderRadius: '3px', background: 'rgba(22, 163, 74, 0.12)', color: '#16A34A' }}>
+                      {m.category} · {(m.confidence * 100).toFixed(0)}%
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => deleteMemory(m.id)}
+                    style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '2px' }}
+                    title="删除该条记忆"
+                  >
+                    <Trash2 size={11} />
+                  </button>
+                </div>
+                <div style={{ fontSize: '10.5px', color: 'var(--text-secondary)', lineHeight: '1.4' }}>
+                  {m.detail}
+                </div>
+                <div style={{ fontSize: '9px', color: 'var(--text-muted)' }}>
+                  沉淀时间: {new Date(m.createdAt).toLocaleDateString()}
+                </div>
+              </div>
+            ))
+          )
+        ) : (
+          filteredRules.map(r => (
           <div
             key={r.id}
             style={{
@@ -313,7 +384,7 @@ export const RulesMemoryPanel: React.FC = () => {
               </div>
             </div>
           </div>
-        ))}
+        )))}
       </div>
 
       {/* Create New Rule Modal */}

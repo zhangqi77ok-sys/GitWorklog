@@ -113,6 +113,7 @@ import {
   loadSavedProjects,
   saveProjectsToStorage,
   resolveApiEndpoint,
+  resolveCanonicalChannelEndpoint,
   loadSavedSessions,
   saveSessionsToStorage,
   loadSavedSessionMessages,
@@ -126,8 +127,25 @@ import {
   appendLiveLog,
   loadSavedAccentColor,
   AgentPendingAction,
-  ActionResult
+  ActionResult,
+  ProjectProfile,
+  DEFAULT_PROJECT_PROFILE
 } from './types/contracts';
+import {
+  detectProjectProfile,
+  formatProfileForSystemPrompt,
+  formatProfileBadge,
+  getCachedProjectProfile
+} from './services/projectProfiler';
+import {
+  buildMemoryPromptSnippet,
+  extractMemoriesFromConversation,
+  saveMemory
+} from './services/memoryStore';
+import {
+  runFileDiagnostics,
+  formatDiagnosticFeedback
+} from './services/compilerDiagnostics';
 import {
   AgentAction,
   ActionScopeTrust,
@@ -617,6 +635,15 @@ export const App: React.FC = () => {
   // Active session's stage gate (per-session via SessionActorManager).
   const activeGate = sessionActorManager.getSessionRuntime(activeSession?.id)?.gate ?? null;
 
+  // Autonomous Project & Host Environment Profile State
+  const [projectProfile, setProjectProfile] = useState<ProjectProfile>(DEFAULT_PROJECT_PROFILE);
+  React.useEffect(() => {
+    const wsPath = activeSession?.projectPath || '';
+    detectProjectProfile(wsPath).then(prof => {
+      setProjectProfile(prof);
+    });
+  }, [activeSession?.projectPath]);
+
   // Session Tree Operations
   const handleNewGlobalSession = () => {
     const newSessionId = `session-${Date.now()}`;
@@ -975,8 +1002,12 @@ export const App: React.FC = () => {
   };
 
 
-  const handleSendMessage = async (text: string, mentions?: MentionContextItem[]) => {
-    if (!text.trim()) return;
+  const handleSendMessage = async (
+    text: string,
+    mentions?: MentionContextItem[],
+    images?: Array<{ id: string; name: string; dataUrl: string; sizeBytes?: number }>
+  ) => {
+    if (!text.trim() && (!images || images.length === 0)) return;
     if (sessionActorManager.isSessionRunning(currentSessionId)) {
       handleEnqueuePrompt(currentSessionId, text, mentions);
       return;
@@ -1029,6 +1060,7 @@ export const App: React.FC = () => {
       id: `msg-${Date.now()}`,
       role: 'user',
       content: text,
+      images,
       timestamp: Date.now(),
       permissionPolicy,
       checkpointRef: createdCheckpointRef,
@@ -1142,11 +1174,20 @@ export const App: React.FC = () => {
 
     const modePromptSnippet = buildModePromptSnippet(executionMode);
 
+    // 🖥️ Autonomous Host Environment & Project Stack Fingerprint
+    const profile = await detectProjectProfile(activeSession.projectPath);
+    setProjectProfile(profile);
+    const profilePromptSnippet = formatProfileForSystemPrompt(profile);
+    const memoryPromptSnippet = buildMemoryPromptSnippet();
+
     const systemPrompt = `你是 Tcode (AI Agentic Desktop IDE) 接入的生产级自主 AI Agent 架构师。
+${profilePromptSnippet}
+${memoryPromptSnippet ? `\n${memoryPromptSnippet}\n` : ''}
+
 【🚨 全局核心开发铁律（严格执行三步法，违者重构）】:
 1. 阶段一：深度分析与代码审查 (Analyze & Review) —— 首先盘查现有代码、目录树与测试契约，理解输入输出边界，定位痛点与依赖。
 2. 阶段二：制定架构与技术解决方案 (Propose Solution) —— 输出清晰明确的技术方案、函数/模块接口契约与改动计划。
-3. 阶段三：落地编码与全量自测验证 (Implement & Verify) —— 使用 write_file 编写完整生产级代码，并使用 run_command 运行 pytest/vitest 执行全量测试，直至全部通过！
+3. 阶段三：落地编码与全量自测验证 (Implement & Verify) —— 使用 write_file 编写完整生产级代码，并使用 run_command 运行 ${profile.testCommand || 'pytest/vitest'} 执行全量测试，直至全部通过！
 严禁在没有完成分析审查与方案制定的情况下盲目写码！
 
 【目标驱动运作法则】:
@@ -1446,12 +1487,9 @@ ${executionMode === 'swarm' ? `
           || savedChannels[0];
 
         if (channel) {
-          let baseUrl = channel.baseUrl.trim();
-          if (baseUrl.endsWith('/')) baseUrl = baseUrl.slice(0, -1);
+          const baseUrl = channel.baseUrl.trim();
           const targetModel = channel.modelMapping?.[streamingModel.id] || streamingModel.id;
-          const fullEndpoint = baseUrl.endsWith('/chat/completions') || baseUrl.endsWith('/messages')
-            ? baseUrl
-            : (channel.type === 14 ? `${baseUrl}/messages` : `${baseUrl}/chat/completions`);
+          const fullEndpoint = resolveCanonicalChannelEndpoint(baseUrl, channel.type);
           const { url, headers } = resolveApiEndpoint(fullEndpoint);
           requestUrl = url;
           requestHeaders = {
@@ -1545,48 +1583,69 @@ ${executionMode === 'swarm' ? `
 
         addLog('INFO', 'AgentLoop', `[Loop #${loopCount}] 调度模型 [${streamingModel.name}] · ${route.adapter} · ${route.endpointUrl}`);
 
-        // ── Stream LLM Response ──
+        // ── Stream LLM Response with 429 Retry ──
         let accumulatedContent = '';
         let accumulatedThinking = '';
         let firstTokenAt: number | null = null;
         const roundStartTime = performance.now();
         const nativeToolCalls: Array<{ id: string; name?: string; arguments?: string }> = [];
 
-        const response = await fetch(requestUrl, {
-          method: 'POST',
-          signal: controller.signal,
-          headers: {
-            'Content-Type': 'application/json',
-            ...requestHeaders
-          },
-          body: requestBody
-        });
+        let response: Response | null = null;
+        let retryCount = 0;
+        while (retryCount < 3) {
+          response = await fetch(requestUrl, {
+            method: 'POST',
+            signal: controller.signal,
+            headers: {
+              'Content-Type': 'application/json',
+              ...requestHeaders
+            },
+            body: requestBody
+          });
 
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          if (response.status === 429 && retryCount < 2) {
+            addLog('WARN', 'RateLimiter', `[中转站频控熔断] 收到 429 Too Many Requests，正在等待 ${1000 * (retryCount + 1)}ms 后自动重试 (#${retryCount + 1})...`);
+            await new Promise(r => setTimeout(r, 1000 * (retryCount + 1)));
+            retryCount++;
+            continue;
+          }
+          break;
+        }
+
+        if (!response || !response.ok) {
+          let detail = `HTTP ${response?.status || 500}: ${response?.statusText || 'Fetch Failed'}`;
+          try {
+            const errJson = await response?.json();
+            if (errJson?.error?.message) detail = `HTTP ${response?.status}: ${errJson.error.message}`;
+            else if (errJson?.msg) detail = `HTTP ${response?.status}: ${errJson.msg}`;
+            else if (errJson?.message) detail = `HTTP ${response?.status}: ${errJson.message}`;
+          } catch (_) {}
+          throw new Error(detail);
         }
 
         const reader = response.body?.getReader();
+
         const decoder = new TextDecoder('utf-8');
         let buffer = '';
+        let isFirstChunk = true;
+        let streamFinished = false;
+        let sawDoneSentinel = false;
+        let sawFinishReason = false;
+        let readerDone = false;
+        let receivedAnyBytes = false;
+        let toolProtocolError = false;
 
         if (reader) {
-          let isFirstChunk = true;
-          let streamFinished = false;
-          let sawDoneSentinel = false;
-          let sawFinishReason = false;
-          let readerDone = false;
-          let receivedAnyBytes = false;
-          let toolProtocolError = false;
-
           while (!streamFinished) {
             const { done, value } = await reader.read();
             if (done) {
               readerDone = true;
               break;
             }
+            if (value && value.length > 0) {
+              receivedAnyBytes = true;
+            }
             buffer += decoder.decode(value, { stream: true });
-            receivedAnyBytes = true;
 
             if (isFirstChunk && buffer.trim()) {
               isFirstChunk = false;
@@ -1677,7 +1736,14 @@ ${executionMode === 'swarm' ? `
             toolProtocolError
           });
           if (termination !== 'completed') {
-            throw new Error(termination === 'cancelled' ? '用户已取消本次模型响应' : `模型流异常: ${describeStreamTermination(termination)}`);
+            if (termination === 'cancelled') {
+              throw new Error('用户已取消本次模型响应');
+            }
+            if (termination === 'stream_interrupted' && (accumulatedContent.trim().length > 0 || accumulatedThinking.trim().length > 0)) {
+              addLog('WARN', 'StreamProtocol', `上游中转未发送[DONE]终止标头即关闭连接，已平滑容错并保全已收到的 ${accumulatedContent.length} 字符回复。`);
+            } else {
+              throw new Error(`模型流异常: ${describeStreamTermination(termination)}`);
+            }
           }
         } else {
           throw new Error(`模型流异常: ${describeStreamTermination('provider_empty_response')}`);
@@ -1692,6 +1758,14 @@ ${executionMode === 'swarm' ? `
         } else {
           finalContent = accumulatedContent;
         }
+
+        const cleanCheck = (accumulatedContent || accumulatedThinking || '').trim();
+        const isServerBusyMessage = cleanCheck.length > 0 && cleanCheck.length < 150 && /server is busy|server is overloaded|服务器繁忙|服务繁忙|系统繁忙|try again later/i.test(cleanCheck);
+        if (isServerBusyMessage) {
+          addLog('WARN', 'Gateway', `[上游算力高峰排队] 检测到上游服务商返回: "${cleanCheck}"`);
+          throw new Error(`上游模型服务商当前负载过高提示: "${cleanCheck}"。请直接按回车重新发送，或切换其他模型通道。`);
+        }
+
         if (!finalContent.trim()) {
           finalContent = '已完成分析。请继续提出具体指令。';
         }
@@ -1987,8 +2061,22 @@ ${executionMode === 'swarm' ? `
           break;
         }
 
+        // ⚡ LSP / Compiler Diagnostics Check (Self-Healing Loop)
+        let compilerDiagnosticsFeedback = '';
+        const writtenFiles = actions.filter(a => a.type === 'write_file').map(a => a.target);
+        if (writtenFiles.length > 0 && activeSession.projectPath) {
+          for (const wf of writtenFiles) {
+            const diag = await runFileDiagnostics(wf, activeSession.projectPath);
+            if (diag.hasErrors) {
+              compilerDiagnosticsFeedback = formatDiagnosticFeedback(diag.errors);
+              addLog('WARN', 'Diagnostics', `[LSP 编译报错] ${wf} 存在 ${diag.errors.length} 处类型/语法错误，已注入下轮自愈回路`);
+              break;
+            }
+          }
+        }
+
         // Append feedback message for next verification turn
-        const feedbackContent = formatExecutionFeedback(actions, results, activeAcceptanceItems);
+        const feedbackContent = formatExecutionFeedback(actions, results, activeAcceptanceItems, compilerDiagnosticsFeedback);
         const feedbackMsg: ChatMessage = {
           id: `feedback-${Date.now()}`,
           role: 'user',
@@ -2008,6 +2096,16 @@ ${executionMode === 'swarm' ? `
 
         // Continue loop → AI will see execution results and decide next step
       }
+
+      // 🧠 Cross-session memory auto-extraction on turn end
+      try {
+        const allMsgs = sessionMessages[currentSessionId] || [];
+        const extractedMemories = extractMemoriesFromConversation(allMsgs, currentSessionId);
+        if (extractedMemories.length > 0) {
+          extractedMemories.forEach(m => saveMemory(m));
+          addLog('INFO', 'MemoryVault', `[🧠 长期记忆沉淀] 自动提取了 ${extractedMemories.length} 条工程约定与习惯`);
+        }
+      } catch (e) {}
 
       if (!completedWithTarget && currentLoopStatus === 'no_progress') {
         addLog('WARN', 'AgentLoop', `任务暂停于无新进展状态，等待用户决策`);
@@ -2321,6 +2419,7 @@ ${executionMode === 'swarm' ? `
                 handleOpenFile(target.filePath, undefined, target.targetLine);
                 setActiveDiffTarget({ ...target, highlightToken: `diff-${target.fileId}` });
               }}
+              projectProfile={projectProfile}
             />
           </div>
 

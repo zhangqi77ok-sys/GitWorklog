@@ -2583,6 +2583,46 @@ export function saveProjectsToStorage(projects: ProjectGroup[]): void {
   } catch (e) {}
 }
 
+export function resolveCanonicalChannelEndpoint(baseUrl: string, channelType?: ChannelType | number): string {
+  let base = (baseUrl || '').trim().replace(/\/+$/, '');
+  if (!base) return '';
+  
+  // If already ends with full action endpoint, return directly
+  if (base.endsWith('/chat/completions') || base.endsWith('/messages') || base.endsWith('/responses')) {
+    return base;
+  }
+
+  // Anthropic / Claude Native format (ChannelType 14)
+  if (channelType === 14) {
+    if (base.endsWith('/v1') || base.endsWith('/api') || base.endsWith('/api/v1')) {
+      return `${base}/messages`;
+    }
+    return `${base}/v1/messages`;
+  }
+
+  // OpenAI / New-API / One-API / Custom:
+  if (base.endsWith('/v1') || base.endsWith('/api') || base.endsWith('/v1beta') || base.endsWith('/api/v1')) {
+    return `${base}/chat/completions`;
+  }
+
+  // Root domains (e.g. https://api.openai.com, https://agentrouter.org, https://co.agentrouter.org)
+  return `${base}/v1/chat/completions`;
+}
+
+export function resolveCanonicalModelsEndpoint(baseUrl: string): string {
+  let base = (baseUrl || '').trim().replace(/\/+$/, '');
+  if (!base) return '';
+  if (base.endsWith('/models')) return base;
+  if (base.endsWith('/chat/completions')) base = base.replace(/\/chat\/completions$/, '');
+  if (base.endsWith('/messages')) base = base.replace(/\/messages$/, '');
+  if (base.endsWith('/responses')) base = base.replace(/\/responses$/, '');
+
+  if (base.endsWith('/v1') || base.endsWith('/api') || base.endsWith('/api/v1') || base.endsWith('/v1beta')) {
+    return `${base}/models`;
+  }
+  return `${base}/v1/models`;
+}
+
 export function resolveApiEndpoint(targetUrl: string): { url: string; headers: Record<string, string> } {
   if (typeof window !== 'undefined' && (window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost')) {
     return {
@@ -2749,4 +2789,40 @@ export function saveThemeModeToStorage(theme: string): void {
       window.dispatchEvent(new CustomEvent('tcode_theme_mode_updated', { detail: theme }));
     }
   } catch (e) {}
+}
+
+// ── Autonomous Host & Project Profile Contract ──
+export interface ProjectProfile {
+  os: 'windows' | 'macos' | 'linux';
+  osName: string;
+  shell: 'powershell' | 'bash' | 'zsh' | 'cmd';
+  shellPath: string;
+  languages: string[];
+  frameworks: string[];
+  packageManager: 'npm' | 'pnpm' | 'yarn' | 'uv' | 'poetry' | 'cargo' | 'go' | 'pip' | 'unknown';
+  testFramework: 'vitest' | 'jest' | 'pytest' | 'cargo-test' | 'go-test' | 'unittest' | 'custom' | 'none';
+  testCommand: string;
+  installedToolchains: string[];
+  activeWorkspacePath: string;
+}
+
+export const DEFAULT_PROJECT_PROFILE: ProjectProfile = {
+  os: typeof navigator !== 'undefined' && /Win/i.test(navigator.userAgent || '') ? 'windows' : 'linux',
+  osName: typeof navigator !== 'undefined' && /Win/i.test(navigator.userAgent || '') ? 'Windows 11 (NT 10.0)' : 'Linux / POSIX',
+  shell: typeof navigator !== 'undefined' && /Win/i.test(navigator.userAgent || '') ? 'powershell' : 'bash',
+  shellPath: typeof navigator !== 'undefined' && /Win/i.test(navigator.userAgent || '') ? 'powershell.exe' : '/bin/bash',
+  languages: ['TypeScript', 'Python'],
+  frameworks: ['React', 'Vite'],
+  packageManager: 'npm',
+  testFramework: 'vitest',
+  testCommand: 'npm test',
+  installedToolchains: ['node', 'python', 'git', 'npm'],
+  activeWorkspacePath: ''
+};
+
+export interface DirectoryItem {
+  id: string;
+  name: string;
+  path: string;
+  type: 'file' | 'directory';
 }

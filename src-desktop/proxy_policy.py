@@ -1,4 +1,4 @@
-﻿"""SSRF guard: upstream target allowlist for the local /api/proxy relay."""
+"""SSRF guard: upstream target allowlist for the local /api/proxy relay."""
 import ipaddress
 from urllib.parse import urlparse
 
@@ -8,7 +8,7 @@ DEFAULT_ALLOWED_HOSTS = {
     "api.x.ai", "accounts.x.ai",
     "generativelanguage.googleapis.com",
     "api.deepseek.com", "api.moonshot.cn", "api.dashscope.aliyuncs.com",
-    "api.siliconflow.cn", "api.z.ai",
+    "api.siliconflow.cn", "api.z.ai", "agentrouter.org",
 }
 
 LOCAL_HOSTS = {"127.0.0.1", "localhost", "0.0.0.0", "::1"}
@@ -43,12 +43,10 @@ def is_allowed_target(url: str, extra_hosts=None) -> tuple:
         return False, "NON_LOCAL_HTTP_DENIED"
     if _is_ip_literal(host):
         return False, "IP_LITERAL_DENIED"
-    if host in DEFAULT_ALLOWED_HOSTS or host in extra_hosts:
+    allowed = DEFAULT_ALLOWED_HOSTS | extra_hosts
+    if host in allowed or any(host.endswith("." + h) for h in allowed):
         return True, ""
-    for allowed in (DEFAULT_ALLOWED_HOSTS | extra_hosts):
-        if host.endswith("." + allowed):
-            return True, ""
-    return False, "HOST_NOT_ALLOWLISTED"
+    return False, "UNKNOWN_HOST"
 
 
 def extract_extra_hosts(providers_payload) -> set:

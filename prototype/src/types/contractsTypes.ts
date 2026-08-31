@@ -62,6 +62,43 @@ export interface AskOptionsPayload {
 
 export type PermissionPolicy = 'strict_approval' | 'autonomous_agent' | 'risk_adaptive';
 
+export type PermissionMode = 'plan' | 'act';
+
+export interface PathPermissionRule {
+  pattern: string;
+  action: 'allow' | 'ask' | 'deny';
+}
+
+export interface CommandPermissionRule {
+  pattern: string;
+  action: 'allow' | 'ask' | 'deny';
+}
+
+export interface PermissionPolicyConfig {
+  mode: PermissionMode;
+  fileRules: PathPermissionRule[];
+  commandRules: CommandPermissionRule[];
+  allowLowRiskInSession: boolean;
+}
+
+export const DEFAULT_PERMISSION_CONFIG: PermissionPolicyConfig = {
+  mode: 'act',
+  fileRules: [
+    { pattern: '.env*', action: 'deny' },
+    { pattern: 'package.json', action: 'ask' },
+    { pattern: 'tests/**', action: 'allow' }
+  ],
+  commandRules: [
+    { pattern: 'git push*', action: 'ask' },
+    { pattern: 'git reset --hard*', action: 'deny' },
+    { pattern: 'rm -rf*', action: 'deny' },
+    { pattern: 'npm test*', action: 'allow' },
+    { pattern: 'vitest*', action: 'allow' },
+    { pattern: 'pytest*', action: 'allow' }
+  ],
+  allowLowRiskInSession: false
+};
+
 export type WorkMode = 'act' | 'plan' | 'minimal' | 'creator';
 
 export interface TaskPlanStep {
@@ -238,6 +275,7 @@ export interface ChatMessage {
   loopStatus?: LoopTerminationStatus; // 🏁 当前任务终止或进行状态
   terminationSummary?: string;        // 总结描述（如：4/4 项验收通过 · 测试通过）
   swarm?: SwarmChatState;            // 🐝 Swarm 真并发多角色结构化状态（存在时优先于正文正则解析）
+  images?: Array<{ id: string; name: string; dataUrl: string; sizeBytes?: number }>; // 🖼️ 多模态图片/截图附件
 }
 
 // Runtime L2 Session State Snapshot

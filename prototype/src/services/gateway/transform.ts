@@ -7,6 +7,7 @@ export interface GatewayMessage {
   content: string;
   toolCallId?: string;
   name?: string;
+  images?: Array<{ id: string; name: string; dataUrl: string; sizeBytes?: number }>;
 }
 
 export interface ToolFunction {
@@ -212,8 +213,20 @@ export class RequestTransformer {
     if (system.length > 0) chatMessages.push({ role: 'system', content: system.join('\n') });
     for (const m of messages) {
       if (m.role === 'system') continue;
-      if (!m.content && m.role !== 'tool') continue; // drop empty messages (T8)
-      const entry: Record<string, unknown> = { role: m.role, content: m.content };
+      if (!m.content && !m.images?.length && m.role !== 'tool') continue; // drop empty messages (T8)
+
+      let formattedContent: unknown = m.content;
+      if (m.images && m.images.length > 0) {
+        formattedContent = [
+          ...(m.content ? [{ type: 'text', text: m.content }] : []),
+          ...m.images.map(img => ({
+            type: 'image_url',
+            image_url: { url: img.dataUrl }
+          }))
+        ];
+      }
+
+      const entry: Record<string, unknown> = { role: m.role, content: formattedContent };
       if (m.role === 'tool' && m.toolCallId) entry.tool_call_id = m.toolCallId;
       chatMessages.push(entry);
     }

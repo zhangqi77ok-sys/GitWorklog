@@ -18,7 +18,9 @@ import {
   ChannelType,
   CHANNEL_PRESETS,
   getPresetForChannelType,
-  resolveApiEndpoint
+  resolveApiEndpoint,
+  resolveCanonicalChannelEndpoint,
+  resolveCanonicalModelsEndpoint
 } from '../types/contracts';
 
 interface ChannelMutateModalProps {
@@ -164,19 +166,28 @@ export const ChannelMutateModal: React.FC<ChannelMutateModalProps> = ({
     setIsFetchingModels(true);
     setTestToast(null);
     try {
-      let target = baseUrl.trim();
-      if (target.endsWith('/')) target = target.slice(0, -1);
-      const urlWithEndpoint = target.endsWith('/models') ? target : `${target}/models`;
-      const { url: fetchUrl, headers: proxyHeaders } = resolveApiEndpoint(urlWithEndpoint);
+      const canonicalUrl = resolveCanonicalModelsEndpoint(baseUrl);
+      const { url: fetchUrl, headers: proxyHeaders } = resolveApiEndpoint(canonicalUrl);
 
       const headers: Record<string, string> = { ...proxyHeaders };
       if (key.trim()) {
         const firstKey = key.trim().split('\n')[0].trim();
         headers['Authorization'] = `Bearer ${firstKey}`;
+        headers['x-api-key'] = firstKey;
+        headers['anthropic-version'] = '2023-06-01';
       }
 
       const res = await fetch(fetchUrl, { method: 'GET', headers });
-      if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      if (!res.ok) {
+        let errMsg = `HTTP ${res.status}: ${res.statusText}`;
+        try {
+          const errJson = await res.json();
+          if (errJson?.error?.message) errMsg = errJson.error.message;
+          else if (errJson?.msg) errMsg = errJson.msg;
+          else if (errJson?.message) errMsg = errJson.message;
+        } catch (_) {}
+        throw new Error(errMsg);
+      }
       const json = await res.json();
       const rawList: any[] = json.data || json.models || (Array.isArray(json) ? json : []);
       if (rawList.length > 0) {
@@ -194,7 +205,7 @@ export const ChannelMutateModal: React.FC<ChannelMutateModalProps> = ({
     }
   };
 
-  // Real test connectivity probe
+  // Real test connectivity probe (Dual-Stage: 1. GET /models -> 2. Fallback POST /chat/completions)
   const handleTestConnectivity = async () => {
     if (!baseUrl.trim()) {
       setTestToast({ text: '请先填写 Base URL', success: false });
@@ -204,23 +215,63 @@ export const ChannelMutateModal: React.FC<ChannelMutateModalProps> = ({
     setTestToast(null);
     const start = Date.now();
     try {
-      let target = baseUrl.trim();
-      if (target.endsWith('/')) target = target.slice(0, -1);
-      const testUrlTarget = target.endsWith('/models') ? target : `${target}/models`;
+      const targetBase = baseUrl.trim();
+
+      const testUrlTarget = resolveCanonicalModelsEndpoint(targetBase);
       const { url: testUrl, headers: proxyHeaders } = resolveApiEndpoint(testUrlTarget);
 
       const headers: Record<string, string> = { ...proxyHeaders };
       if (key.trim()) {
         const firstKey = key.trim().split('\n')[0].trim();
         headers['Authorization'] = `Bearer ${firstKey}`;
+        headers['x-api-key'] = firstKey;
+        headers['anthropic-version'] = '2023-06-01';
       }
 
       const res = await fetch(testUrl, { method: 'GET', headers });
       const duration = Date.now() - start;
       if (res.ok) {
         setTestToast({ text: `✓ 连通性测试通过！HTTP ${res.status} OK · 响应时延 ${duration}ms`, success: true });
+        return;
+      }
+
+      // Stage 2: If /models is forbidden/disabled by unofficial middleman WAF, test /chat/completions
+      const targetModel = testModel || models[0] || 'gpt-4o-mini';
+      const chatUrlTarget = resolveCanonicalChannelEndpoint(targetBase, selectedType);
+      const { url: chatUrl, headers: chatProxyHeaders } = resolveApiEndpoint(chatUrlTarget);
+      const chatHeaders: Record<string, string> = {
+        'Content-Type': 'application/json',
+        ...chatProxyHeaders
+      };
+      if (key.trim()) {
+        const firstKey = key.trim().split('\n')[0].trim();
+        chatHeaders['Authorization'] = `Bearer ${firstKey}`;
+        chatHeaders['x-api-key'] = firstKey;
+        chatHeaders['anthropic-version'] = '2023-06-01';
+      }
+
+      const chatRes = await fetch(chatUrl, {
+        method: 'POST',
+        headers: chatHeaders,
+        body: JSON.stringify({
+          model: targetModel,
+          messages: [{ role: 'user', content: 'hi' }],
+          max_tokens: 1
+        })
+      });
+
+      const chatDuration = Date.now() - start;
+      if (chatRes.ok) {
+        setTestToast({ text: `✓ 连通性测试通过！[${targetModel}] 对话接口响应正常 · 时延 ${chatDuration}ms`, success: true });
       } else {
-        setTestToast({ text: `✕ 连通异常: HTTP ${res.status} (${res.statusText}) · 耗时 ${duration}ms`, success: false });
+        let detailMsg = `HTTP ${chatRes.status} (${chatRes.statusText})`;
+        try {
+          const errJson = await chatRes.json();
+          if (errJson?.error?.message) detailMsg = errJson.error.message;
+          else if (errJson?.msg) detailMsg = errJson.msg;
+          else if (errJson?.message) detailMsg = errJson.message;
+        } catch (_) {}
+        setTestToast({ text: `✕ 连通异常: ${detailMsg} · 耗时 ${chatDuration}ms`, success: false });
       }
     } catch (err: any) {
       const duration = Date.now() - start;

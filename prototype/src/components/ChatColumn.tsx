@@ -96,7 +96,8 @@ import {
   togglePinnedFile,
   mergeForkSessionToMain,
   MOCK_REPO_GRAPH,
-  clampChangesetHeight
+  clampChangesetHeight,
+  ProjectProfile
 } from '../types/contracts';
 import { OptionsCard } from './OptionsCard';
 import { SemanticCommitModal } from './SemanticCommitModal';
@@ -119,6 +120,8 @@ import { ExecutionModeCapsule } from './ExecutionModeCapsule';
 import { useChatColumn } from '../hooks/useChatColumn';
 import type { TokenStats } from '../types/contracts';
 import { StageGateCard } from './StageGateCard';
+import { TerminalOutputCard } from './TerminalOutputCard';
+import { generateConventionalCommitMessage, commitGitChanges } from '../services/gitWorkflow';
 
 interface ChatColumnProps {
   rightWorkspaceOpen: boolean;
@@ -141,7 +144,7 @@ interface ChatColumnProps {
   onEditQueuedPrompt?: (id: string, newText: string) => void;
   onMoveQueuedPrompt?: (index: number, direction: -1 | 1) => void;
   onPreemptQueuedPrompt?: (id: string) => void;
-  onSendMessage: (text: string, mentions?: MentionContextItem[]) => void;
+  onSendMessage: (text: string, mentions?: MentionContextItem[], images?: Array<{ id: string; name: string; dataUrl: string; sizeBytes?: number }>) => void;
   onResolveOptions: (messageId: string, selectedIds: string[], customInput?: string) => void;
   onForkMessage?: (fromMessageId: string) => void;
   onNavigateDiff?: (target: { fileId: string; filePath: string; targetLine: number }) => void;
@@ -160,6 +163,7 @@ interface ChatColumnProps {
   onOpenSpec?: (path: string) => void;
   tokenStats?: TokenStats;
   swarmRunId?: string;
+  projectProfile?: ProjectProfile;
 }
 
 export const ChatColumn: React.FC<ChatColumnProps> = ({
@@ -199,7 +203,8 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
   onGateFeedback,
   onOpenSpec,
   tokenStats,
-  swarmRunId
+  swarmRunId,
+  projectProfile
 }) => {
   // D1 runtime state threading: per-session streaming/gate from SessionActorManager.
   const chatRuntime = useChatColumn(session.id);
@@ -497,6 +502,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
   const [pinnedFiles, setPinnedFiles] = useState<PinnedFileItem[]>([
     { id: 'pin-1', path: 'src/types/contracts.ts', name: 'contracts.ts', size: 38400 }
   ]);
+  const [attachedImages, setAttachedImages] = useState<Array<{ id: string; name: string; dataUrl: string; sizeBytes?: number }>>([]);
   const [changeset, setChangeset] = useState<ChangesetReviewPayload | null>(null);
   const [changesetToast, setChangesetToast] = useState<string | null>(null);
   const [gateFeedbackMode, setGateFeedbackMode] = useState<boolean>(false);
@@ -551,15 +557,37 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
 
   const handlePaste = (e: React.ClipboardEvent) => {
     if (e.clipboardData.files && e.clipboardData.files.length > 0) {
-      e.preventDefault();
       const files = Array.from(e.clipboardData.files);
-      const newItems: AttachedFile[] = files.map(f => ({
-        id: `att-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
-        name: f.name || 'clipboard-file',
-        size: f.size,
-        type: f.type
-      }));
-      setAttachedFiles(prev => [...prev, ...newItems]);
+      const imgFiles = files.filter(f => f.type.startsWith('image/'));
+      const otherFiles = files.filter(f => !f.type.startsWith('image/'));
+
+      if (imgFiles.length > 0) {
+        e.preventDefault();
+        imgFiles.forEach(f => {
+          const reader = new FileReader();
+          reader.onload = (ev) => {
+            const dataUrl = ev.target?.result as string;
+            setAttachedImages(prev => [...prev, {
+              id: `img-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+              name: f.name || 'clipboard.png',
+              dataUrl,
+              sizeBytes: f.size
+            }]);
+          };
+          reader.readAsDataURL(f);
+        });
+      }
+
+      if (otherFiles.length > 0) {
+        e.preventDefault();
+        const newItems: AttachedFile[] = otherFiles.map(f => ({
+          id: `att-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
+          name: f.name || 'clipboard-file',
+          size: f.size,
+          type: f.type
+        }));
+        setAttachedFiles(prev => [...prev, ...newItems]);
+      }
     }
   };
 
@@ -751,8 +779,9 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
       fullPrompt = `[用户显式激活 Skill: @${selectedSkill.name}]\n${fullSkillBody || selectedSkill.description}\n\n${fullPrompt}`;
     }
 
-    onSendMessage(fullPrompt);
+    onSendMessage(fullPrompt, undefined, attachedImages.length > 0 ? attachedImages : undefined);
     setInputText('');
+    setAttachedImages([]);
     setSelectedSkill(null);
     setReferencedSession(null);
     setShowSlashMenu(false);
@@ -1345,6 +1374,20 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                                 </div>
                               )}
 
+                              {/* Live Terminal Output Cards for run_command */}
+                              {round.actionResults && round.actionResults.filter(ar => ar.type === 'run_command').length > 0 && (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', margin: '4px 0' }}>
+                                  {round.actionResults.filter(ar => ar.type === 'run_command').map((ar, idx) => (
+                                    <TerminalOutputCard
+                                      key={ar.actionId || idx}
+                                      command={ar.target}
+                                      result={ar}
+                                      isExecuting={ar.status === 'executing'}
+                                    />
+                                  ))}
+                                </div>
+                              )}
+
                               {/* Round Content */}
                               {(roundParsed.cleanContent || (!roundParsed.thinkingText && roundParsed.toolCalls.length === 0)) && (
                                 <div style={{
@@ -1373,7 +1416,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                       );
                     })}
 
-                    {/* Bottom-Left Message Action Toolbar: Copy, Export, Fork */}
+                    {/* Bottom-Left Message Action Toolbar: Copy, Export, Fork, Commit */}
                     <div style={{
                       display: 'flex',
                       alignItems: 'center',
@@ -1425,6 +1468,46 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                         >
                           <GitBranch size={11} color="var(--accent)" />
                           <span>分叉分支</span>
+                        </button>
+                      )}
+                      {msg.checkpointRef && onRollbackToCheckpoint && (
+                        <button
+                          onClick={() => onRollbackToCheckpoint(msg.checkpointRef!, msg.id)}
+                          title="一键将工作区代码无损回滚到此轮执行前的快照状态"
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: '3px', padding: '3px 8px',
+                            borderRadius: '4px', background: 'rgba(217, 107, 39, 0.1)', border: '1px solid rgba(217, 107, 39, 0.25)',
+                            color: 'var(--accent)', fontSize: '10.5px', fontWeight: 600,
+                            cursor: 'pointer', transition: 'all 0.15s ease'
+                          }}
+                        >
+                          <RotateCcw size={11} color="var(--accent)" />
+                          <span>回滚到此处</span>
+                        </button>
+                      )}
+                      {msg.loopStatus === 'completed' && session.projectPath && (
+                        <button
+                          onClick={async () => {
+                            const written = (msg.actionResults || []).filter(r => r.type === 'write_file').map(r => r.target);
+                            const suggestion = generateConventionalCommitMessage(written, session.title || '完成任务变更');
+                            const res = await commitGitChanges(session.projectPath!, suggestion.fullMessage);
+                            if (res.success) {
+                              setChangesetToast(`✓ 成功提交变更: ${suggestion.fullMessage} (${res.commitHash || 'HEAD'})`);
+                            } else {
+                              setChangesetToast(`✕ 提交失败: ${res.error}`);
+                            }
+                            setTimeout(() => setChangesetToast(null), 3500);
+                          }}
+                          title="一键生成规范提交信息并原子提交到 Git 仓库"
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: '3px', padding: '3px 8px',
+                            borderRadius: '4px', background: 'rgba(22, 163, 74, 0.12)', border: '1px solid #16A34A',
+                            color: '#16A34A', fontSize: '10.5px', fontWeight: 600,
+                            cursor: 'pointer', transition: 'all 0.15s ease'
+                          }}
+                        >
+                          <Check size={11} color="#16A34A" />
+                          <span>一键提交 (Git Commit)</span>
                         </button>
                       )}
                     </div>
@@ -1509,6 +1592,18 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                       WebkitUserSelect: 'text',
                       cursor: 'text'
                     }}>
+                      {msg.images && msg.images.length > 0 && (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '8px' }}>
+                          {msg.images.map(img => (
+                            <img
+                              key={img.id}
+                              src={img.dataUrl}
+                              alt={img.name}
+                              style={{ maxWidth: '280px', maxHeight: '200px', borderRadius: '6px', border: '1px solid var(--border-subtle)', objectFit: 'contain' }}
+                            />
+                          ))}
+                        </div>
+                      )}
                       {msg.role === 'assistant' ? (
                         msg.auditTag?.includes('Swarm') ? (
                           <SwarmSubagentContainer
@@ -2287,7 +2382,7 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
             </span>
           </div>
 
-          {/* 2. BORDERLESS RESIZABLE TEXTAREA (Supports File/Snippet DnD Drop) */}
+          {/* 2. BORDERLESS RESIZABLE TEXTAREA (Supports File/Snippet/Image DnD Drop) */}
           <div
             onDragOver={e => {
               e.preventDefault();
@@ -2295,6 +2390,23 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
             }}
             onDrop={e => {
               e.preventDefault();
+              if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                const files = Array.from(e.dataTransfer.files);
+                const imgFiles = files.filter(f => f.type.startsWith('image/'));
+                imgFiles.forEach(f => {
+                  const reader = new FileReader();
+                  reader.onload = (ev) => {
+                    const dataUrl = ev.target?.result as string;
+                    setAttachedImages(prev => [...prev, {
+                      id: `img-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+                      name: f.name || 'dropped-image.png',
+                      dataUrl,
+                      sizeBytes: f.size
+                    }]);
+                  };
+                  reader.readAsDataURL(f);
+                });
+              }
               const fileData = e.dataTransfer.getData('text/plain') || e.dataTransfer.getData('text/uri-list');
               if (fileData) {
                 setInputText(prev => prev ? `${prev} @${fileData}` : `@${fileData} `);
@@ -2302,6 +2414,40 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
             }}
             style={{ width: '100%' }}
           >
+          {attachedImages.length > 0 && (
+            <div style={{ display: 'flex', gap: '8px', padding: '6px 12px 0', overflowX: 'auto' }}>
+              {attachedImages.map(img => (
+                <div key={img.id} style={{ position: 'relative', display: 'inline-block' }}>
+                  <img
+                    src={img.dataUrl}
+                    alt={img.name}
+                    style={{ width: '48px', height: '48px', objectFit: 'cover', borderRadius: '4px', border: '1px solid var(--border-strong)' }}
+                  />
+                  <button
+                    onClick={() => setAttachedImages(prev => prev.filter(i => i.id !== img.id))}
+                    style={{
+                      position: 'absolute',
+                      top: '-4px',
+                      right: '-4px',
+                      width: '16px',
+                      height: '16px',
+                      borderRadius: '50%',
+                      background: '#EF4444',
+                      color: '#FFF',
+                      border: 'none',
+                      fontSize: '10px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
           <textarea
             placeholder={
               activeGate?.active && gateFeedbackMode
@@ -2776,13 +2922,11 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                 )}
               </div>
 
-              {/* Dual @ Reference Controls: @ 技能引用 and @ 会话引用 */}
-              <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                {/* 1. @ Skill Button */}
+              {/* Unified @ Reference Control */}
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                 <button
                   onClick={() => {
-                    setMentionTab('skill');
-                    setShowMentionMenu(showMentionMenu && mentionTab === 'skill' ? false : true);
+                    setShowMentionMenu(!showMentionMenu);
                     setShowModelMenu(false);
                     setShowRulesPopover(false);
                   }}
@@ -2792,42 +2936,22 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                     gap: '4px',
                     padding: '3px 8px',
                     borderRadius: '4px',
-                    background: selectedSkill ? 'var(--accent-subtle)' : 'var(--bg-base)',
-                    border: selectedSkill ? '1px solid var(--accent)' : '1px solid var(--border-subtle)',
+                    background: (selectedSkill || referencedSession) ? 'var(--accent-subtle)' : 'var(--bg-base)',
+                    border: (selectedSkill || referencedSession) ? '1px solid var(--accent)' : '1px solid var(--border-subtle)',
                     fontSize: '11px',
                     cursor: 'pointer',
-                    color: selectedSkill ? 'var(--accent)' : 'var(--text-secondary)'
+                    color: (selectedSkill || referencedSession) ? 'var(--accent)' : 'var(--text-secondary)'
                   }}
-                  title="引用应用配置的 Agent 专精能力与技能 (Skills)"
+                  title="引用应用专精技能 (Skills) 或关联历史会话上下文 (Sessions)"
                 >
-                  <Sparkles size={12} color="var(--accent)" />
-                  <span>{selectedSkill ? `@ 技能: ${selectedSkill.name}` : '@ 技能引用'}</span>
-                </button>
-
-                {/* 2. @ Session Reference Button */}
-                <button
-                  onClick={() => {
-                    setMentionTab('session');
-                    setShowMentionMenu(showMentionMenu && mentionTab === 'session' ? false : true);
-                    setShowModelMenu(false);
-                    setShowRulesPopover(false);
-                  }}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    padding: '3px 8px',
-                    borderRadius: '4px',
-                    background: referencedSession ? 'rgba(59, 130, 246, 0.1)' : 'var(--bg-base)',
-                    border: referencedSession ? '1px solid #3B82F6' : '1px solid var(--border-subtle)',
-                    fontSize: '11px',
-                    cursor: 'pointer',
-                    color: referencedSession ? '#2563EB' : 'var(--text-secondary)'
-                  }}
-                  title="引用历史会话的上下文作为本轮对话的参考"
-                >
-                  <MessageSquare size={12} color={referencedSession ? '#2563EB' : 'var(--text-muted)'} />
-                  <span>{referencedSession ? `@ 会话: ${referencedSession.title.slice(0, 10)}${referencedSession.title.length > 10 ? '...' : ''}` : '@ 会话引用'}</span>
+                  <AtSign size={12} color={(selectedSkill || referencedSession) ? 'var(--accent)' : 'var(--text-muted)'} />
+                  <span>
+                    {selectedSkill
+                      ? `@ 技能: ${selectedSkill.name}`
+                      : referencedSession
+                      ? `@ 会话: ${referencedSession.title.slice(0, 10)}${referencedSession.title.length > 10 ? '...' : ''}`
+                      : '@引用'}
+                  </span>
                 </button>
 
                 {/* Unified Tabbed @ Mention Popover (Left-aligned) */}
@@ -3218,6 +3342,32 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                   </div>
                 )}
               </div>
+
+              {/* Real-time Host & Project Profile Pill */}
+              {projectProfile && (
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '2px 8px',
+                    borderRadius: '4px',
+                    background: 'var(--bg-base)',
+                    border: '1px solid var(--border-subtle)',
+                    fontSize: '11px',
+                    color: 'var(--text-secondary)',
+                    cursor: 'help',
+                    whiteSpace: 'nowrap'
+                  }}
+                  title={`【🖥️ 宿主环境与工程特征画像】\n系统: ${projectProfile.osName || 'Windows'}\n终端: ${projectProfile.shellPath || 'powershell.exe'}\n语言: ${(projectProfile.languages || []).join(', ')}\n框架: ${(projectProfile.frameworks || []).join(', ')}\n单测框架: ${projectProfile.testFramework}\n执行命令: ${projectProfile.testCommand || 'npm test'}`}
+                >
+                  <span>{projectProfile.os === 'windows' ? '🪟' : '🐧'}</span>
+                  <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{projectProfile.languages?.[0] || 'TS'}</span>
+                  {projectProfile.testCommand && (
+                    <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>· 🧪 {projectProfile.testCommand}</span>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Right Tools Group: Permission, Shortcut Hint, Send Button */}

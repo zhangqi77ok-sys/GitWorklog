@@ -39,6 +39,14 @@ interface RealGitCommit {
   message: string;
 }
 
+interface RealCheckpoint {
+  ref: string;
+  commitHash: string;
+  summary: string;
+  timestamp: string;
+  turnIndex: string;
+}
+
 export const GitSnapshotsPanel: React.FC<GitSnapshotsPanelProps> = ({
   activeProject,
   projects,
@@ -49,13 +57,14 @@ export const GitSnapshotsPanel: React.FC<GitSnapshotsPanelProps> = ({
   const [changes, setChanges] = useState<RealGitChange[]>([]);
   const [stagedChanges, setStagedChanges] = useState<RealGitChange[]>([]);
   const [commits, setCommits] = useState<RealGitCommit[]>([]);
+  const [checkpoints, setCheckpoints] = useState<RealCheckpoint[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isExecutingGit, setIsExecutingGit] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [commitInput, setCommitInput] = useState('');
   const [isChangesExpanded, setIsChangesExpanded] = useState(true);
   const [isStagedExpanded, setIsStagedExpanded] = useState(true);
-  const [isAgentSnapshotsExpanded, setIsAgentSnapshotsExpanded] = useState(false);
+  const [isAgentSnapshotsExpanded, setIsAgentSnapshotsExpanded] = useState(true);
   const [showProjDropdown, setShowProjDropdown] = useState(false);
   // Resizable Partitions (Changes, Checkpoints, Commit Log)
   const [changesPercent, setChangesPercent] = useState<number>(50);
@@ -204,6 +213,15 @@ export const GitSnapshotsPanel: React.FC<GitSnapshotsPanelProps> = ({
           });
         setCommits(parsedCommits);
       }
+
+      // 3. Fetch real git checkpoints from shadow refs
+      try {
+        const resCp = await fetch(`/api/git/checkpoints?path=${encodeURIComponent(targetPath)}`);
+        const dataCp = await resCp.json();
+        if (dataCp.success && Array.isArray(dataCp.checkpoints)) {
+          setCheckpoints(dataCp.checkpoints.reverse());
+        }
+      } catch (_) {}
     } catch (e) {
     } finally {
       setIsLoading(false);
@@ -213,6 +231,31 @@ export const GitSnapshotsPanel: React.FC<GitSnapshotsPanelProps> = ({
   useEffect(() => {
     fetchRealGitData();
   }, [activeProject]);
+
+  // Revert whole workspace to specific Checkpoint
+  const handleRevertCheckpoint = async (ref: string, summary: string) => {
+    if (!window.confirm(`确定要回滚到快照 "${summary}" 吗？\n工作区将恢复到此快照的状态，已自动创建 pre-revert 防误触备份。`)) return;
+    setIsExecutingGit(true);
+    try {
+      const res = await fetch('/api/git/revert', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectPath: targetPath, ref })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setToastMessage(`✓ 已成功回滚至快照，恢复 ${data.restoredFiles?.length || 0} 个文件`);
+        fetchRealGitData();
+      } else {
+        setToastMessage(`❌ 回滚失败: ${data.error || '未知错误'}`);
+      }
+    } catch (e: any) {
+      setToastMessage(`❌ 回滚失败: ${e.message}`);
+    } finally {
+      setIsExecutingGit(false);
+      setTimeout(() => setToastMessage(null), 3000);
+    }
+  };
 
   // Stage single file
   const handleStageFile = async (filePath: string, e?: React.MouseEvent) => {
@@ -717,13 +760,74 @@ export const GitSnapshotsPanel: React.FC<GitSnapshotsPanelProps> = ({
               {isAgentSnapshotsExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
               <ShieldCheck size={12} color="#16A34A" />
               <span>Agent 安全快照 (Checkpoints)</span>
+              {checkpoints.length > 0 && (
+                <span style={{ fontSize: '9.5px', color: '#16A34A' }}>({checkpoints.length})</span>
+              )}
             </div>
-            <span style={{ fontSize: '9px', color: 'var(--text-muted)' }}>保护中</span>
+            <span style={{ fontSize: '9px', color: 'var(--text-muted)' }}>影子管道保护</span>
           </div>
 
           {isAgentSnapshotsExpanded && (
-            <div style={{ padding: '6px 8px', fontSize: '10.5px', color: 'var(--text-muted)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <div>每次 Agent Run 发起前会自动建立影子快照，您可在聊天记录中点击“↩ 回到这里”无损回滚。</div>
+            <div style={{ padding: '4px 6px', fontSize: '10.5px', color: 'var(--text-muted)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              {checkpoints.length === 0 ? (
+                <div style={{ padding: '6px 4px', fontSize: '10px', color: 'var(--text-muted)' }}>
+                  暂无快照。每次 Agent 执行写码前会自动生成影子快照。
+                </div>
+              ) : (
+                checkpoints.map(cp => (
+                  <div
+                    key={cp.ref}
+                    style={{
+                      padding: '5px 7px',
+                      borderRadius: '4px',
+                      background: 'var(--bg-surface)',
+                      border: '1px solid var(--border-subtle)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: '6px'
+                    }}
+                  >
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', overflow: 'hidden' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <span style={{ fontSize: '9px', fontWeight: 700, padding: '1px 4px', borderRadius: '3px', background: 'rgba(22, 163, 74, 0.12)', color: '#16A34A', fontFamily: 'var(--font-mono)' }}>
+                          Turn #{cp.turnIndex}
+                        </span>
+                        <span style={{ fontSize: '10.5px', fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {cp.summary}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '9px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                        {cp.commitHash} · {cp.timestamp ? new Date(cp.timestamp).toLocaleTimeString() : '刚才'}
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => handleRevertCheckpoint(cp.ref, cp.summary)}
+                      title="一键安全回滚到此快照"
+                      style={{
+                        padding: '3px 8px',
+                        borderRadius: '3px',
+                        background: 'rgba(217, 107, 39, 0.1)',
+                        border: '1px solid rgba(217, 107, 39, 0.25)',
+                        color: 'var(--accent)',
+                        fontSize: '10px',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '3px',
+                        flexShrink: 0
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.background = 'var(--accent)'; e.currentTarget.style.color = '#FFF'; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = 'rgba(217, 107, 39, 0.1)'; e.currentTarget.style.color = 'var(--accent)'; }}
+                    >
+                      <RotateCcw size={10} />
+                      <span>回滚</span>
+                    </button>
+                  </div>
+                ))
+              )}
             </div>
           )}
         </div>

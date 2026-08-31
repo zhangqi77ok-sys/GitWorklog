@@ -5,6 +5,7 @@
  * SSE 流式消费：content/reasoning 增量、[DONE]/finish_reason 终结。
  */
 import type { SwarmRoleStream } from '../types/contracts';
+import { resolveCanonicalChannelEndpoint } from '../types/contracts';
 import {
   buildModelCatalogEntry as buildModelCatalogEntryFn,
   resolveModelRoute as resolveModelRouteFn,
@@ -76,12 +77,9 @@ export function createGatewayStreamChat(deps: GatewayStreamChatDeps): StreamChat
       || activeChannels[0];
 
     if (channel) {
-      let baseUrl = channel.baseUrl.trim();
-      if (baseUrl.endsWith('/')) baseUrl = baseUrl.slice(0, -1);
+      const baseUrl = channel.baseUrl.trim();
       const targetModel = channel.modelMapping?.[model.id] || model.id;
-      const fullEndpoint = baseUrl.endsWith('/chat/completions') || baseUrl.endsWith('/messages')
-        ? baseUrl
-        : (channel.type === 14 ? `${baseUrl}/messages` : `${baseUrl}/chat/completions`);
+      const fullEndpoint = resolveCanonicalChannelEndpoint(baseUrl, channel.type);
       const resolved = deps.resolveApiEndpoint(fullEndpoint);
       url = resolved.url;
       const requestHeaders: Record<string, string> = { 'Content-Type': 'application/json', ...resolved.headers };
@@ -153,7 +151,14 @@ export function createGatewayStreamChat(deps: GatewayStreamChatDeps): StreamChat
       signal: req.signal,
     });
     if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      let detail = `HTTP ${response.status}: ${response.statusText}`;
+      try {
+        const errJson = await response.json();
+        if (errJson?.error?.message) detail = `HTTP ${response.status}: ${errJson.error.message}`;
+        else if (errJson?.msg) detail = `HTTP ${response.status}: ${errJson.msg}`;
+        else if (errJson?.message) detail = `HTTP ${response.status}: ${errJson.message}`;
+      } catch (_) {}
+      throw new Error(detail);
     }
     const reader = response.body?.getReader();
     if (!reader) return '';
@@ -188,6 +193,11 @@ export function createGatewayStreamChat(deps: GatewayStreamChatDeps): StreamChat
           throw new Error(`流事件解析失败: ${e instanceof Error ? e.message : String(e)}`);
         }
       }
+    }
+    const cleanCheck = full.trim();
+    const isServerBusyMessage = cleanCheck.length > 0 && cleanCheck.length < 150 && /server is busy|server is overloaded|服务器繁忙|服务繁忙|系统繁忙|try again later/i.test(cleanCheck);
+    if (isServerBusyMessage) {
+      throw new Error(`上游模型服务商当前负载过高提示: "${cleanCheck}"。请稍后重试。`);
     }
     return full;
   };
