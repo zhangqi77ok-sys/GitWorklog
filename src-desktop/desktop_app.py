@@ -1,4 +1,4 @@
-﻿global_window = None
+global_window = None
 import os
 import sys
 import json
@@ -1156,7 +1156,7 @@ if __name__ == '__main__':
         resizable=True,
         text_select=True,
         zoomable=True,
-        frameless=False,
+        frameless=True,
         easy_drag=False
     )
     global_window = window
