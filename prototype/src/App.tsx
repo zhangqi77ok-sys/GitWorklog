@@ -79,6 +79,7 @@ import { ActivityBar } from './components/ActivityBar';
 import { LeftPanel } from './components/LeftPanel';
 import { ChatColumn } from './components/ChatColumn';
 import { EditorWorkspace } from './components/EditorWorkspace';
+import { SystemTaskNotification, TaskNotificationData } from './components/SystemTaskNotification';
 import {
   calculateKVCacheMetrics,
   SessionTier1Type,
@@ -406,6 +407,7 @@ export const App: React.FC = () => {
   const [isDraggingRight, setIsDraggingRight] = useState(false);
   const [activeDiffTarget, setActiveDiffTarget] = useState<DiffNavigationTarget | null>(null);
   const [activeFile, setActiveFile] = useState<{ path: string; name: string; line?: number } | null>(null);
+  const [activeNotification, setActiveNotification] = useState<TaskNotificationData | null>(null);
 
   // Global window pointermove & pointerup listeners for 100% reliable dragging across Monaco/Iframe/Terminals
   React.useEffect(() => {
@@ -447,6 +449,17 @@ export const App: React.FC = () => {
       window.removeEventListener('pointerup', onPointerUp);
     };
   }, [isDraggingLeft, isDraggingRight]);
+
+  // Global listener for task notifications
+  React.useEffect(() => {
+    const handleTaskNotify = (e: any) => {
+      if (e?.detail) {
+        setActiveNotification(e.detail);
+      }
+    };
+    window.addEventListener('tcode_task_notification', handleTaskNotify);
+    return () => window.removeEventListener('tcode_task_notification', handleTaskNotify);
+  }, []);
 
   const handleLeftPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -1240,6 +1253,7 @@ ${modePromptSnippet}
       // ── Single Agent Run Card ID (All turns & steps aggregate into one Card) ──
       const singleRunCardId = `agent-run-${Date.now()}`;
       let accumulatedActionResults: ActionResult[] = [];
+      let lastAssistantContent = '';
 
       // Initial single assistant message container with rounds[]
       let accumulatedRounds: AgentRoundItem[] = [];
@@ -1643,6 +1657,7 @@ ${modePromptSnippet}
         }
 
         // ── Parse target acceptance criteria and deduplicate/merge at Run level ──
+        lastAssistantContent = finalContent;
         const incomingCriteria = parseAcceptanceCriteria(finalContent);
         // Preserve whether the model explicitly declared acceptance criteria before adding defaults.
         const hadExplicitAcceptanceCriteria = incomingCriteria.length > 0 || activeAcceptanceItems.length > 0;
@@ -1946,6 +1961,19 @@ ${modePromptSnippet}
         return latest;
       });
 
+      // ── Trigger System 280x120 Task Completion Notification ──
+      const targetSession = sessions.find(s => s.id === currentSessionId) || activeSession;
+      const cleanSummary = (lastAssistantContent || '').replace(/```[\s\S]*?```/g, '').replace(/[#*`_\n]/g, ' ').trim().slice(0, 60);
+      setActiveNotification({
+        id: `notify-${Date.now()}`,
+        status: currentLoopStatus === 'no_progress' ? 'error' : 'success',
+        projectName: targetSession?.projectName || targetSession?.title || 'Tcode',
+        sessionTitle: targetSession?.title || '会话任务',
+        sessionId: currentSessionId,
+        summary: cleanSummary || (completedWithTarget ? '✓ 任务已成功完成并通过独立验证。' : '✓ 模型回复已生成完毕。'),
+        createdAt: Date.now()
+      });
+
     } catch (err: any) {
       if (!sessionActorManager.isSessionRunning(currentSessionId)) {
         addLog('INFO', 'AgentLoop', '用户已停止 Agent Loop，已取消待审批与后续调度');
@@ -1974,6 +2002,18 @@ ${modePromptSnippet}
         const updated = [...list, errorMsg];
         saveSessionMessagesToStorage({ ...prev, [currentSessionId]: updated });
         return { ...prev, [currentSessionId]: updated };
+      });
+
+      // ── Trigger System 280x120 Task Error Notification ──
+      const targetSession = sessions.find(s => s.id === currentSessionId) || activeSession;
+      setActiveNotification({
+        id: `notify-${Date.now()}`,
+        status: 'error',
+        projectName: targetSession?.projectName || targetSession?.title || 'Tcode',
+        sessionTitle: targetSession?.title || '会话任务',
+        sessionId: currentSessionId,
+        summary: `错误根因: ${err.message || '大模型网络或鉴权异常'}`,
+        createdAt: Date.now()
       });
     } finally {
       sessionActorManager.completeSession(currentSessionId);
@@ -2333,6 +2373,18 @@ ${modePromptSnippet}
         onClose={() => setIsSettingsOpen(false)}
         currentAccentHex={accentHex}
         onSelectAccentHex={handleSelectAccentHex}
+      />
+
+      {/* System 280x120 Task Completion & Error Notification Toast */}
+      <SystemTaskNotification
+        notification={activeNotification}
+        onClose={() => setActiveNotification(null)}
+        onOpenSession={(sessionId) => {
+          if (sessionId) {
+            setCurrentSessionId(sessionId);
+          }
+        }}
+        durationMs={5000}
       />
     </div>
   );
