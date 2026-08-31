@@ -19,6 +19,30 @@ export function stripThinkingProcess(raw: string): string {
   return cleaned.trim();
 }
 
+/**
+ * 提取可分享的对话文本。
+ * 普通消息取 content；Swarm 消息（content 为空，内容在 swarm 字段）拼接
+ * Master 拆解 + 各角色产出（含失败标记）+ Master 终审。
+ */
+export function extractShareableContent(message: ChatMessage): string {
+  if (message.content && message.content.trim()) return message.content;
+  if (message.swarm) {
+    const parts: string[] = [];
+    if (message.swarm.masterPlanning && message.swarm.masterPlanning.trim()) {
+      parts.push(`【Master 拆解】\n${message.swarm.masterPlanning}`);
+    }
+    for (const role of message.swarm.roles) {
+      const failTag = role.status === 'error' ? '（失败）' : '';
+      parts.push(`### ${role.icon} [${role.name}]${failTag}\n${role.content || ''}`);
+    }
+    if (message.swarm.masterSummary && message.swarm.masterSummary.trim()) {
+      parts.push(`【Master 终审】\n${message.swarm.masterSummary}`);
+    }
+    return parts.join('\n\n');
+  }
+  return message.content || '';
+}
+
 export const ShareCardModal: React.FC<ShareCardModalProps> = ({
   isOpen,
   onClose,
@@ -51,8 +75,8 @@ export const ShareCardModal: React.FC<ShareCardModalProps> = ({
     minute: '2-digit'
   });
 
-  // Extract clean content: strictly strip all thinking processes and reasoning blocks
-  const cleanContent = stripThinkingProcess(message.content) || message.content;
+  // Extract clean content: 兼容 Swarm 消息（内容在 swarm 字段），并剔除思考过程
+  const cleanContent = stripThinkingProcess(extractShareableContent(message));
 
   const handleCopyCardText = async () => {
     const text = `【Tcode AI 协作记录卡片】\n会话: ${session.title}\n工程: ${session.projectName || '主工程'}\n时间: ${cardDate}\n\n--- 问答内容 ---\n${cleanContent}\n\n— 来自 Tcode 企业级 AI 桌面 IDE`;
@@ -67,7 +91,7 @@ export const ShareCardModal: React.FC<ShareCardModalProps> = ({
     try {
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
-      if (!ctx) return;
+      if (!ctx) throw new Error('Canvas 2D 不可用');
 
       const width = 800;
       const padding = 32;
