@@ -1285,6 +1285,7 @@ ${executionMode === 'swarm' ? `
           hasGatewayAccountsFor,
           platformForProvider,
           loadSavedProviders,
+          loadSavedChannels,
           buildModelCatalogEntry,
           resolveModelRoute,
           buildGatewayRequestBody,

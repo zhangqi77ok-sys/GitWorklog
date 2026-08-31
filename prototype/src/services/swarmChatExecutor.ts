@@ -15,6 +15,7 @@ import {
   parseGatewayEvent as parseGatewayEventFn,
 } from './modelGateway';
 import type { GatewayMessage } from './gateway/transform';
+import type { ChannelItem } from '../types/contractsTypes';
 import type { ModelAdapter, ProviderRecord } from './modelGateway';
 import type { GatewayPlatform } from './gateway/types';
 
@@ -158,7 +159,7 @@ export async function runSwarmChat(
 
 export interface GatewayStreamChatDeps {
   streamingModel: {
-    id: string; name: string; providerId?: string;
+    id: string; name: string; providerId?: string; uniqueKey?: string;
     adapter?: string; endpointPath?: string; protocol?: string;
     contextLimit?: number; capabilities?: unknown;
   };
@@ -171,6 +172,7 @@ export interface GatewayStreamChatDeps {
   hasGatewayAccountsFor: (platform: GatewayPlatform) => boolean;
   platformForProvider: (providerId: string, modelId: string) => GatewayPlatform;
   loadSavedProviders: () => Array<Record<string, any>>;
+  loadSavedChannels: () => ChannelItem[];
   buildModelCatalogEntry: typeof buildModelCatalogEntryFn;
   resolveModelRoute: typeof resolveModelRouteFn;
   buildGatewayRequestBody: typeof buildGatewayRequestBodyFn;
@@ -188,56 +190,88 @@ export function createGatewayStreamChat(deps: GatewayStreamChatDeps): StreamChat
       { role: 'user', content: req.user },
     ];
 
-    // ── 路由：Gateway v2 多账号优先，无则走 v1 Provider 目录 ──
     let url: string;
     let headers: Record<string, string>;
     let body: string;
     let adapter: ModelAdapter = (model.adapter as ModelAdapter) || 'openai-compatible-chat';
-    const platform = deps.platformForProvider(model.providerId || '', model.id);
-    const prepared = deps.hasGatewayAccountsFor(platform)
-      ? deps.gatewayRuntime.facade.prepare({
-          model: model.id,
-          platform,
-          sessionKey: deps.sessionKey,
-          messages,
-          systemPrompt: req.system,
-          contextLimit: model.contextLimit || 128000,
-          defaultMaxOutputTokens: 4096,
-        })
-      : null;
 
-    if (prepared) {
-      url = prepared.url;
-      headers = prepared.headers;
-      body = JSON.stringify(prepared.body);
-      adapter = prepared.adapter;
-      deps.addLog('INFO', 'GatewayV2', `[Swarm] 调度 ${model.name} -> 账号 ${prepared.accountId} · ${prepared.url}`);
-    } else {
-      const providers = deps.loadSavedProviders();
-      const provider = providers.find(p => p.id === model.providerId)
-        || providers.find(p => p.enabled && (p.models || []).some((m: any) => m.id === model.id))
-        || providers.find(p => p.enabled && p.apiKey && p.baseUrl)
-        || providers[0];
-      if (!provider) throw new Error('没有可用的模型服务商渠道');
-      const catalogModel = (provider.models || []).find((m: any) => m.id === model.id) || {
-        id: model.id,
-        name: model.name,
-        enabled: true,
-        contextLimit: model.contextLimit,
-        adapter: model.adapter,
-        endpointPath: model.endpointPath,
-        protocol: model.protocol,
-        capabilities: [],
-      };
-      const providerRec = provider as ProviderRecord;
-      const catalogEntry = deps.buildModelCatalogEntry(providerRec, catalogModel);
-      const route = deps.resolveModelRoute(providerRec, catalogEntry);
-      const resolved = deps.resolveApiEndpoint(route.endpointUrl);
+    // ── Priority 1: New-API Channels 路由（与主 Agent Loop 一致，最高优先级） ──
+    const activeChannels = deps.loadSavedChannels().filter(c => c.status === 'active' || c.status === 'untested');
+    const channel = activeChannels.find(c => c.id === model.providerId)
+      || activeChannels.find(c => (c.models || []).includes(model.id))
+      || (model.uniqueKey ? activeChannels.find(c => model.uniqueKey?.startsWith(c.id + ':')) : undefined)
+      || activeChannels[0];
+
+    if (channel) {
+      // 渠道直连：key 存于渠道配置（与主循环 ChannelRouter 同口径）
+      let baseUrl = channel.baseUrl.trim();
+      if (baseUrl.endsWith('/')) baseUrl = baseUrl.slice(0, -1);
+      const targetModel = channel.modelMapping?.[model.id] || model.id;
+      const fullEndpoint = baseUrl.endsWith('/chat/completions') || baseUrl.endsWith('/messages')
+        ? baseUrl
+        : (channel.type === 14 ? `${baseUrl}/messages` : `${baseUrl}/chat/completions`);
+      const resolved = deps.resolveApiEndpoint(fullEndpoint);
       url = resolved.url;
-      headers = resolved.headers;
-      body = JSON.stringify(deps.buildGatewayRequestBody(route, messages as GatewayMessage[]));
-      adapter = route.adapter || adapter;
-      deps.addLog('INFO', 'SwarmGateway', `[Swarm] v1 渠道 ${model.name} · ${route.endpointUrl}`);
+      const requestHeaders: Record<string, string> = { 'Content-Type': 'application/json', ...resolved.headers };
+      if (channel.key?.trim()) {
+        const firstKey = channel.key.trim().split('\n')[0].trim();
+        requestHeaders['Authorization'] = `Bearer ${firstKey}`;
+      } else if (channel.type !== 4) {
+        throw new Error(`渠道 [${channel.name}] 尚未填写 API Key 凭据。请点击左下角 ⚙️ 首选项 ➔「模型服务商」编辑该渠道，填入您的 API Key 即可开始对话。`);
+      }
+      if (channel.headerOverride) Object.assign(requestHeaders, channel.headerOverride);
+      headers = requestHeaders;
+      adapter = (channel.type === 14 ? 'anthropic-messages' : 'openai-compatible-chat') as ModelAdapter;
+      body = JSON.stringify({ model: targetModel, messages, stream: true, ...(channel.paramOverride || {}) });
+      deps.addLog('INFO', 'ChannelRouter', `[Swarm][渠道调度] ${model.name} → 渠道 [${channel.name}] (Key已注入) · ${fullEndpoint}`);
+    } else {
+      // ── 路由：Gateway v2 多账号优先，无则走 v1 Provider 目录 ──
+      const platform = deps.platformForProvider(model.providerId || '', model.id);
+      const prepared = deps.hasGatewayAccountsFor(platform)
+        ? deps.gatewayRuntime.facade.prepare({
+            model: model.id,
+            platform,
+            sessionKey: deps.sessionKey,
+            messages,
+            systemPrompt: req.system,
+            contextLimit: model.contextLimit || 128000,
+            defaultMaxOutputTokens: 4096,
+          })
+        : null;
+
+      if (prepared) {
+        url = prepared.url;
+        headers = prepared.headers;
+        body = JSON.stringify(prepared.body);
+        adapter = prepared.adapter;
+        deps.addLog('INFO', 'GatewayV2', `[Swarm] 调度 ${model.name} -> 账号 ${prepared.accountId} · ${prepared.url}`);
+      } else {
+        const providers = deps.loadSavedProviders();
+        const provider = providers.find(p => p.id === model.providerId)
+          || providers.find(p => p.enabled && (p.models || []).some((m: any) => m.id === model.id))
+          || providers.find(p => p.enabled && p.apiKey && p.baseUrl)
+          || providers[0];
+        if (!provider) throw new Error('没有可用的模型服务商渠道');
+        const catalogModel = (provider.models || []).find((m: any) => m.id === model.id) || {
+          id: model.id,
+          name: model.name,
+          enabled: true,
+          contextLimit: model.contextLimit,
+          adapter: model.adapter,
+          endpointPath: model.endpointPath,
+          protocol: model.protocol,
+          capabilities: [],
+        };
+        const providerRec = provider as ProviderRecord;
+        const catalogEntry = deps.buildModelCatalogEntry(providerRec, catalogModel);
+        const route = deps.resolveModelRoute(providerRec, catalogEntry);
+        const resolved = deps.resolveApiEndpoint(route.endpointUrl);
+        url = resolved.url;
+        headers = resolved.headers;
+        body = JSON.stringify(deps.buildGatewayRequestBody(route, messages as GatewayMessage[]));
+        adapter = route.adapter || adapter;
+        deps.addLog('INFO', 'SwarmGateway', `[Swarm] v1 渠道 ${model.name} · ${route.endpointUrl}`);
+      }
     }
 
     // ── SSE 流式消费（与主 Loop 同口径：content/reasoning 增量、[DONE]/finish_reason 终结） ──

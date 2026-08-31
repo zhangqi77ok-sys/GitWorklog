@@ -42,6 +42,7 @@ function makeDeps(overrides: Partial<GatewayStreamChatDeps> = {}): GatewayStream
     hasGatewayAccountsFor: () => true,
     platformForProvider: () => 'openai',
     loadSavedProviders: () => [],
+    loadSavedChannels: () => [],
     buildModelCatalogEntry: vi.fn(),
     resolveModelRoute: vi.fn(),
     buildGatewayRequestBody: vi.fn(),
@@ -119,6 +120,50 @@ describe('createGatewayStreamChat', () => {
     expect(url).toBe('http://proxy.local/v1');
     expect((init as RequestInit).body).toContain('gpt-5.2');
     expect((deps.addLog as ReturnType<typeof vi.fn>).mock.calls[0][1]).toBe('SwarmGateway');
+  });
+
+  it('routes through active channel (Priority 1) when provider lacks API key', async () => {
+    // 复刻用户环境: 模型绑定 channel (chan-opencode-go, key 在渠道里), provider 目录无 key
+    const deps = {
+      ...makeDeps(),
+      streamingModel: { id: 'deepseek-v4-flash', name: 'deepseek-v4-flash', providerId: 'chan-opencode-go' },
+      hasGatewayAccountsFor: () => false,
+      loadSavedChannels: () => [{
+        id: 'chan-opencode-go',
+        name: 'OpenCode (Go 套餐直连)',
+        type: 60,
+        key: 'real-key-line1\nreal-key-line2',
+        baseUrl: 'https://opencode.ai/zen/go/v1',
+        defaultBaseUrl: '',
+        models: ['deepseek-v4-flash'],
+        status: 'active',
+        responseTime: 0,
+        priority: 10,
+        weight: 10,
+        group: 'default',
+      }],
+      // v1 provider 目录存在 provider-opencode-zen 但无 apiKey（复刻用户配置）
+      loadSavedProviders: () => [{
+        id: 'provider-opencode-zen',
+        name: 'OpenCode Zen',
+        enabled: true,
+        baseUrl: 'https://opencode.ai',
+        apiKey: '',
+        models: [{ id: 'deepseek-v4-flash', name: 'deepseek-v4-flash', enabled: true, contextLimit: 131072, capabilities: [] }],
+      }],
+      resolveModelRoute: (() => { throw new Error('不应走到 v1 provider 兜底'); }) as never,
+    } as GatewayStreamChatDeps;
+    const fetchMock = vi.fn().mockResolvedValue(okResponse(sseBody(sseChunks)));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const streamChat = createGatewayStreamChat(deps);
+    const full = await streamChat({ system: 'sys', user: 'user', modelId: 'deepseek-v4-flash', onDelta: () => {} });
+
+    expect(full).toBe('你好');
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe('https://opencode.ai/zen/go/v1/chat/completions');
+    expect((init as RequestInit).headers).toMatchObject({ Authorization: 'Bearer real-key-line1' });
+    expect((deps.addLog as ReturnType<typeof vi.fn>).mock.calls[0][1]).toBe('ChannelRouter');
   });
 
   it('throws when no provider available in v1 fallback', async () => {
