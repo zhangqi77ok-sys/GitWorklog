@@ -12,6 +12,7 @@
 import type { SwarmChatState } from '../types/contracts';
 import type { SwarmRoleStream } from '../types/contracts';
 import type { StreamChatFn } from './swarmGatewayStream';
+import { agentEventStore } from './agentEventStore';
 
 /** Subagent 角色目录：Master 按任务动态挑选 2~4 个执行。 */
 export const SWARM_ROLE_CATALOG: readonly SwarmRoleStream[] = [
@@ -31,6 +32,9 @@ export interface SwarmChatInput {
   modelId: string;
   signal?: AbortSignal;
   streamChat: StreamChatFn;
+  /** 事件总线上下文（可选，缺省用默认值）。 */
+  sessionId?: string;
+  runId?: string;
 }
 
 export interface SwarmChatCallbacks {
@@ -41,6 +45,8 @@ export interface SwarmChatCallbacks {
   onRolesSelected: (roles: SwarmRoleStream[]) => void;
   onRoleStatus: (roleId: string, status: 'running' | 'passed' | 'error', error?: string) => void;
   onRoleDelta: (roleId: string, delta: string) => void;
+  /** Master 审查后下发干预/修订指令（前端同步 revisions/interventions）。 */
+  onRoleIntervention?: (roleId: string, feedback: string, revisions: number) => void;
   onMasterSummary: (summary: string) => void;
   /** Master 终审流式增量（逐字）。 */
   onMasterSummaryDelta?: (delta: string) => void;
@@ -131,6 +137,119 @@ ${roleBlocks}
 }
 
 /** 运行一次 Master 动态组队的真并发 Swarm 协同，返回结构化最终状态。 */
+const MAX_ROLE_REVISIONS = 2;
+
+const MASTER_REVIEW_SYSTEM = `你是 Swarm Master 的质量审查官。
+你负责审查每个 Subagent 的产出质量（是否完整、相关、无重大错误），并给出明确修订指令。
+请严格输出 JSON（不要输出其它内容）。`;
+
+function buildReviewPrompt(input: SwarmChatInput, role: SwarmRoleStream): string {
+  return `【用户目标】: ${input.userGoal}
+
+【角色职责】: ${role.name}（${role.duty || ''}）
+
+【Subagent 产出】:
+${role.content}
+
+请审查该产出是否满足任务要求。
+输出严格 JSON: {"pass": true/false, "feedback": "若 pass=false 给出具体修订要求；通过则为空字符串"}`;
+}
+
+/** 解析 Master 审查结果；非 JSON / 缺 pass 字段视为不通过并给通用修订指令（不静默）。 */
+export function parseReview(raw: string): { pass: boolean; feedback: string } {
+  const fallback: { pass: boolean; feedback: string } = {
+    pass: false,
+    feedback: '【Master 纠偏】: 产出未通过自动审查，请按任务要求完善并补充必要细节。',
+  };
+  const jsonMatch = raw.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) return fallback;
+  try {
+    const obj = JSON.parse(jsonMatch[0]) as { pass?: unknown; feedback?: unknown };
+    if (typeof obj.pass !== 'boolean') return fallback;
+    return {
+      pass: obj.pass,
+      feedback: typeof obj.feedback === 'string' ? obj.feedback : (obj.pass ? '' : '请按任务要求完善产出。'),
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+interface AgentCtx {
+  sessionId: string;
+  runId: string;
+}
+
+/** 单个 Subagent 的「产出 -> Master 审查 -> 修订（最多 N 轮）」互动循环。 */
+async function runRoleWithReview(
+  role: SwarmRoleStream,
+  input: SwarmChatInput,
+  callbacks: SwarmChatCallbacks,
+  ctx: AgentCtx,
+): Promise<void> {
+  const streamWithDelta = (system: string, user: string) =>
+    input.streamChat({
+      system,
+      user,
+      modelId: input.modelId,
+      signal: input.signal,
+      onDelta: (delta) => {
+        role.content += delta;
+        callbacks.onRoleDelta(role.id, delta);
+      },
+    });
+
+  // 首轮产出
+  role.content = '';
+  role.content = await streamWithDelta(buildRoleSystemPrompt(role), buildRolePrompt(input, role));
+
+  let revisions = 0;
+  const interventions: string[] = [];
+  while (true) {
+    // Master 审查（监听产出质量 -> 决策是否干预）
+    const reviewRaw = await input.streamChat({
+      system: MASTER_REVIEW_SYSTEM,
+      user: buildReviewPrompt(input, role),
+      modelId: input.modelId,
+      signal: input.signal,
+      onDelta: () => {},
+    });
+    const { pass, feedback } = parseReview(reviewRaw);
+    interventions.push(feedback);
+    role.interventions = [...interventions];
+    agentEventStore.emit({
+      sessionId: ctx.sessionId,
+      runId: ctx.runId,
+      roundId: role.id,
+      type: pass ? 'review.completed' : 'review.requested',
+      source: 'system',
+      payload: { roleId: role.id, pass, feedback, revisions },
+    });
+    callbacks.onRoleIntervention?.(role.id, feedback, revisions);
+    if (pass) break;
+
+    // 达到最大修订轮次后停止（修订轮已尽力，终审阶段会仲裁）
+    if (revisions >= MAX_ROLE_REVISIONS) break;
+
+    // 下发修订指令并让 Sub 重新产出
+    revisions++;
+    role.revisions = revisions;
+    agentEventStore.emit({
+      sessionId: ctx.sessionId,
+      runId: ctx.runId,
+      roundId: role.id,
+      type: 'task.retrying',
+      source: 'system',
+      payload: { roleId: role.id, attempt: revisions, feedback },
+    });
+    role.content = '';
+    role.content = await streamWithDelta(
+      `${buildRoleSystemPrompt(role)}\n\n【Master 修订要求】: ${feedback}`,
+      buildRolePrompt(input, role),
+    );
+  }
+}
+
 export async function runSwarmChat(
   input: SwarmChatInput,
   callbacks: SwarmChatCallbacks,
@@ -152,27 +271,45 @@ export async function runSwarmChat(
   });
   callbacks.onRolesSelected(selectedRoles);
 
-  // ── Phase 2: 只对选中角色真并发（失败角色不阻塞其余） ──
+  // ── Phase 2: 只对选中角色真并发，每个角色内执行「产出 -> 审查 -> 修订」互动循环 ──
+  const ctx: AgentCtx = {
+    sessionId: input.sessionId || 'default',
+    runId: input.runId || `swarm-${Date.now()}`,
+  };
   await Promise.allSettled(
     selectedRoles.map(async role => {
+      agentEventStore.emit({
+        sessionId: ctx.sessionId,
+        runId: ctx.runId,
+        roundId: role.id,
+        type: 'agent.started',
+        source: 'agent',
+        payload: { roleId: role.id, name: role.name },
+      });
       try {
-        const full = await input.streamChat({
-          system: buildRoleSystemPrompt(role),
-          user: buildRolePrompt(input, role),
-          modelId: input.modelId,
-          signal: input.signal,
-          onDelta: (delta) => {
-            role.content += delta;
-            callbacks.onRoleDelta(role.id, delta);
-          },
-        });
-        role.content = full;
+        await runRoleWithReview(role, input, callbacks, ctx);
         role.status = 'passed';
         callbacks.onRoleStatus(role.id, 'passed');
+        agentEventStore.emit({
+          sessionId: ctx.sessionId,
+          runId: ctx.runId,
+          roundId: role.id,
+          type: 'agent.completed',
+          source: 'agent',
+          payload: { roleId: role.id, revisions: role.revisions || 0, interventions: role.interventions || [] },
+        });
       } catch (err) {
         role.status = 'error';
         role.error = err instanceof Error ? err.message : String(err);
         callbacks.onRoleStatus(role.id, 'error', role.error);
+        agentEventStore.emit({
+          sessionId: ctx.sessionId,
+          runId: ctx.runId,
+          roundId: role.id,
+          type: 'agent.failed',
+          source: 'agent',
+          payload: { roleId: role.id, error: role.error },
+        });
       }
     }),
   );

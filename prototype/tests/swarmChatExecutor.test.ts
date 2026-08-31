@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   runSwarmChat,
   SWARM_ROLE_CATALOG,
+  parseReview,
   SwarmChatInput,
   SwarmChatCallbacks,
 } from '../src/services/swarmChatExecutor';
@@ -30,14 +31,27 @@ function emptyCallbacks(): SwarmChatCallbacks {
   };
 }
 
-/** 构造拆解 mock：Phase1 返回 JSON，按 system prompt 区分角色调用。 */
-function mockStream(roles: string[], overrides: { failRole?: string; error?: Error } = {}): StreamChatFn {
+interface MockOptions {
+  failRole?: string;
+  error?: Error;
+  /** 审查通过序列（共享计数，默认每次通过）。 */
+  reviewPasses?: boolean[];
+}
+
+/** 构造 mock：Phase1 拆解 JSON、审查分支、按 system prompt 区分角色调用。 */
+function mockStream(roles: string[], overrides: MockOptions = {}): StreamChatFn {
+  let reviewCount = 0;
   return (req) => {
     if (req.user.includes('【可选角色目录】')) {
       return Promise.resolve(JSON.stringify({ planning: '【规划】先架构后实现', roles }));
     }
     if (req.user.includes('各 Subagent 产出')) {
       return Promise.resolve('【终审】交付总结');
+    }
+    if (req.system.includes('质量审查官')) {
+      const idx = reviewCount++;
+      const pass = overrides.reviewPasses ? (overrides.reviewPasses[idx] ?? true) : true;
+      return Promise.resolve(JSON.stringify({ pass, feedback: pass ? '' : '请补充边界验证' }));
     }
     const role = SWARM_ROLE_CATALOG.find(r => req.system.includes(r.name))!;
     if (overrides.failRole && role.id === overrides.failRole) {
@@ -63,6 +77,7 @@ describe('runSwarmChat dynamic role selection', () => {
     const streamChat: StreamChatFn = (req) => {
       if (req.user.includes('【可选角色目录】')) return base(req);
       if (req.user.includes('各 Subagent 产出')) return base(req);
+      if (req.system.includes('质量审查官')) return base(req);
       const role = SWARM_ROLE_CATALOG.find(r => req.system.includes(r.name))!;
       invoked.push(role.id);
       return base(req);
@@ -77,13 +92,12 @@ describe('runSwarmChat dynamic role selection', () => {
     };
     const state = await runSwarmChat(makeInput({ streamChat }), callbacks);
 
-    expect(invoked).toEqual(['architect', 'dev']); // 只执行选中的 2 个
+    expect(invoked).toEqual(['architect', 'dev']);
     expect(state.roles).toHaveLength(2);
     expect(state.roles.map(r => r.id)).toEqual(['architect', 'dev']);
     expect(state.roles.every(r => r.status === 'passed')).toBe(true);
     expect(state.masterPlanning).toBe('【规划】先架构后实现');
     expect(state.masterSummary).toBe('【终审】交付总结');
-    // 顺序: planning -> rolesSelected -> 角色状态 -> summary
     expect(events[0]).toBe('planning:【规划】先架构后实现');
     expect(events[1]).toBe('roles:architect,dev');
     expect(events[2]).toBe('role:architect:passed');
@@ -104,6 +118,9 @@ describe('runSwarmChat dynamic role selection', () => {
         summaryStarted = true;
         return new Promise(res => { resolveSummary = res; });
       }
+      if (req.system.includes('质量审查官')) {
+        return Promise.resolve('{"pass": true, "feedback": ""}');
+      }
       const role = SWARM_ROLE_CATALOG.find(r => req.system.includes(r.name))!;
       started.push(role.id);
       return new Promise(res => { roleResolvers[role.id] = res; });
@@ -113,6 +130,8 @@ describe('runSwarmChat dynamic role selection', () => {
     expect(started).toEqual(['architect', 'dev', 'tester', 'security']);
     expect(summaryStarted).toBe(false);
     Object.values(roleResolvers).forEach(r => r('out'));
+    await new Promise(r => setTimeout(r, 0));
+    // 4 个角色产出完成后各自进入审查（并发审查）
     await new Promise(r => setTimeout(r, 0));
     expect(summaryStarted).toBe(true);
     resolveSummary('s');
@@ -164,13 +183,89 @@ describe('runSwarmChat decomposition failure (fail-closed)', () => {
   });
 });
 
+describe('runSwarmChat master review & revision loop', () => {
+  /** 按角色独立审查序列（并发下顺序稳定）。 */
+  function roleReviewMock(rolePasses: Record<string, boolean[]>): { streamChat: StreamChatFn; calls: Record<string, { role: number; review: number }> } {
+    const calls: Record<string, { role: number; review: number }> = {};
+    const counters = new Map<string, { role: number; review: number }>();
+    const streamChat: StreamChatFn = (req) => {
+      if (req.user.includes('【可选角色目录】')) {
+        return Promise.resolve(JSON.stringify({ planning: 'p', roles: Object.keys(rolePasses) }));
+      }
+      if (req.user.includes('各 Subagent 产出')) return Promise.resolve('s');
+      if (req.system.includes('质量审查官')) {
+        const role = SWARM_ROLE_CATALOG.find(r => req.user.includes(r.name))!;
+        const c = counters.get(role.id) || { role: 0, review: 0 };
+        const idx = c.review++;
+        counters.set(role.id, c);
+        calls[role.id] = { ...c };
+        const passes = rolePasses[role.id] || [];
+        const pass = idx < passes.length ? passes[idx] : true;
+        return Promise.resolve(JSON.stringify({ pass, feedback: pass ? '' : '请补充边界验证' }));
+      }
+      const role = SWARM_ROLE_CATALOG.find(r => req.system.includes(r.name))!;
+      const c = counters.get(role.id) || { role: 0, review: 0 };
+      c.role++;
+      counters.set(role.id, c);
+      calls[role.id] = { ...c };
+      return Promise.resolve(`<${role.id}-out>`);
+    };
+    return { streamChat, calls };
+  }
+
+  it('passes on first review without revision', async () => {
+    const { streamChat, calls } = roleReviewMock({ architect: [true], dev: [true] });
+    const state = await runSwarmChat(makeInput({ streamChat }), emptyCallbacks());
+    const arch = state.roles.find(r => r.id === 'architect')!;
+    expect(arch.status).toBe('passed');
+    expect(arch.revisions).toBeUndefined();
+    expect(arch.interventions).toHaveLength(1);
+    expect(calls.architect.role).toBe(1);
+    expect(calls.architect.review).toBe(1);
+  });
+
+  it('revises once when first review fails then passes', async () => {
+    const { streamChat, calls } = roleReviewMock({ architect: [false, true], dev: [true] });
+    const state = await runSwarmChat(makeInput({ streamChat }), emptyCallbacks());
+    const arch = state.roles.find(r => r.id === 'architect')!;
+    expect(arch.status).toBe('passed');
+    expect(arch.revisions).toBe(1);
+    expect(arch.interventions?.length).toBe(2);
+    expect(arch.interventions?.[0]).toBe('请补充边界验证');
+    expect(calls.architect.role).toBe(2);
+    expect(calls.architect.review).toBe(2);
+  });
+
+  it('stops after max 2 revisions even if still failing', async () => {
+    const { streamChat, calls } = roleReviewMock({ architect: [false, false, false], dev: [true] });
+    const state = await runSwarmChat(makeInput({ streamChat }), emptyCallbacks());
+    const arch = state.roles.find(r => r.id === 'architect')!;
+    expect(arch.revisions).toBe(2);
+    expect(arch.interventions).toHaveLength(3);
+    expect(calls.architect.role).toBe(3);
+    expect(arch.status).toBe('passed');
+  });
+});
+
+describe('parseReview', () => {
+  it('parses valid review JSON', () => {
+    expect(parseReview('{"pass": true, "feedback": ""}')).toEqual({ pass: true, feedback: '' });
+    expect(parseReview('{"pass": false, "feedback": "请补充"}')).toEqual({ pass: false, feedback: '请补充' });
+  });
+
+  it('falls back to fail with generic feedback on non-JSON', () => {
+    const r = parseReview('不是 JSON');
+    expect(r.pass).toBe(false);
+    expect(r.feedback).toContain('Master 纠偏');
+  });
+});
+
 describe('runSwarmChat full streaming (planning & summary deltas)', () => {
   it('streams master planning and summary deltas, finishes with phase done', async () => {
     const planningDeltas: string[] = [];
     const summaryDeltas: string[] = [];
     const streamChat: StreamChatFn = (req) => {
       if (req.user.includes('【可选角色目录】')) {
-        // 模拟模型流式输出拆解 JSON（分段增量）
         req.onDelta('{"planning":"');
         req.onDelta('【规划】先架构');
         req.onDelta('","roles":["architect","dev"]}');
@@ -180,6 +275,9 @@ describe('runSwarmChat full streaming (planning & summary deltas)', () => {
         req.onDelta('【终审】');
         req.onDelta('通过');
         return Promise.resolve('【终审】通过');
+      }
+      if (req.system.includes('质量审查官')) {
+        return Promise.resolve('{"pass": true, "feedback": ""}');
       }
       return Promise.resolve('role-out');
     };
@@ -207,7 +305,8 @@ describe('runSwarmChat abort propagation', () => {
       return base(req);
     };
     await runSwarmChat(makeInput({ streamChat, signal }), emptyCallbacks());
-    expect(seen).toHaveLength(4); // 拆解 + 2 角色 + 终审
+    // 拆解 + 2 角色首轮 + 2 审查 + 终审
+    expect(seen).toHaveLength(6);
     expect(seen.every(s => s === signal)).toBe(true);
   });
 });

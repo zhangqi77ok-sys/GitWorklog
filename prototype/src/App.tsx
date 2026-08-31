@@ -6,7 +6,7 @@ import { sessionActorManager } from './services/sessionActorManager';
 import { enqueueItem, withdrawItem, editItem, moveItem } from './services/promptQueueStore';
 import { assembleCacheOptimizedMessages, recordCacheHitTelemetry, extractFileSymbols, buildCompactRepoMap, buildRepoMapFromTree, buildRepoMapFromFileContents, prioritizeActiveFiles, recordActiveFile, getActiveFiles } from './services/cacheEngine';
 import { hostGateway } from './services/hostGateway';
-import { requestSystemNotification } from './services/systemNotify';
+import { requestSystemNotification, type SystemNotifyPayload } from './services/systemNotify';
 import { runSwarmChat } from './services/swarmChatExecutor';
 import { createGatewayStreamChat } from './services/swarmGatewayStream';
 import type { SwarmChatState } from './types/contracts';
@@ -83,7 +83,6 @@ import { ActivityBar } from './components/ActivityBar';
 import { LeftPanel } from './components/LeftPanel';
 import { ChatColumn } from './components/ChatColumn';
 import { EditorWorkspace } from './components/EditorWorkspace';
-import { SystemTaskNotification, TaskNotificationData } from './components/SystemTaskNotification';
 import {
   calculateKVCacheMetrics,
   SessionTier1Type,
@@ -411,7 +410,6 @@ export const App: React.FC = () => {
   const [isDraggingRight, setIsDraggingRight] = useState(false);
   const [activeDiffTarget, setActiveDiffTarget] = useState<DiffNavigationTarget | null>(null);
   const [activeFile, setActiveFile] = useState<{ path: string; name: string; line?: number } | null>(null);
-  const [activeNotification, setActiveNotification] = useState<TaskNotificationData | null>(null);
 
   // Global window pointermove & pointerup listeners for 100% reliable dragging across Monaco/Iframe/Terminals
   React.useEffect(() => {
@@ -453,17 +451,6 @@ export const App: React.FC = () => {
       window.removeEventListener('pointerup', onPointerUp);
     };
   }, [isDraggingLeft, isDraggingRight]);
-
-  // Global listener for task notifications
-  React.useEffect(() => {
-    const handleTaskNotify = (e: any) => {
-      if (e?.detail) {
-        setActiveNotification(e.detail);
-      }
-    };
-    window.addEventListener('tcode_task_notification', handleTaskNotify);
-    return () => window.removeEventListener('tcode_task_notification', handleTaskNotify);
-  }, []);
 
   // OS 原生通知点击唤醒会话（宿主 evaluate_js 分发 tcode_activate_session）
   React.useEffect(() => {
@@ -1306,6 +1293,8 @@ ${executionMode === 'swarm' ? `
             modelId: streamingModel.id,
             signal: controller?.signal,
             streamChat,
+            sessionId: currentSessionId,
+            runId: singleRunCardId,
           },
           {
             onMasterPlanning: (planning) => {
@@ -1328,6 +1317,10 @@ ${executionMode === 'swarm' ? `
             },
             onRoleDelta: (roleId, delta) => {
               swarmState = { ...swarmState, roles: swarmState.roles.map(r => (r.id === roleId ? { ...r, content: r.content + delta } : r)) };
+              syncSwarmCard();
+            },
+            onRoleIntervention: () => {
+              // Master 已更新角色的 revisions/interventions，仅需重新同步卡片
               syncSwarmCard();
             },
             onMasterSummary: (summary) => {
@@ -2039,20 +2032,15 @@ ${executionMode === 'swarm' ? `
       // ── Trigger System 280x120 Task Completion Notification ──
       const targetSession = sessions.find(s => s.id === currentSessionId) || activeSession;
       const cleanSummary = (lastAssistantContent || '').replace(/```[\s\S]*?```/g, '').replace(/[#*`_\n]/g, ' ').trim().slice(0, 60);
-      const notifyPayload: Omit<TaskNotificationData, 'id' | 'createdAt'> = {
+      const notifyPayload: SystemNotifyPayload = {
         status: currentLoopStatus === 'no_progress' ? 'error' : 'success',
         projectName: targetSession?.projectName || targetSession?.title || 'Tcode',
         sessionTitle: targetSession?.title || '会话任务',
         sessionId: currentSessionId,
         summary: cleanSummary || (completedWithTarget ? '✓ 任务已成功完成并通过独立验证。' : '✓ 模型回复已生成完毕。'),
       };
-      // 双通道：窗口后台时由宿主弹 Windows 原生右下角通知
+      // 一律 Windows 原生右下角系统通知
       void requestSystemNotification(notifyPayload);
-      setActiveNotification({
-        id: `notify-${Date.now()}`,
-        createdAt: Date.now(),
-        ...notifyPayload
-      });
 
     } catch (err: any) {
       if (!sessionActorManager.isSessionRunning(currentSessionId)) {
@@ -2086,20 +2074,15 @@ ${executionMode === 'swarm' ? `
 
       // ── Trigger System 280x120 Task Error Notification ──
       const targetSession = sessions.find(s => s.id === currentSessionId) || activeSession;
-      const notifyPayload: Omit<TaskNotificationData, 'id' | 'createdAt'> = {
+      const notifyPayload: SystemNotifyPayload = {
         status: 'error',
         projectName: targetSession?.projectName || targetSession?.title || 'Tcode',
         sessionTitle: targetSession?.title || '会话任务',
         sessionId: currentSessionId,
         summary: `错误根因: ${err.message || '大模型网络或鉴权异常'}`,
       };
-      // 双通道：窗口后台时由宿主弹 Windows 原生右下角通知
+      // 一律 Windows 原生右下角系统通知
       void requestSystemNotification(notifyPayload);
-      setActiveNotification({
-        id: `notify-${Date.now()}`,
-        createdAt: Date.now(),
-        ...notifyPayload
-      });
     } finally {
       sessionActorManager.completeSession(currentSessionId);
     }
@@ -2460,17 +2443,6 @@ ${executionMode === 'swarm' ? `
         onSelectAccentHex={handleSelectAccentHex}
       />
 
-      {/* System 280x120 Task Completion & Error Notification Toast */}
-      <SystemTaskNotification
-        notification={activeNotification}
-        onClose={() => setActiveNotification(null)}
-        onOpenSession={(sessionId) => {
-          if (sessionId) {
-            setCurrentSessionId(sessionId);
-          }
-        }}
-        durationMs={5000}
-      />
     </div>
   );
 };

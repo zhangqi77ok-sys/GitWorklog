@@ -11,6 +11,8 @@ export interface SubagentSection {
   content: string;
   status: 'passed' | 'running' | 'pending';
   error?: string;
+  revisions?: number;
+  interventions?: string[];
 }
 
 export interface SwarmParsedData {

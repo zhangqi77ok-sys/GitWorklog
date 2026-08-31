@@ -62,8 +62,8 @@ ModelRef(providerId:modelId)
 - 前端：`worktreeManager` 影子生命周期、`swarmSteering` 角色×路径越界规则（如前端改 server/ → Master 纠偏指令）、`SwarmMaster` 遥测总线实时记录干预、`swarmExecution` 真并发（每 Agent 独立请求流 + 影子 cwd）、`twoPhaseMerge` 两阶段提交（测试绿灯后才 git apply 落盘）。
 - 说明：控制平面与宿主能力已交付并测试；Swarm 工作台实时可视化接线留待后续专项（与 WP-C actor 模型统一）。
 
-### WP-F · 系统级双通道任务通知（原生右下角）
-- **双通道策略**：窗口聚焦时沿用应用内 280×120 完成/异常 Toast（悬停暂停 + 双按钮）；窗口最小化或后台时由桌面宿主弹出 **Windows 原生右下角通知**（任务完成/异常均触发）。
+### WP-F · 系统级任务通知（原生右下角，一律系统通知）
+- **一律系统通知**：任务完成/异常始终由宿主弹 **Windows 原生右下角通知**（窗口聚焦/后台/最小化均触发），应用内浮动 Toast 已移除。
 - **宿主 API**：`POST /api/notify/system`（入参 status/projectName/sessionTitle/sessionId/summary，Token 鉴权）；`GET /api/window/restore?sessionId=`（恢复并前置窗口）。
 - **点击唤醒**：系统通知点击 → 宿主 `window.restore()/show()` 并 `evaluate_js` 分发 `tcode_activate_session` 事件 → 前端自动切换至对应会话。
 - **通道选型说明**：实测 PowerShell 5.1 无法订阅 WinRT Toast 事件（点击回调不可用），故采用 `System.Windows.Forms.NotifyIcon` 气球通知（.NET 事件可订阅，零新增依赖）。

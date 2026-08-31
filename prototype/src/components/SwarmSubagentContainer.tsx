@@ -14,7 +14,9 @@ export function normalizeSwarmState(swarm: SwarmChatState): SwarmParsedData {
     duty: r.duty,
     content: r.content,
     status: r.status === 'running' ? 'running' : 'passed',
-    error: r.error
+    error: r.error,
+    revisions: r.revisions,
+    interventions: r.interventions
   }));
   return {
     masterPlanning: swarm.masterPlanning,
@@ -197,6 +199,11 @@ export const SwarmSubagentContainer: React.FC<SwarmSubagentContainerProps> = ({
                     · {sub.duty}
                   </span>
                 )}
+                {!!sub.revisions && (
+                  <span style={{ fontSize: '10px', color: 'var(--accent, #D96B27)', fontWeight: 600, flexShrink: 0 }}>
+                    · 已修订 {sub.revisions} 次
+                  </span>
+                )}
               </div>
               <span style={{
                 fontSize: '10px', fontWeight: 600,
@@ -237,6 +244,24 @@ export const SwarmSubagentContainer: React.FC<SwarmSubagentContainerProps> = ({
                     color: '#DC2626', fontSize: '11px', lineHeight: 1.5, whiteSpace: 'pre-wrap'
                   }}>
                     ✕ {sub.error}
+                  </div>
+                )}
+                {(sub.interventions || []).filter(f => f && f.trim()).length > 0 && (
+                  <div style={{
+                    marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '4px'
+                  }}>
+                    {(sub.interventions || []).filter(f => f && f.trim()).map((f, i) => (
+                      <div key={i} style={{
+                        padding: '6px 10px', borderRadius: '6px',
+                        background: 'rgba(217, 107, 39, 0.06)',
+                        border: '1px solid rgba(217, 107, 39, 0.18)',
+                        color: 'var(--text-secondary, #57534E)',
+                        fontSize: '11px', lineHeight: 1.5, whiteSpace: 'pre-wrap'
+                      }}>
+                        <span style={{ fontWeight: 700, color: 'var(--accent, #D96B27)' }}>Master 干预 · </span>
+                        {f}
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>

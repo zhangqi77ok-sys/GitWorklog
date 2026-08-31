@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   isDesktopHost,
-  isWindowHidden,
   requestSystemNotification,
   SystemNotifyPayload,
 } from '../src/services/systemNotify';
@@ -34,18 +33,6 @@ describe('isDesktopHost', () => {
   });
 });
 
-describe('isWindowHidden', () => {
-  it('returns true when visibilityState is hidden', () => {
-    vi.stubGlobal('document', { visibilityState: 'hidden' });
-    expect(isWindowHidden()).toBe(true);
-  });
-
-  it('returns false when visibilityState is visible', () => {
-    vi.stubGlobal('document', { visibilityState: 'visible' });
-    expect(isWindowHidden()).toBe(false);
-  });
-});
-
 describe('requestSystemNotification', () => {
   it('returns false and skips fetch in non-host environment', async () => {
     const fetchMock = vi.fn();
@@ -54,18 +41,8 @@ describe('requestSystemNotification', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('returns false and skips fetch when window is focused', async () => {
+  it('posts JSON payload to /api/notify/system in desktop host', async () => {
     vi.stubGlobal('window', { __TCODE_HOST_TOKEN__: 'tok' });
-    vi.stubGlobal('document', { visibilityState: 'visible' });
-    const fetchMock = vi.fn();
-    vi.stubGlobal('fetch', fetchMock);
-    expect(await requestSystemNotification(payload)).toBe(false);
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-
-  it('posts JSON payload to /api/notify/system when host + hidden', async () => {
-    vi.stubGlobal('window', { __TCODE_HOST_TOKEN__: 'tok' });
-    vi.stubGlobal('document', { visibilityState: 'hidden' });
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200 });
     vi.stubGlobal('fetch', fetchMock);
 
@@ -78,7 +55,6 @@ describe('requestSystemNotification', () => {
 
   it('returns false and logs on non-ok response', async () => {
     vi.stubGlobal('window', { __TCODE_HOST_TOKEN__: 'tok' });
-    vi.stubGlobal('document', { visibilityState: 'hidden' });
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({ ok: false, status: 500, text: async () => 'boom' }),
@@ -91,7 +67,6 @@ describe('requestSystemNotification', () => {
 
   it('returns false and logs when fetch rejects', async () => {
     vi.stubGlobal('window', { __TCODE_HOST_TOKEN__: 'tok' });
-    vi.stubGlobal('document', { visibilityState: 'hidden' });
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network down')));
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
     expect(await requestSystemNotification(payload)).toBe(false);

@@ -1563,11 +1563,11 @@ Tcode 必须区分“环境中发现了工作流工具”和“用户选择并�
    - **`@ 会话引用` (Sessions)**：快速调起历史会话与关联项目会话列表，点击选择后在输入框插入 `@会话名称` 并在发送时自动注入前序会话的上下文摘要；
    - 输入框顶部实时呈现已挂载引用的高亮徽标胶囊，支持一键 `✕` 快速取消。
 
-### 4.48.12 系统级双通道任务完成与异常通知规范 (Dual-Channel System Notification, 2026-08-31 修订)
+### 4.48.12 系统级任务完成与异常通知规范 (Native System Notification, 2026-08-31 修订)
 
-1. **双通道触发策略**：
-   - **应用内通道（窗口聚焦）**：沿用 280×120 微型 Toast（`SystemTaskNotification`，磨砂毛玻璃质感），精确 `280px` 宽 $\times$ `120px` 高，置于窗口右下角，`zIndex: 99999`；
-   - **系统级通道（窗口后台/最小化）**：由桌面宿主（`desktop_app.py`）通过 PowerShell 5.1 + `System.Windows.Forms.NotifyIcon` 在 Windows 屏幕物理右下角（任务栏上方）弹出**原生系统通知**，与 Tcode 窗口边界完全解耦——窗口最小化、切走或全屏遮挡时依然稳定弹出。
+1. **一律系统通知（无应用内浮动 Toast）**：
+   - 任务完成 / 异常时**始终**由桌面宿主（`desktop_app.py`）通过 PowerShell 5.1 + `System.Windows.Forms.NotifyIcon` 在 **Windows 屏幕物理右下角（任务栏上方）** 弹出原生系统通知；
+   - 不再区分窗口前后台，**不渲染应用内浮动 Toast**（`SystemTaskNotification` 已移除）；窗口聚焦、最小化、切走、全屏遮挡时均稳定弹出。
 2. **触发时机与内容**：
    - Agent Loop 任务正常闭环 → `success` 通知，携带项目名、会话标题与核心产出摘要；
    - Agent Loop 异常/失败 → `error` 通知，携带项目名、会话标题与错误根因摘要。
@@ -1578,24 +1578,8 @@ Tcode 必须区分“环境中发现了工作流工具”和“用户选择并�
    - 点击系统通知 → PowerShell 事件回调 `Invoke-RestMethod` 调宿主 `/api/window/restore?sessionId=<会话>`（携带宿主 token）→ 前端监听 `tcode_activate_session` 自动切换至对应会话。
 5. **通道选型说明（2026-08-31 修订）**：
    - 原方案计划使用 WinRT Toast（`[Windows.UI.Notifications]`）；实测 **PowerShell 5.1 无法订阅 WinRT 事件**（`Register-ObjectEvent` 报 "cannot subscribe to Windows RT events"），点击回调不可用；
-   - 故改用 `NotifyIcon` 气球通知：同为 Windows 原生右下角通知、点击回调为 .NET 事件（PowerShell 可订阅），**零新增依赖**；
+   - 故采用 `NotifyIcon` 气球通知：同为 Windows 原生右下角通知、点击回调为 .NET 事件（PowerShell 可订阅），**零新增依赖**；
    - 若后续需要现代版 Toast 样式，可切换至 Python `winrt` 包（需新增构建依赖并适配 PyInstaller）。
 6. **失败可见性**：
    - 宿主通知脚本错误写入 `%LOCALAPPDATA%\Tcode\notify\notify_error.log`；
    - 前端 `requestSystemNotification` 失败时 `console.error` 并返回 false，不静默降级。
-
-
-### 4.48.13 Swarm 真并发多角色结构化协同规约 (Concurrent Multi-Role Swarm, 2026-08-31 修订)
-
-1. **Master 动态组队协议（非预选角色）**：
-   - 角色目录 `SWARM_ROLE_CATALOG` 提供 8 个可选 Subagent：架构师 📐 / 核心开发 💻 / 质量测试 🧪 / 代码审计与安全 🛡️ / 前端 🎨 / 后端 ⚙️ / 数据库 💾 / 文档 📝；
-   - **Master 拆解阶段**：一次 LLM 调用返回严格 JSON `{ "planning": "...", "roles": ["architect", "dev", "..."] }`，由 Master **按任务实际需要动态挑选 2~4 个**角色（不预先固定、不贪多）；
-   - 前端在拆解完成前显示「Master 正在分析任务并组建 Subagent 团队」骨架，拆解完成后按实际选中角色实例化卡片。
-2. **三段式结构化执行（全链路流式）**：
-   - Phase 1 Master 拆解（JSON 组队，**逐字流式上屏**）→ Phase 2 仅对**选中的角色**各自独立流式调用 LLM（`Promise.allSettled`，逐字回调）→ Phase 3 Master 终审汇总实际选中角色产出（**逐字流式上屏**）做质量仲裁与交付；
-   - `SwarmChatState.phase: planning | roles | summary | done` 驱动前端流式光标/骨架/完成态切换。
-3. **数据契约**：`ChatMessage.swarm?: SwarmChatState { masterPlanning, roles: SwarmRoleStream[], masterSummary }`；`roles` 为动态数组，由拆解结果决定。
-4. **失败边界（fail-closed）**：拆解 JSON 解析失败、包含未知角色 id、或数量不在 2~4 之间 → **显式抛错**并在界面显示协议错误，不静默回退；单个角色执行失败不阻塞其余角色，失败卡片显式标红附错误信息。
-5. **渲染规范（暖色极简）**：`SwarmSubagentContainer` 采用米白表面 + 极细边框 + 克制控件的平铺布局；自上而下为 Master 总控头部条（单行紧凑）、Master 拆解（可折叠，**拆解期逐字流式**）、Subagent 平铺卡片（**内容默认展开**，可独立折叠；含图标/名称/职责/状态徽标，running 流式并显示「推演中…」占位，error 红块）、Master 终审交付区（**终审期逐字流式**）；旧消息（无 `swarm` 字段）走正则解析回退。
-6. **v1 范围界定**：Subagent 仅输出分析/设计/测试用例/安全审计文本，不直接执行工具；核心开发角色的代码块在 Master 终审中呈现，由用户决定是否应用。
-7. **生产流式通道**：`swarmGatewayStream.createGatewayStreamChat` 与主 Agent Loop 同口径（New-API 渠道直连 → Gateway v2 多账号 → v1 Provider 目录），SSE 增量逐字回调。

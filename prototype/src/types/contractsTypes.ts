@@ -198,6 +198,10 @@ export interface SwarmRoleStream {
   content: string;  // 该角色已累积的流式内容
   status: 'running' | 'passed' | 'error';
   error?: string;   // status=error 时的错误信息
+  /** Master 审查后要求修订的次数（0 表示首轮即通过）。 */
+  revisions?: number;
+  /** Master 干预/审查反馈记录（含修订指令）。 */
+  interventions?: string[];
 }
 
 /** 🐝 Swarm 会话级结构化协同状态（Master 拆解 -> 多角色并发 -> Master 终审）。 */
