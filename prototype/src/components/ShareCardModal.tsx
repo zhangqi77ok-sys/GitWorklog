@@ -228,8 +228,12 @@ export const ShareCardModal: React.FC<ShareCardModalProps> = ({
           throw new Error(`保存失败: HTTP ${res.status} ${detail.slice(0, 120)}`);
         }
         const payload = await res.json();
-        setImageGeneratedToast(`✨ 已保存卡片图片：${payload.path}`);
-        setTimeout(() => setImageGeneratedToast(null), 5000);
+        setImageGeneratedToast(
+          payload.clipboard
+            ? `✨ 已保存并复制到剪贴板（可直接 Ctrl+V 粘贴）：${payload.path}`
+            : `✨ 已保存卡片图片（剪贴板复制失败）：${payload.path}`,
+        );
+        setTimeout(() => setImageGeneratedToast(null), 6000);
       } else {
         // 浏览器 dev 环境：Blob 下载
         const blob = await (await fetch(`data:image/png;base64,${dataBase64}`)).blob();

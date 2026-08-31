@@ -90,6 +90,28 @@ def get_share_dir():
     base.mkdir(parents=True, exist_ok=True)
     return base
 
+
+def copy_image_to_clipboard(path: Path) -> bool:
+    # 将 PNG 解码为位图写入 Windows 系统剪贴板（用户可直接 Ctrl+V 粘贴图片）。
+    # 注: Set-Clipboard -Path 只放文件引用(FileDrop)，Get-Clipboard -Format Image 读不到，
+    # 必须用 System.Drawing.Clipboard.SetImage 放入位图格式。
+    escaped = str(path).replace(chr(39), chr(39) + chr(39))
+    ps_cmd = (
+        'Add-Type -AssemblyName System.Windows.Forms; '
+        'Add-Type -AssemblyName System.Drawing; '
+        f"$img = [System.Drawing.Image]::FromFile('{escaped}'); "
+        '[System.Windows.Forms.Clipboard]::SetImage($img); '
+        '$img.Dispose()'
+    )
+    try:
+        proc = run_silent_cmd(
+            ['powershell.exe', '-NoProfile', '-NonInteractive', '-Command', ps_cmd],
+            timeout=15,
+        )
+        return proc.returncode == 0
+    except Exception:
+        return False
+
 def get_dist_path():
     if hasattr(sys, '_MEIPASS'):
         return Path(sys._MEIPASS) / 'dist'
@@ -692,7 +714,9 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
             except Exception as e:
                 self._send_json(500, {'error': 'SAVE_FAILED', 'code': 500, 'detail': str(e)})
                 return
-            self._send_json(200, {'success': True, 'path': str(target)})
+            # 保存后同时写入系统剪贴板（失败不影响保存，显式返回 clipboard 状态）
+            clipboard_ok = copy_image_to_clipboard(target)
+            self._send_json(200, {'success': True, 'path': str(target), 'clipboard': clipboard_ok})
             return
 
         # 1b. Native Windows OS Toast Notification (System Task Completion / Error)

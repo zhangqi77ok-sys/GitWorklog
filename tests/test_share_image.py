@@ -90,3 +90,54 @@ def test_save_image_requires_token():
         "dataBase64": "aGVsbG8=",
     }, token=None)
     assert status == 401
+
+
+def test_save_image_copies_to_clipboard_on_success(monkeypatch, tmp_path):
+    copied = {}
+    def fake_copy(path):
+        copied['path'] = str(path)
+        return True
+    monkeypatch.setattr(desktop, "copy_image_to_clipboard", fake_copy)
+    monkeypatch.setattr(desktop, "get_share_dir", lambda: tmp_path)
+    status, data = _request("POST", "/api/share/save_image", body={
+        "filename": "Tcode-Share-Card-clip.png",
+        "dataBase64": base64.b64encode(PNG_BYTES).decode("ascii"),
+    })
+    payload = json.loads(data)
+    assert status == 200
+    assert payload.get("clipboard") is True
+    assert copied["path"].endswith("Tcode-Share-Card-clip.png")
+
+
+def test_save_image_reports_clipboard_failure_but_still_saves(monkeypatch, tmp_path):
+    monkeypatch.setattr(desktop, "copy_image_to_clipboard", lambda path: False)
+    monkeypatch.setattr(desktop, "get_share_dir", lambda: tmp_path)
+    status, data = _request("POST", "/api/share/save_image", body={
+        "filename": "Tcode-Share-Card-noclip.png",
+        "dataBase64": base64.b64encode(PNG_BYTES).decode("ascii"),
+    })
+    payload = json.loads(data)
+    assert status == 200
+    assert payload.get("success") is True
+    assert payload.get("clipboard") is False
+
+
+def test_copy_image_to_clipboard_runs_powershell(monkeypatch, tmp_path):
+    calls = []
+    class FakeProc:
+        returncode = 0
+    def fake_run(cmd, **kwargs):
+        calls.append(cmd)
+        return FakeProc()
+    monkeypatch.setattr(desktop, "run_silent_cmd", fake_run)
+    ok = desktop.copy_image_to_clipboard(tmp_path / "card.png")
+    assert ok is True
+    assert calls and "Clipboard]::SetImage" in " ".join(calls[0])
+    assert str(tmp_path / "card.png") in " ".join(calls[0])
+
+
+def test_copy_image_to_clipboard_failure_returns_false(monkeypatch, tmp_path):
+    class FakeProc:
+        returncode = 1
+    monkeypatch.setattr(desktop, "run_silent_cmd", lambda cmd, **kw: FakeProc())
+    assert desktop.copy_image_to_clipboard(tmp_path / "card.png") is False
