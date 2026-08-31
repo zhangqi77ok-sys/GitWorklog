@@ -1,6 +1,7 @@
 import { TargetStepProgressCard } from './TargetStepProgressCard';
 import { ActionApprovalModal } from './ActionApprovalModal';
 import { ShareCardModal } from './ShareCardModal';
+import { buildCleanConversationText, buildCleanRoundsText } from '../services/shareText';
 import React, { useState, useEffect } from 'react';
 import { MarkdownCard } from './MarkdownCard';
 import { agentRuntimeController } from '../services/agentRuntimeController';
@@ -1382,8 +1383,8 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                     }}>
                       <button
                         onClick={() => {
-                          const allContent = msg.rounds!.map(r => `[Round ${r.roundId}] ${r.title}\n${r.content}`).join('\n\n---\n\n');
-                          navigator.clipboard.writeText(allContent);
+                          // 统一净化：剥离工具动作块/思考过程，轮次标题用动态标题
+                          navigator.clipboard.writeText(buildCleanRoundsText(msg));
                           setCopiedMsgId(msg.id);
                           setTimeout(() => setCopiedMsgId(null), 2000);
                         }}
@@ -1555,7 +1556,8 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                   }}>
                     <button
                       onClick={() => {
-                        navigator.clipboard.writeText(msg.content);
+                        // 统一净化：Agent Loop 剥离工具块，Swarm 拼接结构化内容
+                        navigator.clipboard.writeText(buildCleanConversationText(msg));
                         setCopiedMsgId(msg.id);
                         setTimeout(() => setCopiedMsgId(null), 2000);
                       }}

@@ -1353,7 +1353,8 @@ ${executionMode === 'swarm' ? `
         // Initialize incremental streaming round for loopCount
         const currentStreamingRound: AgentRoundItem = {
           roundId: loopCount,
-          title: loopCount === 1 ? '🔍 目标拆解与现状探查' : (loopCount === 2 ? '⚡ 编码落地与工具执行' : `🛠️ 第 ${loopCount} 轮自愈与验证`),
+          // 创建时不确定本轮动作，使用中性标题；轮次结束后依据真实 actions 动态更新
+          title: `第 ${loopCount} 轮`,
           status: 'running',
           phase: loopCount === 1 ? 'inspect' : 'modify',
           content: '',

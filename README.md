@@ -76,6 +76,7 @@ ModelRef(providerId:modelId)
 - **执行器**：`swarmChatExecutor.runSwarmChat`（纯编排，可注入 streamChat）；`swarmGatewayStream.createGatewayStreamChat` 复用主 Loop 调度口径（渠道 → Gateway v2 → v1）。
 - **渲染**：暖色极简（米白表面/细边框/克制控件），Subagent 卡片**内容默认展开**、可独立折叠，拆解/终审逐字流式，running 显示「推演中…」占位，error 状态清晰。
 - **v1 边界**：角色仅产出分析文本；工具执行留待后续。
+- **统一输出**：分享/复制统一净化（剥离工具块/思考过程），Agent Loop 与 Swarm 风格一致；轮次标题基于真实 actions 动态生成，不预设阶段名。
 
 ### 2. 目标驱动 Agent Loop
 
