@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   createGatewayStreamChat,
   GatewayStreamChatDeps,
-} from '../src/services/swarmChatExecutor';
+} from '../src/services/swarmGatewayStream';
 
 afterEach(() => {
   vi.unstubAllGlobals();

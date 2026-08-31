@@ -1585,14 +1585,16 @@ Tcode 必须区分“环境中发现了工作流工具”和“用户选择并�
    - 前端 `requestSystemNotification` 失败时 `console.error` 并返回 false，不静默降级。
 
 
-### 4.48.13 Swarm 真并发多角色结构化协同规约 (Concurrent Multi-Role Swarm, 2026-08-31)
+### 4.48.13 Swarm 真并发多角色结构化协同规约 (Concurrent Multi-Role Swarm, 2026-08-31 修订)
 
-1. **三段式结构化协议**：
-   - **Phase 1 Master 拆解**：一次 LLM 调用产出全局任务拆解与四角色分工规划（不再要求模型输出角色标记）；
-   - **Phase 2 四角色真并发**：架构师 / 核心开发工程师 / 质量测试专家 / 代码审计与安全员 四个 Subagent **各自独立流式调用 LLM**（`Promise.allSettled`），逐字回调渲染到独立角色卡片；
-   - **Phase 3 Master 终审**：汇总四角色产出做质量仲裁与最终交付总结。
-2. **数据契约**：`ChatMessage.swarm?: SwarmChatState { masterPlanning, roles: SwarmRoleStream[], masterSummary }`；`SwarmRoleStream { id, name, icon, duty?, content, status: running|passed|error, error? }`。
-3. **渲染**：`SwarmSubagentContainer` 结构化 `swarm` 字段优先；旧消息（无 `swarm`）走正文正则解析回退（角色标记 `### 📐 [Subagent · 系统架构师]` 等）。
-4. **失败隔离与取消**：单个角色失败不阻塞其余角色，失败卡片显式标红并附错误信息；`AbortController` 全链路传播，停止会话即中止全部并发调用。
-5. **v1 范围界定**：Subagent 仅输出分析/设计/测试用例/安全审计文本，不直接执行工具；核心开发角色的代码块在 Master 终审中呈现，由用户决定是否应用。并发角色工具执行、动态角色选取留待后续迭代。
-6. **生产流式通道**：`createGatewayStreamChat` 与主 Agent Loop 同口径（Gateway v2 多账号优先，v1 Provider 目录兜底），SSE 增量逐字回调。
+1. **Master 动态组队协议（非预选角色）**：
+   - 角色目录 `SWARM_ROLE_CATALOG` 提供 8 个可选 Subagent：架构师 📐 / 核心开发 💻 / 质量测试 🧪 / 代码审计与安全 🛡️ / 前端 🎨 / 后端 ⚙️ / 数据库 💾 / 文档 📝；
+   - **Master 拆解阶段**：一次 LLM 调用返回严格 JSON `{ "planning": "...", "roles": ["architect", "dev", "..."] }`，由 Master **按任务实际需要动态挑选 2~4 个**角色（不预先固定、不贪多）；
+   - 前端在拆解完成前显示「Master 正在分析任务并组建 Subagent 团队」骨架，拆解完成后按实际选中角色实例化卡片。
+2. **三段式结构化执行**：
+   - Phase 1 Master 拆解（JSON 组队）→ Phase 2 仅对**选中的角色**各自独立流式调用 LLM（`Promise.allSettled`，逐字回调）→ Phase 3 Master 终审汇总实际选中角色产出做质量仲裁与交付。
+3. **数据契约**：`ChatMessage.swarm?: SwarmChatState { masterPlanning, roles: SwarmRoleStream[], masterSummary }`；`roles` 为动态数组，由拆解结果决定。
+4. **失败边界（fail-closed）**：拆解 JSON 解析失败、包含未知角色 id、或数量不在 2~4 之间 → **显式抛错**并在界面显示协议错误，不静默回退；单个角色执行失败不阻塞其余角色，失败卡片显式标红附错误信息。
+5. **渲染规范（暖色极简）**：`SwarmSubagentContainer` 采用米白表面 + 极细边框 + 克制控件的平铺布局；自上而下为 Master 总控头部条（单行紧凑）、Master 拆解（可折叠）、Subagent 平铺卡片（每卡可独立折叠，含图标/名称/职责/状态徽标，running 流式、error 红块）、Master 终审交付区；旧消息（无 `swarm` 字段）走正则解析回退。
+6. **v1 范围界定**：Subagent 仅输出分析/设计/测试用例/安全审计文本，不直接执行工具；核心开发角色的代码块在 Master 终审中呈现，由用户决定是否应用。
+7. **生产流式通道**：`swarmGatewayStream.createGatewayStreamChat` 与主 Agent Loop 同口径（New-API 渠道直连 → Gateway v2 多账号 → v1 Provider 目录），SSE 增量逐字回调。

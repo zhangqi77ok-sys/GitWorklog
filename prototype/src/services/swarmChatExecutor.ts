@@ -1,43 +1,29 @@
 /**
- * Task B2: Swarm 真并发多角色执行器。
+ * Task B2/C1: Swarm 真并发多角色执行器（Master 动态组队）。
  *
- * 三段式编排（结构化协议）：
- *   1. Master 拆解：一次 LLM 调用产出全局规划；
- *   2. 多角色并发：固定 4 角色（架构/开发/测试/安全）各自独立流式调用 LLM，逐字回调；
- *   3. Master 终审：汇总全部角色产物做质量仲裁并交付。
+ * 协议（结构化）：
+ *   1. Master 拆解：一次 LLM 调用返回 JSON { planning, roles[] }，Master 按任务
+ *      从角色目录动态挑选 2~4 个 Subagent（不预先固定）；
+ *   2. 多角色并发：只对选中的角色各发起独立流式调用（Promise.allSettled），逐字回调；
+ *   3. Master 终审：汇总实际选中角色的产出做质量仲裁与交付。
+ * 解析/校验失败（非 JSON、未知角色、数量越界）→ 显式抛错，fail-closed，不静默回退。
  * 依赖注入 streamChat（生产接宿主网关，测试用 mock），单角色失败不阻塞其余角色。
  */
-import type { SwarmChatState, SwarmRoleStream } from '../types/contracts';
-import {
-  buildModelCatalogEntry as buildModelCatalogEntryFn,
-  resolveModelRoute as resolveModelRouteFn,
-  buildGatewayRequestBody as buildGatewayRequestBodyFn,
-  parseGatewayEvent as parseGatewayEventFn,
-} from './modelGateway';
-import type { GatewayMessage } from './gateway/transform';
-import type { ChannelItem } from '../types/contractsTypes';
-import type { ModelAdapter, ProviderRecord } from './modelGateway';
-import type { GatewayPlatform } from './gateway/types';
+import type { SwarmChatState } from '../types/contracts';
+import type { SwarmRoleStream } from '../types/contracts';
+import type { StreamChatFn } from './swarmGatewayStream';
 
-/** 固定四角色目录（v1 不做动态角色选取，KISS）。 */
-export const SWARM_ROLES: readonly SwarmRoleStream[] = [
+/** Subagent 角色目录：Master 按任务动态挑选 2~4 个执行。 */
+export const SWARM_ROLE_CATALOG: readonly SwarmRoleStream[] = [
   { id: 'architect', name: '系统架构师', icon: '📐', duty: '领域建模、接口契约与依赖分析', content: '', status: 'running' },
   { id: 'dev', name: '核心开发工程师', icon: '💻', duty: '具体算法、业务逻辑与核心代码', content: '', status: 'running' },
-  { id: 'qa', name: '质量测试专家', icon: '🧪', duty: '红绿测试用例与边界验证', content: '', status: 'running' },
-  { id: 'security', name: '代码审计与安全员', icon: '🛡️', duty: '代码坏味道审查与安全合规检查', content: '', status: 'running' },
+  { id: 'tester', name: '质量测试专家', icon: '🧪', duty: '红绿测试用例与边界验证', content: '', status: 'running' },
+  { id: 'security', name: '代码审计与安全员', icon: '🛡️', duty: '代码坏味道与安全合规检查', content: '', status: 'running' },
+  { id: 'frontend', name: '前端工程师', icon: '🎨', duty: 'React/TS 界面与交互实现', content: '', status: 'running' },
+  { id: 'backend', name: '后端工程师', icon: '⚙️', duty: '服务端/API/数据访问实现', content: '', status: 'running' },
+  { id: 'dba', name: '数据库专家', icon: '💾', duty: '表结构、迁移与查询优化', content: '', status: 'running' },
+  { id: 'docs', name: '技术文档写手', icon: '📝', duty: '文档、交接与使用说明', content: '', status: 'running' },
 ];
-
-export interface StreamChatRequest {
-  system: string;
-  user: string;
-  modelId: string;
-  signal?: AbortSignal;
-  /** 增量文本回调（用于角色流式渲染）。 */
-  onDelta: (delta: string) => void;
-}
-
-/** 可注入的流式对话调用；返回完整文本。 */
-export type StreamChatFn = (req: StreamChatRequest) => Promise<string>;
 
 export interface SwarmChatInput {
   userGoal: string;
@@ -49,24 +35,65 @@ export interface SwarmChatInput {
 
 export interface SwarmChatCallbacks {
   onMasterPlanning: (planning: string) => void;
+  /** Master 拆解完成后，将实际选中的角色（初始 running 态）投影到前端。 */
+  onRolesSelected: (roles: SwarmRoleStream[]) => void;
   onRoleStatus: (roleId: string, status: 'running' | 'passed' | 'error', error?: string) => void;
   onRoleDelta: (roleId: string, delta: string) => void;
   onMasterSummary: (summary: string) => void;
 }
 
 const MASTER_SYSTEM = `你是 Tcode 桌面 IDE 的 Swarm Master 协同调度中枢。
-你负责全局任务拆解与终审交付：先给出清晰可执行的多角色分工规划；
-终审时对架构、开发、测试、安全四个角色的产出做质量仲裁，并给出最终交付总结。
-输出使用简洁 Markdown。`;
+你的职责：
+1. 拆解任务：分析用户目标与工程上下文，产出清晰的多角色分工规划；
+2. 动态组队：从角色目录中按任务实际需要挑选 2~4 个 Subagent（不要贪多，够用即可）；
+3. 终审交付：对全部 Subagent 产出做质量仲裁，输出最终交付总结。`;
 
-/** Master 拆解阶段提示词：产出分工规划，不要求输出角色标记（角色由执行器实例化）。 */
+/** Master 拆解提示词：要求严格 JSON 输出，携带角色目录供选择。 */
 function buildPlanningPrompt(input: SwarmChatInput): string {
+  const catalogLines = SWARM_ROLE_CATALOG.map(r => `- ${r.id}: ${r.name}（${r.duty}）`).join('\n');
   return `【用户目标】: ${input.userGoal}
 
 【工程上下文】:
 ${input.contextSnapshotMarkdown || '（无额外上下文）'}
 
-请作为 Master 拆解该目标：明确验收标准、依赖关系，并分配架构/开发/测试/安全四个子角色的任务边界。`;
+【可选角色目录】:
+${catalogLines}
+
+请输出严格 JSON（不要输出任何其它内容或 Markdown 围栏）:
+{
+  "planning": "任务拆解与分工规划（Markdown 文本）",
+  "roles": ["architect", "dev", "..."]
+}
+规则：
+- roles 从上述目录中按任务需要挑选 2~4 个，元素必须严格等于目录中的 id；
+- 不要选择与任务无关的角色；不确定时优先选架构 + 实现类角色。`;
+}
+
+/** 解析 Master 拆解输出：提取 JSON 并校验角色合法性（fail-closed）。 */
+export function parseDecomposition(raw: string): { planning: string; roleIds: string[] } {
+  const jsonMatch = raw.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error('Master 拆解未返回有效 JSON');
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(jsonMatch[0]);
+  } catch {
+    throw new Error('Master 拆解 JSON 解析失败');
+  }
+  const obj = parsed as { planning?: unknown; roles?: unknown };
+  if (typeof obj.planning !== 'string' || !Array.isArray(obj.roles)) {
+    throw new Error('Master 拆解缺少 planning 或 roles 字段');
+  }
+  const roleIds = obj.roles.filter((r): r is string => typeof r === 'string');
+  const catalogIds = new Set(SWARM_ROLE_CATALOG.map(r => r.id));
+  const unknown = roleIds.filter(id => !catalogIds.has(id));
+  if (unknown.length > 0) {
+    throw new Error(`Master 拆解包含未知角色: ${unknown.join(', ')}`);
+  }
+  const unique = [...new Set(roleIds)];
+  if (unique.length < 2 || unique.length > 4) {
+    throw new Error(`Master 拆解角色数量需为 2~4 个，当前 ${unique.length} 个`);
+  }
+  return { planning: obj.planning.trim(), roleIds: unique };
 }
 
 /** 角色系统提示词：定义该角色的专业职责与输出规范。 */
@@ -86,7 +113,7 @@ ${input.contextSnapshotMarkdown || '（无额外上下文）'}
 作为「${role.name}」，请给出你的专业分析与产出。`;
 }
 
-/** Master 终审提示词：汇总四个角色产出做质量仲裁与交付。 */
+/** Master 终审提示词：汇总实际选中角色的产出做质量仲裁与交付。 */
 function buildSummaryPrompt(input: SwarmChatInput, roles: SwarmRoleStream[]): string {
   const roleBlocks = roles
     .map(r => `### ${r.icon} [${r.name}]${r.status === 'error' ? `（执行失败: ${r.error || '未知错误'}）` : ''}\n${r.content}`)
@@ -99,31 +126,35 @@ ${roleBlocks}
 请作为 Master 终审：仲裁各角色产出质量，指出分歧与风险，并输出最终交付总结。`;
 }
 
-/** 运行一次真并发 Swarm 协同，返回结构化最终状态。 */
+/** 运行一次 Master 动态组队的真并发 Swarm 协同，返回结构化最终状态。 */
 export async function runSwarmChat(
   input: SwarmChatInput,
   callbacks: SwarmChatCallbacks,
 ): Promise<SwarmChatState> {
-  const roles: SwarmRoleStream[] = SWARM_ROLES.map(r => ({ ...r, content: '', status: 'running' as const }));
-
-  // ── Phase 1: Master 拆解（一次性返回规划） ──
-  const masterPlanning = await input.streamChat({
+  // ── Phase 1: Master 拆解 + 动态组队 ──
+  const raw = await input.streamChat({
     system: MASTER_SYSTEM,
     user: buildPlanningPrompt(input),
     modelId: input.modelId,
     signal: input.signal,
     onDelta: () => {},
   });
-  callbacks.onMasterPlanning(masterPlanning);
+  const { planning, roleIds } = parseDecomposition(raw);
+  callbacks.onMasterPlanning(planning);
 
-  // ── Phase 2: 多角色真并发（失败角色不阻塞其余） ──
+  const selectedRoles: SwarmRoleStream[] = roleIds.map(id => {
+    const def = SWARM_ROLE_CATALOG.find(r => r.id === id)!;
+    return { ...def, content: '', status: 'running' as const };
+  });
+  callbacks.onRolesSelected(selectedRoles);
+
+  // ── Phase 2: 只对选中角色真并发（失败角色不阻塞其余） ──
   await Promise.allSettled(
-    SWARM_ROLES.map(async (roleDef, i) => {
-      const role = roles[i];
+    selectedRoles.map(async role => {
       try {
         const full = await input.streamChat({
-          system: buildRoleSystemPrompt(roleDef),
-          user: buildRolePrompt(input, roleDef),
+          system: buildRoleSystemPrompt(role),
+          user: buildRolePrompt(input, role),
           modelId: input.modelId,
           signal: input.signal,
           onDelta: (delta) => {
@@ -145,179 +176,12 @@ export async function runSwarmChat(
   // ── Phase 3: Master 终审（一次性返回总结） ──
   const masterSummary = await input.streamChat({
     system: MASTER_SYSTEM,
-    user: buildSummaryPrompt(input, roles),
+    user: buildSummaryPrompt(input, selectedRoles),
     modelId: input.modelId,
     signal: input.signal,
     onDelta: () => {},
   });
   callbacks.onMasterSummary(masterSummary);
 
-  return { masterPlanning, roles, masterSummary };
-}
-
-/** ── 生产版 streamChat：复用宿主网关（Gateway v2 -> v1 Provider 兜底）+ SSE 流式解析 ── */
-
-export interface GatewayStreamChatDeps {
-  streamingModel: {
-    id: string; name: string; providerId?: string; uniqueKey?: string;
-    adapter?: string; endpointPath?: string; protocol?: string;
-    contextLimit?: number; capabilities?: unknown;
-  };
-  sessionKey: string;
-  gatewayRuntime: { facade: { prepare: (opts: {
-    model: string; platform: GatewayPlatform; sessionKey: string;
-    messages: GatewayMessage[];
-    systemPrompt: string; contextLimit: number; defaultMaxOutputTokens: number;
-  }) => { url: string; headers: Record<string, string>; body: unknown; adapter: ModelAdapter; accountId: string } | null } };
-  hasGatewayAccountsFor: (platform: GatewayPlatform) => boolean;
-  platformForProvider: (providerId: string, modelId: string) => GatewayPlatform;
-  loadSavedProviders: () => Array<Record<string, any>>;
-  loadSavedChannels: () => ChannelItem[];
-  buildModelCatalogEntry: typeof buildModelCatalogEntryFn;
-  resolveModelRoute: typeof resolveModelRouteFn;
-  buildGatewayRequestBody: typeof buildGatewayRequestBodyFn;
-  parseGatewayEvent: typeof parseGatewayEventFn;
-  resolveApiEndpoint: (endpointUrl: string) => { url: string; headers: Record<string, string> };
-  addLog: (level: 'INFO' | 'WARN' | 'ERROR' | 'NET', module: string, message: string) => void;
-}
-
-/** 生产版流式对话实现：与主 Agent Loop 的调度口径一致（Gateway v2 优先，v1 Provider 兜底）。 */
-export function createGatewayStreamChat(deps: GatewayStreamChatDeps): StreamChatFn {
-  const model = deps.streamingModel;
-  return async (req: StreamChatRequest): Promise<string> => {
-    const messages: Array<{ role: 'system' | 'user'; content: string }> = [
-      { role: 'system', content: req.system },
-      { role: 'user', content: req.user },
-    ];
-
-    let url: string;
-    let headers: Record<string, string>;
-    let body: string;
-    let adapter: ModelAdapter = (model.adapter as ModelAdapter) || 'openai-compatible-chat';
-
-    // ── Priority 1: New-API Channels 路由（与主 Agent Loop 一致，最高优先级） ──
-    const activeChannels = deps.loadSavedChannels().filter(c => c.status === 'active' || c.status === 'untested');
-    const channel = activeChannels.find(c => c.id === model.providerId)
-      || activeChannels.find(c => (c.models || []).includes(model.id))
-      || (model.uniqueKey ? activeChannels.find(c => model.uniqueKey?.startsWith(c.id + ':')) : undefined)
-      || activeChannels[0];
-
-    if (channel) {
-      // 渠道直连：key 存于渠道配置（与主循环 ChannelRouter 同口径）
-      let baseUrl = channel.baseUrl.trim();
-      if (baseUrl.endsWith('/')) baseUrl = baseUrl.slice(0, -1);
-      const targetModel = channel.modelMapping?.[model.id] || model.id;
-      const fullEndpoint = baseUrl.endsWith('/chat/completions') || baseUrl.endsWith('/messages')
-        ? baseUrl
-        : (channel.type === 14 ? `${baseUrl}/messages` : `${baseUrl}/chat/completions`);
-      const resolved = deps.resolveApiEndpoint(fullEndpoint);
-      url = resolved.url;
-      const requestHeaders: Record<string, string> = { 'Content-Type': 'application/json', ...resolved.headers };
-      if (channel.key?.trim()) {
-        const firstKey = channel.key.trim().split('\n')[0].trim();
-        requestHeaders['Authorization'] = `Bearer ${firstKey}`;
-      } else if (channel.type !== 4) {
-        throw new Error(`渠道 [${channel.name}] 尚未填写 API Key 凭据。请点击左下角 ⚙️ 首选项 ➔「模型服务商」编辑该渠道，填入您的 API Key 即可开始对话。`);
-      }
-      if (channel.headerOverride) Object.assign(requestHeaders, channel.headerOverride);
-      headers = requestHeaders;
-      adapter = (channel.type === 14 ? 'anthropic-messages' : 'openai-compatible-chat') as ModelAdapter;
-      body = JSON.stringify({ model: targetModel, messages, stream: true, ...(channel.paramOverride || {}) });
-      deps.addLog('INFO', 'ChannelRouter', `[Swarm][渠道调度] ${model.name} → 渠道 [${channel.name}] (Key已注入) · ${fullEndpoint}`);
-    } else {
-      // ── 路由：Gateway v2 多账号优先，无则走 v1 Provider 目录 ──
-      const platform = deps.platformForProvider(model.providerId || '', model.id);
-      const prepared = deps.hasGatewayAccountsFor(platform)
-        ? deps.gatewayRuntime.facade.prepare({
-            model: model.id,
-            platform,
-            sessionKey: deps.sessionKey,
-            messages,
-            systemPrompt: req.system,
-            contextLimit: model.contextLimit || 128000,
-            defaultMaxOutputTokens: 4096,
-          })
-        : null;
-
-      if (prepared) {
-        url = prepared.url;
-        headers = prepared.headers;
-        body = JSON.stringify(prepared.body);
-        adapter = prepared.adapter;
-        deps.addLog('INFO', 'GatewayV2', `[Swarm] 调度 ${model.name} -> 账号 ${prepared.accountId} · ${prepared.url}`);
-      } else {
-        const providers = deps.loadSavedProviders();
-        const provider = providers.find(p => p.id === model.providerId)
-          || providers.find(p => p.enabled && (p.models || []).some((m: any) => m.id === model.id))
-          || providers.find(p => p.enabled && p.apiKey && p.baseUrl)
-          || providers[0];
-        if (!provider) throw new Error('没有可用的模型服务商渠道');
-        const catalogModel = (provider.models || []).find((m: any) => m.id === model.id) || {
-          id: model.id,
-          name: model.name,
-          enabled: true,
-          contextLimit: model.contextLimit,
-          adapter: model.adapter,
-          endpointPath: model.endpointPath,
-          protocol: model.protocol,
-          capabilities: [],
-        };
-        const providerRec = provider as ProviderRecord;
-        const catalogEntry = deps.buildModelCatalogEntry(providerRec, catalogModel);
-        const route = deps.resolveModelRoute(providerRec, catalogEntry);
-        const resolved = deps.resolveApiEndpoint(route.endpointUrl);
-        url = resolved.url;
-        headers = resolved.headers;
-        body = JSON.stringify(deps.buildGatewayRequestBody(route, messages as GatewayMessage[]));
-        adapter = route.adapter || adapter;
-        deps.addLog('INFO', 'SwarmGateway', `[Swarm] v1 渠道 ${model.name} · ${route.endpointUrl}`);
-      }
-    }
-
-    // ── SSE 流式消费（与主 Loop 同口径：content/reasoning 增量、[DONE]/finish_reason 终结） ──
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...headers },
-      body,
-      signal: req.signal,
-    });
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-    }
-    const reader = response.body?.getReader();
-    if (!reader) return '';
-    const decoder = new TextDecoder('utf-8');
-    let full = '';
-    let buffer = '';
-    let sawDone = false;
-    let sawFinish = false;
-    while (!sawDone && !sawFinish) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed.startsWith('data: ')) continue;
-        const raw = trimmed.slice(6).trim();
-        if (raw === '[DONE]') {
-          sawDone = true;
-          break;
-        }
-        try {
-          const normalized = deps.parseGatewayEvent(adapter, JSON.parse(raw));
-          if (normalized.content || normalized.reasoning) {
-            const chunk = `${normalized.reasoning || ''}${normalized.content || ''}`;
-            full += chunk;
-            req.onDelta(chunk);
-          }
-          if (normalized.finished) sawFinish = true;
-        } catch (e) {
-          throw new Error(`流事件解析失败: ${e instanceof Error ? e.message : String(e)}`);
-        }
-      }
-    }
-    return full;
-  };
+  return { masterPlanning: planning, roles: selectedRoles, masterSummary };
 }

@@ -69,17 +69,14 @@ ModelRef(providerId:modelId)
 - **通道选型说明**：实测 PowerShell 5.1 无法订阅 WinRT Toast 事件（点击回调不可用），故采用 `System.Windows.Forms.NotifyIcon` 气球通知（.NET 事件可订阅，零新增依赖）。
 - **失败策略**：宿主通知失败显式写日志并返回 5xx，前端 `console.error`，禁止静默吞错。
 
-### WP-G · Swarm 真并发多角色协同（会话级，Chat 直通）
-- **三段式协议**：Master 拆解 → 四角色（📐架构师 / 💻开发 / 🧪测试 / 🛡️安全）**各自独立并发流式调用 LLM** → Master 终审仲裁交付；不再依赖单模型输出角色标记。
-- **结构化数据**：`ChatMessage.swarm`（`SwarmChatState`）驱动 `SwarmSubagentContainer` 逐角色独立卡片流式渲染；旧消息走正则解析回退。
-- **执行器**：`swarmChatExecutor.runSwarmChat`（纯编排，可注入 streamChat）；`createGatewayStreamChat` 复用主 Loop 调度口径（Gateway v2 → v1 Provider）。
-- **失败隔离**：单角色失败显式标红不阻塞其余；`AbortController` 全链路取消。
-- **v1 边界**：角色仅产出分析文本；工具执行与动态角色选取留待后续。
+### WP-G · Swarm 真并发多角色协同（会话级，Chat 直通，Master 动态组队）
+- **Master 动态组队**：8 角色目录（架构/开发/测试/安全/前端/后端/数据库/文档），Master 拆解返回 JSON `{planning, roles[]}` 按任务**动态挑选 2~4 个**执行，不再固定角色。
+- **三段式协议**：拆解 → 仅对选中角色各自独立并发流式调用 LLM → 终审仲裁交付；拆解非法（非 JSON/未知角色/数量越界）显式报错，fail-closed。
+- **结构化数据**：`ChatMessage.swarm`（`SwarmChatState`）驱动 `SwarmSubagentContainer` 平铺渲染；拆解中显示组队骨架；旧消息走正则回退。
+- **执行器**：`swarmChatExecutor.runSwarmChat`（纯编排，可注入 streamChat）；`swarmGatewayStream.createGatewayStreamChat` 复用主 Loop 调度口径（渠道 → Gateway v2 → v1）。
+- **渲染**：暖色极简（米白表面/细边框/克制控件），Master 拆解与 Subagent 卡片均可折叠，running/error 状态清晰。
+- **v1 边界**：角色仅产出分析文本；工具执行留待后续。
 
-- **双态执行胶囊**：对话栏顶部 `⚡ Agent Loop`（极速执行，无门禁）与 `🧩 Graph 编排`（阶段图谱 + 门禁审批）双态切换，`Alt+1 / Alt+2` 快捷键；旧的 `Harness / Swarm` 顶层切换与冗余工作流按钮已移除。
-- **Graph 工作流选择**：Graph 态胶囊浮层内选择积木工作流模板（SDD/TDD 等）或「🛰 动态图谱规划（自动）」；未选模板时注入动态 DAG planner 指令，首轮任务图谱产出后挂起门禁终审，批准后才允许写码。
-- **Stage Gate 方案终审卡**：工作流门禁块（`gate-user` / `requireUserReview`）阶段结束自动挂起，弹出终审卡（✅ 批准 / 💬 提修改意见 / ⛔ 终止）；挂起期间输入框切换「输入修改意见」模式；终止绝不写码；快照复用 git checkpoint。
-- **迁移兼容**：旧 `tcode_pipeline_mode`（harness/swarm）自动迁移为 executionMode（act/graph），磁盘恢复与本地存储双向同步。
 ### 2. 目标驱动 Agent Loop
 
 - 通过“理解 → 动作 → 观察 → 验收”推进任务，不能因为空 action 或网络 EOF 就伪装成完成；

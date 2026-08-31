@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   runSwarmChat,
-  SWARM_ROLES,
-  StreamChatFn,
+  SWARM_ROLE_CATALOG,
   SwarmChatInput,
+  SwarmChatCallbacks,
 } from '../src/services/swarmChatExecutor';
+import type { StreamChatFn } from '../src/services/swarmGatewayStream';
 
-const ROLE_NAMES = ['系统架构师', '核心开发工程师', '质量测试专家', '代码审计与安全员'];
+const CATALOG_IDS = ['architect', 'dev', 'tester', 'security', 'frontend', 'backend', 'dba', 'docs'];
 
 function makeInput(overrides: Partial<SwarmChatInput> = {}): SwarmChatInput {
   return {
@@ -19,106 +20,98 @@ function makeInput(overrides: Partial<SwarmChatInput> = {}): SwarmChatInput {
   };
 }
 
-function emptyCallbacks() {
+function emptyCallbacks(): SwarmChatCallbacks {
   return {
     onMasterPlanning: () => {},
+    onRolesSelected: () => {},
     onRoleStatus: () => {},
     onRoleDelta: () => {},
     onMasterSummary: () => {},
   };
 }
 
-describe('SWARM_ROLES catalog', () => {
-  it('has exactly 4 fixed roles with unique ids', () => {
-    expect(SWARM_ROLES).toHaveLength(4);
-    const ids = new Set(SWARM_ROLES.map(r => r.id));
-    expect(ids.size).toBe(4);
-    expect(SWARM_ROLES.map(r => r.id)).toEqual(['architect', 'dev', 'qa', 'security']);
+/** 构造拆解 mock：Phase1 返回 JSON，按 system prompt 区分角色调用。 */
+function mockStream(roles: string[], overrides: { failRole?: string; error?: Error } = {}): StreamChatFn {
+  return (req) => {
+    if (req.user.includes('【可选角色目录】')) {
+      return Promise.resolve(JSON.stringify({ planning: '【规划】先架构后实现', roles }));
+    }
+    if (req.user.includes('各 Subagent 产出')) {
+      return Promise.resolve('【终审】交付总结');
+    }
+    const role = SWARM_ROLE_CATALOG.find(r => req.system.includes(r.name))!;
+    if (overrides.failRole && role.id === overrides.failRole) {
+      return Promise.reject(overrides.error || new Error('模型超时'));
+    }
+    return Promise.resolve(`<${role.id}-out>`);
+  };
+}
+
+describe('SWARM_ROLE_CATALOG', () => {
+  it('contains 8 roles with unique ids', () => {
+    expect(SWARM_ROLE_CATALOG).toHaveLength(8);
+    const ids = new Set(SWARM_ROLE_CATALOG.map(r => r.id));
+    expect(ids.size).toBe(8);
+    expect(SWARM_ROLE_CATALOG.map(r => r.id)).toEqual(CATALOG_IDS);
   });
 });
 
-describe('runSwarmChat happy path', () => {
-  it('produces planning -> concurrent roles -> master summary', async () => {
+describe('runSwarmChat dynamic role selection', () => {
+  it('only executes roles selected by master decomposition', async () => {
+    const invoked: string[] = [];
+    const base = mockStream(['architect', 'dev']);
+    const streamChat: StreamChatFn = (req) => {
+      if (req.user.includes('【可选角色目录】')) return base(req);
+      if (req.user.includes('各 Subagent 产出')) return base(req);
+      const role = SWARM_ROLE_CATALOG.find(r => req.system.includes(r.name))!;
+      invoked.push(role.id);
+      return base(req);
+    };
     const events: string[] = [];
-    const streamChat: StreamChatFn = (req) => {
-      if (req.system.includes('Swarm Master') && req.user.includes('作为 Master 拆解')) {
-        return Promise.resolve('【规划】拆解完成');
-      }
-      if (req.user.includes('各 Subagent 产出')) {
-        return Promise.resolve('【终审】交付总结');
-      }
-      const role = SWARM_ROLES.find(r => req.system.includes(r.name))!;
-      return Promise.resolve(`<${role.name}-output>`);
-    };
-    const input = makeInput({ streamChat });
     const callbacks = {
       ...emptyCallbacks(),
-      onMasterPlanning: (planning: string) => events.push(`planning:${planning}`),
-      onRoleStatus: (roleId: string, status: string) => events.push(`role:${roleId}:${status}`),
-      onMasterSummary: (summary: string) => events.push(`summary:${summary}`),
+      onMasterPlanning: (p: string) => events.push(`planning:${p}`),
+      onRolesSelected: (roles: unknown[]) => events.push(`roles:${(roles as { id: string }[]).map(r => r.id).join(',')}`),
+      onRoleStatus: (id: string, s: string) => events.push(`role:${id}:${s}`),
+      onMasterSummary: (s: string) => events.push(`summary:${s}`),
     };
-    const state = await runSwarmChat(input, callbacks);
+    const state = await runSwarmChat(makeInput({ streamChat }), callbacks);
 
-    expect(state.masterPlanning).toBe('【规划】拆解完成');
-    expect(state.masterSummary).toBe('【终审】交付总结');
-    expect(state.roles).toHaveLength(4);
+    expect(invoked).toEqual(['architect', 'dev']); // 只执行选中的 2 个
+    expect(state.roles).toHaveLength(2);
+    expect(state.roles.map(r => r.id)).toEqual(['architect', 'dev']);
     expect(state.roles.every(r => r.status === 'passed')).toBe(true);
-    expect(state.roles.map(r => r.content)).toEqual(
-      SWARM_ROLES.map(r => `<${r.name}-output>`),
-    );
-    // 顺序: planning -> 4 角色 -> summary
-    expect(events[0]).toBe('planning:【规划】拆解完成');
-    expect(events[1]).toBe('role:architect:passed');
-    expect(events[4]).toBe('role:security:passed');
-    expect(events[5]).toBe('summary:【终审】交付总结');
+    expect(state.masterPlanning).toBe('【规划】先架构后实现');
+    expect(state.masterSummary).toBe('【终审】交付总结');
+    // 顺序: planning -> rolesSelected -> 角色状态 -> summary
+    expect(events[0]).toBe('planning:【规划】先架构后实现');
+    expect(events[1]).toBe('roles:architect,dev');
+    expect(events[2]).toBe('role:architect:passed');
+    expect(events[3]).toBe('role:dev:passed');
+    expect(events[4]).toBe('summary:【终审】交付总结');
   });
 
-  it('streams role deltas into role content', async () => {
-    const deltas: string[] = [];
-    const streamChat: StreamChatFn = (req) => {
-      if (req.user.includes('作为 Master 拆解')) return Promise.resolve('p');
-      if (req.user.includes('各 Subagent 产出')) return Promise.resolve('s');
-      req.onDelta('第一段');
-      req.onDelta('第二段');
-      return Promise.resolve('第一段第二段');
-    };
-    const input = makeInput({ streamChat });
-    const callbacks = {
-      ...emptyCallbacks(),
-      onRoleDelta: (roleId: string, delta: string) => {
-        if (roleId === 'architect') deltas.push(delta);
-      },
-    };
-    const state = await runSwarmChat(input, callbacks);
-    expect(deltas).toEqual(['第一段', '第二段']);
-    expect(state.roles.find(r => r.id === 'architect')!.content).toBe('第一段第二段');
-  });
-});
-
-describe('runSwarmChat concurrency & failure isolation', () => {
-  it('starts all four roles before any resolves', async () => {
+  it('runs up to 4 selected roles concurrently', async () => {
     const started: string[] = [];
     const roleResolvers: Record<string, (v: string) => void> = {};
     let resolveSummary: (v: string) => void = () => {};
     let summaryStarted = false;
-
     const streamChat: StreamChatFn = (req) => {
-      if (req.user.includes('作为 Master 拆解')) return Promise.resolve('p');
+      if (req.user.includes('【可选角色目录】')) {
+        return Promise.resolve(JSON.stringify({ planning: 'p', roles: ['architect', 'dev', 'tester', 'security'] }));
+      }
       if (req.user.includes('各 Subagent 产出')) {
         summaryStarted = true;
         return new Promise(res => { resolveSummary = res; });
       }
-      const name = SWARM_ROLES.find(r => req.system.includes(r.name))!.name;
-      started.push(name);
-      return new Promise(res => { roleResolvers[name] = res; });
+      const role = SWARM_ROLE_CATALOG.find(r => req.system.includes(r.name))!;
+      started.push(role.id);
+      return new Promise(res => { roleResolvers[role.id] = res; });
     };
     const runPromise = runSwarmChat(makeInput({ streamChat }), emptyCallbacks());
-
-    // 等待 planning 微任务完成，触发 allSettled（4 个角色同步启动）
     await new Promise(r => setTimeout(r, 0));
-    expect(started).toEqual(ROLE_NAMES);
-    expect(summaryStarted).toBe(false); // 终审必须等角色全部结束
-
+    expect(started).toEqual(['architect', 'dev', 'tester', 'security']);
+    expect(summaryStarted).toBe(false);
     Object.values(roleResolvers).forEach(r => r('out'));
     await new Promise(r => setTimeout(r, 0));
     expect(summaryStarted).toBe(true);
@@ -127,28 +120,47 @@ describe('runSwarmChat concurrency & failure isolation', () => {
     expect(state.roles.every(r => r.status === 'passed')).toBe(true);
   });
 
-  it('isolates a failing role and still produces master summary', async () => {
-    const streamChat: StreamChatFn = (req) => {
-      if (req.user.includes('作为 Master 拆解')) return Promise.resolve('p');
-      if (req.user.includes('各 Subagent 产出')) return Promise.resolve('s');
-      if (req.system.includes('质量测试专家')) return Promise.reject(new Error('模型超时'));
-      return Promise.resolve('ok');
-    };
+  it('isolates a failing selected role and still produces master summary', async () => {
+    const streamChat = mockStream(['architect', 'dev', 'tester'], { failRole: 'tester', error: new Error('模型超时') });
     const statuses: string[] = [];
-    const input = makeInput({ streamChat });
     const callbacks = {
       ...emptyCallbacks(),
-      onRoleStatus: (roleId: string, status: string, error?: string) => {
-        if (roleId === 'qa') statuses.push(`${status}:${error || ''}`);
+      onRoleStatus: (id: string, s: string, err?: string) => {
+        if (id === 'tester') statuses.push(`${s}:${err || ''}`);
       },
     };
-    const state = await runSwarmChat(input, callbacks);
-    const qa = state.roles.find(r => r.id === 'qa')!;
-    expect(qa.status).toBe('error');
-    expect(qa.error).toBe('模型超时');
-    expect(state.roles.filter(r => r.id !== 'qa').every(r => r.status === 'passed')).toBe(true);
-    expect(state.masterSummary).toBe('s');
+    const state = await runSwarmChat(makeInput({ streamChat }), callbacks);
+    const tester = state.roles.find(r => r.id === 'tester')!;
+    expect(tester.status).toBe('error');
+    expect(tester.error).toBe('模型超时');
+    expect(state.roles.filter(r => r.id !== 'tester').every(r => r.status === 'passed')).toBe(true);
+    expect(state.masterSummary).toBe('【终审】交付总结');
     expect(statuses).toEqual(['error:模型超时']);
+  });
+});
+
+describe('runSwarmChat decomposition failure (fail-closed)', () => {
+  it('throws when decomposition is not valid JSON', async () => {
+    const streamChat: StreamChatFn = (req) => {
+      if (req.user.includes('【可选角色目录】')) return Promise.resolve('不是 JSON 的文本');
+      return Promise.resolve('ok');
+    };
+    await expect(runSwarmChat(makeInput({ streamChat }), emptyCallbacks())).rejects.toThrow('Master 拆解');
+  });
+
+  it('throws when decomposition contains unknown role id', async () => {
+    const streamChat = mockStream(['architect', 'ghost-role']);
+    await expect(runSwarmChat(makeInput({ streamChat }), emptyCallbacks())).rejects.toThrow('未知角色');
+  });
+
+  it('throws when fewer than 2 roles selected', async () => {
+    const streamChat = mockStream(['architect']);
+    await expect(runSwarmChat(makeInput({ streamChat }), emptyCallbacks())).rejects.toThrow('2~4');
+  });
+
+  it('throws when more than 4 roles selected', async () => {
+    const streamChat = mockStream(['architect', 'dev', 'tester', 'security', 'frontend']);
+    await expect(runSwarmChat(makeInput({ streamChat }), emptyCallbacks())).rejects.toThrow('2~4');
   });
 });
 
@@ -156,14 +168,13 @@ describe('runSwarmChat abort propagation', () => {
   it('passes the same AbortSignal to every call', async () => {
     const signal = new AbortController().signal;
     const seen: (AbortSignal | undefined)[] = [];
+    const base = mockStream(['architect', 'dev']);
     const streamChat: StreamChatFn = (req) => {
       seen.push(req.signal);
-      if (req.user.includes('作为 Master 拆解')) return Promise.resolve('p');
-      if (req.user.includes('各 Subagent 产出')) return Promise.resolve('s');
-      return Promise.resolve('ok');
+      return base(req);
     };
     await runSwarmChat(makeInput({ streamChat, signal }), emptyCallbacks());
-    expect(seen).toHaveLength(6); // planning + 4 roles + summary
+    expect(seen).toHaveLength(4); // 拆解 + 2 角色 + 终审
     expect(seen.every(s => s === signal)).toBe(true);
   });
 });

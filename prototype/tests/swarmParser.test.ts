@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import {
-  normalizeSwarmState,
-  parseSwarmContent,
-} from '../src/components/SwarmSubagentContainer';
+import { normalizeSwarmState } from '../src/components/SwarmSubagentContainer';
+import { parseSwarmContent } from '../src/services/swarmLegacyParser';
 import { SwarmChatState } from '../src/types/contracts';
 
 describe('parseSwarmContent (legacy single-stream regex fallback)', () => {

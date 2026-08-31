@@ -7,7 +7,8 @@ import { enqueueItem, withdrawItem, editItem, moveItem } from './services/prompt
 import { assembleCacheOptimizedMessages, recordCacheHitTelemetry, extractFileSymbols, buildCompactRepoMap, buildRepoMapFromTree, buildRepoMapFromFileContents, prioritizeActiveFiles, recordActiveFile, getActiveFiles } from './services/cacheEngine';
 import { hostGateway } from './services/hostGateway';
 import { requestSystemNotification } from './services/systemNotify';
-import { runSwarmChat, createGatewayStreamChat, SWARM_ROLES } from './services/swarmChatExecutor';
+import { runSwarmChat } from './services/swarmChatExecutor';
+import { createGatewayStreamChat } from './services/swarmGatewayStream';
 import type { SwarmChatState } from './types/contracts';
 import { getContextBudget, getContextTelemetry, compressModelContext } from './services/contextTelemetry';
 // ────────────────────────────────────────────────────────────
@@ -1234,9 +1235,10 @@ ${executionMode === 'swarm' ? `
       // Initial single assistant message container with rounds[]
       let accumulatedRounds: AgentRoundItem[] = [];
       const isSwarmRun = executionMode === 'swarm';
+      // 角色由 Master 拆解后动态决定，初始为空（UI 显示拆解中状态）
       const initialSwarm: SwarmChatState = {
         masterPlanning: '',
-        roles: SWARM_ROLES.map(r => ({ ...r, content: '', status: 'running' as const })),
+        roles: [],
         masterSummary: '',
       };
       const runCardMsg: ChatMessage = {
@@ -1263,7 +1265,7 @@ ${executionMode === 'swarm' ? `
       if (isSwarmRun) {
         let swarmState: SwarmChatState = {
           masterPlanning: '',
-          roles: SWARM_ROLES.map(r => ({ ...r, content: '', status: 'running' as const })),
+          roles: [],
           masterSummary: '',
         };
         // 每次增量同步到会话卡片（不可变更新，保证 React 重新渲染）
@@ -1306,6 +1308,11 @@ ${executionMode === 'swarm' ? `
           {
             onMasterPlanning: (planning) => {
               swarmState = { ...swarmState, masterPlanning: planning };
+              syncSwarmCard();
+            },
+            onRolesSelected: (roles) => {
+              // Master 已按任务动态组队：投影实际选中的角色卡片（初始 running 态）
+              swarmState = { ...swarmState, roles };
               syncSwarmCard();
             },
             onRoleStatus: (roleId, status, error) => {
