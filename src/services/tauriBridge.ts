@@ -60,7 +60,40 @@ function loadProjectsDb(): BridgeProjectsDatabase {
   try {
     const raw = localStorage.getItem(STORAGE_PROJECTS_KEY);
     if (raw) {
-      return JSON.parse(raw);
+      const db: BridgeProjectsDatabase = JSON.parse(raw);
+      let needsSave = false;
+      if (Array.isArray(db.projects)) {
+        for (const proj of db.projects) {
+          if (Array.isArray(proj.sessions)) {
+            for (const sess of proj.sessions) {
+              if (Array.isArray(sess.messages)) {
+                for (const msg of sess.messages) {
+                  if (msg.role === 'assistant' && msg.content) {
+                    const extracted = parseToolCallsFromText(msg.content);
+                    if (extracted.length > 0 && (!msg.toolCalls || msg.toolCalls.length === 0)) {
+                      msg.toolCalls = extracted.map((c) => ({
+                        name: c.name,
+                        args: c.args,
+                        result: '（历史算子工具调用日志已归档）',
+                      }));
+                      needsSave = true;
+                    }
+                    const cleaned = sanitizeTextContent(msg.content);
+                    if (cleaned !== msg.content) {
+                      msg.content = cleaned;
+                      needsSave = true;
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+      if (needsSave) {
+        saveProjectsDb(db);
+      }
+      return db;
     }
   } catch (e) {
     console.warn('Failed to parse projects db from localStorage:', e);
@@ -128,11 +161,12 @@ function persistMessageToSession(
 export function sanitizeTextContent(text: string): string {
   if (!text) return '';
   let clean = text;
-  clean = clean.replace(/<[\s|]*DSML[\s|]*tool_calls[\s|]*>[\s\S]*?<\/[\s|]*DSML[\s|]*tool_calls[\s|]*>/gi, '');
-  clean = clean.replace(/<[\s|]*DSML[\s|]*invoke[\s\S]*?<\/[\s|]*DSML[\s|]*invoke[\s|]*>/gi, '');
-  clean = clean.replace(/<[\s|]*DSML[\s|]*parameter[\s\S]*?<\/[\s|]*DSML[\s|]*parameter[\s|]*>/gi, '');
-  clean = clean.replace(/<[\s|]*tool_call[\s|]*>[\s\S]*?<\/[\s|]*tool_call[\s|]*>/gi, '');
-  clean = clean.replace(/<[\s|]*\/?[\s|]*DSML[\s\S]*?>/gi, '');
+  clean = clean.replace(/<[\s\/|]*DSML[\s\/|]*tool_calls[\s\/|]*>[\s\S]*?<\/[\s\/|]*DSML[\s\/|]*tool_calls[\s\/|]*>/gi, '');
+  clean = clean.replace(/<[\s\/|]*DSML[\s\/|]*invoke[\s\S]*?<\/[\s\/|]*DSML[\s\/|]*invoke[\s\/|]*>/gi, '');
+  clean = clean.replace(/<[\s\/|]*DSML[\s\/|]*parameter[\s\S]*?<\/[\s\/|]*DSML[\s\/|]*parameter[\s\/|]*>/gi, '');
+  clean = clean.replace(/<[\s\/|]*tool_call[\s\/|]*>[\s\S]*?<\/[\s\/|]*tool_call[\s\/|]*>/gi, '');
+  clean = clean.replace(/<[\s\/|]*\/?[\s\/|]*DSML[\s\S]*?>/gi, '');
+  clean = clean.replace(/<[\s\/|]*\/?[\s\/|]*tool_call[\s\S]*?>/gi, '');
   return clean.trim();
 }
 

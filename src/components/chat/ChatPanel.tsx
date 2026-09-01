@@ -457,14 +457,15 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ onOpenSettings }) => {
               {/* Main Message Bubble */}
               {(() => {
                 const cleanText = (msg.content || '')
-                  .replace(/<[\s|]*DSML[\s|]*tool_calls[\s|]*>[\s\S]*?<\/[\s|]*DSML[\s|]*tool_calls[\s|]*>/gi, '')
-                  .replace(/<[\s|]*DSML[\s|]*invoke[\s\S]*?<\/[\s|]*DSML[\s|]*invoke[\s|]*>/gi, '')
-                  .replace(/<[\s|]*DSML[\s|]*parameter[\s\S]*?<\/[\s|]*DSML[\s|]*parameter[\s|]*>/gi, '')
-                  .replace(/<[\s|]*tool_call[\s|]*>[\s\S]*?<\/[\s|]*tool_call[\s|]*>/gi, '')
-                  .replace(/<[\s|]*\/?[\s|]*DSML[\s\S]*?>/gi, '')
+                  .replace(/<[\s\/|]*DSML[\s\/|]*tool_calls[\s\/|]*>[\s\S]*?<\/[\s\/|]*DSML[\s\/|]*tool_calls[\s\/|]*>/gi, '')
+                  .replace(/<[\s\/|]*DSML[\s\/|]*invoke[\s\S]*?<\/[\s\/|]*DSML[\s\/|]*invoke[\s\/|]*>/gi, '')
+                  .replace(/<[\s\/|]*DSML[\s\/|]*parameter[\s\S]*?<\/[\s\/|]*DSML[\s\/|]*parameter[\s\/|]*>/gi, '')
+                  .replace(/<[\s\/|]*tool_call[\s\/|]*>[\s\S]*?<\/[\s\/|]*tool_call[\s\/|]*>/gi, '')
+                  .replace(/<[\s\/|]*\/?[\s\/|]*DSML[\s\S]*?>/gi, '')
+                  .replace(/<[\s\/|]*\/?[\s\/|]*tool_call[\s\S]*?>/gi, '')
                   .trim();
 
-                if (!cleanText && msg.role === 'assistant' && msg.toolCalls && msg.toolCalls.length > 0) {
+                if (!cleanText && msg.role === 'assistant') {
                   return null;
                 }
 
@@ -476,7 +477,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ onOpenSettings }) => {
                         : 'bg-white border border-[#E6DFD5] text-[#1E1C1A] rounded-tl-xs shadow-xs'
                     }`}
                   >
-                    <div className="whitespace-pre-wrap">{cleanText || msg.content}</div>
+                    <div className="whitespace-pre-wrap">{cleanText}</div>
 
                     {/* Diff Viewer Button for Agent Code Patches */}
                     {msg.role === 'assistant' && msg.content.includes('```') && (
