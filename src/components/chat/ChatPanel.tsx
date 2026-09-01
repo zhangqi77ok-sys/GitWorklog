@@ -7,16 +7,18 @@ import {
   ChevronDown,
   ChevronRight,
   SplitSquareVertical,
-  Check,
-  Copy,
   BrainCircuit,
-  RotateCcw,
+  Trash2,
+  Paperclip,
+  Zap,
 } from 'lucide-react';
 import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
-import { useProjectSessionStore, ChatMessage } from '../../store/useProjectSessionStore';
+import { useProjectSessionStore } from '../../store/useProjectSessionStore';
 import { useWorkspaceStore } from '../../store/useWorkspaceStore';
 import { useGatewayStore } from '../../store/useGatewayStore';
+import { SubtaskProgressCard } from './SubtaskProgressCard';
+import type { Subtask } from '../../types';
 
 export const ChatPanel: React.FC = () => {
   const {
@@ -26,7 +28,7 @@ export const ChatPanel: React.FC = () => {
     loadInitialData,
   } = useProjectSessionStore();
 
-  const { openDiffTab, openFile, activeTabPath } = useWorkspaceStore();
+  const { openDiffTab, activeTabPath } = useWorkspaceStore();
   const { channels, activeChannelId } = useGatewayStore();
 
   const [inputPrompt, setInputPrompt] = useState('');
@@ -36,10 +38,11 @@ export const ChatPanel: React.FC = () => {
   const [collapsedThoughts, setCollapsedThoughts] = useState<Record<string, boolean>>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Find active project & session
-  const activeProject = projects.find(p => p.id === activeProjectId);
-  const activeSession = activeProject?.sessions.find(s => s.id === activeSessionId);
-  const activeChannel = channels.find(c => c.id === activeChannelId) || channels[0];
+  const activeProject = projects.find((p) => p.id === activeProjectId);
+  const activeSession = activeProject?.sessions.find((s) => s.id === activeSessionId);
+  const activeChannel = channels.find((c) => c.id === activeChannelId) || channels[0];
+
+  const activeFileName = activeTabPath ? activeTabPath.split(/[/\\]/).pop() : null;
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -49,42 +52,43 @@ export const ChatPanel: React.FC = () => {
     scrollToBottom();
   }, [activeSession?.messages, streamingContent, streamingThought]);
 
-  // Listen to Tauri stream events
+  // Listen to Tauri streaming events
   useEffect(() => {
     const unlistenThought = listen<{ session_id: string; chunk: string }>(
       'agent_thought_chunk',
-      event => {
+      (event) => {
         if (event.payload.session_id === activeSessionId) {
-          setStreamingThought(prev => prev + event.payload.chunk);
+          setStreamingThought((prev) => prev + event.payload.chunk);
         }
       }
     );
 
     const unlistenText = listen<{ session_id: string; chunk: string }>(
       'agent_text_chunk',
-      event => {
+      (event) => {
         if (event.payload.session_id === activeSessionId) {
-          setStreamingContent(prev => prev + event.payload.chunk);
+          setStreamingContent((prev) => prev + event.payload.chunk);
         }
       }
     );
 
-    const unlistenDone = listen<{ session_id: string; full_content: string; full_thought: string }>(
-      'agent_stream_done',
-      async event => {
-        if (event.payload.session_id === activeSessionId) {
-          setIsStreaming(false);
-          setStreamingContent('');
-          setStreamingThought('');
-          await loadInitialData();
-        }
+    const unlistenDone = listen<{
+      session_id: string;
+      full_content: string;
+      full_thought: string;
+    }>('agent_stream_done', async (event) => {
+      if (event.payload.session_id === activeSessionId) {
+        setIsStreaming(false);
+        setStreamingContent('');
+        setStreamingThought('');
+        await loadInitialData();
       }
-    );
+    });
 
     return () => {
-      unlistenThought.then(f => f());
-      unlistenText.then(f => f());
-      unlistenDone.then(f => f());
+      unlistenThought.then((f) => f());
+      unlistenText.then((f) => f());
+      unlistenDone.then((f) => f());
     };
   }, [activeSessionId, loadInitialData]);
 
@@ -112,25 +116,25 @@ export const ChatPanel: React.FC = () => {
   };
 
   const toggleThoughtCollapse = (msgId: string) => {
-    setCollapsedThoughts(prev => ({
+    setCollapsedThoughts((prev) => ({
       ...prev,
       [msgId]: !prev[msgId],
     }));
   };
 
-  // Helper to extract code blocks from assistant message and open diff tab
-  const handleOpenDiffFromCode = (codeBlock: string, proposedLang: string) => {
-    const targetFile = activeTabPath && !activeTabPath.startsWith('diff:')
-      ? activeTabPath
-      : `${activeProject?.path || 'D:\\weihu\\agent-learning'}\\src\\App.tsx`;
+  const handleOpenDiffFromCode = (codeBlock: string) => {
+    const targetFile =
+      activeTabPath && !activeTabPath.startsWith('diff:')
+        ? activeTabPath
+        : `${activeProject?.path || 'D:\\weihu\\agent-learning'}\\src\\App.tsx`;
 
-    openDiffTab(targetFile, '// 当前打开的代码文件', codeBlock);
+    openDiffTab(targetFile, '// 原始文件代码', codeBlock);
   };
 
   return (
     <div className="flex-1 h-full bg-[#FAF8F5] flex flex-col overflow-hidden select-none">
       {/* 1. Chat Header */}
-      <div className="h-10 px-4 border-b border-[#E6DFD5] flex items-center justify-between bg-[#F4EFEA]">
+      <div className="h-10 px-3 border-b border-[#E6DFD5] flex items-center justify-between bg-[#F4EFEA]">
         <div className="flex items-center gap-2">
           <Sparkles className="w-4 h-4 text-[#D96B27]" />
           <span className="font-semibold text-xs text-[#1E1C1A]">
@@ -142,10 +146,10 @@ export const ChatPanel: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono bg-white border border-[#E6DFD5] text-[#2E7D32]">
+          <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono bg-white border border-[#E6DFD5] text-[#2E7D32] shadow-2xs">
             <span className="w-1.5 h-1.5 rounded-full bg-[#2E7D32]" />
-            {activeChannel?.name || 'DeepSeek 官方直连'}
-          </span>
+            <span>{activeChannel?.name || 'DeepSeek-Reasoner (64k)'}</span>
+          </div>
         </div>
       </div>
 
@@ -164,15 +168,15 @@ export const ChatPanel: React.FC = () => {
             </p>
           </div>
         ) : (
-          activeSession.messages.map(msg => (
+          activeSession.messages.map((msg) => (
             <div key={msg.id} className="space-y-2">
-              {/* User Bubble */}
               {msg.role === 'user' ? (
+                /* User Bubble */
                 <div className="flex items-start gap-2.5 justify-end">
-                  <div className="max-w-2xl bg-white border border-[#E6DFD5] rounded-2xl rounded-tr-xs p-3.5 shadow-xs text-xs text-[#1E1C1A] leading-relaxed select-text">
+                  <div className="max-w-2xl bg-white border border-[#E6DFD5] rounded-2xl rounded-tr-xs p-3 shadow-xs text-xs text-[#1E1C1A] leading-relaxed select-text">
                     {msg.content}
                   </div>
-                  <div className="w-7 h-7 rounded-full bg-[#3D3A36] text-white flex items-center justify-center flex-shrink-0">
+                  <div className="w-7 h-7 rounded-full bg-[#3D3A36] text-white flex items-center justify-center flex-shrink-0 shadow-2xs">
                     <User className="w-4 h-4" />
                   </div>
                 </div>
@@ -192,7 +196,7 @@ export const ChatPanel: React.FC = () => {
                         >
                           <div className="flex items-center gap-1.5 font-medium text-[11px]">
                             <BrainCircuit className="w-3.5 h-3.5 text-[#D96B27]" />
-                            <span>深度思考过程 (Deep Thinking)</span>
+                            <span>深度思考过程 (Deep Thinking · 耗时 2.4s)</span>
                           </div>
                           {collapsedThoughts[msg.id] ? (
                             <ChevronRight className="w-3.5 h-3.5" />
@@ -209,10 +213,9 @@ export const ChatPanel: React.FC = () => {
                     )}
 
                     {/* Main Content & Code Blocks */}
-                    <div className="bg-white border border-[#E6DFD5] rounded-2xl rounded-tl-xs p-4 shadow-xs text-xs text-[#1E1C1A] leading-relaxed select-text space-y-3">
+                    <div className="bg-white border border-[#E6DFD5] rounded-2xl rounded-tl-xs p-3.5 shadow-xs text-xs text-[#1E1C1A] leading-relaxed select-text space-y-3">
                       <div className="whitespace-pre-wrap">{msg.content}</div>
 
-                      {/* If content contains code blocks, provide quick 'Apply Diff to Monaco' button */}
                       {msg.content.includes('```') && (
                         <div className="pt-2 border-t border-[#E6DFD5] flex items-center justify-between">
                           <span className="text-[11px] text-[#8A847C]">检测到生成代码补丁</span>
@@ -220,7 +223,7 @@ export const ChatPanel: React.FC = () => {
                             onClick={() => {
                               const match = msg.content.match(/```(?:\w+)?\n([\s\S]*?)```/);
                               if (match && match[1]) {
-                                handleOpenDiffFromCode(match[1], 'rust');
+                                handleOpenDiffFromCode(match[1]);
                               }
                             }}
                             className="flex items-center gap-1 px-2.5 py-1 bg-[#F4EFEA] hover:bg-[#D96B27] text-[#3D3A36] hover:text-white rounded text-xs font-medium transition-colors border border-[#E6DFD5]"
@@ -256,7 +259,7 @@ export const ChatPanel: React.FC = () => {
               )}
 
               {streamingContent && (
-                <div className="bg-white border border-[#E6DFD5] rounded-2xl rounded-tl-xs p-4 shadow-xs text-xs text-[#1E1C1A] leading-relaxed whitespace-pre-wrap select-text">
+                <div className="bg-white border border-[#E6DFD5] rounded-2xl rounded-tl-xs p-3.5 shadow-xs text-xs text-[#1E1C1A] leading-relaxed whitespace-pre-wrap select-text">
                   {streamingContent}
                   <span className="inline-block w-1.5 h-3 bg-[#D96B27] ml-1 animate-pulse" />
                 </div>
@@ -270,11 +273,19 @@ export const ChatPanel: React.FC = () => {
 
       {/* 3. Chat Input Box */}
       <div className="p-3 bg-[#F4EFEA] border-t border-[#E6DFD5]">
-        <div className="bg-white border border-[#E6DFD5] focus-within:border-[#D96B27] rounded-xl p-2 shadow-xs transition-colors">
+        <div className="bg-white border border-[#E6DFD5] focus-within:border-[#D96B27] rounded-xl p-2.5 shadow-xs transition-colors space-y-2">
+          {activeFileName && (
+            <div className="flex items-center gap-1.5 text-[11px] text-[#6B665F] bg-[#FAF8F5] px-2 py-0.5 rounded border border-[#E6DFD5] w-fit">
+              <Paperclip className="w-3 h-3 text-[#D96B27]" />
+              <span>已引用当前文件:</span>
+              <span className="font-mono font-medium text-[#1E1C1A]">{activeFileName}</span>
+            </div>
+          )}
+
           <textarea
             value={inputPrompt}
-            onChange={e => setInputPrompt(e.target.value)}
-            onKeyDown={e => {
+            onChange={(e) => setInputPrompt(e.target.value)}
+            onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 handleSend();
@@ -282,17 +293,21 @@ export const ChatPanel: React.FC = () => {
             }}
             placeholder="输入编程需求或任务指令 (Enter 发送, Shift+Enter 换行)..."
             rows={2}
-            className="w-full resize-none outline-none text-xs text-[#1E1C1A] placeholder-[#8A847C] leading-relaxed"
+            className="w-full resize-none outline-none text-xs text-[#1E1C1A] placeholder-[#8A847C] leading-relaxed bg-transparent"
           />
-          <div className="flex items-center justify-between pt-2 border-t border-[#F4EFEA]">
-            <div className="flex items-center gap-1.5 text-[11px] text-[#8A847C]">
-              <span>当前项目:</span>
-              <span className="font-semibold text-[#3D3A36]">{activeProject?.name || '未选择'}</span>
+
+          <div className="flex items-center justify-between pt-1 border-t border-[#F4EFEA]">
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#FAF8F5] border border-[#E6DFD5] rounded text-[10px] font-medium text-[#6B665F]">
+                <Zap className="w-3 h-3 text-[#D96B27]" />
+                模式: ⚡ Coding
+              </span>
             </div>
+
             <button
               onClick={handleSend}
               disabled={!inputPrompt.trim() || isStreaming}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#D96B27] hover:bg-[#B8551B] disabled:opacity-50 text-white rounded-lg text-xs font-medium transition-colors shadow-xs"
+              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#D96B27] hover:bg-[#B8551B] disabled:opacity-50 text-white rounded-lg text-xs font-medium transition-colors shadow-xs"
             >
               <Send className="w-3.5 h-3.5" />
               <span>{isStreaming ? '生成中...' : '发送'}</span>

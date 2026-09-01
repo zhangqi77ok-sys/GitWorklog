@@ -7,33 +7,29 @@ interface WorkspaceTreeViewProps {
 }
 
 export const WorkspaceTreeView: React.FC<WorkspaceTreeViewProps> = ({ rootNode }) => {
-  const { openFile, loadTree } = useWorkspaceStore();
+  const { openFile } = useWorkspaceStore();
 
   if (!rootNode) {
     return (
-      <div className="p-3 text-xs text-[#8A847C] text-center">
+      <div className="p-4 text-xs text-[#8A847C] text-center italic">
         未挂载工作区目录
       </div>
     );
   }
 
+  if (!rootNode.children || rootNode.children.length === 0) {
+    return (
+      <div className="p-4 text-xs text-[#8A847C] text-center italic">
+        该目录为空
+      </div>
+    );
+  }
+
   return (
-    <div className="text-xs select-none">
-      <div className="flex items-center justify-between px-2 py-1 text-[#6B665F] font-semibold uppercase tracking-wider text-[10px]">
-        <span>文件目录 (Files)</span>
-        <button
-          onClick={() => loadTree(rootNode.path)}
-          className="p-1 hover:text-[#D96B27] rounded transition-colors"
-          title="刷新文件树"
-        >
-          <RefreshCw className="w-3 h-3" />
-        </button>
-      </div>
-      <div className="space-y-0.5 mt-1">
-        {rootNode.children?.map(child => (
-          <TreeNode key={child.path} node={child} depth={0} onSelect={openFile} />
-        ))}
-      </div>
+    <div className="text-xs select-none space-y-0.5">
+      {rootNode.children.map(child => (
+        <TreeNode key={child.path} node={child} depth={0} onSelect={openFile} />
+      ))}
     </div>
   );
 };

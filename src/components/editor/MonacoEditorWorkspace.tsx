@@ -1,6 +1,16 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import Editor, { DiffEditor } from '@monaco-editor/react';
-import { X, Save, Check, Ban, FileCode, SplitSquareVertical } from 'lucide-react';
+import {
+  X,
+  Save,
+  Check,
+  Ban,
+  FileCode,
+  SplitSquareVertical,
+  Columns,
+  AlignJustify,
+  FolderOpen,
+} from 'lucide-react';
 import { useWorkspaceStore } from '../../store/useWorkspaceStore';
 
 export const MonacoEditorWorkspace: React.FC = () => {
@@ -15,7 +25,8 @@ export const MonacoEditorWorkspace: React.FC = () => {
     rejectDiffPatch,
   } = useWorkspaceStore();
 
-  const activeTab = openTabs.find(t => t.path === activeTabPath);
+  const [isSideBySide, setIsSideBySide] = useState(true);
+  const activeTab = openTabs.find((t) => t.path === activeTabPath);
 
   // Keyboard shortcut Ctrl+S
   useEffect(() => {
@@ -41,12 +52,16 @@ export const MonacoEditorWorkspace: React.FC = () => {
     );
   }
 
+  // Format breadcrumbs from path
+  const breadcrumbParts = activeTab.path.replace(/\\/g, '/').split('/').filter(Boolean);
+  const displayBreadcrumbs = breadcrumbParts.slice(-4).join(' > ');
+
   return (
     <div className="flex-1 h-full bg-[#1E1C1A] flex flex-col overflow-hidden">
       {/* 1. Multi-Tabs Bar */}
       <div className="h-9 bg-[#161412] border-b border-[#2D2A26] flex items-center justify-between px-2 overflow-x-auto no-scrollbar select-none">
         <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
-          {openTabs.map(tab => {
+          {openTabs.map((tab) => {
             const isActive = tab.path === activeTabPath;
             return (
               <div
@@ -58,12 +73,17 @@ export const MonacoEditorWorkspace: React.FC = () => {
                     : 'bg-[#161412] text-[#8A847C] hover:text-[#D5CEBF] hover:bg-[#1E1C1A]/50 border-transparent'
                 }`}
               >
+                {tab.isDiff ? (
+                  <SplitSquareVertical className="w-3.5 h-3.5 text-[#D96B27]" />
+                ) : (
+                  <FileCode className="w-3.5 h-3.5 text-[#8A847C]" />
+                )}
                 <span>{tab.name}</span>
                 {tab.isDirty && (
                   <span className="w-2 h-2 rounded-full bg-[#D96B27]" title="未保存修改" />
                 )}
                 <button
-                  onClick={e => {
+                  onClick={(e) => {
                     e.stopPropagation();
                     closeTab(tab.path);
                   }}
@@ -86,13 +106,48 @@ export const MonacoEditorWorkspace: React.FC = () => {
               title="保存当前文件 (Ctrl+S)"
             >
               <Save className="w-3.5 h-3.5" />
-              <span>保存</span>
+              <span>保存文件</span>
             </button>
           )}
         </div>
       </div>
 
-      {/* 2. Editor Body */}
+      {/* 2. Breadcrumb Navigation Bar */}
+      <div className="h-6 bg-[#1A1816] border-b border-[#2D2A26] px-3 flex items-center justify-between text-[11px] text-[#8A847C] font-mono select-none">
+        <div className="flex items-center gap-1 truncate">
+          <FolderOpen className="w-3 h-3 text-[#D96B27]/80" />
+          <span className="truncate">{displayBreadcrumbs}</span>
+        </div>
+
+        {activeTab.isDiff && (
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <button
+              onClick={() => setIsSideBySide(true)}
+              className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] transition-colors ${
+                isSideBySide
+                  ? 'bg-[#2D2A26] text-[#FAF8F5] font-semibold'
+                  : 'text-[#8A847C] hover:text-[#FAF8F5]'
+              }`}
+            >
+              <Columns className="w-3 h-3" />
+              <span>双栏对比</span>
+            </button>
+            <button
+              onClick={() => setIsSideBySide(false)}
+              className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] transition-colors ${
+                !isSideBySide
+                  ? 'bg-[#2D2A26] text-[#FAF8F5] font-semibold'
+                  : 'text-[#8A847C] hover:text-[#FAF8F5]'
+              }`}
+            >
+              <AlignJustify className="w-3 h-3" />
+              <span>行内比对</span>
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* 3. Editor Body */}
       <div className="flex-1 relative overflow-hidden">
         {activeTab.isDiff ? (
           <div className="w-full h-full flex flex-col">
@@ -104,7 +159,7 @@ export const MonacoEditorWorkspace: React.FC = () => {
                 theme="vs-dark"
                 options={{
                   readOnly: true,
-                  renderSideBySide: true,
+                  renderSideBySide: isSideBySide,
                   minimap: { enabled: false },
                   scrollBeyondLastLine: false,
                   fontSize: 13,
@@ -117,7 +172,7 @@ export const MonacoEditorWorkspace: React.FC = () => {
             <div className="h-12 bg-[#161412] border-t border-[#2D2A26] px-4 flex items-center justify-between z-10 select-none">
               <div className="flex items-center gap-2 text-xs text-[#D5CEBF]">
                 <SplitSquareVertical className="w-4 h-4 text-[#D96B27]" />
-                <span>Agent 提议代码变更已就绪，请审查左（原）右（新）对比差异</span>
+                <span>💡 Agent 提议代码变更已就绪，请审查左（原）右（新）代码补丁</span>
               </div>
               <div className="flex items-center gap-2">
                 <button
@@ -142,7 +197,7 @@ export const MonacoEditorWorkspace: React.FC = () => {
             value={activeTab.content}
             language={activeTab.language}
             theme="vs-dark"
-            onChange={val => updateTabContent(activeTab.path, val || '')}
+            onChange={(val) => updateTabContent(activeTab.path, val || '')}
             options={{
               fontSize: 13,
               fontFamily: 'JetBrains Mono, Fira Code, Consolas, monospace',
