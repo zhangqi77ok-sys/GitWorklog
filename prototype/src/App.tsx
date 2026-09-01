@@ -6,7 +6,7 @@ import { sessionActorManager } from './services/sessionActorManager';
 import { enqueueItem, withdrawItem, editItem, moveItem } from './services/promptQueueStore';
 import { assembleCacheOptimizedMessages, recordCacheHitTelemetry, extractFileSymbols, buildCompactRepoMap, buildRepoMapFromTree, buildRepoMapFromFileContents, prioritizeActiveFiles, recordActiveFile, getActiveFiles } from './services/cacheEngine';
 import { hostGateway } from './services/hostGateway';
-import { requestSystemNotification, type SystemNotifyPayload } from './services/systemNotify';
+import { requestSystemNotification, isWindowHidden, type SystemNotifyPayload } from './services/systemNotify';
 import { SystemTaskNotification, type TaskNotificationData } from './components/SystemTaskNotification';
 import { runSwarmChat } from './services/swarmChatExecutor';
 import { createGatewayStreamChat } from './services/swarmGatewayStream';
@@ -2094,8 +2094,6 @@ export const App: React.FC = () => {
         createdAt: Date.now()
       };
       
-      setActiveTaskNotification(taskNotifyData);
-
       const notifyPayload: SystemNotifyPayload = {
         status: taskNotifyData.status,
         projectName: taskNotifyData.projectName,
@@ -2103,8 +2101,13 @@ export const App: React.FC = () => {
         sessionId: taskNotifyData.sessionId,
         summary: taskNotifyData.summary,
       };
-      // 一律 Windows 原生右下角系统通知
-      void requestSystemNotification(notifyPayload);
+
+      // 🌟 双通道互斥：后台派发 Windows 原生通知，前台展示像素级磨砂亚克力卡片
+      if (isWindowHidden()) {
+        void requestSystemNotification(notifyPayload);
+      } else {
+        setActiveTaskNotification(taskNotifyData);
+      }
 
     } catch (err: any) {
       if (!sessionActorManager.isSessionRunning(currentSessionId)) {
@@ -2147,7 +2150,6 @@ export const App: React.FC = () => {
         durationSec: 1.5,
         createdAt: Date.now()
       };
-      setActiveTaskNotification(errorNotifyData);
 
       const notifyPayload: SystemNotifyPayload = {
         status: 'error',
@@ -2156,8 +2158,13 @@ export const App: React.FC = () => {
         sessionId: errorNotifyData.sessionId,
         summary: errorNotifyData.summary,
       };
-      // 一律 Windows 原生右下角系统通知
-      void requestSystemNotification(notifyPayload);
+
+      // 🌟 双通道互斥：后台派发 Windows 原生通知，前台展示像素级磨砂亚克力卡片
+      if (isWindowHidden()) {
+        void requestSystemNotification(notifyPayload);
+      } else {
+        setActiveTaskNotification(errorNotifyData);
+      }
     } finally {
       sessionActorManager.completeSession(currentSessionId);
     }

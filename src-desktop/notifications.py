@@ -7,6 +7,7 @@ BalloonTipClicked 是 .NET 事件，PowerShell 可订阅，实现「点击 -> �
 且零新增依赖。
 """
 
+import base64
 import os
 import subprocess
 from pathlib import Path
@@ -38,12 +39,7 @@ def _powershell_single_quote(value: str) -> str:
 
 
 def build_notify_script(payload: dict, port: int, token: str, timeout_seconds: int = NOTIFY_TIMEOUT_SECONDS) -> str:
-    """生成 PowerShell NotifyIcon 气球通知脚本文本。
-
-    入参契约: status/projectName/sessionTitle/sessionId/summary（status 取值 success|error）。
-    输出: 可独立运行的 .ps1；屏幕右下角弹出原生通知，点击后经宿主
-    /api/window/restore 唤醒窗口并回传 sessionId（携带宿主 token 鉴权头）。
-    """
+    """生成 PowerShell NotifyIcon 气球通知脚本文本（Base64 安全编码，彻底杜绝中文乱码）。"""
     project_name = payload.get("projectName") or ""
     session_title = payload.get("sessionTitle") or "Tcode 会话"
     session_id = payload.get("sessionId") or ""
@@ -53,6 +49,9 @@ def build_notify_script(payload: dict, port: int, token: str, timeout_seconds: i
     message = f"{session_title}\n{summary}" if session_title else summary
     icon = "Error" if payload.get("status") == "error" else "Info"
 
+    title_b64 = base64.b64encode(title.encode("utf-8")).decode("ascii")
+    message_b64 = base64.b64encode(message.encode("utf-8")).decode("ascii")
+
     restore_url = (
         "http://127.0.0.1:{port}/api/window/restore?sessionId={encoded}"
     ).format(port=int(port), encoded=quote(session_id, safe=""))
@@ -60,13 +59,16 @@ def build_notify_script(payload: dict, port: int, token: str, timeout_seconds: i
 
     return """\
 $ErrorActionPreference = 'Stop'
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 $notify = New-Object System.Windows.Forms.NotifyIcon
 $notify.Icon = [System.Drawing.SystemIcons]::Information
 $notify.Visible = $true
-$notify.BalloonTipTitle = '{title}'
-$notify.BalloonTipText = '{message}'
+$titleBytes = [System.Convert]::FromBase64String('{title_b64}')
+$notify.BalloonTipTitle = [System.Text.Encoding]::UTF8.GetString($titleBytes)
+$msgBytes = [System.Convert]::FromBase64String('{message_b64}')
+$notify.BalloonTipText = [System.Text.Encoding]::UTF8.GetString($msgBytes)
 $notify.BalloonTipIcon = [System.Windows.Forms.ToolTipIcon]::{icon}
 try {{
   $notify.ShowBalloonTip({display_ms})
@@ -84,8 +86,8 @@ Register-ObjectEvent -InputObject $notify -EventName BalloonTipClicked -SourceId
 Wait-Event -SourceIdentifier TcodeBalloonClicked -Timeout {timeout} | Out-Null
 $notify.Dispose()
 """.format(
-        title=_powershell_single_quote(title),
-        message=_powershell_single_quote(message),
+        title_b64=title_b64,
+        message_b64=message_b64,
         icon=icon,
         display_ms=BALLOON_DISPLAY_MS,
         error_log=_powershell_single_quote(str(error_log)),
@@ -96,13 +98,10 @@ $notify.Dispose()
 
 
 def show_system_notification(payload: dict, port: int) -> None:
-    """将通知脚本落盘并以隐藏窗口方式派发独立 PowerShell 进程。
-
-    失败策略: Popen 异常直接抛出（路由层返回 500）；脚本内部错误写入 notify_error.log。
-    """
+    """将通知脚本落盘并以隐藏窗口方式派发独立 PowerShell 进程。"""
     script = build_notify_script(payload, port, host_auth.get_token())
     script_path = get_notify_dir() / NOTIFY_SCRIPT_NAME
-    script_path.write_text(script, encoding="utf-8")
+    script_path.write_text(script, encoding="utf-8-sig")
 
     startupinfo = subprocess.STARTUPINFO()
     startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW

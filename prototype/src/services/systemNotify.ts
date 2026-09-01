@@ -22,8 +22,14 @@ export const isDesktopHost = (): boolean => {
   return Boolean((window as unknown as { __TCODE_HOST_TOKEN__?: string }).__TCODE_HOST_TOKEN__);
 };
 
+/** 是否处于后台/最小化/未聚焦状态。 */
+export const isWindowHidden = (): boolean => {
+  if (typeof document === 'undefined') return false;
+  return document.visibilityState === 'hidden' || !document.hasFocus();
+};
+
 /**
- * 请求宿主弹出 Windows 原生右下角系统通知（一律系统通知，不再区分窗口前后台）。
+ * 请求宿主弹出 Windows 原生右下角系统通知。
  * 返回是否成功触发（浏览器 dev 环境、宿主失败均返回 false）。
  */
 export async function requestSystemNotification(payload: SystemNotifyPayload): Promise<boolean> {
