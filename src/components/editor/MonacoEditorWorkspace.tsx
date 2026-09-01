@@ -10,6 +10,7 @@ import {
   Columns,
   AlignJustify,
   FolderOpen,
+  FilePlus,
 } from 'lucide-react';
 import { useWorkspaceStore } from '../../store/useWorkspaceStore';
 
@@ -23,6 +24,8 @@ export const MonacoEditorWorkspace: React.FC = () => {
     saveActiveFile,
     acceptDiffPatch,
     rejectDiffPatch,
+    currentRoot,
+    openDiffTab,
   } = useWorkspaceStore();
 
   const [isSideBySide, setIsSideBySide] = useState(true);
@@ -40,14 +43,38 @@ export const MonacoEditorWorkspace: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [saveActiveFile]);
 
+  const handleOpenScratch = () => {
+    if (currentRoot && currentRoot.children && currentRoot.children.length > 0) {
+      const target = currentRoot.children.find(
+        (c) => !c.is_dir && !c.name.endsWith('.exe') && !c.name.endsWith('.dll')
+      );
+      if (target) {
+        openFile(target.path);
+        return;
+      }
+    }
+    openDiffTab(
+      'example_safety_rail.rs',
+      '// 原始安全拦截规则\nfn check_safety(cmd: &str) -> bool {\n    !cmd.contains("rm -rf")\n}\n',
+      '// Agent 提议优化后的双环沙箱安全拦截规则\nfn check_safety(cmd: &str) -> bool {\n    let is_safe = !cmd.contains("rm -rf") && !cmd.contains("reg delete");\n    is_safe\n}\n'
+    );
+  };
+
   if (!activeTab) {
     return (
       <div className="flex-1 h-full bg-[#1E1C1A] flex flex-col items-center justify-center text-[#8A847C] select-none p-6 text-center">
-        <FileCode className="w-12 h-12 mb-3 text-[#3D3A36]" />
-        <h3 className="text-sm font-medium text-[#D5CEBF] mb-1">未打开任何文件</h3>
-        <p className="text-xs text-[#8A847C] max-w-xs">
+        <FileCode className="w-12 h-12 mb-3 text-[#D96B27]/40" />
+        <h3 className="text-sm font-bold text-[#D5CEBF] mb-1">未打开任何文件</h3>
+        <p className="text-xs text-[#8A847C] max-w-xs mb-4">
           请在左侧文件树中点击文件进行浏览与编辑，或在对话中让 Agent 编写并生成代码补丁。
         </p>
+        <button
+          onClick={handleOpenScratch}
+          className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#2D2A26] hover:bg-[#3D3A36] text-[#FAF8F5] hover:text-[#D96B27] rounded-lg text-xs font-medium transition-colors border border-[#3D3A36] cursor-pointer"
+        >
+          <FilePlus className="w-3.5 h-3.5" />
+          <span>打开示例文件 / Diff 视窗</span>
+        </button>
       </div>
     );
   }
@@ -87,7 +114,7 @@ export const MonacoEditorWorkspace: React.FC = () => {
                     e.stopPropagation();
                     closeTab(tab.path);
                   }}
-                  className="p-0.5 rounded hover:bg-[#2D2A26] text-[#8A847C] hover:text-white opacity-60 group-hover:opacity-100 transition-opacity"
+                  className="p-0.5 rounded hover:bg-[#2D2A26] text-[#8A847C] hover:text-white opacity-60 group-hover:opacity-100 transition-opacity cursor-pointer"
                   title="关闭标签"
                 >
                   <X className="w-3 h-3" />
@@ -102,7 +129,7 @@ export const MonacoEditorWorkspace: React.FC = () => {
           {!activeTab.isDiff && (
             <button
               onClick={saveActiveFile}
-              className="flex items-center gap-1 px-2.5 py-1 bg-[#2D2A26] hover:bg-[#3D3A36] text-[#FAF8F5] hover:text-[#D96B27] rounded text-xs font-medium transition-colors"
+              className="flex items-center gap-1 px-2.5 py-1 bg-[#2D2A26] hover:bg-[#3D3A36] text-[#FAF8F5] hover:text-[#D96B27] rounded text-xs font-medium transition-colors cursor-pointer"
               title="保存当前文件 (Ctrl+S)"
             >
               <Save className="w-3.5 h-3.5" />
@@ -123,7 +150,7 @@ export const MonacoEditorWorkspace: React.FC = () => {
           <div className="flex items-center gap-1 flex-shrink-0">
             <button
               onClick={() => setIsSideBySide(true)}
-              className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] transition-colors ${
+              className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] transition-colors cursor-pointer ${
                 isSideBySide
                   ? 'bg-[#2D2A26] text-[#FAF8F5] font-semibold'
                   : 'text-[#8A847C] hover:text-[#FAF8F5]'
@@ -134,7 +161,7 @@ export const MonacoEditorWorkspace: React.FC = () => {
             </button>
             <button
               onClick={() => setIsSideBySide(false)}
-              className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] transition-colors ${
+              className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] transition-colors cursor-pointer ${
                 !isSideBySide
                   ? 'bg-[#2D2A26] text-[#FAF8F5] font-semibold'
                   : 'text-[#8A847C] hover:text-[#FAF8F5]'
@@ -177,14 +204,14 @@ export const MonacoEditorWorkspace: React.FC = () => {
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => rejectDiffPatch(activeTab.path)}
-                  className="flex items-center gap-1.5 px-3 py-1 bg-[#2D2A26] hover:bg-[#3D3A36] text-[#FAF8F5] hover:text-[#C62828] rounded text-xs font-medium transition-colors"
+                  className="flex items-center gap-1.5 px-3 py-1 bg-[#2D2A26] hover:bg-[#3D3A36] text-[#FAF8F5] hover:text-[#C62828] rounded text-xs font-medium transition-colors cursor-pointer"
                 >
                   <Ban className="w-3.5 h-3.5" />
                   <span>放弃变更</span>
                 </button>
                 <button
                   onClick={() => acceptDiffPatch(activeTab.path)}
-                  className="flex items-center gap-1.5 px-3 py-1 bg-[#D96B27] hover:bg-[#B8551B] text-white rounded text-xs font-medium transition-colors shadow-xs"
+                  className="flex items-center gap-1.5 px-3 py-1 bg-[#D96B27] hover:bg-[#B8551B] text-white rounded text-xs font-medium transition-colors shadow-xs cursor-pointer"
                 >
                   <Check className="w-3.5 h-3.5" />
                   <span>接受并应用补丁</span>

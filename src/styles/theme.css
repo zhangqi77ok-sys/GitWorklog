@@ -20,19 +20,20 @@
 
   --border-subtle: #E8E2D9;
   --border-strong: #D5CCC0;
-  --text-primary: #2B2621;
-  --text-secondary: #70675D;
-  --text-muted: #A3998E;
+  --text-primary: #1E1C1A;
+  --text-secondary: #6B665F;
+  --text-muted: #8A847C;
 
   --accent: #D96B27;
   --accent-hover: #BF5A1B;
   --accent-subtle: rgba(217, 107, 39, 0.1);
   --bg-code: #1E1C1A;
   --code-lime: #A3E635;
-  --status-safe: #16A34A;
-  --status-warning: #D97706;
-  --status-danger: #DC2626;
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --status-safe: #2E7D32;
+  --status-warning: #E65100;
+  --status-danger: #C62828;
+  --font-sans: "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "WenQuanYi Micro Hei", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", "Cascadia Code", "Fira Code", Consolas, Menlo, Monaco, monospace;
 }
 
 [data-theme="dark"] {
@@ -61,22 +62,38 @@
   --status-safe: #22C55E;
   --status-warning: #F59E0B;
   --status-danger: #EF4444;
+  --font-sans: "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "WenQuanYi Micro Hei", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", "Cascadia Code", "Fira Code", Consolas, Menlo, Monaco, monospace;
 }
 
-* {
+*, *::before, *::after {
   box-sizing: border-box;
+}
+
+html, body {
   margin: 0;
   padding: 0;
-}
-
-body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-family: var(--font-sans);
   background-color: var(--bg-base);
   color: var(--text-primary);
   overflow: hidden;
   height: 100vh;
   width: 100vw;
-  user-select: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+button:active {
+  transform: scale(0.98);
+}
+
+input, textarea, select {
+  font-family: inherit;
 }
 
 /* Custom Scrollbars */
@@ -88,11 +105,11 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--border-strong);
+  background: #D5CCC0;
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--accent);
+  background: #D96B27;
 }
 
 /* Animation utilities */
