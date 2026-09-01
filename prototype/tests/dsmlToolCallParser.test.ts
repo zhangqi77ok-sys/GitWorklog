@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { parseAgentMessage } from '../src/types/contracts';
-import { parseAgentActions } from '../src/services/agentLoop';
+import { parseAgentActions, extractThinkingFallbackActions } from '../src/services/agentLoop';
 
 describe('DSML & Custom Tool Call Parsing Protocol', () => {
   it('should parse DeepSeek DSML tool_name tag variant and sanitize cleanContent completely', () => {
@@ -97,6 +97,20 @@ D:\\weihu\\new-api`;
     expect(actions[0].type).toBe('run_command');
     expect(actions[0].code).toContain('Get-ChildItem');
     expect(actions[0].code).toContain('D:\\weihu\\new-api');
+  });
+
+  it('should extract safe exploration command from thinkingText when content omits code fences', () => {
+    const thinkingText = `Let me explore the directory structure.
+Let me do:
+\`\`\`
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Get-ChildItem "D:/weihu/agent-learning/docs/technical_reviews" -Force | Format-Table Mode, Name, Length -AutoSize
+\`\`\`
+Let me proceed.`;
+
+    const actions = extractThinkingFallbackActions(thinkingText);
+    expect(actions.length).toBe(1);
+    expect(actions[0].type).toBe('run_command');
+    expect(actions[0].code).toContain('Get-ChildItem');
   });
 });
 

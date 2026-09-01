@@ -154,6 +154,7 @@ import {
   createActionResult,
   formatExecutionFeedback as formatAgentExecutionFeedback,
   parseAgentActions,
+  extractThinkingFallbackActions,
   hasIncompleteActionBlock,
   shouldRequireActionApproval,
   parseAcceptanceCriteria,
@@ -1208,7 +1209,7 @@ export const App: React.FC = () => {
       const singleRunCardId = `agent-run-${Date.now()}`;
       let accumulatedActionResults: ActionResult[] = [];
       let lastAssistantContent = '';
-      let autoContinuationAttempts = 0;
+      let consecutiveEmptyActionCount = 0;
 
       // Initial single assistant message container with rounds[]
       let accumulatedRounds: AgentRoundItem[] = [];
@@ -1840,9 +1841,18 @@ export const App: React.FC = () => {
           ];
         }
 
-        const actions = (frozenRunMode === 'act' || frozenRunMode === 'minimal')
+        let actions = (frozenRunMode === 'act' || frozenRunMode === 'minimal')
           ? [...parseActionsFromContent(finalContent), ...parseNativeToolCalls(nativeToolCalls)]
           : [];
+
+        // 🧠 深度思考链动作兜底挖掘 (Thinking Action Mining)
+        if (actions.length === 0 && accumulatedThinking && (frozenRunMode === 'act' || frozenRunMode === 'minimal')) {
+          const thinkingActions = extractThinkingFallbackActions(accumulatedThinking);
+          if (thinkingActions.length > 0) {
+            actions = thinkingActions;
+            addLog('INFO', 'ToolEngine', `[思维链动作挖掘] 正文未包含代码块，成功从深度思考链中兜底捕获到 ${thinkingActions.length} 个探索命令: ${thinkingActions[0].target}`);
+          }
+        }
 
         // Record Step Tag & Append Round Item without overwriting history
         const currentPhase: InternalStepTag['phase'] = actions.some(a => a.type === 'write_file')
@@ -1939,21 +1949,21 @@ export const App: React.FC = () => {
         }
 
         if (actions.length === 0) {
-          const isShortIntroductory = finalContent.length < 200 &&
-            /我来|我先|我将|让我|先列出|探索|读取|查看|审查|执行|稍等/i.test(finalContent);
+          const isShortIntroductory = finalContent.length < 350 &&
+            /我来|我先|我将|让我|先列出|探索|读取|查看|审查|执行|稍等|定位|修正|逐个/i.test(finalContent);
           const hasUnfinishedCriteria = activeAcceptanceItems.some(i => i.status !== 'passed');
 
-          if (frozenRunMode === 'act' && isShortIntroductory && hasUnfinishedCriteria && autoContinuationAttempts < 2 && loopCount < 10) {
-            autoContinuationAttempts++;
-            addLog('INFO', 'AgentLoop', `[自主推进自愈 #${autoContinuationAttempts}] 检测到模型仅输出探索计划开场白，自动注入动作执行指令驱动 Agent 实际执行探索...`);
+          if (frozenRunMode === 'act' && (isShortIntroductory || hasUnfinishedCriteria) && consecutiveEmptyActionCount < 2 && loopCount < 12) {
+            consecutiveEmptyActionCount++;
+            addLog('INFO', 'AgentLoop', `[轮次级自愈推进 #${consecutiveEmptyActionCount}] 阶段任务未完成 (第 ${loopCount} 轮)，自动注入动作执行指令驱动 Agent 推进...`);
             
             const pushMsg: ChatMessage = {
               id: `auto-push-${Date.now()}`,
               role: 'user',
-              content: '【系统自动执行指令】: 请立即输出具体的 ```run_command 或 ```write_file 代码块，以实际执行你刚才计划的探索或读取操作。例如：\n```run_command\nGet-ChildItem -Path "..." -Force\n```',
+              content: '【系统自动执行指令】: 请立即在 Markdown 正文中输出具体的 ```run_command 或 ```write_file 代码块，以实际执行你刚才计划的操作。严禁只输出说明文字或只在思考链中写命令！',
               timestamp: Date.now(),
               isAgentFeedback: true,
-              auditTag: `🚀 Agent 自动推进驱动 #${autoContinuationAttempts}`
+              auditTag: `🚀 Agent 自动推进驱动 #${consecutiveEmptyActionCount}`
             };
             conversationSnapshot.push(pushMsg);
             setSessionMessages(prev => ({
@@ -2009,6 +2019,7 @@ export const App: React.FC = () => {
         }
 
         // ── Execute actions with Batch Decision & Scoped Trust ──
+        consecutiveEmptyActionCount = 0; // Reset consecutive empty count upon having actions
         addLog('INFO', 'AgentLoop', `[Loop #${loopCount}] 检测到 ${actions.length} 个动作，开始评估执行策略...`);
         const results: ActionResult[] = [];
         const publishActionResult = (nextResult: ActionResult) => {

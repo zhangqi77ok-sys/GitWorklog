@@ -422,6 +422,41 @@ export function parseAgentActions(content: string): AgentAction[] {
   return actions;
 }
 
+/**
+ * 深度思考链动作兜底挖掘（Thinking Action Mining）
+ * 当大模型在 <think> 内部规划并输出了完整代码块，但在 </think> 后的正文中遗漏了代码块时，
+ * 自动从思考链中安全提取只读探索动作（如 Get-ChildItem, Get-Content, dir, ls, cat 等）以驱动闭环。
+ */
+export function extractThinkingFallbackActions(thinkingText: string): AgentAction[] {
+  if (!thinkingText || !thinkingText.trim()) return [];
+  const actions: AgentAction[] = [];
+
+  // 1. 匹配思考链中的代码块
+  const codeBlockRegex = /```(?:run_command|powershell|bash|cmd|sh)?\s*\n([\s\S]*?)```/gi;
+  let match: RegExpExecArray | null;
+  while ((match = codeBlockRegex.exec(thinkingText)) !== null) {
+    const rawCmd = match[1].trim();
+    if (!rawCmd) continue;
+
+    // 过滤出安全的探索/只读指令
+    const isSafeReadOrExplore = /^(?:\[Console\]::OutputEncoding\s*=\s*\[System\.Text\.Encoding\]::UTF8\s*;\s*)?(?:Get-ChildItem|Get-Content|dir|ls|cat|find|grep|npm\s+test|git\s+status|git\s+diff)/i.test(rawCmd);
+    if (isSafeReadOrExplore && !HIGH_RISK_COMMAND.test(rawCmd)) {
+      const firstLine = rawCmd.split('\n')[0].slice(0, 80);
+      actions.push({
+        id: `action-${actions.length}-thinking_fallback-${actionContentHash(rawCmd)}`,
+        type: 'run_command',
+        target: `[思维链兜底] ${firstLine}`,
+        code: rawCmd,
+        isHighRisk: false,
+        tier: 'silent'
+      });
+      break; // 优先提取主要探索指令
+    }
+  }
+
+  return actions;
+}
+
 /** Checks whether a path or target matches a glob like src/** or src/components/*. */
 export function matchesGlob(path: string, glob: string): boolean {
   const normalizedPath = path.replace(/\\/g, '/');
