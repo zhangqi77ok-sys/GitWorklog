@@ -708,7 +708,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       3. 凭据与服务端点配置
                     </span>
                     <span className="text-[10px] font-mono px-2 py-0.5 bg-[#FAF8F5] border border-[#E6DFD5] text-[#8A847C] rounded">
-                      模式: {channelForm.ingress_type.toUpperCase()}
+                      模式: {(channelForm.ingress_type || 'api_key').toUpperCase()}
                     </span>
                   </div>
 

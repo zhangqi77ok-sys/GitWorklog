@@ -46,7 +46,7 @@ export const SessionTreeItem: React.FC<SessionTreeItemProps> = ({
   };
 
   const getTagBadgeClass = (tag: string) => {
-    const lower = tag.toLowerCase();
+    const lower = (tag || '').toLowerCase();
     if (lower.includes('refactor') || lower.includes('重构')) {
       return 'bg-[#FBE9E7] text-[#D84315] border border-[#FFAB91]';
     }

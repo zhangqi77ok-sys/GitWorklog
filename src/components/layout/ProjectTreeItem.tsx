@@ -40,8 +40,8 @@ export const ProjectTreeItem: React.FC<ProjectTreeItemProps> = ({
   const filteredSessions = project.sessions.filter((s) => {
     const matchesSearch =
       !searchQuery ||
-      s.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      s.tags?.some((t) => t.toLowerCase().includes(searchQuery.toLowerCase()));
+      (s.title || '').toLowerCase().includes((searchQuery || '').toLowerCase()) ||
+      s.tags?.some((t) => (t || '').toLowerCase().includes((searchQuery || '').toLowerCase()));
     const matchesTag = !selectedTag || s.tags?.includes(selectedTag);
     return matchesSearch && matchesTag;
   });
