@@ -96,18 +96,26 @@ function loadProjectsDb(): BridgeProjectsDatabase {
   return initialDb;
 }
 
-function persistMessageToSession(sessionId: string | null, role: 'user' | 'assistant' | 'system', content: string, thought?: string) {
+function persistMessageToSession(
+  sessionId: string | null,
+  role: 'user' | 'assistant' | 'system',
+  content: string,
+  thought?: string,
+  toolCalls?: any[]
+) {
   if (!sessionId) return;
   const db = loadProjectsDb();
   for (const proj of db.projects) {
     const sess = proj.sessions.find((s: BridgeSessionRecord) => s.id === sessionId);
     if (sess) {
       if (!Array.isArray(sess.messages)) sess.messages = [];
+      const cleanContent = sanitizeTextContent(content);
       sess.messages.push({
         id: `msg_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
         role,
-        content,
+        content: cleanContent || content,
         thought,
+        toolCalls: Array.isArray(toolCalls) && toolCalls.length > 0 ? toolCalls : undefined,
         timestamp: Date.now(),
       });
       sess.updated_at = Date.now();
@@ -115,6 +123,15 @@ function persistMessageToSession(sessionId: string | null, role: 'user' | 'assis
       break;
     }
   }
+}
+
+export function sanitizeTextContent(text: string): string {
+  if (!text) return '';
+  let clean = text;
+  clean = clean.replace(/<\|DSML\|tool_calls>[\s\S]*?<\/\|DSML\|tool_calls>/g, '');
+  clean = clean.replace(/<\|DSML\|invoke\s+name=["'][^"']+["']>[\s\S]*?<\/\|DSML\|invoke>/g, '');
+  clean = clean.replace(/<tool_call>[\s\S]*?<\/tool_call>/g, '');
+  return clean.trim();
 }
 
 export interface ParsedToolCall {

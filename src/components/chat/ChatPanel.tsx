@@ -22,6 +22,7 @@ import { useGatewayStore } from '../../store/useGatewayStore';
 import { SubtaskProgressCard } from './SubtaskProgressCard';
 import { SwarmFlowVisualizer, SwarmFlowState } from './SwarmFlowVisualizer';
 import { ExecutionModeCapsule } from './ExecutionModeCapsule';
+import { ToolCallCard } from './ToolCallCard';
 import { toast } from '../common/Toast';
 import type { Subtask, ExecutionMode } from '../../types';
 
@@ -448,32 +449,51 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ onOpenSettings }) => {
                 </div>
               )}
 
-              {/* Main Message Bubble */}
-              <div
-                className={`max-w-[85%] rounded-2xl p-3.5 text-xs leading-relaxed ${
-                  msg.role === 'user'
-                    ? 'bg-[#D96B27] text-white rounded-tr-xs shadow-xs'
-                    : 'bg-white border border-[#E6DFD5] text-[#1E1C1A] rounded-tl-xs shadow-xs'
-                }`}
-              >
-                <div className="whitespace-pre-wrap">{msg.content}</div>
+              {/* Tool Execution Card (Image 2 Specification) */}
+              {msg.toolCalls && msg.toolCalls.length > 0 && (
+                <ToolCallCard toolCalls={msg.toolCalls} />
+              )}
 
-                {/* Diff Viewer Button for Agent Code Patches */}
-                {msg.role === 'assistant' && msg.content.includes('```') && (
-                  <div className="mt-3 pt-2.5 border-t border-[#E6DFD5] flex items-center justify-between">
-                    <span className="text-[10px] text-[#8A847C] font-mono">
-                      包含代码补丁变更
-                    </span>
-                    <button
-                      onClick={() => handleOpenDiffFromCode(msg.content)}
-                      className="flex items-center gap-1 px-2.5 py-1 bg-[#FAF8F5] border border-[#E6DFD5] hover:border-[#D96B27] text-[#D96B27] rounded-lg text-[11px] font-bold transition-all shadow-2xs cursor-pointer"
-                    >
-                      <SplitSquareVertical className="w-3 h-3" />
-                      <span>在编辑器中审查 Diff</span>
-                    </button>
+              {/* Main Message Bubble */}
+              {(() => {
+                const cleanText = (msg.content || '')
+                  .replace(/<\|DSML\|tool_calls>[\s\S]*?<\/\|DSML\|tool_calls>/g, '')
+                  .replace(/<\|DSML\|invoke\s+name=["'][^"']+["']>[\s\S]*?<\/\|DSML\|invoke>/g, '')
+                  .replace(/<tool_call>[\s\S]*?<\/tool_call>/g, '')
+                  .trim();
+
+                if (!cleanText && msg.role === 'assistant' && msg.toolCalls && msg.toolCalls.length > 0) {
+                  return null;
+                }
+
+                return (
+                  <div
+                    className={`max-w-[85%] rounded-2xl p-3.5 text-xs leading-relaxed ${
+                      msg.role === 'user'
+                        ? 'bg-[#D96B27] text-white rounded-tr-xs shadow-xs'
+                        : 'bg-white border border-[#E6DFD5] text-[#1E1C1A] rounded-tl-xs shadow-xs'
+                    }`}
+                  >
+                    <div className="whitespace-pre-wrap">{cleanText || msg.content}</div>
+
+                    {/* Diff Viewer Button for Agent Code Patches */}
+                    {msg.role === 'assistant' && msg.content.includes('```') && (
+                      <div className="mt-3 pt-2.5 border-t border-[#E6DFD5] flex items-center justify-between">
+                        <span className="text-[10px] text-[#8A847C] font-mono">
+                          包含代码补丁变更
+                        </span>
+                        <button
+                          onClick={() => handleOpenDiffFromCode(msg.content)}
+                          className="flex items-center gap-1 px-2.5 py-1 bg-[#FAF8F5] border border-[#E6DFD5] hover:border-[#D96B27] text-[#D96B27] rounded-lg text-[11px] font-bold transition-all shadow-2xs cursor-pointer"
+                        >
+                          <SplitSquareVertical className="w-3 h-3" />
+                          <span>在编辑器中审查 Diff</span>
+                        </button>
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
+                );
+              })()}
             </div>
           ))
         )}

@@ -1,111 +1,106 @@
-# 10 - 自主 Agent 多轮工具闭环 (Multi-Turn Loop) 与 DSML 工具调用解析
+# 10 - OpenAI 规范 Tools 定义接入与 `> 调用 1 个工具` UI 折叠渲染
 
 > **归档编号**：KNOW-10  
 > **关联规范**：`AGENTS.md`【铁律 6】、`AGENTS.md`【铁律 1.5】  
-> **核心领域**：Agent 认知循环 / 工具调用解析 / 多轮自动闭环
+> **核心领域**：OpenAI Tools 规范 / UI 提取渲染 / DSML 过滤器
 
 ---
 
 ## ① 知识点与问题背景 (Context & Problem Statement)
 
-用户发送“帮我审查一下项目架构”等复杂编程指令时，大模型（如 `deepseek-v4-flash` / OpenCode）返回了如下 DSML 格式的工具调用代码段：
+用户贴出两张对比截图并提出严重质疑：
+1. **渲染问题**：原界面直接将模型返回的原始 XML 标签 `<|DSML|tool_calls> <|DSML|invoke name="Lookup">` 以代码框形式强行画在聊天泡泡里，不仅极其丑陋，而且导致文字截断与中途挂起；
+2. **OpenAI 规范未对齐**：请求大模型 API 时没有按照 OpenAI Function Calling 标准传递 `tools` 字段定义，导致模型只能依靠文本输出 XML，而无法正确使用 API 级工具规范。
 
-```xml
-我来看一下项目的整体结构。
-
-<|DSML|tool_calls>
-<|DSML|invoke name="Lookup">
-<|DSML|parameter name="path" string="true">.</|DSML|parameter>
-</|DSML|invoke>
-</|DSML|tool_calls>
-```
-
-**问题现象**：模型输出完上述 `<|DSML|...>` 工具标签后，**对话突然中断**，没有显示工具执行结果，也没有继续输出项目架构审查报告。
+参照行业成熟 Agent 界面（如图 2），工具调用必须渲染为优雅折叠的 **`> ⚙️ 调用 1 个工具`** 卡片，且聊天泡泡中绝不允许出现原始 XML 标签。
 
 ---
 
 ## ② 核心原理与根本原因剖析 (Knowledge Content & Root Cause)
 
-### 1. 对话中断的根本原因
-- 像 DeepSeek、Qwen、OpenCode 等 AI 编程模型，在需要查看代码或搜索目录时，会优先发出工具调用指令（Tool Calls）；
-- 原系统仅执行了“单轮流式接收”，将模型吐出的 XML 标签直接打在屏幕上，随后触发了流式结束事件（`agent_stream_done`）；
-- **缺乏工具闭环循环**：没有解析 `<|DSML|invoke>` 指令，没有在本地执行 `Lookup`（目录扫描）或 `read_file`（读取文件），更没有把工具返回的结果作为下一轮上下文传回给大模型，导致模型无法拿到数据继续生成，对话被迫中断。
+### 1. 为什么不能直接将 XML 渲染在聊天泡泡中？
+- 模型输出的 `<|DSML|...>` 属于底层 Agent 指令控制流，并非用户可见的对话自然语言；
+- 如果直接作为 Markdown/Pre 渲染在主消息泡泡内，会导致逻辑混淆、文本重复与排版破坏。
 
-### 2. 自主 Agent 多轮自动闭环原理 (Multi-Turn Agent Loop)
+### 2. OpenAI 标准 Tools 接口规范
+在发往 OpenAI/AgentRouter/DeepSeek 的 Payload 中，必须显式携带 `tools` 结构定义：
 
-真正的 Agentic IDE 必须具备**内外双环多轮自主协作逻辑**：
-
+```json
+"tools": [
+  {
+    "type": "function",
+    "function": {
+      "name": "Lookup",
+      "description": "列出项目工作区指定路径下的文件与子目录结构",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "path": { "type": "string", "description": "目标相对路径" }
+        },
+        "required": ["path"]
+      }
+    }
+  }
+]
 ```
-┌────────────────────────────────────────────────────────────────────────┐
-│                        Tcode 自主 Agent 多轮闭环架构                    │
-├────────────────────────────────────────────────────────────────────────┤
-│ 1. 接收 User Prompt ("帮我审查一下项目架构")                            │
-│ 2. Turn 1: 调大模型获取思考 -> 模型输出 <|DSML|invoke name="Lookup">  │
-│ 3. 拦截解析: parseToolCallsFromText() 提取工具名与参数                 │
-│ 4. 本地工具执行: executeToolCall("Lookup", { path: "." })               │
-│ 5. 上下文追加: 将 [Tool Output] 作为 user 消息追加至历史 Payload       │
-│ 6. Turn 2: 自动发起下一轮 LLM 请求 -> 模型基于文件列表输出完整架构报告│
-│ 7. 任务完成: 终止循环并保存完整会话                                    │
-└────────────────────────────────────────────────────────────────────────┘
-```
+
+### 3. UI 隔离渲染架构 (Message vs. ToolCallCard)
+- **自然文本与控制标签解耦**：使用 `sanitizeTextContent` 过滤掉所有的 `<|DSML|...>` 与 `<tool_call>...</tool_call>` 字符串；
+- **独立组件 Rendering**：将提取出的工具调用结构化存储在 `msg.toolCalls` 数组中，在对话视图中使用专属 `ToolCallCard` 组件渲染为 **`> ⚙️ 调用 1 个工具`**，支持点击展开/折叠查看输入参数与执行输出。
 
 ---
 
 ## ③ 标准解决方案与实操步骤 (Actionable Solutions & Step-by-Step Guide)
 
-### 1. DSML 工具调用解析器 (`tauriBridge.ts`)
+### 1. 前端渲染解耦与 `ToolCallCard` 组件 (`ToolCallCard.tsx`)
 
-```typescript
-export function parseToolCallsFromText(text: string): ParsedToolCall[] {
-  const calls: ParsedToolCall[] = [];
-  if (!text) return calls;
-
-  const invokeRegex = /<\|DSML\|invoke\s+name=["']([^"']+)["']>([\s\S]*?)<\/\|DSML\|invoke>/g;
-  let match: RegExpExecArray | null;
-
-  while ((match = invokeRegex.exec(text)) !== null) {
-    const toolName = match[1];
-    const body = match[2];
-    const args: Record<string, any> = {};
-
-    const paramRegex = /<\|DSML\|parameter\s+name=["']([^"']+)["'][^>]*>([\s\S]*?)<\/\|DSML\|parameter>/g;
-    let pMatch: RegExpExecArray | null;
-    while ((pMatch = paramRegex.exec(body)) !== null) {
-      args[pMatch[1]] = pMatch[2].trim();
-    }
-    calls.push({ name: toolName, args });
-  }
-  return calls;
-}
+```tsx
+export const ToolCallCard: React.FC<{ toolCalls: ToolCallItem[] }> = ({ toolCalls }) => {
+  return (
+    <div className="flex flex-col gap-1.5 my-1.5 max-w-[85%] w-full">
+      {toolCalls.map((tool, idx) => (
+        <div key={idx} className="border border-[#E6DFD5] bg-[#FAF8F5] rounded-xl overflow-hidden text-xs">
+          <button className="flex items-center justify-between w-full px-3 py-2 bg-[#F4EFEA]">
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-[#1E1C1A]">调用 1 个工具</span>
+              <span className="text-[10px] text-[#8A847C] font-mono bg-white px-1.5 py-0.5 rounded border border-[#E6DFD5]">
+                {tool.name}
+              </span>
+            </div>
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+};
 ```
 
-### 2. 工具本地适配执行网桥 (`executeToolCall`)
-映射 `Lookup`、`read_file`、`execute_command` 至真正的底层文件系统与终端 API：
+### 2. 主消息泡泡的 XML 过滤与气泡渲染 (`ChatPanel.tsx`)
 
-```typescript
-async function executeToolCall(toolName: string, args: Record<string, any>, workspacePath: string): Promise<string> {
-  const normName = toolName.trim().toLowerCase();
-  if (normName === 'lookup' || normName === 'read_workspace_tree') {
-    const res = await fetch(`/api/fs/tree?path=${encodeURIComponent(args.path || '.')}`);
-    const data = await res.json();
-    return `[目录结构 ${args.path}]:\n` + data.tree.map((t: any) => `${t.is_dir ? '📁' : '📄'} ${t.name}`).join('\n');
-  }
-  // 适配 read_file, execute_command ...
-}
+```tsx
+{msg.toolCalls && msg.toolCalls.length > 0 && (
+  <ToolCallCard toolCalls={msg.toolCalls} />
+)}
+
+{(() => {
+  const cleanText = (msg.content || '')
+    .replace(/<\|DSML\|tool_calls>[\s\S]*?<\/\|DSML\|tool_calls>/g, '')
+    .replace(/<\|DSML\|invoke\s+name=["'][^"']+["']>[\s\S]*?<\/\|DSML\|invoke>/g, '')
+    .trim();
+
+  if (!cleanText && msg.role === 'assistant' && msg.toolCalls?.length) return null;
+
+  return (
+    <div className="max-w-[85%] rounded-2xl p-3.5 bg-white border border-[#E6DFD5]">
+      <div className="whitespace-pre-wrap">{cleanText}</div>
+    </div>
+  );
+})()}
 ```
-
-### 3. 流式分发中心的多轮自动循环 (`stream_chat_prompt`)
-
-在 `stream_chat_prompt` 中引入 `while (turn < MAX_TURNS && shouldContinueLoop)`：
-- 每轮接收完成后自动 `parseToolCallsFromText(turnContent)`；
-- 若检测到工具调用，自动执行工具并将结果写回 `apiPayloadMessages`；
-- 循环进入 Turn 2，直到模型不再要求调用工具，或者达到最大轮数限制。
 
 ---
 
 ## ④ 避坑指南与最佳实践 (Troubleshooting & Best Practices)
 
-1. **死循环防护机制**：
-   设置 `MAX_TURNS = 5`，防止模型在特定场景下无限循环调用工具导致配额耗尽；
-2. **工具卡片平滑流式渲染**：
-   在工具执行时，向 UI 实时 emit 反馈节点（`> 🔧 【Agent 自动调用工具】` 与 `> 🛠️ 【工具返回输出】`），使用户能够实时直观掌控 Agent 的每一步操作过程。
+1. **绝对禁止原始控制标签落盘与直接渲染**；
+2. **多模态与多协议兼容**：无论模型通过 OpenAI 原生 `delta.tool_calls` 返回还是通过文本 `DSML` 返回，均在 Bridge 层统一清洗归一化为标准的 `toolCalls` 数组传给 UI。

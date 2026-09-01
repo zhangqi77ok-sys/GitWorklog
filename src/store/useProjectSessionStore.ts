@@ -9,6 +9,7 @@ export interface ChatMessage {
   timestamp: number;
   status?: string;
   dag?: any;
+  toolCalls?: any[];
 }
 
 export interface SessionRecord {
