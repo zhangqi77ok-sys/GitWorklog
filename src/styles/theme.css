@@ -1,0 +1,103 @@
+/* ────────────────────────────────────────────────────────────
+ * 🎨 Tcode Universal Multi-Theme Styling System
+ * ──────────────────────────────────────────────────────────── */
+
+:root,
+[data-theme="cream"],
+[data-theme="warm"] {
+  /* 经典纸质暖橙 (Paper Warm) */
+  --bg-base: #FAF8F5;
+  --bg-surface: #F4EFEA;
+  --bg-surface-elevated: #EDE6DD;
+
+  --chat-bg: #FAF8F5;
+  --chat-user-bg: #F4EFEA;
+  --chat-system-bg: #F4EFEA;
+  --chat-code-bg: #1E1C1A;
+  --chat-input-bg: #FAF8F5;
+
+  --border-subtle: #E8E2D9;
+  --border-strong: #D5CCC0;
+  --text-primary: #2B2621;
+  --text-secondary: #70675D;
+  --text-muted: #A3998E;
+
+  --accent: #D96B27;
+  --accent-hover: #BF5A1B;
+  --accent-subtle: rgba(217, 107, 39, 0.1);
+  --bg-code: #1E1C1A;
+  --code-lime: #A3E635;
+  --status-safe: #16A34A;
+  --status-warning: #D97706;
+  --status-danger: #DC2626;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+[data-theme="dark"] {
+  /* 深邃极客暗黑 (Obsidian Dark) */
+  --bg-base: #131417;
+  --bg-surface: #1C1E24;
+  --bg-surface-elevated: #242730;
+
+  --chat-bg: #131417;
+  --chat-user-bg: #1C1E24;
+  --chat-system-bg: #1C1E24;
+  --chat-code-bg: #0C0D0F;
+  --chat-input-bg: #181A1F;
+
+  --border-subtle: #2D313A;
+  --border-strong: #3F4452;
+  --text-primary: #F3F4F6;
+  --text-secondary: #9CA3AF;
+  --text-muted: #6B7280;
+
+  --accent: #F97316;
+  --accent-hover: #EA580C;
+  --accent-subtle: rgba(249, 115, 22, 0.15);
+  --bg-code: #0C0D0F;
+  --code-lime: #4ADE80;
+  --status-safe: #22C55E;
+  --status-warning: #F59E0B;
+  --status-danger: #EF4444;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  overflow: hidden;
+  height: 100vh;
+  width: 100vw;
+  user-select: none;
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent);
+}
+
+/* Animation utilities */
+@keyframes pulseGlow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+.animate-pulse-glow {
+  animation: pulseGlow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}

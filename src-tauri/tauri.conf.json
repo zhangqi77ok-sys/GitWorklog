@@ -1,24 +1,26 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Tcode",
-  "version": "1.0.0",
-  "identifier": "com.codemind.hub",
+  "version": "2.0.0",
+  "identifier": "com.tcode.studio",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:5173",
     "beforeBuildCommand": "npm run build",
-    "frontendDist": "../prototype/dist"
+    "frontendDist": "../dist"
   },
   "app": {
     "windows": [
       {
-        "title": "Tcode",
+        "title": "Tcode Studio",
         "width": 1440,
         "height": 900,
         "minWidth": 1024,
         "minHeight": 640,
         "resizable": true,
-        "fullscreen": false
+        "fullscreen": false,
+        "decorations": true,
+        "transparent": false
       }
     ],
     "security": {
@@ -31,6 +33,7 @@
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
+      "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
     ]
