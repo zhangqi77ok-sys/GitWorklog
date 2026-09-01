@@ -3,11 +3,17 @@ import { Dialog } from './Dialog';
 import { ConfirmModal } from './ConfirmModal';
 import { PromptModal } from './PromptModal';
 import { toast, useToastStore } from './Toast';
+import { ErrorBoundary } from './ErrorBoundary';
 
 describe('Modal and Dialog Components', () => {
   it('exports Dialog component', () => {
     expect(Dialog).toBeDefined();
     expect(typeof Dialog).toBe('function');
+  });
+
+  it('exports ErrorBoundary component', () => {
+    expect(ErrorBoundary).toBeDefined();
+    expect(typeof ErrorBoundary).toBe('function');
   });
 
   it('exports ConfirmModal component', () => {

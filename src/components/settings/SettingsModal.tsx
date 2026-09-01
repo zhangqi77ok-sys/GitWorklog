@@ -42,13 +42,6 @@ import { toast } from '../common/Toast';
 import { McpServerModal } from './McpServerModal';
 import { SkillModal } from './SkillModal';
 
-interface SettingsModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  theme: 'cream' | 'dark';
-  onToggleTheme: () => void;
-}
-
 export interface PlatformSpec {
   id: ProviderPlatform;
   label: string;
@@ -156,13 +149,22 @@ export const ALL_INGRESS_OPTIONS: {
   { id: 'proxy', label: '自建中转 / 代理', desc: '反代或 OneAPI / 本地 Ollama', icon: <Globe className="w-3 h-3 text-[#E65100]" /> },
 ];
 
-type SettingsTab = 'gateway' | 'mcp' | 'skills' | 'appearance' | 'about';
+export type SettingsTab = 'gateway' | 'mcp' | 'skills' | 'appearance' | 'about';
+
+export interface SettingsModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  theme: 'cream' | 'dark';
+  onToggleTheme: () => void;
+  initialTab?: SettingsTab;
+}
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
   isOpen,
   onClose,
   theme,
   onToggleTheme,
+  initialTab = 'gateway',
 }) => {
   const {
     channels,
@@ -191,8 +193,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     toggleSkill,
   } = useMcpSkillStore();
 
-  const [activeTab, setActiveTab] = useState<SettingsTab>('gateway');
+  const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab);
   const [selectedChannelId, setSelectedChannelId] = useState<string>('');
+
+  useEffect(() => {
+    if (isOpen && initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [isOpen, initialTab]);
 
   // Editing form for Gateway Channel
   const [channelForm, setChannelForm] = useState<GatewayChannel>({
@@ -452,17 +460,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           {[
             {
               id: 'gateway',
-              label: `AI 模型网关 (${channels.length})`,
+              label: `AI 模型网关 (${(channels || []).length})`,
               icon: <Sparkles className="w-3.5 h-3.5" />,
             },
             {
               id: 'mcp',
-              label: `MCP 协议管理 (${mcpServers.length})`,
+              label: `MCP 协议管理 (${(mcpServers || []).length})`,
               icon: <Layers className="w-3.5 h-3.5" />,
             },
             {
               id: 'skills',
-              label: `SKILL 智能体技能 (${skills.length})`,
+              label: `SKILL 智能体技能 (${(skills || []).length})`,
               icon: <Code2 className="w-3.5 h-3.5" />,
             },
             { id: 'appearance', label: '外观主题', icon: <Palette className="w-3.5 h-3.5" /> },
@@ -502,7 +510,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
-                  {channels.map((ch) => {
+                  {(channels || []).map((ch) => {
                     const isSelected = ch.id === selectedChannelId;
                     const isActive = ch.id === activeChannelId;
                     return (
@@ -527,7 +535,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             )}
                           </div>
                           <div className="text-[10px] text-[#8A847C] font-mono truncate mt-0.5">
-                            {ch.platform} · {ch.models.length} 个模型
+                            {ch.platform || 'openai'} · {(ch.models || []).length} 个模型
                           </div>
                         </div>
 
@@ -604,7 +612,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 {(() => {
                   const currentSpec = PLATFORM_SPECS.find((p) => p.id === channelForm.platform) || PLATFORM_SPECS[0];
                   const dynamicIngressOptions = ALL_INGRESS_OPTIONS.filter((opt) =>
-                    currentSpec.supportedIngress.includes(opt.id)
+                    ((currentSpec && currentSpec.supportedIngress) || []).includes(opt.id)
                   );
                   return (
                     <div className="space-y-1.5">
@@ -837,7 +845,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </div>
                     <input
                       type="text"
-                      value={channelForm.models.join(', ')}
+                      value={(channelForm.models || []).join(', ')}
                       onChange={(e) =>
                         setChannelForm({
                           ...channelForm,

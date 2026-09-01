@@ -14,6 +14,7 @@
 | **04** | **Tcode 执行模式拓扑与双环/SwarmFlow 内部逻辑设计** | 执行内核 / 模式拓扑 | 三维正交模型、单 Agent 双环极速闭环 vs SwarmFlow 7 算子流、前端胶囊收敛与统一分发契约 | [04-execution-modes-and-swarm-topology.md](./04-execution-modes-and-swarm-topology.md) |
 | **05** | **桌面端 WebView2 与 Tauri IPC 双轨兼容适配网桥设计** | 桌面端架构 / IPC 协议 | `Cannot read properties of undefined (reading 'invoke')` 根因剖析、Universal Bridge 映射与原生文件拾取器直连 | [05-desktop-webview-tauri-ipc-bridge.md](./05-desktop-webview-tauri-ipc-bridge.md) |
 | **06** | **AgentRouter 多模型网关对接、真实测速拉取与会话模型选择器设计** | 模型网关 / 协议路由 | 渠道保存即时关联、对话框模型选择下拉器、401 `unauthorized client` 特征攻防与真实毫秒级探活拉取 | [06-agentrouter-gateway-models-and-channel-sync.md](./06-agentrouter-gateway-models-and-channel-sync.md) |
+| **07** | **客户端白屏根因防御、模块级锚定弹窗与全功能状态记忆体系** | UI 架构 / 容错机制 / 状态记忆 | 渲染层属性链防御、顶层 ErrorBoundary 容灾、顶部/底部双弹窗锚定定位与全功能状态生命周期持久化 | [07-workbench-white-screen-prevention-and-full-state-memory.md](./07-workbench-white-screen-prevention-and-full-state-memory.md) |
 
 ---
 

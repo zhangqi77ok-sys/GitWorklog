@@ -32,7 +32,31 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ onFileSelected }) => {
   } = useProjectSessionStore();
 
   const { currentRoot, loadTree } = useWorkspaceStore();
-  const [collapsedProjects, setCollapsedProjects] = useState<Record<string, boolean>>({});
+
+  const [collapsedProjects, setCollapsedProjects] = useState<Record<string, boolean>>(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        const saved = localStorage.getItem('tcode_collapsed_projects_v2');
+        return saved ? JSON.parse(saved) : {};
+      }
+    } catch (e) {}
+    return {};
+  });
+
+  const toggleProjectCollapse = (projectId: string) => {
+    setCollapsedProjects((prev) => {
+      const next = {
+        ...prev,
+        [projectId]: !prev[projectId],
+      };
+      try {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('tcode_collapsed_projects_v2', JSON.stringify(next));
+        }
+      } catch (e) {}
+      return next;
+    });
+  };
 
   // Unified ConfirmModal State
   const [confirmConfig, setConfirmConfig] = useState<{
@@ -48,28 +72,22 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ onFileSelected }) => {
     onConfirm: () => {},
   });
 
-  const activeProject = projects.find((p) => p.id === activeProjectId) || projects[0];
+  const safeProjects = Array.isArray(projects) ? projects : [];
+  const activeProject = safeProjects.find((p) => p.id === activeProjectId) || safeProjects[0];
 
-  // Extract all unique tags & compute tag counts
+  // Extract all unique tags & compute tag counts safely
   const allTags = Array.from(
-    new Set(projects.flatMap((p) => p.sessions.flatMap((s) => s.tags || [])))
+    new Set(safeProjects.flatMap((p) => (p.sessions || []).flatMap((s) => s.tags || [])))
   );
   const tagCounts: Record<string, number> = {
-    all: projects.reduce((acc, p) => acc + p.sessions.length, 0),
+    all: safeProjects.reduce((acc, p) => acc + (p.sessions || []).length, 0),
   };
   allTags.forEach((t) => {
-    tagCounts[t] = projects.reduce(
-      (acc, p) => acc + p.sessions.filter((s) => s.tags?.includes(t)).length,
+    tagCounts[t] = safeProjects.reduce(
+      (acc, p) => acc + (p.sessions || []).filter((s) => s.tags?.includes(t)).length,
       0
     );
   });
-
-  const toggleProjectCollapse = (projectId: string) => {
-    setCollapsedProjects((prev) => ({
-      ...prev,
-      [projectId]: !prev[projectId],
-    }));
-  };
 
   // 2. Select system folder natively via Rust RFD
   const handleOpenFolder = async () => {
@@ -124,7 +142,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ onFileSelected }) => {
 
   const handleDeleteProject = (projectId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    const proj = projects.find((p) => p.id === projectId);
+    const proj = safeProjects.find((p) => p.id === projectId);
     setConfirmConfig({
       isOpen: true,
       title: '从工作台移除项目',
@@ -162,7 +180,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ onFileSelected }) => {
         </div>
 
         {/* 1.2 Search & Tag Filter Bar */}
-        {projects.length > 0 && (
+        {safeProjects.length > 0 && (
           <div className="p-2 border-b border-[#E6DFD5] space-y-1.5 bg-[#FAF8F5]/50">
             <div className="relative">
               <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-[#8A847C]" />
@@ -186,7 +204,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ onFileSelected }) => {
 
         {/* 1.3 Multi-Project & Nested Sessions List (独立滚动) */}
         <div className="flex-1 overflow-y-auto p-2 space-y-2">
-          {projects.length === 0 ? (
+          {safeProjects.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center p-6 text-center text-xs text-[#8A847C] select-none">
               <FolderOpen className="w-10 h-10 mb-2 text-[#D96B27]/40" />
               <p className="font-semibold text-[#1E1C1A] mb-1">未打开任何项目</p>
@@ -202,7 +220,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ onFileSelected }) => {
               </button>
             </div>
           ) : (
-            projects.map((project) => (
+            safeProjects.map((project) => (
               <ProjectTreeItem
                 key={project.id}
                 project={project}
@@ -214,7 +232,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ onFileSelected }) => {
                 onToggleCollapse={toggleProjectCollapse}
                 onSelectProject={(id) => {
                   setActiveProject(id);
-                  const proj = projects.find((p) => p.id === id);
+                  const proj = safeProjects.find((p) => p.id === id);
                   if (proj?.path) {
                     loadTree(proj.path);
                   }
@@ -249,33 +267,31 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ onFileSelected }) => {
               className="p-1 hover:bg-white rounded text-[#8A847C] hover:text-[#1E1C1A] transition-colors cursor-pointer"
               title="刷新文件树"
             >
-              <RefreshCw className="w-3 h-3" />
+              <RefreshCw className="w-3.5 h-3.5" />
             </button>
           )}
         </div>
 
-        {/* 2.2 File Tree Body (原生文件夹折叠与文件图标) */}
-        <div className="flex-1 overflow-y-auto p-1 text-xs">
-          {!activeProject ? (
-            <div className="h-full flex flex-col items-center justify-center p-4 text-center text-[#8A847C]">
-              <p>未打开工作区文件夹</p>
-            </div>
-          ) : currentRoot ? (
+        {/* 2.2 Workspace Tree Body */}
+        <div className="flex-1 overflow-y-auto p-1 font-mono text-xs">
+          {currentRoot ? (
             <WorkspaceTreeView rootNode={currentRoot} />
           ) : (
-            <div className="p-4 text-center text-xs text-[#8A847C]">加载工作区文件树中...</div>
+            <div className="p-4 text-center text-xs text-[#8A847C]">
+              {activeProject ? '正在加载文件系统树...' : '请先选择一个活跃项目'}
+            </div>
           )}
         </div>
       </div>
 
-      {/* Unified Confirm Modal */}
+      {/* Unified Action Confirm Modal */}
       <ConfirmModal
         isOpen={confirmConfig.isOpen}
-        onClose={() => setConfirmConfig((prev) => ({ ...prev, isOpen: false }))}
-        onConfirm={confirmConfig.onConfirm}
         title={confirmConfig.title}
         message={confirmConfig.message}
         isDanger={confirmConfig.isDanger}
+        onConfirm={confirmConfig.onConfirm}
+        onClose={() => setConfirmConfig((prev) => ({ ...prev, isOpen: false }))}
       />
     </aside>
   );

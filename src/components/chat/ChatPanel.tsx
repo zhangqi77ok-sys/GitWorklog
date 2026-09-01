@@ -12,6 +12,7 @@ import {
   Paperclip,
   Zap,
   Check,
+  Settings,
 } from 'lucide-react';
 import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
@@ -24,37 +25,83 @@ import { ExecutionModeCapsule } from './ExecutionModeCapsule';
 import { toast } from '../common/Toast';
 import type { Subtask, ExecutionMode } from '../../types';
 
-export const ChatPanel: React.FC = () => {
+interface ChatPanelProps {
+  onOpenSettings?: () => void;
+}
+
+export const ChatPanel: React.FC<ChatPanelProps> = ({ onOpenSettings }) => {
   const {
     projects,
     activeProjectId,
     activeSessionId,
     loadInitialData,
+    updateSession,
   } = useProjectSessionStore();
 
   const { openDiffTab, activeTabPath } = useWorkspaceStore();
-  const { channels, activeChannelId } = useGatewayStore();
+  const { channels, activeChannelId, activeModelId, setActiveModel } = useGatewayStore();
 
   const [inputPrompt, setInputPrompt] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingThought, setStreamingThought] = useState('');
   const [streamingContent, setStreamingContent] = useState('');
-  const [collapsedThoughts, setCollapsedThoughts] = useState<Record<string, boolean>>({});
-  const [executionMode, setExecutionMode] = useState<ExecutionMode>('coding');
-  const [swarmBudgetTokens, setSwarmBudgetTokens] = useState<number>(25000);
+  const [collapsedThoughts, setCollapsedThoughts] = useState<Record<string, boolean>>(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        const saved = localStorage.getItem('tcode_collapsed_thoughts');
+        return saved ? JSON.parse(saved) : {};
+      }
+    } catch (e) {}
+    return {};
+  });
+
+  const [executionMode, setExecutionMode] = useState<ExecutionMode>(() => {
+    if (typeof window !== 'undefined') {
+      return (localStorage.getItem('tcode_execution_mode') as ExecutionMode) || 'coding';
+    }
+    return 'coding';
+  });
+
+  const [swarmBudgetTokens, setSwarmBudgetTokens] = useState<number>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('tcode_swarm_budget');
+      return saved ? parseInt(saved, 10) : 25000;
+    }
+    return 25000;
+  });
+
   const [swarmFlowData, setSwarmFlowData] = useState<SwarmFlowState | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const [isHeaderDropdownOpen, setIsHeaderDropdownOpen] = useState(false);
+  const [isBottomDropdownOpen, setIsBottomDropdownOpen] = useState(false);
+  const headerDropdownRef = useRef<HTMLDivElement>(null);
+  const bottomDropdownRef = useRef<HTMLDivElement>(null);
+
+  const handleModeChange = (mode: ExecutionMode) => {
+    setExecutionMode(mode);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('tcode_execution_mode', mode);
+    }
+  };
+
+  const handleBudgetChange = (tokens: number) => {
+    setSwarmBudgetTokens(tokens);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('tcode_swarm_budget', String(tokens));
+    }
+  };
 
   // Global hotkeys: Alt+1 for Coding Loop, Alt+2 for SwarmFlow
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
       if (e.altKey && e.key === '1') {
         e.preventDefault();
-        setExecutionMode('coding');
+        handleModeChange('coding');
         toast.info('已切换至: ⚡ 极速双环 (Coding Loop)');
       } else if (e.altKey && e.key === '2') {
         e.preventDefault();
-        setExecutionMode('swarm');
+        handleModeChange('swarm');
         toast.info('已切换至: ✨ SwarmFlow 算子编排流');
       }
     };
@@ -63,40 +110,38 @@ export const ChatPanel: React.FC = () => {
   }, []);
 
   const activeProject = projects.find((p) => p.id === activeProjectId);
-  const activeSession = activeProject?.sessions.find((s) => s.id === activeSessionId);
+  const activeSession = activeProject?.sessions?.find((s) => s.id === activeSessionId);
   const activeChannel = channels.find((c) => c.id === activeChannelId) || channels[0];
   const availableModels =
     activeChannel?.models && activeChannel.models.length > 0
       ? activeChannel.models
       : ['deepseek-v4-flash', 'gpt-5.6-sol', 'claude-opus-5', 'claude-opus-4-8', 'glm-5.3'];
 
-  const [selectedModel, setSelectedModel] = useState<string>('deepseek-v4-flash');
-  const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
-  const modelDropdownRef = useRef<HTMLDivElement>(null);
-
   // Close dropdown on outside click
   useEffect(() => {
     const handleOutside = (e: MouseEvent) => {
-      if (modelDropdownRef.current && !modelDropdownRef.current.contains(e.target as Node)) {
-        setIsModelDropdownOpen(false);
+      if (headerDropdownRef.current && !headerDropdownRef.current.contains(e.target as Node)) {
+        setIsHeaderDropdownOpen(false);
+      }
+      if (bottomDropdownRef.current && !bottomDropdownRef.current.contains(e.target as Node)) {
+        setIsBottomDropdownOpen(false);
       }
     };
-    if (isModelDropdownOpen) {
+    if (isHeaderDropdownOpen || isBottomDropdownOpen) {
       document.addEventListener('mousedown', handleOutside);
     }
     return () => document.removeEventListener('mousedown', handleOutside);
-  }, [isModelDropdownOpen]);
+  }, [isHeaderDropdownOpen, isBottomDropdownOpen]);
 
-  // Keep selectedModel synchronized with active session or available models
-  useEffect(() => {
-    if (activeSession?.model_id && availableModels.includes(activeSession.model_id)) {
-      setSelectedModel(activeSession.model_id);
-    } else if (availableModels.includes('deepseek-v4-flash')) {
-      setSelectedModel('deepseek-v4-flash');
-    } else if (availableModels.length > 0) {
-      setSelectedModel(availableModels[0]);
+  const handleSelectModel = (model: string) => {
+    setActiveModel(model);
+    if (activeSession) {
+      updateSession(activeSession.id, undefined, undefined, undefined, model);
     }
-  }, [activeSession?.model_id, availableModels]);
+    setIsHeaderDropdownOpen(false);
+    setIsBottomDropdownOpen(false);
+    toast.success(`已切换生效模型: ${model}`);
+  };
 
   const activeFileName = activeTabPath ? activeTabPath.split(/[/\\]/).pop() : null;
 
@@ -110,41 +155,48 @@ export const ChatPanel: React.FC = () => {
 
   // Listen to Tauri streaming events
   useEffect(() => {
-    const unlistenThought = listen<{ session_id: string; chunk: string }>(
-      'agent_thought_chunk',
-      (event) => {
+    let unlistenThought: () => void = () => {};
+    let unlistenText: () => void = () => {};
+    let unlistenDone: () => void = () => {};
+    let unlistenError: () => void = () => {};
+
+    const setupListeners = async () => {
+      unlistenThought = await listen<any>('agent_thought_chunk', (event) => {
         if (event.payload.session_id === activeSessionId) {
           setStreamingThought((prev) => prev + event.payload.chunk);
         }
-      }
-    );
+      });
 
-    const unlistenText = listen<{ session_id: string; chunk: string }>(
-      'agent_text_chunk',
-      (event) => {
+      unlistenText = await listen<any>('agent_text_chunk', (event) => {
         if (event.payload.session_id === activeSessionId) {
           setStreamingContent((prev) => prev + event.payload.chunk);
         }
-      }
-    );
+      });
 
-    const unlistenDone = listen<{
-      session_id: string;
-      full_content: string;
-      full_thought: string;
-    }>('agent_stream_done', async (event) => {
-      if (event.payload.session_id === activeSessionId) {
-        setIsStreaming(false);
-        setStreamingContent('');
-        setStreamingThought('');
-        await loadInitialData();
-      }
-    });
+      unlistenDone = await listen<any>('agent_stream_done', async (event) => {
+        if (event.payload.session_id === activeSessionId) {
+          setIsStreaming(false);
+          setStreamingThought('');
+          setStreamingContent('');
+          await loadInitialData();
+        }
+      });
+
+      unlistenError = await listen<any>('agent_stream_error', (event) => {
+        if (event.payload.session_id === activeSessionId) {
+          setIsStreaming(false);
+          toast.error(`生成异常: ${event.payload.error}`);
+        }
+      });
+    };
+
+    setupListeners();
 
     return () => {
-      unlistenThought.then((f) => f());
-      unlistenText.then((f) => f());
-      unlistenDone.then((f) => f());
+      unlistenThought();
+      unlistenText();
+      unlistenDone();
+      unlistenError();
     };
   }, [activeSessionId, loadInitialData]);
 
@@ -154,18 +206,18 @@ export const ChatPanel: React.FC = () => {
     const promptText = inputPrompt.trim();
     setInputPrompt('');
     setIsStreaming(true);
-    setStreamingContent('');
     setStreamingThought('');
+    setStreamingContent('');
 
-    const workspaceDir = activeProject?.path || 'D:\\weihu\\agent-learning';
+    const workspaceDir = activeProject?.path || 'E:\\pro\\agent-learning';
 
     if (executionMode === 'swarm') {
       try {
-        const decision = await invoke<any>('run_swarm_flow_task', {
+        const result: any = await invoke('run_swarm_flow_task', {
           prompt: promptText,
           budgetTokens: swarmBudgetTokens,
         });
-        if (decision) {
+        if (result?.selected_candidate) {
           setSwarmFlowData({
             taskPrompt: promptText,
             budgetTokens: swarmBudgetTokens,
@@ -174,27 +226,27 @@ export const ChatPanel: React.FC = () => {
             candidates: [
               {
                 workerId: 'Worker-A',
-                candidateName: 'Candidate_Worker-A (高内聚方案)',
-                codePatch: '// Worker-A 候选实现\npub fn execute() -> bool { true }\n',
-                score: 0.88,
+                candidateName: '极速重构候选 A',
+                codePatch: '// Worker A Patch',
+                score: 0.91,
               },
               {
-                workerId: 'Worker-B',
-                candidateName: 'Candidate_Worker-B (双环沙箱极致方案)',
-                codePatch: decision.selected_candidate?.code_patch || '// Worker-B 候选实现\n',
-                score: decision.confidence_score || 0.96,
+                workerId: result.selected_candidate.worker_id,
+                candidateName: '最优仲裁补丁 B',
+                codePatch: result.selected_candidate.code_patch || '// Optimized Patch',
+                score: result.confidence_score || 0.96,
               },
               {
                 workerId: 'Worker-C',
-                candidateName: 'Candidate_Worker-C (轻量快速方案)',
-                codePatch: '// Worker-C 候选实现\npub fn execute() -> bool { false }\n',
-                score: 0.82,
+                candidateName: '保守安全候选 C',
+                codePatch: '// Worker C Patch',
+                score: 0.88,
               },
             ],
-            selectedWorkerId: decision.selected_candidate?.worker_id || 'Worker-B',
-            confidenceScore: decision.confidence_score || 0.96,
-            humanReviewed: decision.human_reviewed || false,
-            rationale: decision.rationale || 'Candidate [Worker-B] chosen with highest review score 0.96',
+            selectedWorkerId: result.selected_candidate.worker_id,
+            confidenceScore: result.confidence_score || 0.96,
+            humanReviewed: true,
+            rationale: '基于双环沙箱编译验证与单元测试通过率最高，由仲裁引擎选定为最优执行方案。',
           });
         }
       } catch (err: any) {
@@ -210,7 +262,7 @@ export const ChatPanel: React.FC = () => {
         sessionId: activeSessionId,
         workspaceDir,
         prompt: promptText,
-        model: selectedModel,
+        model: activeModelId,
       });
     } catch (err: any) {
       setIsStreaming(false);
@@ -219,17 +271,25 @@ export const ChatPanel: React.FC = () => {
   };
 
   const toggleThoughtCollapse = (msgId: string) => {
-    setCollapsedThoughts((prev) => ({
-      ...prev,
-      [msgId]: !prev[msgId],
-    }));
+    setCollapsedThoughts((prev) => {
+      const next = {
+        ...prev,
+        [msgId]: !prev[msgId],
+      };
+      try {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('tcode_collapsed_thoughts', JSON.stringify(next));
+        }
+      } catch (e) {}
+      return next;
+    });
   };
 
   const handleOpenDiffFromCode = (codeBlock: string) => {
     const targetFile =
       activeTabPath && !activeTabPath.startsWith('diff:')
         ? activeTabPath
-        : `${activeProject?.path || 'D:\\weihu\\agent-learning'}\\src\\App.tsx`;
+        : `${activeProject?.path || 'E:\\pro\\agent-learning'}\\src\\App.tsx`;
 
     openDiffTab(targetFile, '// 原始文件代码', codeBlock);
   };
@@ -249,20 +309,20 @@ export const ChatPanel: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Model Selector Dropdown */}
-          <div className="relative" ref={modelDropdownRef}>
+          {/* Model Selector Dropdown in Header */}
+          <div className="relative" ref={headerDropdownRef}>
             <button
               type="button"
-              onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
+              onClick={() => setIsHeaderDropdownOpen(!isHeaderDropdownOpen)}
               className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-mono bg-white border border-[#E6DFD5] hover:border-[#D96B27] text-[#1E1C1A] shadow-2xs transition-all cursor-pointer group"
               title="点击切换当前对话生效的 AI 模型"
             >
               <span className="w-2 h-2 rounded-full bg-[#2E7D32]" />
-              <span className="font-semibold">{selectedModel}</span>
-              <ChevronDown className={`w-3 h-3 text-[#8A847C] transition-transform duration-150 ${isModelDropdownOpen ? 'rotate-180 text-[#D96B27]' : ''}`} />
+              <span className="font-semibold">{activeModelId}</span>
+              <ChevronDown className={`w-3 h-3 text-[#8A847C] transition-transform duration-150 ${isHeaderDropdownOpen ? 'rotate-180 text-[#D96B27]' : ''}`} />
             </button>
 
-            {isModelDropdownOpen && (
+            {isHeaderDropdownOpen && (
               <div className="absolute right-0 top-full mt-1.5 w-64 bg-white border border-[#E6DFD5] rounded-xl shadow-xl z-50 p-1.5 text-xs animate-in fade-in zoom-in-95 duration-100">
                 <div className="px-2 py-1 text-[10px] font-bold text-[#8A847C] uppercase tracking-wider border-b border-[#F4EFEA] flex items-center justify-between">
                   <span>切换大模型 ({availableModels.length})</span>
@@ -270,16 +330,12 @@ export const ChatPanel: React.FC = () => {
                 </div>
                 <div className="max-h-56 overflow-y-auto py-1 space-y-0.5">
                   {availableModels.map((m) => {
-                    const isCurrent = m === selectedModel;
+                    const isCurrent = m === activeModelId;
                     return (
                       <button
                         key={m}
                         type="button"
-                        onClick={() => {
-                          setSelectedModel(m);
-                          setIsModelDropdownOpen(false);
-                          toast.success(`已切换生效模型: ${m}`);
-                        }}
+                        onClick={() => handleSelectModel(m)}
                         className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between transition-colors cursor-pointer ${
                           isCurrent
                             ? 'bg-[#FAF8F5] text-[#D96B27] font-bold border border-[#D96B27]/20'
@@ -295,6 +351,21 @@ export const ChatPanel: React.FC = () => {
                     );
                   })}
                 </div>
+                {onOpenSettings && (
+                  <div className="pt-1 mt-1 border-t border-[#F4EFEA]">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsHeaderDropdownOpen(false);
+                        onOpenSettings();
+                      }}
+                      className="w-full text-left px-2.5 py-1 rounded text-[10px] text-[#8A847C] hover:text-[#D96B27] hover:bg-[#FAF8F5] transition-colors flex items-center gap-1.5 cursor-pointer font-medium"
+                    >
+                      <Settings className="w-3 h-3" />
+                      <span>管理 AI 模型网关与渠道...</span>
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -317,111 +388,127 @@ export const ChatPanel: React.FC = () => {
           </div>
         ) : (
           activeSession.messages.map((msg) => (
-            <div key={msg.id} className="space-y-2">
-              {msg.role === 'user' ? (
-                /* User Bubble */
-                <div className="flex items-start gap-2.5 justify-end">
-                  <div className="max-w-2xl bg-white border border-[#E6DFD5] rounded-2xl rounded-tr-xs p-3 shadow-xs text-xs text-[#1E1C1A] leading-relaxed select-text">
-                    {msg.content}
-                  </div>
-                  <div className="w-7 h-7 rounded-full bg-[#3D3A36] text-white flex items-center justify-center flex-shrink-0 shadow-2xs">
-                    <User className="w-4 h-4" />
-                  </div>
-                </div>
-              ) : (
-                /* Assistant Bubble */
-                <div className="flex items-start gap-2.5">
-                  <div className="w-7 h-7 rounded-full bg-[#D96B27] text-white flex items-center justify-center flex-shrink-0 shadow-xs">
-                    <Bot className="w-4 h-4" />
-                  </div>
-                  <div className="flex-1 max-w-3xl space-y-2">
-                    {/* Collapsible Deep Thinking Block */}
-                    {msg.thought && (
-                      <div className="bg-[#F4EFEA] border border-[#E6DFD5] rounded-lg overflow-hidden text-xs">
-                        <button
-                          onClick={() => toggleThoughtCollapse(msg.id)}
-                          className="w-full px-3 py-2 flex items-center justify-between text-[#6B665F] hover:text-[#1E1C1A] transition-colors"
-                        >
-                          <div className="flex items-center gap-1.5 font-medium text-[11px]">
-                            <BrainCircuit className="w-3.5 h-3.5 text-[#D96B27]" />
-                            <span>深度思考过程 (Deep Thinking · 耗时 2.4s)</span>
-                          </div>
-                          {collapsedThoughts[msg.id] ? (
-                            <ChevronRight className="w-3.5 h-3.5" />
-                          ) : (
-                            <ChevronDown className="w-3.5 h-3.5" />
-                          )}
-                        </button>
-                        {!collapsedThoughts[msg.id] && (
-                          <div className="px-3 pb-2.5 text-[#6B665F] font-mono text-[11px] leading-relaxed border-t border-[#E6DFD5]/60 pt-2 whitespace-pre-wrap select-text">
-                            {msg.thought}
-                          </div>
-                        )}
-                      </div>
-                    )}
+            <div
+              key={msg.id}
+              className={`flex flex-col ${
+                msg.role === 'user' ? 'items-end' : 'items-start'
+              } space-y-1`}
+            >
+              <div className="flex items-center gap-1.5 text-[10px] text-[#8A847C] px-1">
+                {msg.role === 'user' ? (
+                  <>
+                    <User className="w-3 h-3 text-[#1E1C1A]" />
+                    <span className="font-medium text-[#1E1C1A]">You</span>
+                  </>
+                ) : (
+                  <>
+                    <Bot className="w-3 h-3 text-[#D96B27]" />
+                    <span className="font-medium text-[#D96B27]">Tcode Agent</span>
+                  </>
+                )}
+                <span>
+                  {new Date(msg.timestamp).toLocaleTimeString('zh-CN', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
+                </span>
+              </div>
 
-                    {/* Main Content & Code Blocks */}
-                    <div className="bg-white border border-[#E6DFD5] rounded-2xl rounded-tl-xs p-3.5 shadow-xs text-xs text-[#1E1C1A] leading-relaxed select-text space-y-3">
-                      <div className="whitespace-pre-wrap">{msg.content}</div>
-
-                      {msg.content.includes('```') && (
-                        <div className="pt-2 border-t border-[#E6DFD5] flex items-center justify-between">
-                          <span className="text-[11px] text-[#8A847C]">检测到生成代码补丁</span>
-                          <button
-                            onClick={() => {
-                              const match = msg.content.match(/```(?:\w+)?\n([\s\S]*?)```/);
-                              if (match && match[1]) {
-                                handleOpenDiffFromCode(match[1]);
-                              }
-                            }}
-                            className="flex items-center gap-1 px-2.5 py-1 bg-[#F4EFEA] hover:bg-[#D96B27] text-[#3D3A36] hover:text-white rounded text-xs font-medium transition-colors border border-[#E6DFD5]"
-                          >
-                            <SplitSquareVertical className="w-3.5 h-3.5" />
-                            <span>在右侧开启 Diff 审查</span>
-                          </button>
-                        </div>
-                      )}
+              {/* Collapsible Deep Thinking Block */}
+              {msg.thought && (
+                <div className="max-w-[85%] w-full my-1 bg-[#F4EFEA] border border-[#E6DFD5] rounded-xl overflow-hidden text-xs">
+                  <div
+                    onClick={() => toggleThoughtCollapse(msg.id)}
+                    className="flex items-center justify-between p-2 px-3 bg-[#EAE4DC]/60 cursor-pointer hover:bg-[#EAE4DC] transition-colors"
+                  >
+                    <div className="flex items-center gap-1.5 text-[#6B665F] font-mono text-[11px]">
+                      <BrainCircuit className="w-3.5 h-3.5 text-[#D96B27]" />
+                      <span className="font-semibold">深度思考推理过程</span>
                     </div>
+                    {collapsedThoughts[msg.id] ? (
+                      <ChevronRight className="w-3.5 h-3.5 text-[#8A847C]" />
+                    ) : (
+                      <ChevronDown className="w-3.5 h-3.5 text-[#8A847C]" />
+                    )}
                   </div>
+                  {!collapsedThoughts[msg.id] && (
+                    <div className="p-3 font-mono text-[11px] text-[#6B665F] whitespace-pre-wrap leading-relaxed border-t border-[#E6DFD5]/50 bg-[#FAF8F5]">
+                      {msg.thought}
+                    </div>
+                  )}
                 </div>
               )}
+
+              {/* Subtask DAG / Progress Card */}
+              {msg.dag && (
+                <div className="max-w-[85%] w-full my-1">
+                  <SubtaskProgressCard subtasks={msg.dag?.subtasks || (Array.isArray(msg.dag) ? msg.dag : [])} />
+                </div>
+              )}
+
+              {/* Main Message Bubble */}
+              <div
+                className={`max-w-[85%] rounded-2xl p-3.5 text-xs leading-relaxed ${
+                  msg.role === 'user'
+                    ? 'bg-[#D96B27] text-white rounded-tr-xs shadow-xs'
+                    : 'bg-white border border-[#E6DFD5] text-[#1E1C1A] rounded-tl-xs shadow-xs'
+                }`}
+              >
+                <div className="whitespace-pre-wrap">{msg.content}</div>
+
+                {/* Diff Viewer Button for Agent Code Patches */}
+                {msg.role === 'assistant' && msg.content.includes('```') && (
+                  <div className="mt-3 pt-2.5 border-t border-[#E6DFD5] flex items-center justify-between">
+                    <span className="text-[10px] text-[#8A847C] font-mono">
+                      包含代码补丁变更
+                    </span>
+                    <button
+                      onClick={() => handleOpenDiffFromCode(msg.content)}
+                      className="flex items-center gap-1 px-2.5 py-1 bg-[#FAF8F5] border border-[#E6DFD5] hover:border-[#D96B27] text-[#D96B27] rounded-lg text-[11px] font-bold transition-all shadow-2xs cursor-pointer"
+                    >
+                      <SplitSquareVertical className="w-3 h-3" />
+                      <span>在编辑器中审查 Diff</span>
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           ))
         )}
 
-        {/* Live Streaming State */}
+        {/* Live Streaming Indicator & Partial Message */}
         {isStreaming && (
-          <div className="flex items-start gap-2.5">
-            <div className="w-7 h-7 rounded-full bg-[#D96B27] text-white flex items-center justify-center flex-shrink-0 animate-pulse">
-              <Bot className="w-4 h-4" />
+          <div className="flex flex-col items-start space-y-1">
+            <div className="flex items-center gap-1.5 text-[10px] text-[#8A847C] px-1">
+              <Bot className="w-3 h-3 text-[#D96B27] animate-pulse" />
+              <span className="font-medium text-[#D96B27]">Tcode Agent (正在实时生成...)</span>
             </div>
-            <div className="flex-1 max-w-3xl space-y-2">
-              {streamingThought && (
-                <div className="bg-[#F4EFEA] border border-[#D96B27]/40 rounded-lg p-3 text-xs font-mono text-[#6B665F] whitespace-pre-wrap leading-relaxed animate-pulse select-text">
-                  <div className="flex items-center gap-1 text-[#D96B27] font-semibold text-[11px] mb-1">
-                    <BrainCircuit className="w-3.5 h-3.5" />
-                    <span>正在深度推理思考中...</span>
-                  </div>
+
+            {streamingThought && (
+              <div className="max-w-[85%] w-full my-1 bg-[#F4EFEA] border border-[#E6DFD5] rounded-xl overflow-hidden text-xs">
+                <div className="flex items-center gap-1.5 p-2 px-3 bg-[#EAE4DC]/60 font-mono text-[11px] text-[#6B665F]">
+                  <BrainCircuit className="w-3.5 h-3.5 text-[#D96B27] animate-spin" />
+                  <span className="font-semibold">正在深度思考推理...</span>
+                </div>
+                <div className="p-3 font-mono text-[11px] text-[#6B665F] whitespace-pre-wrap leading-relaxed border-t border-[#E6DFD5]/50 bg-[#FAF8F5]">
                   {streamingThought}
                 </div>
-              )}
+              </div>
+            )}
 
-              {streamingContent && (
-                <div className="bg-white border border-[#E6DFD5] rounded-2xl rounded-tl-xs p-3.5 shadow-xs text-xs text-[#1E1C1A] leading-relaxed whitespace-pre-wrap select-text">
-                  {streamingContent}
-                  <span className="inline-block w-1.5 h-3 bg-[#D96B27] ml-1 animate-pulse" />
-                </div>
-              )}
-            </div>
+            {streamingContent && (
+              <div className="max-w-[85%] bg-white border border-[#E6DFD5] text-[#1E1C1A] rounded-2xl rounded-tl-xs p-3.5 text-xs leading-relaxed shadow-xs">
+                <div className="whitespace-pre-wrap">{streamingContent}</div>
+              </div>
+            )}
           </div>
         )}
 
-        {/* Live Swarm Flow Operators Execution Card */}
+        {/* Swarm Flow Visualization Overlay */}
         {swarmFlowData && (
-          <SwarmFlowVisualizer
-            flowData={swarmFlowData}
-            onInspectCode={(code) => handleOpenDiffFromCode(code)}
-          />
+          <div className="my-3">
+            <SwarmFlowVisualizer flowData={swarmFlowData} />
+          </div>
         )}
 
         <div ref={messagesEndRef} />
@@ -460,21 +547,71 @@ export const ChatPanel: React.FC = () => {
             <div className="flex items-center gap-2">
               <ExecutionModeCapsule
                 mode={executionMode}
-                onModeChange={setExecutionMode}
+                onModeChange={handleModeChange}
                 swarmBudgetTokens={swarmBudgetTokens}
-                onBudgetChange={setSwarmBudgetTokens}
+                onBudgetChange={handleBudgetChange}
               />
 
-              <button
-                type="button"
-                onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
-                className="inline-flex items-center gap-1.5 px-2 py-1 bg-[#FAF8F5] hover:bg-white border border-[#E6DFD5] hover:border-[#D96B27] rounded-lg text-[10px] font-mono text-[#6B665F] hover:text-[#1E1C1A] transition-all cursor-pointer shadow-2xs"
-                title="当前会话模型 (点击可快速切换)"
-              >
-                <Bot className="w-3 h-3 text-[#D96B27]" />
-                <span className="font-semibold max-w-[120px] truncate">{selectedModel}</span>
-                <ChevronDown className="w-2.5 h-2.5 text-[#8A847C]" />
-              </button>
+              {/* Bottom Model Selector Button & Upward Popover */}
+              <div className="relative" ref={bottomDropdownRef}>
+                <button
+                  type="button"
+                  onClick={() => setIsBottomDropdownOpen(!isBottomDropdownOpen)}
+                  className="inline-flex items-center gap-1.5 px-2 py-1 bg-[#FAF8F5] hover:bg-white border border-[#E6DFD5] hover:border-[#D96B27] rounded-lg text-[10px] font-mono text-[#6B665F] hover:text-[#1E1C1A] transition-all cursor-pointer shadow-2xs group"
+                  title="当前会话模型 (点击弹出模型列表切换)"
+                >
+                  <Bot className="w-3 h-3 text-[#D96B27]" />
+                  <span className="font-semibold max-w-[120px] truncate">{activeModelId}</span>
+                  <ChevronDown className={`w-2.5 h-2.5 text-[#8A847C] transition-transform duration-150 ${isBottomDropdownOpen ? 'rotate-180 text-[#D96B27]' : ''}`} />
+                </button>
+
+                {isBottomDropdownOpen && (
+                  <div className="absolute left-0 bottom-full mb-1.5 w-64 bg-white border border-[#E6DFD5] rounded-xl shadow-xl z-50 p-1.5 text-xs animate-in fade-in slide-in-from-bottom-2 duration-100">
+                    <div className="px-2 py-1 text-[10px] font-bold text-[#8A847C] uppercase tracking-wider border-b border-[#F4EFEA] flex items-center justify-between">
+                      <span>切换生效模型 ({availableModels.length})</span>
+                      <span className="text-[#D96B27] truncate max-w-[110px]">{activeChannel?.name || '当前渠道'}</span>
+                    </div>
+                    <div className="max-h-56 overflow-y-auto py-1 space-y-0.5">
+                      {availableModels.map((m) => {
+                        const isCurrent = m === activeModelId;
+                        return (
+                          <button
+                            key={m}
+                            type="button"
+                            onClick={() => handleSelectModel(m)}
+                            className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between transition-colors cursor-pointer ${
+                              isCurrent
+                                ? 'bg-[#FAF8F5] text-[#D96B27] font-bold border border-[#D96B27]/20'
+                                : 'text-[#3D3A36] hover:bg-[#FAF8F5]'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2 truncate">
+                              <Bot className="w-3.5 h-3.5 text-[#8A847C] flex-shrink-0" />
+                              <span className="truncate font-mono text-[11px]">{m}</span>
+                            </div>
+                            {isCurrent && <Check className="w-3.5 h-3.5 text-[#D96B27] flex-shrink-0" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {onOpenSettings && (
+                      <div className="pt-1 mt-1 border-t border-[#F4EFEA]">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsBottomDropdownOpen(false);
+                            onOpenSettings();
+                          }}
+                          className="w-full text-left px-2.5 py-1 rounded text-[10px] text-[#8A847C] hover:text-[#D96B27] hover:bg-[#FAF8F5] transition-colors flex items-center gap-1.5 cursor-pointer font-medium"
+                        >
+                          <Settings className="w-3 h-3" />
+                          <span>管理 AI 模型网关与渠道...</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
 
             <button

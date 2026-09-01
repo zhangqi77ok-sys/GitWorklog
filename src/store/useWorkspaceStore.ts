@@ -37,6 +37,38 @@ interface WorkspaceState {
   rejectDiffPatch: (path: string) => void;
 }
 
+const STORAGE_OPEN_TABS_KEY = 'tcode_open_tabs_v2';
+const STORAGE_ACTIVE_TAB_KEY = 'tcode_active_tab_path_v2';
+
+function loadSavedTabs(): { openTabs: EditorTab[]; activeTabPath: string | null } {
+  try {
+    if (typeof window !== 'undefined') {
+      const savedTabs = localStorage.getItem(STORAGE_OPEN_TABS_KEY);
+      const savedActive = localStorage.getItem(STORAGE_ACTIVE_TAB_KEY);
+      if (savedTabs) {
+        return {
+          openTabs: JSON.parse(savedTabs) || [],
+          activeTabPath: savedActive || null,
+        };
+      }
+    }
+  } catch (e) {}
+  return { openTabs: [], activeTabPath: null };
+}
+
+function persistTabs(openTabs: EditorTab[], activeTabPath: string | null) {
+  try {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(STORAGE_OPEN_TABS_KEY, JSON.stringify(openTabs));
+      if (activeTabPath) {
+        localStorage.setItem(STORAGE_ACTIVE_TAB_KEY, activeTabPath);
+      } else {
+        localStorage.removeItem(STORAGE_ACTIVE_TAB_KEY);
+      }
+    }
+  } catch (e) {}
+}
+
 function detectLanguage(path: string): string {
   const ext = path.split('.').pop()?.toLowerCase();
   switch (ext) {
@@ -71,10 +103,12 @@ function detectLanguage(path: string): string {
   }
 }
 
+const initialSaved = loadSavedTabs();
+
 export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   currentRoot: null,
-  openTabs: [],
-  activeTabPath: null,
+  openTabs: initialSaved.openTabs,
+  activeTabPath: initialSaved.activeTabPath,
   isLoadingTree: false,
   error: null,
 
@@ -91,9 +125,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
 
   openFile: async (path: string) => {
     const { openTabs } = get();
-    const existing = openTabs.find(t => t.path === path);
+    const existing = openTabs.find((t) => t.path === path);
     if (existing) {
       set({ activeTabPath: path });
+      persistTabs(openTabs, path);
       return;
     }
 
@@ -105,15 +140,17 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       const newTab: EditorTab = {
         path,
         name,
-        content,
+        content: content ?? '',
         language,
         isDirty: false,
       };
 
+      const newOpenTabs = [...openTabs, newTab];
       set({
-        openTabs: [...openTabs, newTab],
+        openTabs: newOpenTabs,
         activeTabPath: path,
       });
+      persistTabs(newOpenTabs, path);
     } catch (err: any) {
       set({ error: String(err) });
     }
@@ -121,35 +158,36 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
 
   closeTab: (path: string) => {
     const { openTabs, activeTabPath } = get();
-    const filtered = openTabs.filter(t => t.path !== path);
+    const filtered = openTabs.filter((t) => t.path !== path);
     let nextActive = activeTabPath;
     if (activeTabPath === path) {
       nextActive = filtered.length > 0 ? filtered[filtered.length - 1].path : null;
     }
     set({ openTabs: filtered, activeTabPath: nextActive });
+    persistTabs(filtered, nextActive);
   },
 
   updateTabContent: (path: string, content: string) => {
-    const { openTabs } = get();
-    set({
-      openTabs: openTabs.map(t =>
-        t.path === path ? { ...t, content, isDirty: true } : t
-      ),
-    });
+    const { openTabs, activeTabPath } = get();
+    const updated = openTabs.map((t) =>
+      t.path === path ? { ...t, content, isDirty: true } : t
+    );
+    set({ openTabs: updated });
+    persistTabs(updated, activeTabPath);
   },
 
   saveActiveFile: async () => {
     const { openTabs, activeTabPath, currentRoot } = get();
-    const tab = openTabs.find(t => t.path === activeTabPath);
+    const tab = openTabs.find((t) => t.path === activeTabPath);
     if (!tab) return;
 
     try {
       await invoke('save_file_content', { path: tab.path, content: tab.content });
-      set({
-        openTabs: openTabs.map(t =>
-          t.path === tab.path ? { ...t, isDirty: false } : t
-        ),
-      });
+      const updated = openTabs.map((t) =>
+        t.path === tab.path ? { ...t, isDirty: false } : t
+      );
+      set({ openTabs: updated });
+      persistTabs(updated, activeTabPath);
       if (currentRoot) {
         get().loadTree(currentRoot.path);
       }
@@ -174,15 +212,17 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       proposedContent,
     };
 
+    const newTabs = [...openTabs.filter((t) => t.path !== diffTab.path), diffTab];
     set({
-      openTabs: [...openTabs.filter(t => t.path !== diffTab.path), diffTab],
+      openTabs: newTabs,
       activeTabPath: diffTab.path,
     });
+    persistTabs(newTabs, diffTab.path);
   },
 
   acceptDiffPatch: async (diffPath: string) => {
     const { openTabs } = get();
-    const diffTab = openTabs.find(t => t.path === diffPath);
+    const diffTab = openTabs.find((t) => t.path === diffPath);
     if (!diffTab || !diffTab.proposedContent) return;
 
     const realPath = diffPath.replace(/^diff:/, '');

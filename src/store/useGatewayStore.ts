@@ -56,6 +56,7 @@ export interface GatewayConfigDatabase {
 interface GatewayState {
   channels: GatewayChannel[];
   activeChannelId: string | null;
+  activeModelId: string;
   probeResults: Record<string, GatewayHealthResult>;
   isProbing: boolean;
   isLoading: boolean;
@@ -65,13 +66,24 @@ interface GatewayState {
   saveChannel: (channel: GatewayChannel) => Promise<GatewayChannel | null>;
   deleteChannel: (channelId: string) => Promise<void>;
   setActiveChannel: (channelId: string) => Promise<void>;
+  setActiveModel: (modelId: string) => void;
   testChannel: (channel: GatewayChannel) => Promise<GatewayHealthResult | null>;
   pullModels: (baseUrl: string, apiKey?: string) => Promise<string[]>;
+}
+
+const STORAGE_MODEL_KEY = 'tcode_active_model';
+
+function getInitialModel(): string {
+  if (typeof window !== 'undefined') {
+    return localStorage.getItem(STORAGE_MODEL_KEY) || 'deepseek-v4-flash';
+  }
+  return 'deepseek-v4-flash';
 }
 
 export const useGatewayStore = create<GatewayState>((set, get) => ({
   channels: [],
   activeChannelId: null,
+  activeModelId: getInitialModel(),
   probeResults: {},
   isProbing: false,
   isLoading: false,
@@ -81,14 +93,27 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const db = await invoke<GatewayConfigDatabase>('list_gateway_channels');
+      const savedModel = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_MODEL_KEY) : null;
+      const channelsList = db.channels || [];
+      const activeCh = channelsList.find((c) => c.id === db.active_channel_id) || channelsList[0];
+      const modelToUse = savedModel || activeCh?.models?.[0] || 'deepseek-v4-flash';
+
       set({
-        channels: db.channels,
-        activeChannelId: db.active_channel_id,
+        channels: channelsList,
+        activeChannelId: db.active_channel_id || (channelsList[0]?.id ?? null),
+        activeModelId: modelToUse,
         isLoading: false,
       });
     } catch (err: any) {
       set({ error: String(err), isLoading: false });
     }
+  },
+
+  setActiveModel: (modelId: string) => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(STORAGE_MODEL_KEY, modelId);
+    }
+    set({ activeModelId: modelId });
   },
 
   saveChannel: async (channel: GatewayChannel) => {
@@ -125,7 +150,18 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
   setActiveChannel: async (channelId: string) => {
     try {
       await invoke('set_active_gateway_channel', { channelId });
-      set({ activeChannelId: channelId });
+      const { channels, activeModelId } = get();
+      const targetCh = channels.find((c) => c.id === channelId);
+      let nextModel = activeModelId;
+      if (targetCh && Array.isArray(targetCh.models) && targetCh.models.length > 0) {
+        if (!targetCh.models.includes(activeModelId)) {
+          nextModel = targetCh.models[0];
+          if (typeof window !== 'undefined') {
+            localStorage.setItem(STORAGE_MODEL_KEY, nextModel);
+          }
+        }
+      }
+      set({ activeChannelId: channelId, activeModelId: nextModel });
     } catch (err: any) {
       set({ error: String(err) });
     }
@@ -135,7 +171,7 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
     set({ isProbing: true });
     try {
       const result = await invoke<GatewayHealthResult>('test_gateway_channel', { channel });
-      set(state => ({
+      set((state) => ({
         probeResults: { ...state.probeResults, [channel.id]: result },
         isProbing: false,
       }));
