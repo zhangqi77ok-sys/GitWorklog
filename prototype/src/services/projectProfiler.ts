@@ -267,26 +267,32 @@ export function analyzeFileTreeHeuristics(files: DirectoryItem[], workspacePath 
     }
   });
 
-  const matchedLanguages: string[] = [];
+  const langScores: Record<string, number> = {};
   const matchedFrameworks: string[] = [];
   let detectedPkgMgr: ProjectProfile['packageManager'] = 'unknown';
   let detectedTestFramework: ProjectProfile['testFramework'] = 'none';
   let detectedTestCommand = '';
 
-  // 1. Evaluate all registered language rules
+  // 1. Evaluate all registered language rules with weighted scoring
   for (const rule of LANGUAGE_RULES) {
     const manifestHit = rule.manifests.some(m => fileNames.has(m) || allPaths.some(p => p.endsWith('/' + m)));
-    const extensionHit = rule.extensions.some(ext => (extCounts[ext] || 0) > 0);
+    const extCount = rule.extensions.reduce((sum, ext) => sum + (extCounts[ext] || 0), 0);
 
-    if (manifestHit || extensionHit) {
-      matchedLanguages.push(rule.name);
-      if (detectedPkgMgr === 'unknown' && rule.packageManager !== 'unknown') {
-        detectedPkgMgr = rule.packageManager;
+    if (manifestHit || extCount > 0) {
+      let score = 0;
+      if (manifestHit) {
+        if (rule.name === 'Java / Kotlin') score += 200;
+        else if (rule.name === 'Rust' || rule.name === 'Go') score += 200;
+        else if (rule.name === 'TypeScript' || rule.name === 'JavaScript') score += 180;
+        else if (rule.name === 'Python' && (fileNames.has('pyproject.toml') || fileNames.has('pipfile'))) score += 180;
+        else score += 100;
       }
-      if (detectedTestFramework === 'none') {
-        detectedTestFramework = rule.testFramework;
-        detectedTestCommand = rule.testCommand;
+      if (extCount > 0) {
+        score += Math.min(60, extCount * 4);
       }
+
+      langScores[rule.name] = score;
+
       if (rule.frameworkDetectors) {
         for (const fd of rule.frameworkDetectors) {
           if (fd.match(fileNames, allPaths)) {
@@ -297,28 +303,57 @@ export function analyzeFileTreeHeuristics(files: DirectoryItem[], workspacePath 
     }
   }
 
-  // Refine package manager locks
-  if (fileNames.has('pnpm-lock.yaml') || allPaths.some(p => p.includes('pnpm-lock.yaml'))) detectedPkgMgr = 'pnpm';
-  else if (fileNames.has('yarn.lock') || allPaths.some(p => p.includes('yarn.lock'))) detectedPkgMgr = 'yarn';
-  else if (fileNames.has('bun.lockb')) detectedPkgMgr = 'npm';
-  else if (fileNames.has('uv.lock') || fileNames.has('pyproject.toml')) {
-    if (detectedPkgMgr === 'unknown') detectedPkgMgr = 'uv';
-  }
-
-  // Refine TS/JS test runner if package.json has vitest vs jest
-  if (matchedLanguages.includes('TypeScript') || matchedLanguages.includes('JavaScript')) {
-    if (allPaths.some(p => p.includes('vitest') || p.includes('.test.ts') || p.includes('.test.tsx'))) {
-      detectedTestFramework = 'vitest';
-      detectedTestCommand = detectedPkgMgr === 'pnpm' ? 'pnpm test' : detectedPkgMgr === 'yarn' ? 'yarn test' : 'npm test';
-    } else if (allPaths.some(p => p.includes('jest.config') || p.includes('.spec.js'))) {
-      detectedTestFramework = 'jest';
-      detectedTestCommand = 'npm test';
+  // Check Spring Boot / MyBatis in Java projects
+  if (fileNames.has('pom.xml') || allPaths.some(p => p.includes('pom.xml'))) {
+    if (allPaths.some(p => p.includes('spring') || p.includes('boot') || p.includes('application'))) {
+      matchedFrameworks.push('Spring Boot');
     }
   }
 
-  // 2. Graceful Fallback (If completely empty / dynamic custom workspace)
-  const isDynamicProject = matchedLanguages.length === 0;
-  const finalLanguages = isDynamicProject ? ['Custom / Multi-Stack'] : Array.from(new Set(matchedLanguages));
+  // Sort languages by score descending
+  const sortedLanguages = Object.keys(langScores).sort((a, b) => langScores[b] - langScores[a]);
+  const primaryLang = sortedLanguages[0] || 'Custom / Multi-Stack';
+
+  // Determine primary package manager and test runner
+  if (primaryLang === 'Java / Kotlin') {
+    detectedPkgMgr = 'unknown';
+    detectedTestFramework = 'custom';
+    detectedTestCommand = fileNames.has('build.gradle') ? './gradlew test' : 'mvn test';
+  } else if (primaryLang === 'Rust') {
+    detectedPkgMgr = 'cargo';
+    detectedTestFramework = 'cargo-test';
+    detectedTestCommand = 'cargo test';
+  } else if (primaryLang === 'Go') {
+    detectedPkgMgr = 'go';
+    detectedTestFramework = 'go-test';
+    detectedTestCommand = 'go test ./...';
+  } else if (primaryLang === 'TypeScript' || primaryLang === 'JavaScript') {
+    if (fileNames.has('pnpm-lock.yaml')) detectedPkgMgr = 'pnpm';
+    else if (fileNames.has('yarn.lock')) detectedPkgMgr = 'yarn';
+    else detectedPkgMgr = 'npm';
+
+    if (allPaths.some(p => p.includes('vitest') || p.includes('.test.ts') || p.includes('.test.tsx'))) {
+      detectedTestFramework = 'vitest';
+      detectedTestCommand = detectedPkgMgr === 'pnpm' ? 'pnpm test' : detectedPkgMgr === 'yarn' ? 'yarn test' : 'npm test';
+    } else {
+      detectedTestFramework = 'jest';
+      detectedTestCommand = 'npm test';
+    }
+  } else if (primaryLang === 'Python') {
+    detectedPkgMgr = fileNames.has('uv.lock') ? 'uv' : 'unknown';
+    detectedTestFramework = 'pytest';
+    detectedTestCommand = 'pytest';
+  } else {
+    const matchedRule = LANGUAGE_RULES.find(r => r.name === primaryLang);
+    if (matchedRule) {
+      if (detectedPkgMgr === 'unknown') detectedPkgMgr = matchedRule.packageManager;
+      if (detectedTestFramework === 'none') detectedTestFramework = matchedRule.testFramework;
+      if (!detectedTestCommand) detectedTestCommand = matchedRule.testCommand;
+    }
+  }
+
+  // 2. Fallback
+  const finalLanguages = sortedLanguages.length > 0 ? sortedLanguages : ['Custom / Multi-Stack'];
   const finalFrameworks = Array.from(new Set(matchedFrameworks));
 
   return {

@@ -161,6 +161,23 @@ describe('Autonomous Project and Environment Profiler', () => {
     expect(badge).toContain('npm test');
   });
 
+  it('correctly prioritizes Java Spring Boot project even when auxiliary python scripts exist', () => {
+    const mockFiles: DirectoryItem[] = [
+      { id: '1', name: 'pom.xml', path: 'pom.xml', type: 'file' },
+      { id: '2', name: 'Application.java', path: 'src/main/java/com/geek/Application.java', type: 'file' },
+      { id: '3', name: 'UserController.java', path: 'src/main/java/com/geek/UserController.java', type: 'file' },
+      { id: '4', name: 'build_installer.py', path: 'build_installer.py', type: 'file' },
+      { id: '5', name: 'test_helper.py', path: 'scripts/test_helper.py', type: 'file' }
+    ];
+
+    const profile = analyzeFileTreeHeuristics(mockFiles, 'D:/weihu/agent-learning');
+
+    // Primary language MUST be Java
+    expect(profile.languages[0]).toBe('Java / Kotlin');
+    expect(profile.testCommand).toBe('mvn test');
+    expect(profile.languages).toContain('Python'); // Auxiliary python is preserved in array
+  });
+
   it('manages in-memory cache correctly', () => {
     setCachedProjectProfile({
       ...DEFAULT_PROJECT_PROFILE,

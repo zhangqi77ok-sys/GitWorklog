@@ -477,11 +477,52 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
 
             languages = []
             frameworks = []
+            root = Path(target_path)
+            lang_scores = {}
+            frameworks = []
             package_mgr = 'unknown'
             test_framework = 'none'
             test_command = ''
 
-            root = Path(target_path)
+            # 1. Java / Kotlin evaluation
+            java_score = 0
+            is_maven = (root / 'pom.xml').is_file()
+            is_gradle = (root / 'build.gradle').is_file() or (root / 'build.gradle.kts').is_file() or (root / 'settings.gradle').is_file()
+            if is_maven: java_score += 200
+            if is_gradle: java_score += 200
+            
+            # Check for java sources
+            has_java_files = (root / 'src' / 'main' / 'java').is_dir() or any(root.glob('*.java')) or any(root.glob('*/*.java'))
+            if has_java_files: java_score += 100
+
+            if is_maven:
+                try:
+                    pom_text = (root / 'pom.xml').read_text(encoding='utf-8', errors='ignore')
+                    if 'spring-boot' in pom_text: frameworks.append('Spring Boot')
+                    if 'mybatis' in pom_text: frameworks.append('MyBatis-Plus')
+                    if 'spring-cloud' in pom_text: frameworks.append('Spring Cloud')
+                except Exception:
+                    pass
+
+            if java_score > 0:
+                lang_scores['Java'] = java_score
+
+            # 2. Rust evaluation
+            rust_score = 0
+            if (root / 'Cargo.toml').is_file(): rust_score += 200
+            if (root / 'src' / 'main.rs').is_file() or (root / 'src' / 'lib.rs').is_file() or any(root.glob('*.rs')): rust_score += 100
+            if rust_score > 0:
+                lang_scores['Rust'] = rust_score
+
+            # 3. Go evaluation
+            go_score = 0
+            if (root / 'go.mod').is_file(): go_score += 200
+            if any(root.glob('*.go')): go_score += 100
+            if go_score > 0:
+                lang_scores['Go'] = go_score
+
+            # 4. TypeScript / JavaScript evaluation
+            ts_js_score = 0
             pkg_json_candidates = [root / 'package.json', root / 'prototype' / 'package.json', root / 'frontend' / 'package.json']
             found_pkg = None
             for cand in pkg_json_candidates:
@@ -490,14 +531,16 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
                     break
 
             if found_pkg:
+                ts_js_score += 180
                 try:
                     pkg_data = json.loads(found_pkg.read_text(encoding='utf-8', errors='ignore'))
                     deps = {**pkg_data.get('dependencies', {}), **pkg_data.get('devDependencies', {})}
                     scripts = pkg_data.get('scripts', {})
-                    if 'typescript' in deps or (found_pkg.parent / 'tsconfig.json').is_file():
-                        languages.append('TypeScript')
+                    is_ts = 'typescript' in deps or (found_pkg.parent / 'tsconfig.json').is_file()
+                    if is_ts:
+                        lang_scores['TypeScript'] = ts_js_score + 20
                     else:
-                        languages.append('JavaScript')
+                        lang_scores['JavaScript'] = ts_js_score
 
                     if 'react' in deps: frameworks.append('React')
                     if 'vue' in deps: frameworks.append('Vue')
@@ -508,116 +551,82 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
                     if (found_pkg.parent / 'pnpm-lock.yaml').is_file(): package_mgr = 'pnpm'
                     elif (found_pkg.parent / 'yarn.lock').is_file(): package_mgr = 'yarn'
                     else: package_mgr = 'npm'
-
-                    if 'vitest' in deps or 'vitest' in scripts.get('test', ''):
-                        test_framework = 'vitest'
-                        test_command = 'npm test' if package_mgr == 'npm' else f'{package_mgr} test'
-                    elif 'jest' in deps or 'jest' in scripts.get('test', ''):
-                        test_framework = 'jest'
-                        test_command = 'npm test' if package_mgr == 'npm' else f'{package_mgr} test'
-                    elif 'test' in scripts:
-                        test_framework = 'custom'
-                        test_command = f"{package_mgr} test"
                 except Exception:
                     pass
 
-            py_indicators = [root / 'pyproject.toml', root / 'requirements.txt', root / 'setup.py', root / 'src-desktop' / 'requirements.txt']
-            if any(p.is_file() for p in py_indicators) or any(root.glob('*.py')):
-                languages.append('Python')
-                if (root / 'pyproject.toml').is_file() or (root / 'uv.lock').is_file():
-                    if package_mgr == 'unknown': package_mgr = 'uv'
-                if test_framework == 'none':
-                    test_framework = 'pytest'
-                    test_command = 'pytest'
+            # 5. C# / .NET evaluation
+            cs_score = 0
+            if any(root.glob('*.csproj')) or any(root.glob('*.sln')) or any(root.glob('*/*.csproj')): cs_score += 200
+            if any(root.glob('*.cs')): cs_score += 50
+            if cs_score > 0:
+                lang_scores['C# (.NET)'] = cs_score
 
-            if (root / 'Cargo.toml').is_file() or any(root.glob('*.rs')):
-                languages.append('Rust')
-                if package_mgr == 'unknown': package_mgr = 'cargo'
-                if test_framework == 'none':
-                    test_framework = 'cargo-test'
-                    test_command = 'cargo test'
+            # 6. C / C++ evaluation
+            cpp_score = 0
+            if (root / 'CMakeLists.txt').is_file() or (root / 'Makefile').is_file(): cpp_score += 150
+            if any(root.glob('*.cpp')) or any(root.glob('*.c')): cpp_score += 50
+            if cpp_score > 0:
+                lang_scores['C / C++'] = cpp_score
 
-            if (root / 'go.mod').is_file() or any(root.glob('*.go')):
-                languages.append('Go')
-                if package_mgr == 'unknown': package_mgr = 'go'
-                if test_framework == 'none':
-                    test_framework = 'go-test'
-                    test_command = 'go test ./...'
+            # 7. Python evaluation (check whether it is main or auxiliary scripts)
+            py_score = 0
+            if (root / 'pyproject.toml').is_file() or (root / 'Pipfile').is_file() or (root / 'environment.yml').is_file():
+                py_score += 180
+            elif (root / 'requirements.txt').is_file() or (root / 'setup.py').is_file():
+                py_score += 90
+            elif any(root.glob('*.py')) or (root / 'src-desktop').is_dir():
+                # Auxiliary build/dev scripts
+                py_score += 25
 
-            if (root / 'build.zig').is_file() or (root / 'build.zig.zon').is_file() or any(root.glob('*.zig')):
-                languages.append('Zig')
-                if test_framework == 'none':
-                    test_framework = 'custom'
-                    test_command = 'zig build test'
+            if py_score > 0:
+                lang_scores['Python'] = py_score
 
-            if (root / 'CMakeLists.txt').is_file() or (root / 'Makefile').is_file() or any(root.glob('*.cpp')) or any(root.glob('*.c')):
-                languages.append('C / C++')
-                if test_framework == 'none':
-                    test_framework = 'custom'
-                    test_command = 'ctest'
+            # Sort languages by weighted scores descending
+            sorted_languages = [k for k, v in sorted(lang_scores.items(), key=lambda item: item[1], reverse=True)]
+            primary_lang = sorted_languages[0] if sorted_languages else 'Custom / Multi-Stack'
 
-            if (root / 'pubspec.yaml').is_file() or any(root.glob('*.dart')):
-                languages.append('Dart / Flutter')
-                if test_framework == 'none':
-                    test_framework = 'custom'
-                    test_command = 'dart test'
+            # Determine package manager and test runner based on PRIMARY language
+            if primary_lang == 'Java':
+                package_mgr = 'Maven' if is_maven else ('Gradle' if is_gradle else 'unknown')
+                test_framework = 'JUnit / Maven' if is_maven else 'Gradle Test'
+                test_command = 'mvn test' if is_maven else './gradlew test'
+            elif primary_lang == 'Rust':
+                package_mgr = 'cargo'
+                test_framework = 'cargo-test'
+                test_command = 'cargo test'
+            elif primary_lang == 'Go':
+                package_mgr = 'go'
+                test_framework = 'go-test'
+                test_command = 'go test ./...'
+            elif primary_lang in ('TypeScript', 'JavaScript'):
+                if found_pkg:
+                    try:
+                        pkg_data = json.loads(found_pkg.read_text(encoding='utf-8', errors='ignore'))
+                        deps = {**pkg_data.get('dependencies', {}), **pkg_data.get('devDependencies', {})}
+                        scripts = pkg_data.get('scripts', {})
+                        if 'vitest' in deps or 'vitest' in scripts.get('test', ''):
+                            test_framework = 'vitest'
+                            test_command = 'npm test' if package_mgr == 'npm' else f'{package_mgr} test'
+                        elif 'jest' in deps or 'jest' in scripts.get('test', ''):
+                            test_framework = 'jest'
+                            test_command = 'npm test' if package_mgr == 'npm' else f'{package_mgr} test'
+                        elif 'test' in scripts:
+                            test_framework = 'custom'
+                            test_command = f"{package_mgr} test"
+                    except Exception:
+                        pass
+            elif primary_lang == 'C# (.NET)':
+                test_framework = 'dotnet-test'
+                test_command = 'dotnet test'
+            elif primary_lang == 'C / C++':
+                test_framework = 'ctest'
+                test_command = 'ctest'
+            elif primary_lang == 'Python':
+                package_mgr = 'uv' if (root / 'uv.lock').is_file() else 'pip'
+                test_framework = 'pytest'
+                test_command = 'pytest'
 
-            if (root / 'mix.exs').is_file() or any(root.glob('*.ex')):
-                languages.append('Elixir')
-                if test_framework == 'none':
-                    test_framework = 'custom'
-                    test_command = 'mix test'
-
-            if (root / 'Package.swift').is_file() or any(root.glob('*.swift')):
-                languages.append('Swift')
-                if test_framework == 'none':
-                    test_framework = 'custom'
-                    test_command = 'swift test'
-
-            if (root / 'composer.json').is_file() or any(root.glob('*.php')):
-                languages.append('PHP')
-                if test_framework == 'none':
-                    test_framework = 'custom'
-                    test_command = 'composer test'
-
-            if (root / 'Gemfile').is_file() or any(root.glob('*.rb')):
-                languages.append('Ruby')
-                if test_framework == 'none':
-                    test_framework = 'custom'
-                    test_command = 'bundle exec rspec'
-
-            if (root / 'pom.xml').is_file() or (root / 'build.gradle').is_file() or (root / 'build.gradle.kts').is_file() or any(root.glob('*.java')) or any(root.glob('*.kt')):
-                languages.append('Java / Kotlin')
-                if test_framework == 'none':
-                    test_framework = 'custom'
-                    test_command = 'mvn test'
-
-            if any(root.glob('*.cs')) or any(root.glob('*.csproj')) or any(root.glob('*.sln')):
-                languages.append('C# (.NET)')
-                if test_framework == 'none':
-                    test_framework = 'custom'
-                    test_command = 'dotnet test'
-
-            if (root / 'Project.toml').is_file() or any(root.glob('*.jl')):
-                languages.append('Julia')
-                if test_framework == 'none':
-                    test_framework = 'custom'
-                    test_command = 'julia --project -e "using Pkg; Pkg.test()"'
-
-            if (root / 'stack.yaml').is_file() or any(root.glob('*.hs')):
-                languages.append('Haskell')
-                if test_framework == 'none':
-                    test_framework = 'custom'
-                    test_command = 'stack test'
-
-            if any(root.glob('*.sol')) or (root / 'hardhat.config.js').is_file() or (root / 'foundry.toml').is_file():
-                languages.append('Solidity')
-                if test_framework == 'none':
-                    test_framework = 'custom'
-                    test_command = 'forge test'
-
-            if any(root.glob('*.lua')):
-                languages.append('Lua')
+            languages = sorted_languages if sorted_languages else ['Custom']
 
             if not languages:
                 languages = ['Custom / Multi-Stack']
