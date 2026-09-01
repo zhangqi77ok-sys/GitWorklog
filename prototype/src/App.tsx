@@ -156,6 +156,7 @@ import {
   parseAgentActions,
   extractThinkingFallbackActions,
   hasIncompleteActionBlock,
+  autoRepairIncompleteFences,
   shouldRequireActionApproval,
   parseAcceptanceCriteria,
   mergeAcceptanceCriteria,
@@ -1750,11 +1751,11 @@ export const App: React.FC = () => {
               throw new Error('用户已取消本次模型响应');
             }
             if (termination === 'stream_interrupted') {
-              if (hasIncompleteActionBlock(accumulatedContent)) {
-                throw new Error('大模型流式传输在代码/命令块中间意外中断 (未收到完整数据流)。已安全拦截残缺代码，请按 Enter 重新执行。');
-              }
               if (accumulatedContent.trim().length > 0 || accumulatedThinking.trim().length > 0) {
-                addLog('WARN', 'StreamProtocol', `上游中转未发送[DONE]终止标头即关闭连接，已平滑容错并保全已收到的 ${accumulatedContent.length} 字符回复。`);
+                if (hasIncompleteActionBlock(accumulatedContent)) {
+                  accumulatedContent = autoRepairIncompleteFences(accumulatedContent);
+                }
+                addLog('WARN', 'StreamProtocol', `上游中转未发送[DONE]终止标头即关闭连接，已自动平滑修复代码块并保全已收到的回复。`);
               } else {
                 throw new Error(`模型流异常: ${describeStreamTermination(termination)}`);
               }
@@ -1945,7 +1946,11 @@ export const App: React.FC = () => {
         }
 
         if (hasIncompleteActionBlock(finalContent)) {
-          throw new Error('检测到大模型输出的动作代码块语法残缺或未闭合 (可能因 Token 截断或断流)。已安全拦截残缺操作，请按 Enter 重新执行。');
+          finalContent = autoRepairIncompleteFences(finalContent);
+          addLog('WARN', 'AgentLoop', `[代码块自动修复] 检测到大模型输出的代码块末尾未闭合，已自动补齐闭合标记并平滑提取动作。`);
+          if (actions.length === 0 && (frozenRunMode === 'act' || frozenRunMode === 'minimal')) {
+            actions = parseActionsFromContent(finalContent);
+          }
         }
 
         if (actions.length === 0) {

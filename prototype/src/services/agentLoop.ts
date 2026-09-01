@@ -220,13 +220,31 @@ export function hasIncompleteActionBlock(content: string): boolean {
     const isActionLang = activeLanguage.startsWith('write_file:') ||
                          activeLanguage.startsWith('file:') ||
                          activeLanguage.startsWith('create_file:') ||
-                         ['run_command', 'bash', 'sh', 'powershell', 'cmd'].includes(activeLanguage.toLowerCase());
+                         ['run_command', 'bash', 'sh', 'powershell', 'cmd', 'python', 'py'].includes(activeLanguage.toLowerCase());
     if (isActionLang) {
       return true;
     }
   }
 
   return false;
+}
+
+/** 自动补齐悬挂未闭合的反引号代码块 */
+export function autoRepairIncompleteFences(content: string): string {
+  if (!content) return '';
+  const lines = content.split('\n');
+  let activeLanguage: string | null = null;
+  for (const line of lines) {
+    const trimmed = line.trimStart();
+    if (trimmed.startsWith('```')) {
+      if (activeLanguage === null) activeLanguage = trimmed.slice(3).trim();
+      else activeLanguage = null;
+    }
+  }
+  if (activeLanguage !== null) {
+    return content + '\n```\n';
+  }
+  return content;
 }
 
 /** Parses supported fenced blocks AND XML tool_call blocks into normalized Agent Actions. */
@@ -419,7 +437,27 @@ export function parseAgentActions(content: string): AgentAction[] {
     }
   }
 
-  // 4. 自然语言意图路径智能合成兜底 (NLP Path & Intent Synthesizer)
+  // 4. Python/脚本独立探索代码块智能兜底 (当模型输出独立脚本代码块用于探索时)
+  if (actions.length === 0 && (content.includes('```python') || content.includes('```py'))) {
+    const pyMatch = /```(?:python|py)\s*\n([\s\S]*?)(?:```|$)/i.exec(content);
+    if (pyMatch && pyMatch[1].trim()) {
+      const rawPy = pyMatch[1].trim();
+      if (rawPy.includes('import io') || rawPy.includes('import sys') || rawPy.includes('import os') || rawPy.includes('print(') || rawPy.includes('open(')) {
+        const firstLine = rawPy.split('\n')[0].slice(0, 80);
+        const escaped = rawPy.replace(/"/g, '\\"');
+        actions.push({
+          id: `action-0-python_script-${actionContentHash(rawPy)}`,
+          type: 'run_command',
+          target: `[Python探索脚本] ${firstLine}`,
+          code: `python -c "${escaped}"`,
+          isHighRisk: false,
+          tier: 'silent'
+        });
+      }
+    }
+  }
+
+  // 5. 自然语言意图路径智能合成兜底 (NLP Path & Intent Synthesizer)
   if (actions.length === 0 && content) {
     const nlpActions = extractNaturalLanguageExplorationActions(content);
     if (nlpActions.length > 0) {
