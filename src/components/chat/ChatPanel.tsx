@@ -457,12 +457,12 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ onOpenSettings }) => {
               {/* Main Message Bubble */}
               {(() => {
                 const cleanText = (msg.content || '')
-                  .replace(/<[\s\/|]*DSML[\s\/|]*tool_calls[\s\/|]*>[\s\S]*?<\/[\s\/|]*DSML[\s\/|]*tool_calls[\s\/|]*>/gi, '')
-                  .replace(/<[\s\/|]*DSML[\s\/|]*invoke[\s\S]*?<\/[\s\/|]*DSML[\s\/|]*invoke[\s\/|]*>/gi, '')
-                  .replace(/<[\s\/|]*DSML[\s\/|]*parameter[\s\S]*?<\/[\s\/|]*DSML[\s\/|]*parameter[\s\/|]*>/gi, '')
-                  .replace(/<[\s\/|]*tool_call[\s\/|]*>[\s\S]*?<\/[\s\/|]*tool_call[\s\/|]*>/gi, '')
-                  .replace(/<[\s\/|]*\/?[\s\/|]*DSML[\s\S]*?>/gi, '')
-                  .replace(/<[\s\/|]*\/?[\s\/|]*tool_call[\s\S]*?>/gi, '')
+                  .replace(/<[\s\/\u007C\uFF5C\u2502\u00A6]*DSML[\s\/\u007C\uFF5C\u2502\u00A6]*tool_calls[\s\/\u007C\uFF5C\u2502\u00A6>|]*>[\s\S]*?<\/[\s\/\u007C\uFF5C\u2502\u00A6]*DSML[\s\/\u007C\uFF5C\u2502\u00A6]*tool_calls[\s\/\u007C\uFF5C\u2502\u00A6>|]*>/gi, '')
+                  .replace(/<[\s\/\u007C\uFF5C\u2502\u00A6]*DSML[\s\/\u007C\uFF5C\u2502\u00A6]*invoke[\s\S]*?<\/[\s\/\u007C\uFF5C\u2502\u00A6]*DSML[\s\/\u007C\uFF5C\u2502\u00A6]*invoke[\s\/\u007C\uFF5C\u2502\u00A6>|]*>/gi, '')
+                  .replace(/<[\s\/\u007C\uFF5C\u2502\u00A6]*DSML[\s\/\u007C\uFF5C\u2502\u00A6]*parameter[\s\S]*?<\/[\s\/\u007C\uFF5C\u2502\u00A6]*DSML[\s\/\u007C\uFF5C\u2502\u00A6]*parameter[\s\/\u007C\uFF5C\u2502\u00A6>|]*>/gi, '')
+                  .replace(/<[\s\/\u007C\uFF5C\u2502\u00A6]*tool_call[\s\/\u007C\uFF5C\u2502\u00A6]*>[\s\S]*?<\/[\s\/\u007C\uFF5C\u2502\u00A6]*tool_call[\s\/\u007C\uFF5C\u2502\u00A6>|]*>/gi, '')
+                  .replace(/<[\s\/\u007C\uFF5C\u2502\u00A6]*\/?[\s\/\u007C\uFF5C\u2502\u00A6]*DSML[\s\S]*?>/gi, '')
+                  .replace(/<[\s\/\u007C\uFF5C\u2502\u00A6]*\/?[\s\/\u007C\uFF5C\u2502\u00A6]*tool_call[\s\S]*?>/gi, '')
                   .trim();
 
                 if (!cleanText && msg.role === 'assistant') {

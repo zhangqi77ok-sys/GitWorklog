@@ -167,12 +167,13 @@ function persistMessageToSession(
 export function sanitizeTextContent(text: string): string {
   if (!text) return '';
   let clean = text;
-  clean = clean.replace(/<[\s\/|]*DSML[\s\/|]*tool_calls[\s\/|]*>[\s\S]*?<\/[\s\/|]*DSML[\s\/|]*tool_calls[\s\/|]*>/gi, '');
-  clean = clean.replace(/<[\s\/|]*DSML[\s\/|]*invoke[\s\S]*?<\/[\s\/|]*DSML[\s\/|]*invoke[\s\/|]*>/gi, '');
-  clean = clean.replace(/<[\s\/|]*DSML[\s\/|]*parameter[\s\S]*?<\/[\s\/|]*DSML[\s\/|]*parameter[\s\/|]*>/gi, '');
-  clean = clean.replace(/<[\s\/|]*tool_call[\s\/|]*>[\s\S]*?<\/[\s\/|]*tool_call[\s\/|]*>/gi, '');
-  clean = clean.replace(/<[\s\/|]*\/?[\s\/|]*DSML[\s\S]*?>/gi, '');
-  clean = clean.replace(/<[\s\/|]*\/?[\s\/|]*tool_call[\s\S]*?>/gi, '');
+  // Support ASCII pipe, Fullwidth pipe \uFF5C, Box drawing \u2502, Broken bar \u00A6 and DSM[A-Z0-9]*
+  clean = clean.replace(/<[\s\/\u007C\uFF5C\u2502\u00A6]*DSM[A-Z0-9]*[\s\/\u007C\uFF5C\u2502\u00A6]*tool_calls[\s\/\u007C\uFF5C\u2502\u00A6>|]*>[\s\S]*?<\/[\s\/\u007C\uFF5C\u2502\u00A6]*DSM[A-Z0-9]*[\s\/\u007C\uFF5C\u2502\u00A6]*tool_calls[\s\/\u007C\uFF5C\u2502\u00A6>|]*>/gi, '');
+  clean = clean.replace(/<[\s\/\u007C\uFF5C\u2502\u00A6]*DSM[A-Z0-9]*[\s\/\u007C\uFF5C\u2502\u00A6]*invoke[\s\S]*?<\/[\s\/\u007C\uFF5C\u2502\u00A6]*DSM[A-Z0-9]*[\s\/\u007C\uFF5C\u2502\u00A6]*invoke[\s\/\u007C\uFF5C\u2502\u00A6>|]*>/gi, '');
+  clean = clean.replace(/<[\s\/\u007C\uFF5C\u2502\u00A6]*DSM[A-Z0-9]*[\s\/\u007C\uFF5C\u2502\u00A6]*parameter[\s\S]*?<\/[\s\/\u007C\uFF5C\u2502\u00A6]*DSM[A-Z0-9]*[\s\/\u007C\uFF5C\u2502\u00A6]*parameter[\s\/\u007C\uFF5C\u2502\u00A6>|]*>/gi, '');
+  clean = clean.replace(/<[\s\/\u007C\uFF5C\u2502\u00A6]*tool_call[\s\/\u007C\uFF5C\u2502\u00A6]*>[\s\S]*?<\/[\s\/\u007C\uFF5C\u2502\u00A6]*tool_call[\s\/\u007C\uFF5C\u2502\u00A6>|]*>/gi, '');
+  clean = clean.replace(/<[\s\/\u007C\uFF5C\u2502\u00A6]*\/?[\s\/\u007C\uFF5C\u2502\u00A6]*DSM[A-Z0-9]*[\s\S]*?>/gi, '');
+  clean = clean.replace(/<[\s\/\u007C\uFF5C\u2502\u00A6]*\/?[\s\/\u007C\uFF5C\u2502\u00A6]*tool_call[\s\S]*?>/gi, '');
   return clean.trim();
 }
 
@@ -185,7 +186,7 @@ export function parseToolCallsFromText(text: string): ParsedToolCall[] {
   const calls: ParsedToolCall[] = [];
   if (!text) return calls;
 
-  const invokeRegex = /<[\s|]*DSML[\s|]*invoke\s+name=["']([^"']+)["'][\s|]*>([\s\S]*?)<\/[\s|]*DSML[\s|]*invoke[\s|]*>/gi;
+  const invokeRegex = /<[\s\/\u007C\uFF5C\u2502\u00A6]*DSM[A-Z0-9]*[\s\/\u007C\uFF5C\u2502\u00A6]*invoke\s+name=["']([^"']+)["'][\s\/\u007C\uFF5C\u2502\u00A6>|]*>([\s\S]*?)<\/[\s\/\u007C\uFF5C\u2502\u00A6]*DSM[A-Z0-9]*[\s\/\u007C\uFF5C\u2502\u00A6]*invoke[\s\/\u007C\uFF5C\u2502\u00A6>|]*>/gi;
   let match: RegExpExecArray | null;
 
   while ((match = invokeRegex.exec(text)) !== null) {
@@ -193,7 +194,7 @@ export function parseToolCallsFromText(text: string): ParsedToolCall[] {
     const body = match[2];
     const args: Record<string, any> = {};
 
-    const paramRegex = /<[\s|]*DSML[\s|]*parameter\s+name=["']([^"']+)["'][^>]*>([\s\S]*?)<\/[\s|]*DSML[\s|]*parameter[\s|]*>/gi;
+    const paramRegex = /<[\s\/\u007C\uFF5C\u2502\u00A6]*DSM[A-Z0-9]*[\s\/\u007C\uFF5C\u2502\u00A6]*parameter\s+name=["']([^"']+)["'][^>]*>([\s\S]*?)<\/[\s\/\u007C\uFF5C\u2502\u00A6]*DSM[A-Z0-9]*[\s\/\u007C\uFF5C\u2502\u00A6]*parameter[\s\/\u007C\uFF5C\u2502\u00A6>|]*>/gi;
     let pMatch: RegExpExecArray | null;
     while ((pMatch = paramRegex.exec(body)) !== null) {
       const pName = pMatch[1];
@@ -205,7 +206,7 @@ export function parseToolCallsFromText(text: string): ParsedToolCall[] {
   }
 
   if (calls.length === 0) {
-    const xmlRegex = /<[\s|]*tool_call[\s|]*>[\s\S]*?<name>([^<]+)<\/name>[\s\S]*?<\/[\s|]*tool_call[\s|]*>/gi;
+    const xmlRegex = /<[\s\/\u007C\uFF5C\u2502\u00A6]*tool_call[\s\/\u007C\uFF5C\u2502\u00A6]*>[\s\S]*?<name>([^<]+)<\/name>[\s\S]*?<\/[\s\/\u007C\uFF5C\u2502\u00A6]*tool_call[\s\/\u007C\uFF5C\u2502\u00A6]*>/gi;
     let xMatch: RegExpExecArray | null;
     while ((xMatch = xmlRegex.exec(text)) !== null) {
       calls.push({ name: xMatch[1].trim(), args: {} });
@@ -812,8 +813,18 @@ export function initTauriBridge(): void {
           historyMessages = [{ role: 'user', content: prompt }];
         }
 
+        const targetWorkspace = workspaceDir || 'E:\\pro\\agent-learning';
+        const systemPrompt = `You are Tcode Next-Gen Autonomous AI Coding Assistant in Tcode Studio.
+Current Active Workspace Directory: ${targetWorkspace}
+You have native access to workspace tools:
+- Lookup: inspect folder structure or find files, e.g. <|DSML|invoke name="Lookup"><|DSML|parameter name="path">.</|DSML|parameter></|DSML|invoke>
+- read_file: read file contents, e.g. <|DSML|invoke name="read_file"><|DSML|parameter name="path">package.json</|DSML|parameter></|DSML|invoke>
+- execute_command: run terminal commands in sandbox, e.g. <|DSML|invoke name="execute_command"><|DSML|parameter name="command">git status</|DSML|parameter></|DSML|invoke>
+
+When the user asks to review, inspect, or write code for this project, you MUST first invoke Lookup or read_file to inspect the real workspace. Once tool outputs are returned, analyze them and provide a complete, comprehensive architectural analysis report in markdown.`;
+
         const apiPayloadMessages = [
-          { role: 'system', content: 'You are Tcode Next-Gen Autonomous AI Coding Assistant. When asked to inspect projects, read files, or execute tasks, invoke tools (e.g. Lookup, read_file). Respond clearly and comprehensively.' },
+          { role: 'system', content: systemPrompt },
           ...historyMessages,
         ];
 
@@ -910,6 +921,9 @@ export function initTauriBridge(): void {
           const toolCalls = parseToolCallsFromText(turnContent);
 
           if (toolCalls.length > 0 && turn < MAX_TURNS) {
+            apiPayloadMessages.push({ role: 'assistant', content: turnContent });
+            const toolOutputParts: string[] = [];
+
             for (const call of toolCalls) {
               const toolResult = await executeToolCall(call.name, call.args, workspaceDir || 'E:\\pro\\agent-learning');
               accumulatedToolCalls.push({
@@ -918,19 +932,24 @@ export function initTauriBridge(): void {
                 result: toolResult.slice(0, 1000),
               });
 
-              // Inform the LLM of the tool output in the multi-turn message history
-              apiPayloadMessages.push({ role: 'assistant', content: turnContent });
-              apiPayloadMessages.push({
-                role: 'user',
-                content: `[Tool Output for ${call.name} (${JSON.stringify(call.args)})]:\n${toolResult}\n请结合此工具输出，继续深入分析或输出完整的审查报告。`,
-              });
+              toolOutputParts.push(`[Tool Output for ${call.name} (${JSON.stringify(call.args)})]:\n${toolResult}`);
 
-              const progressMsg = `\n> ⚙️ 已调用工具: \`${call.name}\` (${JSON.stringify(call.args)})\n`;
+              const progressMsg = `\n> ⚙️ 已调用系统工具: \`${call.name}\` (${JSON.stringify(call.args)})\n`;
               await emit('agent_thought_chunk', {
                 session_id: sessionId,
                 chunk: progressMsg,
               });
             }
+
+            const promptSuffix =
+              turn >= 2
+                ? '\n\n【重要指示】：工作区上下文已收集完备，请不要再发出工具调用，请立即输出最终完整、详尽的项目架构审查分析报告！'
+                : '\n\n请结合上述工具执行结果，继续分析或输出最终审查报告。';
+
+            apiPayloadMessages.push({
+              role: 'user',
+              content: toolOutputParts.join('\n\n') + promptSuffix,
+            });
           } else {
             const cleanText = sanitizeTextContent(turnContent);
             finalReportText = cleanText || turnContent;
