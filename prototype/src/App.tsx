@@ -1953,9 +1953,9 @@ export const App: React.FC = () => {
             /我来|我先|我将|让我|先列出|探索|读取|查看|审查|执行|稍等|定位|修正|逐个/i.test(finalContent);
           const hasUnfinishedCriteria = activeAcceptanceItems.some(i => i.status !== 'passed');
 
-          if (frozenRunMode === 'act' && (isShortIntroductory || hasUnfinishedCriteria) && consecutiveEmptyActionCount < 2 && loopCount < 12) {
+          if (frozenRunMode === 'act' && (isShortIntroductory || hasUnfinishedCriteria) && sessionActorManager.isSessionRunning(currentSessionId)) {
             consecutiveEmptyActionCount++;
-            addLog('INFO', 'AgentLoop', `[轮次级自愈推进 #${consecutiveEmptyActionCount}] 阶段任务未完成 (第 ${loopCount} 轮)，自动注入动作执行指令驱动 Agent 推进...`);
+            addLog('INFO', 'AgentLoop', `[目标驱动自愈推进 #${consecutiveEmptyActionCount}] 阶段任务未完成 (第 ${loopCount} 轮)，自动注入动作执行指令驱动 Agent 推进...`);
             
             const pushMsg: ChatMessage = {
               id: `auto-push-${Date.now()}`,
@@ -1970,7 +1970,7 @@ export const App: React.FC = () => {
               ...prev,
               [currentSessionId]: [...(prev[currentSessionId] || []), pushMsg]
             }));
-            continue; // Keep looping!
+            continue; // Keep looping continuously until user stops or all criteria pass!
           }
 
           // A plain answer may complete a conversational turn, but an explicit unfinished

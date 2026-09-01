@@ -330,6 +330,19 @@ npm run dev -- --host 127.0.0.1
 3. **反思维链吞没系统提示词硬约束（Anti-Thinking-Only Constraint）**：
    - 在 System Prompt 中明确规约“所有终端命令必须在 `</think>` 结束后的正式 Markdown 正文中输出”，从源头规范模型输出。
 
+## WP-O · 自然语言意图路径智能合成与无上限目标闭环引擎
+
+为应对大模型在长上下文下以自然语言陈述意图（例如“*我需要读取 docs 目录下的内容，特别是 model-gateway-v2-contract.md，同时查看 src-desktop 目录结构*”）且未附带代码块的场景，Tcode 落地了高级 NLP 动作合成与目标闭环引擎：
+
+1. **自然语言意图路径智能合成器（NLP Path & Intent Synthesizer）**：
+   - 当大模型以自然语言段落陈述探索与读取意图时，系统自动抽取段落中提及的目录路径与具体文件名（如 `docs/technical_reviews`、`model-gateway-v2-contract.md`、`src-desktop`）；
+   - 自动生成并组合为只读探测指令并在宿主机器执行，直接将执行证据反馈回模型，彻底杜绝“有明确意图却因缺少代码块而卡死”的现象；
+2. **彻底解除人为轮次上限（Pure Goal-Driven Loop）**：
+   - 移除任何人为硬编码的轮次上限截断；
+   - 只要验收项处于 `pending` 状态且会话未被用户手动终止，系统自动持续驱动 Agent 进入下一轮深度推演，直到达成全部目标；
+3. **正反 Few-Shot 强化示例约束**：
+   - 在 System Prompt 中注入严格的“❌ 错误示范 vs ✅ 正确示范”对比，强力纠偏模型的自发行为。
+
 ---
 
 

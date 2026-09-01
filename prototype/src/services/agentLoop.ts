@@ -419,6 +419,69 @@ export function parseAgentActions(content: string): AgentAction[] {
     }
   }
 
+  // 4. 自然语言意图路径智能合成兜底 (NLP Path & Intent Synthesizer)
+  if (actions.length === 0 && content) {
+    const nlpActions = extractNaturalLanguageExplorationActions(content);
+    if (nlpActions.length > 0) {
+      return nlpActions;
+    }
+  }
+
+  return actions;
+}
+
+/**
+ * 自然语言意图路径智能提取与命令合成器 (NLP Path & Intent Synthesizer)
+ * 当大模型没有输出任何 ```run_command 代码块，而是以自然语言描述：
+ * "我需要读取 docs/technical_reviews 目录下的内容，特别是 model-gateway-v2-contract.md，同时查看 src-desktop 目录结构"
+ * 系统自动提取出文本中提及的路径与文件名，自动合成为安全的探索/读取命令执行。
+ */
+export function extractNaturalLanguageExplorationActions(content: string): AgentAction[] {
+  if (!content || !content.trim() || content.includes('```')) return [];
+
+  const hasExplorationIntent = /读取|查看|探索|列出|检查|分析|定位|扫描|检视|read|inspect|explore|list|check|scan/i.test(content);
+  if (!hasExplorationIntent) return [];
+
+  // 匹配文本中的目录路径或具体文件（如 docs/technical_reviews、src-desktop、model-gateway-v2-contract.md 等）
+  const pathRegex = /(?:[a-zA-Z0-9_\-.]+[\\/][a-zA-Z0-9_\-./]+|[a-zA-Z0-9_\-.]+\.(?:md|ts|tsx|js|jsx|json|py|rs|go|java|html|css|yaml|yml|toml|txt|sh|ps1)|src-[a-zA-Z0-9_\-]+)/g;
+  const matches = content.match(pathRegex) || [];
+  const uniquePaths = Array.from(new Set(matches.map(p => p.trim()))).filter(p => !p.startsWith('http') && p.length > 2);
+
+  if (uniquePaths.length === 0) return [];
+
+  const actions: AgentAction[] = [];
+  const dirPaths: string[] = [];
+  const filePaths: string[] = [];
+
+  for (const p of uniquePaths) {
+    if (/\.(md|ts|tsx|js|jsx|json|py|rs|go|java|html|css|yaml|yml|toml|txt|sh|ps1)$/i.test(p)) {
+      filePaths.push(p);
+    } else {
+      dirPaths.push(p);
+    }
+  }
+
+  const cmds: string[] = [];
+  if (dirPaths.length > 0) {
+    const formattedDirs = dirPaths.map(d => `"${d}"`).join(', ');
+    cmds.push(`Get-ChildItem -Path ${formattedDirs} -Force -ErrorAction SilentlyContinue | Format-Table Mode, Name, Length -AutoSize`);
+  }
+  for (const f of filePaths) {
+    cmds.push(`Get-Content -Path "${f}" -Encoding UTF8 -ErrorAction SilentlyContinue | Select-Object -First 120`);
+  }
+
+  if (cmds.length > 0) {
+    const combinedCmd = cmds.join(' ; ');
+    actions.push({
+      id: `action-${actions.length}-nlp_synthesized-${actionContentHash(combinedCmd)}`,
+      type: 'run_command',
+      target: `[NLP意图合成] 读取/探索 ${uniquePaths.join(', ')}`,
+      code: combinedCmd,
+      isHighRisk: false,
+      tier: 'silent'
+    });
+  }
+
   return actions;
 }
 

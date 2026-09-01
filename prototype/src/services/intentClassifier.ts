@@ -137,5 +137,13 @@ ${config.mcpSnippet ? `${config.mcpSnippet}\n` : ''}
      \`\`\`write_file:相对路径或绝对路径
      完整文件内容
      \`\`\`
-4. **真实证据闭环**: 每执行一步动作，Tcode 会将终端 stdout/stderr 结果反馈给你供你分析。请基于真实执行证据完成后续步骤，直至验证通过！`;
+4. **正反格式对照 (Strict Few-Shot Examples)**:
+   - ❌ 错误示范 (严禁输出此类无代码块的纯文字说明):
+     "继续探索。我需要读取 docs 目录下的内容，同时查看 src-desktop 目录结构。让我用一条命令完成多个探索。" (系统无法执行纯文字描述！)
+   - ✅ 正确示范 (必须立即附带具体代码块):
+     我来读取 docs 与 src-desktop 目录结构：
+     \`\`\`run_command
+     Get-ChildItem -Path "docs", "src-desktop" -Force | Format-Table Mode, Name, Length -AutoSize
+     \`\`\`
+5. **真实证据闭环与无轮次上限目标驱动**: 每执行一步动作，Tcode 会将终端 stdout/stderr 结果反馈给你供你分析。系统无轮次上限，你必须基于真实执行证据持续推演推进，直至所有验收目标 100% 达成并验证通过！`;
 }

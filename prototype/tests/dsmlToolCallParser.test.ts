@@ -1,6 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { parseAgentMessage } from '../src/types/contracts';
-import { parseAgentActions, extractThinkingFallbackActions } from '../src/services/agentLoop';
+import {
+  parseAgentActions,
+  extractThinkingFallbackActions,
+  extractNaturalLanguageExplorationActions
+} from '../src/services/agentLoop';
 
 describe('DSML & Custom Tool Call Parsing Protocol', () => {
   it('should parse DeepSeek DSML tool_name tag variant and sanitize cleanContent completely', () => {
@@ -111,6 +115,17 @@ Let me proceed.`;
     expect(actions.length).toBe(1);
     expect(actions[0].type).toBe('run_command');
     expect(actions[0].code).toContain('Get-ChildItem');
+  });
+
+  it('should synthesize commands from natural language sentences containing paths without code fences', () => {
+    const naturalSentence = '继续探索。我需要读取 docs/technical_reviews 目录下的内容，特别是 model-gateway-v2-contract.md，同时查看 src-desktop 目录结构。让我用一条命令完成多个探索。';
+
+    const actions = parseAgentActions(naturalSentence);
+    expect(actions.length).toBe(1);
+    expect(actions[0].type).toBe('run_command');
+    expect(actions[0].code).toContain('docs/technical_reviews');
+    expect(actions[0].code).toContain('src-desktop');
+    expect(actions[0].code).toContain('model-gateway-v2-contract.md');
   });
 });
 
