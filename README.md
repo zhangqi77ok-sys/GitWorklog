@@ -367,6 +367,21 @@ npm run dev -- --host 127.0.0.1
    - 在消息气泡底部直接渲染微型、精致、可点击的选项药丸按钮；
    - 用户无需手动键盘打字，轻点对应按钮即可将指令一键注入并驱动 Agent 开展下一阶段研发。
 
+## WP-S · Agent Loop 与 Tooling Harness 纯净架构重塑
+
+为彻底消除“黑盒猜测意图、盲目擅自后台 continue、PowerShell 编码错乱与上下文爆炸至 530k tokens”等设计硬伤，Tcode 实施了纯净 Tooling Harness 架构重塑：
+
+1. **废黜黑盒意图猜测与 NLP 拼凑（No Blackbox Magic）**：
+   - 彻底移除了 `extractNaturalLanguageExplorationActions`；
+   - 恪守治具铁律：**模型没有显式调用工具，系统绝不擅自拼装命令！模型输出纯文本或提问时，立即结束生成并交还人类控制权**；
+2. **原生文件与终端治具契约（Native Tooling Harness）**：
+   - 引入 `toolingHarness.ts`：标准化 `read_file(path, start_line?, end_line?)`、`write_file`、`list_dir`、`grep_search` 与 `run_command`；
+   - 支持绝对路径（如 `D:\weihu\new-api\...`）与相对路径精准定位，行号对齐，彻底消除 PowerShell 截断与静默吞错；
+3. **上下文体积守护治具（Context Hygiene Harness）**：
+   - 工具执行结果超过阈值时，自动在中间插入折叠标记，保留头尾诊断信息，彻底杜绝长上下文无限膨胀到 500k+ tokens 导致网络卡死假死；
+4. **业务模块 100% 关联保全**：
+   - 沙箱三权分层审批、目标驱动验收证据链、Stage Gate 门禁、Git 快照回滚、多模型网关、Swarm 容器全部 100% 完整继承。
+
 ---
 
 

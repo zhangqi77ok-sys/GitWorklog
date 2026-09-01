@@ -1,5 +1,11 @@
 import type { ActionResult, PermissionPolicy, TargetAcceptanceItem, EvidenceItem, PermissionPolicyConfig, PathPermissionRule, CommandPermissionRule } from '../types/contracts';
 import { DEFAULT_PERMISSION_CONFIG, parseAgentMessage } from '../types/contracts';
+import {
+  formatReadFileCommand,
+  formatListDirCommand,
+  formatGrepSearchCommand,
+  truncateToolOutputForContext
+} from './toolingHarness';
 
 export type AgentActionType = 'write_file' | 'run_command' | 'read_file';
 export type ActionExecutionTier = 'silent' | 'notify_after' | 'blocking_approval';
@@ -299,6 +305,14 @@ export function parseAgentActions(content: string): AgentAction[] {
     const contentMatch = /<(?:arg_key>content<\/arg_key>\s*<arg_value>|content>)([\s\S]*?)<\/(?:arg_value|content)>/i.exec(toolBody);
     if (contentMatch) code = contentMatch[1];
 
+    if (!target && (toolName === 'read_file' || toolName === 'view_file') && toolBody.trim() && !toolBody.includes('<')) {
+      target = toolBody.trim();
+    }
+    if (!code && (toolName === 'run_command' || toolName === 'exec_command' || toolName === 'bash') && toolBody.trim() && !toolBody.includes('<')) {
+      code = toolBody.trim();
+      target = code.split('\n')[0].slice(0, 80);
+    }
+
     if (toolName === 'write_file' || toolName === 'create_file') {
       if (target && code) {
         const isHighRisk = HIGH_RISK_FILE.test(target);
@@ -326,12 +340,13 @@ export function parseAgentActions(content: string): AgentAction[] {
         });
       }
     } else if (toolName === 'read_file' && target) {
-      // Convert read_file into a safe non-blocking inspect command
+      // 原生文件读取治具 (Tooling Harness)
+      const cmd = formatReadFileCommand(target);
       actions.push({
         id: `action-${actions.length}-read_file-${actionContentHash(target)}`,
         type: 'run_command',
-        target: `查看文件内容: ${target}`,
-        code: typeof process !== 'undefined' && process.platform === 'win32' ? `Get-Content "${target}" -TotalCount 200` : `cat "${target}"`,
+        target: `[治具] 读取文件: ${target}`,
+        code: cmd,
         isHighRisk: false,
         tier: 'silent'
       });
@@ -379,60 +394,43 @@ export function parseAgentActions(content: string): AgentAction[] {
           });
         }
       }
-    } else if (tName === 'read_file') {
+    } else if (tName === 'read_file' || tName === 'view_file') {
       const target = (params.path || params.file || params.target || '').trim();
-      if (target && !actions.some(a => a.target === `查看文件内容: ${target}`)) {
+      if (target && !actions.some(a => a.target === `[治具] 读取文件: ${target}`)) {
+        const startLine = parseInt(params.start_line || params.start || '1', 10);
+        const endLine = parseInt(params.end_line || params.end || '200', 10);
+        const cmd = formatReadFileCommand(target, startLine, endLine);
         actions.push({
           id: `action-${actions.length}-read_file-${actionContentHash(target)}`,
           type: 'run_command',
-          target: `查看文件内容: ${target}`,
-          code: typeof process !== 'undefined' && process.platform === 'win32' ? `Get-Content "${target}" -TotalCount 200` : `cat "${target}"`,
-          isHighRisk: false,
-          tier: 'silent'
-        });
-      }
-    }
-  }
-
-  // 4. Bare Command Heuristic Fallback (When model outputs a clear terminal command without code fences)
-  if (actions.length === 0 && content && !hasIncompleteActionBlock(content) && !content.includes('```')) {
-    const lines = content.split('\n');
-    for (const rawLine of lines) {
-      const line = rawLine.trim();
-      if (!line || line.startsWith('#') || line.startsWith('//') || line.startsWith('/*') || line.startsWith('`')) continue;
-      
-      const isBareCmd = /^(Get-ChildItem|Get-Content|Set-Location|Select-String|dir\s+-|ls\s+-|pytest|vitest)\s+[^\n]+$/i.test(line);
-      if (isBareCmd) {
-        const firstLine = line.slice(0, 80);
-        const isHighRisk = HIGH_RISK_COMMAND.test(line);
-        actions.push({
-          id: `action-${actions.length}-bare_command-${actionContentHash(line)}`,
-          type: 'run_command',
-          target: firstLine,
-          code: line,
-          isHighRisk,
-          riskReason: getRiskReason('run_command', firstLine, line),
-          tier: getActionTier('run_command', firstLine, isHighRisk)
-        });
-        break; // Extract top-level primary command in fallback mode
-      }
-
-      // Check if it is a bare path (e.g. D:\weihu\new-api or /path/to/dir)
-      const isBarePath = /^[a-zA-Z]:[\\/][^:*?"<>|\r\n]+$/.test(line) || /^(\.\/|\.\.\/|\/)[a-zA-Z0-9_.\-\\/]+$/.test(line);
-      if (isBarePath) {
-        const p = line.trim();
-        const cmd = typeof process !== 'undefined' && process.platform === 'win32'
-          ? `Get-ChildItem -Path "${p}" -Force | Select-Object Mode, Name, Length | Format-Table -AutoSize`
-          : `ls -la "${p}"`;
-        actions.push({
-          id: `action-${actions.length}-bare_path-${actionContentHash(p)}`,
-          type: 'run_command',
-          target: `探索目录: ${p}`,
+          target: `[治具] 读取文件: ${target}`,
           code: cmd,
           isHighRisk: false,
           tier: 'silent'
         });
-        break;
+      }
+    } else if (tName === 'list_dir' || tName === 'list_directory') {
+      const dirPath = (params.path || params.dir || '.').trim();
+      actions.push({
+        id: `action-${actions.length}-list_dir-${actionContentHash(dirPath)}`,
+        type: 'run_command',
+        target: `[治具] 目录遍历: ${dirPath}`,
+        code: formatListDirCommand(dirPath),
+        isHighRisk: false,
+        tier: 'silent'
+      });
+    } else if (tName === 'grep_search' || tName === 'search_code') {
+      const query = (params.query || params.pattern || '').trim();
+      const p = (params.path || '.').trim();
+      if (query) {
+        actions.push({
+          id: `action-${actions.length}-grep_search-${actionContentHash(query + p)}`,
+          type: 'run_command',
+          target: `[治具] 文本检索: ${query}`,
+          code: formatGrepSearchCommand(query, p),
+          isHighRisk: false,
+          tier: 'silent'
+        });
       }
     }
   }
@@ -457,67 +455,46 @@ export function parseAgentActions(content: string): AgentAction[] {
     }
   }
 
-  // 5. 自然语言意图路径智能合成兜底 (NLP Path & Intent Synthesizer)
-  if (actions.length === 0 && content) {
-    const nlpActions = extractNaturalLanguageExplorationActions(content);
-    if (nlpActions.length > 0) {
-      return nlpActions;
+  // 5. 单行显式命令与裸路径识别 (当模型未用反引号包裹但直接输出了终端命令或路径时)
+  if (actions.length === 0 && content && !hasIncompleteActionBlock(content) && !content.includes('```')) {
+    const lines = content.split('\n');
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+      if (!line || line.startsWith('#') || line.startsWith('//') || line.startsWith('/*') || line.startsWith('`')) continue;
+
+      const isBareCmd = /^(Get-ChildItem|Get-Content|Set-Location|Select-String|dir\s+-|ls\s+-|pytest|vitest|python|python3)\s+[^\n]+$/i.test(line);
+      if (isBareCmd) {
+        const firstLine = line.slice(0, 80);
+        const isHighRisk = HIGH_RISK_COMMAND.test(line);
+        actions.push({
+          id: `action-${actions.length}-bare_command-${actionContentHash(line)}`,
+          type: 'run_command',
+          target: firstLine,
+          code: line,
+          isHighRisk,
+          riskReason: getRiskReason('run_command', firstLine, line),
+          tier: getActionTier('run_command', firstLine, isHighRisk)
+        });
+        break;
+      }
+
+      const isBarePath = /^[a-zA-Z]:[\\/][^:*?"<>|\r\n]+$/.test(line) || /^(\.\/|\.\.\/|\/)[a-zA-Z0-9_.\-\\/]+$/.test(line);
+      if (isBarePath) {
+        const p = line.trim();
+        const cmd = typeof process !== 'undefined' && process.platform === 'win32'
+          ? `Get-ChildItem -Path "${p}" -Force | Select-Object Mode, Name, Length | Format-Table -AutoSize`
+          : `ls -la "${p}"`;
+        actions.push({
+          id: `action-${actions.length}-bare_path-${actionContentHash(p)}`,
+          type: 'run_command',
+          target: `探索目录: ${p}`,
+          code: cmd,
+          isHighRisk: false,
+          tier: 'silent'
+        });
+        break;
+      }
     }
-  }
-
-  return actions;
-}
-
-/**
- * 自然语言意图路径智能提取与命令合成器 (NLP Path & Intent Synthesizer)
- * 当大模型没有输出任何 ```run_command 代码块，而是以自然语言描述：
- * "我需要读取 docs/technical_reviews 目录下的内容，特别是 model-gateway-v2-contract.md，同时查看 src-desktop 目录结构"
- * 系统自动提取出文本中提及的路径与文件名，自动合成为安全的探索/读取命令执行。
- */
-export function extractNaturalLanguageExplorationActions(content: string): AgentAction[] {
-  if (!content || !content.trim() || content.includes('```')) return [];
-
-  const hasExplorationIntent = /读取|查看|探索|列出|检查|分析|定位|扫描|检视|read|inspect|explore|list|check|scan/i.test(content);
-  if (!hasExplorationIntent) return [];
-
-  // 匹配文本中的目录路径或具体文件（如 docs/technical_reviews、src-desktop、model-gateway-v2-contract.md 等）
-  const pathRegex = /(?:[a-zA-Z0-9_\-.]+[\\/][a-zA-Z0-9_\-./]+|[a-zA-Z0-9_\-.]+\.(?:md|ts|tsx|js|jsx|json|py|rs|go|java|html|css|yaml|yml|toml|txt|sh|ps1)|src-[a-zA-Z0-9_\-]+)/g;
-  const matches = content.match(pathRegex) || [];
-  const uniquePaths = Array.from(new Set(matches.map(p => p.trim()))).filter(p => !p.startsWith('http') && p.length > 2);
-
-  if (uniquePaths.length === 0) return [];
-
-  const actions: AgentAction[] = [];
-  const dirPaths: string[] = [];
-  const filePaths: string[] = [];
-
-  for (const p of uniquePaths) {
-    if (/\.(md|ts|tsx|js|jsx|json|py|rs|go|java|html|css|yaml|yml|toml|txt|sh|ps1)$/i.test(p)) {
-      filePaths.push(p);
-    } else {
-      dirPaths.push(p);
-    }
-  }
-
-  const cmds: string[] = [];
-  if (dirPaths.length > 0) {
-    const formattedDirs = dirPaths.map(d => `"${d}"`).join(', ');
-    cmds.push(`Get-ChildItem -Path ${formattedDirs} -Force -ErrorAction SilentlyContinue | Format-Table Mode, Name, Length -AutoSize`);
-  }
-  for (const f of filePaths) {
-    cmds.push(`Get-Content -Path "${f}" -Encoding UTF8 -ErrorAction SilentlyContinue | Select-Object -First 120`);
-  }
-
-  if (cmds.length > 0) {
-    const combinedCmd = cmds.join(' ; ');
-    actions.push({
-      id: `action-${actions.length}-nlp_synthesized-${actionContentHash(combinedCmd)}`,
-      type: 'run_command',
-      target: `[NLP意图合成] 读取/探索 ${uniquePaths.join(', ')}`,
-      code: combinedCmd,
-      isHighRisk: false,
-      tier: 'silent'
-    });
   }
 
   return actions;
@@ -1028,14 +1005,14 @@ export function formatExecutionFeedback(
       if (action.type === 'read_file') {
         lines.push(`✅ read_file: ${action.target} — 读取成功 (${result.fileSize ?? '?'} 字节)`);
         if (result.output) {
-          lines.push(`\`\`\`\n${result.output.slice(0, 12000)}\n\`\`\``);
+          lines.push(`\`\`\`\n${truncateToolOutputForContext(result.output, 100, 6000)}\n\`\`\``);
         }
       } else if (action.type === 'write_file') {
         lines.push(`✅ write_file:${action.target} — 写入成功 (${result.fileSize ?? '?'} 字节)`);
       } else {
         lines.push(`✅ run_command: ${action.target} — 执行完成 (Exit Code: ${result.exitCode ?? 0})`);
-        if (result.output) lines.push(`  stdout: ${result.output.slice(0, 500)}`);
-        if (result.error) lines.push(`  stderr: ${result.error.slice(0, 300)}`);
+        if (result.output) lines.push(`  stdout: ${truncateToolOutputForContext(result.output, 80, 4000)}`);
+        if (result.error) lines.push(`  stderr: ${result.error.slice(0, 500)}`);
       }
     } else if (result.status === 'rejected') {
       lines.push(`🚫 ${action.type}: ${action.target} — 用户拒绝执行`);
@@ -1043,7 +1020,7 @@ export function formatExecutionFeedback(
       const exitCode = action.type === 'run_command' && result.exitCode !== undefined
         ? ` (Exit Code: ${result.exitCode})`
         : '';
-      lines.push(`❌ ${action.type}: ${action.target} — 执行失败${exitCode}${result.error ? `: ${result.error.slice(0, 300)}` : ''}`);
+      lines.push(`❌ ${action.type}: ${action.target} — 执行失败${exitCode}${result.error ? `: ${result.error.slice(0, 500)}` : ''}`);
     }
   }
 

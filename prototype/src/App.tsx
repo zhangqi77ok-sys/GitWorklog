@@ -1996,28 +1996,29 @@ export const App: React.FC = () => {
             break; // 停止后台自动轮转，等待用户做出选择！
           }
 
-          const isShortIntroductory = finalContent.length < 350 &&
-            /我来|我先|我将|让我|先列出|探索|读取|查看|审查|执行|稍等|定位|修正|逐个/i.test(finalContent);
-          const hasUnfinishedCriteria = activeAcceptanceItems.some(i => i.status !== 'passed');
+          // 只有极简短的开场白 (如 "好的，我来处理") 且仅限首次，可自动驱动一次；其余情况交还人类控制权
+          const isPureShortIntro = finalContent.length < 120 &&
+            consecutiveEmptyActionCount === 0 &&
+            /^(好的|没问题|我来|我先|稍等)/i.test(finalContent.trim());
 
-          if (frozenRunMode === 'act' && (isShortIntroductory || hasUnfinishedCriteria) && sessionActorManager.isSessionRunning(currentSessionId)) {
+          if (frozenRunMode === 'act' && isPureShortIntro && sessionActorManager.isSessionRunning(currentSessionId)) {
             consecutiveEmptyActionCount++;
-            addLog('INFO', 'AgentLoop', `[目标驱动自愈推进 #${consecutiveEmptyActionCount}] 阶段任务未完成 (第 ${loopCount} 轮)，自动注入动作执行指令驱动 Agent 推进...`);
-            
+            addLog('INFO', 'AgentLoop', `[首轮开场白自愈推进] 检测到短开场白，自动提示输出执行代码块...`);
+
             const pushMsg: ChatMessage = {
               id: `auto-push-${Date.now()}`,
               role: 'user',
-              content: '【系统自动执行指令】: 请立即在 Markdown 正文中输出具体的 ```run_command 或 ```write_file 代码块，以实际执行你刚才计划的操作。严禁只输出说明文字或只在思考链中写命令！',
+              content: '【系统提示】: 请在 Markdown 正文中输出具体的工具代码块执行操作。',
               timestamp: Date.now(),
               isAgentFeedback: true,
-              auditTag: `🚀 Agent 自动推进驱动 #${consecutiveEmptyActionCount}`
+              auditTag: `🚀 Agent 首轮推进`
             };
             conversationSnapshot.push(pushMsg);
             setSessionMessages(prev => ({
               ...prev,
               [currentSessionId]: [...(prev[currentSessionId] || []), pushMsg]
             }));
-            continue; // Keep looping continuously until user stops or all criteria pass!
+            continue;
           }
 
           // A plain answer may complete a conversational turn, but an explicit unfinished

@@ -2,8 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { parseAgentMessage } from '../src/types/contracts';
 import {
   parseAgentActions,
-  extractThinkingFallbackActions,
-  extractNaturalLanguageExplorationActions
+  extractThinkingFallbackActions
 } from '../src/services/agentLoop';
 
 describe('DSML & Custom Tool Call Parsing Protocol', () => {
@@ -117,15 +116,12 @@ Let me proceed.`;
     expect(actions[0].code).toContain('Get-ChildItem');
   });
 
-  it('should synthesize commands from natural language sentences containing paths without code fences', () => {
+  it('should not parse natural language prose as commands without explicit tool call or code fence', () => {
     const naturalSentence = '继续探索。我需要读取 docs/technical_reviews 目录下的内容，特别是 model-gateway-v2-contract.md，同时查看 src-desktop 目录结构。让我用一条命令完成多个探索。';
 
     const actions = parseAgentActions(naturalSentence);
-    expect(actions.length).toBe(1);
-    expect(actions[0].type).toBe('run_command');
-    expect(actions[0].code).toContain('docs/technical_reviews');
-    expect(actions[0].code).toContain('src-desktop');
-    expect(actions[0].code).toContain('model-gateway-v2-contract.md');
+    // 纯粹原则：自然语言陈述不伪造命令，actions 为 0
+    expect(actions.length).toBe(0);
   });
 });
 
