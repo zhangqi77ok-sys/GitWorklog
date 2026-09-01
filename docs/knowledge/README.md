@@ -12,7 +12,7 @@
 | **02** | **AI Agent 跨会话长期工程记忆层与提示词动态注入机制** | Agent 认知架构 / 记忆库 | 用户纠偏规约提取、长期记忆本地化持久存储、System Prompt 置顶注入与 Token 预算平衡 | [02-cross-session-memory-vault.md](./02-cross-session-memory-vault.md) |
 | **03** | **LSP 编译器诊断与代码自愈闭环设计** | 编译器工具链 / 自愈循环 | 文件落盘触发式语法诊断（TSC / Python / Rust）、红线报错结构化解析、Agent 循环下轮自愈注入 | [03-lsp-compiler-diagnostics-loop.md](./03-lsp-compiler-diagnostics-loop.md) |
 | **04** | **Tcode 执行模式拓扑与双环/SwarmFlow 内部逻辑设计** | 执行内核 / 模式拓扑 | 三维正交模型、单 Agent 双环极速闭环 vs SwarmFlow 7 算子流、前端胶囊收敛与统一分发契约 | [04-execution-modes-and-swarm-topology.md](./04-execution-modes-and-swarm-topology.md) |
-| **05** | **动态多协议模型网关 (Dynamic Ingress Gateway) 设计** | 模型路由 / 渠道总线 | Sub2API / NewAPI / OpenAI / Anthropic 多协议标准化转化、多模态 Vision Payload 兼容适配 | [05-dynamic-ingress-model-gateway.md](./05-dynamic-ingress-model-gateway.md) |
+| **05** | **桌面端 WebView2 与 Tauri IPC 双轨兼容适配网桥设计** | 桌面端架构 / IPC 协议 | `Cannot read properties of undefined (reading 'invoke')` 根因剖析、Universal Bridge 映射与原生文件拾取器直连 | [05-desktop-webview-tauri-ipc-bridge.md](./05-desktop-webview-tauri-ipc-bridge.md) |
 
 ---
 
