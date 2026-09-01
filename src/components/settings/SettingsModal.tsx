@@ -27,6 +27,7 @@ import {
   UploadCloud,
   Layers,
   Code2,
+  FileText,
 } from 'lucide-react';
 import {
   useGatewayStore,
@@ -149,7 +150,7 @@ export const ALL_INGRESS_OPTIONS: {
   { id: 'proxy', label: '自建中转 / 代理', desc: '反代或 OneAPI / 本地 Ollama', icon: <Globe className="w-3 h-3 text-[#E65100]" /> },
 ];
 
-export type SettingsTab = 'gateway' | 'mcp' | 'skills' | 'appearance' | 'about';
+export type SettingsTab = 'gateway' | 'mcp' | 'skills' | 'logs' | 'appearance' | 'about';
 
 export interface SettingsModalProps {
   isOpen: boolean;
@@ -276,11 +277,50 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     onSubmit: () => {},
   });
 
+  // System Logs state
+  const [systemLogs, setSystemLogs] = useState<string>('正在加载系统运行与故障日志...');
+  const [logDir, setLogDir] = useState<string>('');
+  const [isLoadingLogs, setIsLoadingLogs] = useState<boolean>(false);
+
+  const fetchLogs = async () => {
+    setIsLoadingLogs(true);
+    try {
+      const res = await fetch('/api/system/logs');
+      if (res.ok) {
+        const data = await res.json();
+        setSystemLogs(data.logs || '暂无日志记录');
+        setLogDir(data.log_dir || '');
+      } else {
+        setSystemLogs('获取日志失败：接口返回 HTTP ' + res.status);
+      }
+    } catch (err: any) {
+      setSystemLogs('获取系统日志异常：' + err);
+    } finally {
+      setIsLoadingLogs(false);
+    }
+  };
+
+  const handleCleanupLogs = async () => {
+    try {
+      const res = await fetch('/api/system/logs/cleanup', { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        toast.success(data.message || '已成功清理 7 天前旧日志');
+        fetchLogs();
+      }
+    } catch (err: any) {
+      toast.error('清理日志失败：' + err);
+    }
+  };
+
   useEffect(() => {
     if (isOpen) {
       loadChannels();
+      if (activeTab === 'logs') {
+        fetchLogs();
+      }
     }
-  }, [isOpen, loadChannels]);
+  }, [isOpen, activeTab, loadChannels]);
 
   useEffect(() => {
     if (channels.length > 0) {
@@ -472,6 +512,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               id: 'skills',
               label: `SKILL 智能体技能 (${(skills || []).length})`,
               icon: <Code2 className="w-3.5 h-3.5" />,
+            },
+            {
+              id: 'logs',
+              label: '系统日志与排错',
+              icon: <FileText className="w-3.5 h-3.5" />,
             },
             { id: 'appearance', label: '外观主题', icon: <Palette className="w-3.5 h-3.5" /> },
             { id: 'about', label: '关于与安全', icon: <Info className="w-3.5 h-3.5" /> },
@@ -1175,7 +1220,62 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           )}
 
-          {/* TAB 4: 外观与主题 */}
+          {/* TAB 4: 系统日志与排错 */}
+          {activeTab === 'logs' && (
+            <div className="flex-1 flex flex-col p-4 overflow-hidden space-y-3 bg-[#FAF8F5]">
+              {/* Header Bar */}
+              <div className="flex items-center justify-between bg-white p-3 rounded-xl border border-[#E6DFD5] shadow-2xs">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-xs text-[#1E1C1A]">系统崩溃与运行日志 (System Logs)</span>
+                    <span className="px-2 py-0.5 bg-[#E8F5E9] text-[#2E7D32] border border-[#A5D6A7] rounded-full text-[10px] font-bold">
+                      🛡️ 7天规则已激活 (7-Day Retention Active)
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-[#8A847C] font-mono">
+                    日志路径: {logDir || '应用数据目录/logs'} · 系统每日由后台定时任务自动清理 7 天前旧日志
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={fetchLogs}
+                    disabled={isLoadingLogs}
+                    className="flex items-center gap-1 px-2.5 py-1 bg-white hover:bg-[#FAF8F5] border border-[#E6DFD5] text-[#1E1C1A] rounded-lg text-xs font-bold transition-all shadow-2xs cursor-pointer"
+                  >
+                    <RotateCw className={`w-3.5 h-3.5 text-[#D96B27] ${isLoadingLogs ? 'animate-spin' : ''}`} />
+                    <span>刷新日志</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(systemLogs);
+                      toast.success('日志已复制到剪贴板');
+                    }}
+                    className="flex items-center gap-1 px-2.5 py-1 bg-white hover:bg-[#FAF8F5] border border-[#E6DFD5] text-[#1E1C1A] rounded-lg text-xs font-bold transition-all shadow-2xs cursor-pointer"
+                  >
+                    <FileText className="w-3.5 h-3.5 text-[#1565C0]" />
+                    <span>复制全部</span>
+                  </button>
+
+                  <button
+                    onClick={handleCleanupLogs}
+                    className="flex items-center gap-1 px-2.5 py-1 bg-[#FFEBEE] hover:bg-[#FFCDD2] border border-[#EF9A9A] text-[#C62828] rounded-lg text-xs font-bold transition-all shadow-2xs cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>清理7天前旧日志</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Log Content Area */}
+              <div className="flex-1 bg-[#1E1C1A] text-[#A9B7C6] rounded-xl p-3.5 font-mono text-[11px] overflow-auto leading-relaxed border border-[#3D3A36] shadow-inner select-text">
+                <pre className="whitespace-pre-wrap break-all font-mono">{systemLogs}</pre>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 5: 外观与主题 */}
           {activeTab === 'appearance' && (
             <div className="flex-1 overflow-y-auto p-6 space-y-4">
               <div className="font-bold text-[#1E1C1A]">界面色彩模式 (Theme Mode)</div>

@@ -12,6 +12,8 @@ import path_sandbox
 import proxy_policy
 import airgap
 import notifications
+import logger
+import threading
 CREATE_NO_WINDOW = 0x08000000
 APP_NAME = 'Tcode Studio'
 APP_STORAGE_KEY = 'Tcode'
@@ -344,6 +346,16 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
             self.send_header('Content-Type', 'application/json')
             self.end_headers()
             self.wfile.write(json.dumps({'status': 'ok', 'service': 'tcode'}).encode('utf-8'))
+            return
+
+        if parsed.path == '/api/system/logs':
+            content = logger.get_recent_logs()
+            self._send_json(200, {
+                'success': True,
+                'log_dir': logger.LOG_DIR,
+                'logs': content,
+                'retention': '7天滚动自动清理保留'
+            })
             return
 
         if parsed.path.startswith('/api/git/worktree'):
@@ -830,6 +842,31 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
                         global_window.evaluate_js(js)
                     except Exception as e:
                         print(f"[Notify] activate-session evaluate_js failed: {e}")
+            self._send_json(200, {'success': True})
+            return
+
+        if parsed.path == '/api/system/logs/cleanup':
+            removed = logger.cleanup_old_logs(7)
+            self._send_json(200, {
+                'success': True,
+                'message': f'日志清理完成，已清理 {removed} 个 7 天前旧日志文件与历史超期日志',
+                'removed_files': removed
+            })
+            return
+
+        if parsed.path == '/api/system/log':
+            body = self._read_json_body() or {}
+            level = body.get('level', 'error')
+            msg = body.get('message', '')
+            stack = body.get('stack', '')
+            formatted = f"[Frontend Log] {msg}"
+            if stack:
+                formatted += f"\nStack: {stack}"
+            
+            if level == 'error':
+                logger.log_error(formatted)
+            else:
+                logger.log_info(formatted)
             self._send_json(200, {'success': True})
             return
 
@@ -1698,6 +1735,27 @@ def start_local_server(port=PORT):
 
 if __name__ == '__main__':
     host_auth.init_token()
+    
+    # Run 7-day log retention cleanup on startup & schedule 24-hour recurring daemon
+    try:
+        logger.cleanup_old_logs(7)
+        logger.log_info("Tcode Studio initialized. 7-Day Log Retention Policy active.")
+    except Exception as e:
+        print(f"[Logger] Startup log cleanup warning: {e}")
+
+    def log_cleanup_scheduler():
+        try:
+            logger.cleanup_old_logs(7)
+        except Exception:
+            pass
+        t_next = threading.Timer(86400, log_cleanup_scheduler)
+        t_next.daemon = True
+        t_next.start()
+
+    t_sched = threading.Timer(86400, log_cleanup_scheduler)
+    t_sched.daemon = True
+    t_sched.start()
+
     port = start_local_server()
     url = f"http://127.0.0.1:{port}/"
 

@@ -15,6 +15,7 @@
 | **05** | **桌面端 WebView2 与 Tauri IPC 双轨兼容适配网桥设计** | 桌面端架构 / IPC 协议 | `Cannot read properties of undefined (reading 'invoke')` 根因剖析、Universal Bridge 映射与原生文件拾取器直连 | [05-desktop-webview-tauri-ipc-bridge.md](./05-desktop-webview-tauri-ipc-bridge.md) |
 | **06** | **AgentRouter 多模型网关对接、真实测速拉取与会话模型选择器设计** | 模型网关 / 协议路由 | 渠道保存即时关联、对话框模型选择下拉器、401 `unauthorized client` 特征攻防与真实毫秒级探活拉取 | [06-agentrouter-gateway-models-and-channel-sync.md](./06-agentrouter-gateway-models-and-channel-sync.md) |
 | **07** | **客户端白屏根因防御、模块级锚定弹窗与全功能状态记忆体系** | UI 架构 / 容错机制 / 状态记忆 | 渲染层属性链防御、顶层 ErrorBoundary 容灾、顶部/底部双弹窗锚定定位与全功能状态生命周期持久化 | [07-workbench-white-screen-prevention-and-full-state-memory.md](./07-workbench-white-screen-prevention-and-full-state-memory.md) |
+| **08** | **系统日志诊断追踪系统与 7 天自动清理定时任务设计** | 系统运维 / 7天日志留存 / 故障排查 | `toUpperCase` 空指针拦截修补、全量前端/后端日志收集体系、24小时守护定时任务与 7 天滑动保留算法 | [08-system-logger-and-7-day-auto-cleanup-daemon.md](./08-system-logger-and-7-day-auto-cleanup-daemon.md) |
 
 ---
 
