@@ -153,6 +153,7 @@ import {
   createActionResult,
   formatExecutionFeedback as formatAgentExecutionFeedback,
   parseAgentActions,
+  hasIncompleteActionBlock,
   shouldRequireActionApproval,
   parseAcceptanceCriteria,
   mergeAcceptanceCriteria,
@@ -1689,8 +1690,15 @@ export const App: React.FC = () => {
             if (termination === 'cancelled') {
               throw new Error('用户已取消本次模型响应');
             }
-            if (termination === 'stream_interrupted' && (accumulatedContent.trim().length > 0 || accumulatedThinking.trim().length > 0)) {
-              addLog('WARN', 'StreamProtocol', `上游中转未发送[DONE]终止标头即关闭连接，已平滑容错并保全已收到的 ${accumulatedContent.length} 字符回复。`);
+            if (termination === 'stream_interrupted') {
+              if (hasIncompleteActionBlock(accumulatedContent)) {
+                throw new Error('大模型流式传输在代码/命令块中间意外中断 (未收到完整数据流)。已安全拦截残缺代码，请按 Enter 重新执行。');
+              }
+              if (accumulatedContent.trim().length > 0 || accumulatedThinking.trim().length > 0) {
+                addLog('WARN', 'StreamProtocol', `上游中转未发送[DONE]终止标头即关闭连接，已平滑容错并保全已收到的 ${accumulatedContent.length} 字符回复。`);
+              } else {
+                throw new Error(`模型流异常: ${describeStreamTermination(termination)}`);
+              }
             } else {
               throw new Error(`模型流异常: ${describeStreamTermination(termination)}`);
             }
@@ -1856,6 +1864,10 @@ export const App: React.FC = () => {
             continue;
           }
           addLog('INFO', 'StageGate', `[Gate #${loopCount}] 用户已批准方案，继续执行后续阶段...`);
+        }
+
+        if (hasIncompleteActionBlock(finalContent)) {
+          throw new Error('检测到大模型输出的动作代码块语法残缺或未闭合 (可能因 Token 截断或断流)。已安全拦截残缺操作，请按 Enter 重新执行。');
         }
 
         if (actions.length === 0) {

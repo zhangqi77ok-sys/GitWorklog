@@ -153,6 +153,82 @@ function getFenceAction(language: string, code: string, index: number): AgentAct
   return null;
 }
 
+/** Checks whether code/command syntax appears complete (balanced quotes/brackets and no dangling operators). */
+export function checkActionSyntaxComplete(code: string): boolean {
+  if (!code || !code.trim()) return false;
+  const text = code.trim();
+
+  // 1. Check balanced double and single quotes (ignoring escaped ones)
+  let inDouble = false;
+  let inSingle = false;
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    const prev = i > 0 ? text[i - 1] : '';
+    if (char === '"' && prev !== '\\' && !inSingle) inDouble = !inDouble;
+    if (char === '\'' && prev !== '\\' && !inDouble) inSingle = !inSingle;
+  }
+  if (inDouble || inSingle) return false;
+
+  // 2. Check dangling line continuations or incomplete pipe / operators
+  if (/(\||&&|\band\b|\bor\b|\\|,|\+|\*|\/)\s*$/i.test(text)) return false;
+
+  // 3. For code blocks, check balanced braces/parentheses
+  let paren = 0;
+  let brace = 0;
+  let bracket = 0;
+  for (const c of text) {
+    if (c === '(') paren++;
+    else if (c === ')') paren--;
+    else if (c === '{') brace++;
+    else if (c === '}') brace--;
+    else if (c === '[') bracket++;
+    else if (c === ']') bracket--;
+  }
+  if (paren !== 0 || brace < 0 || bracket !== 0) return false;
+
+  // 4. Check unfinished TypeScript / JS / Python keyword expressions (e.g. "export const a = (num")
+  if (/\b(export|import|const|let|var|function|def|class)\s+[a-zA-Z0-9_$]+\s*=\s*\([a-zA-Z0-9_$,\s]*$/i.test(text)) {
+    return false;
+  }
+
+  return true;
+}
+
+/** Detects whether content contains a dangling incomplete action block truncated mid-stream. */
+export function hasIncompleteActionBlock(content: string): boolean {
+  if (!content) return false;
+  const lines = content.split('\n');
+  let activeLanguage: string | null = null;
+  let codeLines: string[] = [];
+
+  for (const line of lines) {
+    const trimmed = line.trimStart();
+    if (!trimmed.startsWith('```')) {
+      if (activeLanguage !== null) codeLines.push(line);
+      continue;
+    }
+    if (activeLanguage === null) {
+      activeLanguage = trimmed.slice(3).trim();
+      codeLines = [];
+      continue;
+    }
+    activeLanguage = null;
+    codeLines = [];
+  }
+
+  if (activeLanguage !== null) {
+    const isActionLang = activeLanguage.startsWith('write_file:') ||
+                         activeLanguage.startsWith('file:') ||
+                         activeLanguage.startsWith('create_file:') ||
+                         ['run_command', 'bash', 'sh', 'powershell', 'cmd'].includes(activeLanguage.toLowerCase());
+    if (isActionLang) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 /** Parses supported fenced blocks AND XML tool_call blocks into normalized Agent Actions. */
 export function parseAgentActions(content: string): AgentAction[] {
   const actions: AgentAction[] = [];
