@@ -19,8 +19,9 @@ import { useWorkspaceStore } from '../../store/useWorkspaceStore';
 import { useGatewayStore } from '../../store/useGatewayStore';
 import { SubtaskProgressCard } from './SubtaskProgressCard';
 import { SwarmFlowVisualizer, SwarmFlowState } from './SwarmFlowVisualizer';
+import { ExecutionModeCapsule } from './ExecutionModeCapsule';
 import { toast } from '../common/Toast';
-import type { Subtask } from '../../types';
+import type { Subtask, ExecutionMode } from '../../types';
 
 export const ChatPanel: React.FC = () => {
   const {
@@ -38,9 +39,27 @@ export const ChatPanel: React.FC = () => {
   const [streamingThought, setStreamingThought] = useState('');
   const [streamingContent, setStreamingContent] = useState('');
   const [collapsedThoughts, setCollapsedThoughts] = useState<Record<string, boolean>>({});
-  const [isSwarmMode, setIsSwarmMode] = useState(false);
+  const [executionMode, setExecutionMode] = useState<ExecutionMode>('coding');
+  const [swarmBudgetTokens, setSwarmBudgetTokens] = useState<number>(25000);
   const [swarmFlowData, setSwarmFlowData] = useState<SwarmFlowState | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Global hotkeys: Alt+1 for Coding Loop, Alt+2 for SwarmFlow
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if (e.altKey && e.key === '1') {
+        e.preventDefault();
+        setExecutionMode('coding');
+        toast.info('已切换至: ⚡ 极速双环 (Coding Loop)');
+      } else if (e.altKey && e.key === '2') {
+        e.preventDefault();
+        setExecutionMode('swarm');
+        toast.info('已切换至: ✨ SwarmFlow 算子编排流');
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, []);
 
   const activeProject = projects.find((p) => p.id === activeProjectId);
   const activeSession = activeProject?.sessions.find((s) => s.id === activeSessionId);
@@ -107,16 +126,16 @@ export const ChatPanel: React.FC = () => {
 
     const workspaceDir = activeProject?.path || 'D:\\weihu\\agent-learning';
 
-    if (isSwarmMode) {
+    if (executionMode === 'swarm') {
       try {
         const decision = await invoke<any>('run_swarm_flow_task', {
           prompt: promptText,
-          budgetTokens: 25000,
+          budgetTokens: swarmBudgetTokens,
         });
         if (decision) {
           setSwarmFlowData({
             taskPrompt: promptText,
-            budgetTokens: 25000,
+            budgetTokens: swarmBudgetTokens,
             workersCount: 3,
             status: 'completed',
             candidates: [
@@ -350,34 +369,21 @@ export const ChatPanel: React.FC = () => {
               }
             }}
             placeholder={
-              isSwarmMode
-                ? "输入复杂重构或多任务指令，将通过 SwarmFlow (budget -> parallel -> compact -> pipeline -> arbiter) 并行推进..."
-                : "输入编程需求或任务指令 (Enter 发送, Shift+Enter 换行)..."
+              executionMode === 'swarm'
+                ? "输入复杂重构或多任务方案设计，将通过 SwarmFlow 7 算子流并行竞标与仲裁推进 (Alt+2)..."
+                : "输入日常编程需求或任务指令，由单 Agent 极速执行内外双环 (Enter 发送, Alt+1 切换)..."
             }
             rows={2}
             className="w-full resize-none outline-none text-xs text-[#1E1C1A] placeholder-[#8A847C] leading-relaxed bg-transparent"
           />
 
           <div className="flex items-center justify-between pt-1 border-t border-[#F4EFEA]">
-            <div className="flex items-center gap-2">
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#FAF8F5] border border-[#E6DFD5] rounded text-[10px] font-medium text-[#6B665F]">
-                <Zap className="w-3 h-3 text-[#D96B27]" />
-                模式: ⚡ Coding
-              </span>
-
-              <button
-                type="button"
-                onClick={() => setIsSwarmMode(!isSwarmMode)}
-                className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold transition-all cursor-pointer ${
-                  isSwarmMode
-                    ? 'bg-[#D96B27] text-white shadow-xs'
-                    : 'bg-[#FAF8F5] border border-[#E6DFD5] text-[#6B665F] hover:text-[#1E1C1A]'
-                }`}
-              >
-                <Sparkles className="w-3 h-3" />
-                <span>{isSwarmMode ? 'SwarmFlow 算子流 (已开启)' : 'SwarmFlow 算子流'}</span>
-              </button>
-            </div>
+            <ExecutionModeCapsule
+              mode={executionMode}
+              onModeChange={setExecutionMode}
+              swarmBudgetTokens={swarmBudgetTokens}
+              onBudgetChange={setSwarmBudgetTokens}
+            />
 
             <button
               onClick={handleSend}

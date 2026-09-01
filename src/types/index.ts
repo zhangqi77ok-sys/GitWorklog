@@ -1,5 +1,12 @@
 export type Role = 'system' | 'user' | 'assistant' | 'tool';
 
+export type ExecutionMode = 'coding' | 'swarm';
+
+export interface ExecutionModeConfig {
+  mode: ExecutionMode;
+  swarmBudgetTokens: number;
+}
+
 export interface ToolCall {
   id: string;
   name: string;
