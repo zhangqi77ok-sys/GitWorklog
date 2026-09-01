@@ -55,6 +55,7 @@ interface ProjectSessionState {
   createSession: (projectId: string, title?: string, tags?: string[], modelId?: string) => Promise<SessionRecord | null>;
   updateSession: (sessionId: string, title?: string, tags?: string[], isPinned?: boolean) => Promise<void>;
   deleteSession: (sessionId: string) => Promise<void>;
+  deleteProject: (projectId: string) => Promise<void>;
   setSearchQuery: (query: string) => void;
   setSelectedTag: (tag: string | null) => void;
 }
@@ -153,6 +154,15 @@ export const useProjectSessionStore = create<ProjectSessionState>((set, get) => 
   deleteSession: async (sessionId: string) => {
     try {
       await invoke('delete_project_session', { sessionId });
+      await get().loadInitialData();
+    } catch (err: any) {
+      set({ error: String(err) });
+    }
+  },
+
+  deleteProject: async (projectId: string) => {
+    try {
+      await invoke('delete_project_folder', { projectId });
       await get().loadInitialData();
     } catch (err: any) {
       set({ error: String(err) });

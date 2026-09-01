@@ -20,6 +20,13 @@ import {
   Sun,
   Moon,
   ExternalLink,
+  Plus,
+  Trash2,
+  Edit2,
+  Terminal,
+  UploadCloud,
+  Layers,
+  Code2,
 } from 'lucide-react';
 import {
   useGatewayStore,
@@ -27,15 +34,13 @@ import {
   ProviderPlatform,
   IngressType,
 } from '../../store/useGatewayStore';
-import type { PluginMetadata, ToolSchema } from '../../types';
+import { useMcpSkillStore, McpServerConfig, SkillConfig } from '../../store/useMcpSkillStore';
 
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   theme: 'cream' | 'dark';
   onToggleTheme: () => void;
-  plugins?: PluginMetadata[];
-  tools?: ToolSchema[];
 }
 
 const PLATFORM_OPTIONS: {
@@ -103,30 +108,47 @@ const PLATFORM_OPTIONS: {
   },
 ];
 
-type SettingsTab = 'gateway' | 'plugins' | 'appearance' | 'about';
+type SettingsTab = 'gateway' | 'mcp' | 'skills' | 'appearance' | 'about';
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
   isOpen,
   onClose,
   theme,
   onToggleTheme,
-  plugins = [],
-  tools = [],
 }) => {
   const {
     channels,
     activeChannelId,
     probeResults,
     saveChannel,
+    deleteChannel,
     setActiveChannel,
     testChannel,
     pullModels,
   } = useGatewayStore();
 
+  const {
+    mcpServers,
+    skills,
+    addMcpServer,
+    updateMcpServer,
+    deleteMcpServer,
+    toggleMcpServer,
+    importClaudeJson,
+    addPresetMcp,
+    addSkill,
+    updateSkill,
+    deleteSkill,
+    toggleSkill,
+  } = useMcpSkillStore();
+
   const [activeTab, setActiveTab] = useState<SettingsTab>('gateway');
   const [selectedChannelId, setSelectedChannelId] = useState<string>('');
-  const [formData, setFormData] = useState<Partial<GatewayChannel>>({
-    name: 'DeepSeek 官方直连',
+
+  // Editing form for Gateway Channel
+  const [channelForm, setChannelForm] = useState<GatewayChannel>({
+    id: '',
+    name: '新建渠道',
     platform: 'deepseek',
     ingress_type: 'api_key',
     base_url: 'https://api.deepseek.com/v1',
@@ -138,8 +160,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     weight: 100,
   });
 
-  const [sub2Url, setSub2Url] = useState('');
-  const [capJson, setCapJson] = useState('');
   const [showKey, setShowKey] = useState(false);
   const [isProbing, setIsProbing] = useState(false);
   const [isFetchingModels, setIsFetchingModels] = useState(false);
@@ -150,11 +170,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     message: string;
   } | null>(null);
 
+  // MCP / Skill state
+  const [jsonImportText, setJsonImportText] = useState('');
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [editingMcp, setEditingMcp] = useState<McpServerConfig | null>(null);
+  const [editingSkill, setEditingSkill] = useState<SkillConfig | null>(null);
+
   useEffect(() => {
     if (channels.length > 0) {
       const active = channels.find((c) => c.id === activeChannelId) || channels[0];
       setSelectedChannelId(active.id);
-      setFormData(active);
+      setChannelForm(active);
     }
   }, [channels, activeChannelId]);
 
@@ -162,15 +188,43 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const currentProbe = localProbeResult || (selectedChannelId ? probeResults[selectedChannelId] : null);
 
+  // Handle Channel Selection
+  const handleSelectChannel = (channel: GatewayChannel) => {
+    setSelectedChannelId(channel.id);
+    setChannelForm(channel);
+    setLocalProbeResult(null);
+  };
+
+  // Handle New Channel creation
+  const handleAddNewChannel = () => {
+    const newId = `ch_${Date.now()}`;
+    const newChannel: GatewayChannel = {
+      id: newId,
+      name: `新 OpenAI 渠道 ${channels.length + 1}`,
+      platform: 'openai',
+      ingress_type: 'api_key',
+      base_url: 'https://api.openai.com/v1',
+      api_key: '',
+      models: ['gpt-4o', 'gpt-4o-mini'],
+      enabled: true,
+      is_healthy: true,
+      priority: 1,
+      weight: 100,
+    };
+    setSelectedChannelId(newId);
+    setChannelForm(newChannel);
+    setLocalProbeResult(null);
+  };
+
   const handleSelectPlatform = (platformId: ProviderPlatform) => {
     const plat = PLATFORM_OPTIONS.find((p) => p.id === platformId);
     if (!plat) return;
-    setFormData((prev) => ({
+    setChannelForm((prev) => ({
       ...prev,
       platform: platformId,
       base_url: plat.defaultUrl,
       models: plat.defaultModels,
-      name: `${plat.label} 官方直连`,
+      name: `${plat.label} 渠道 ${channels.filter((c) => c.platform === platformId).length + 1}`,
     }));
   };
 
@@ -178,20 +232,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setIsProbing(true);
     setLocalProbeResult(null);
     try {
-      const channel: GatewayChannel = {
-        id: selectedChannelId || `ch_${Date.now()}`,
-        name: formData.name || 'AI Channel',
-        platform: formData.platform || 'deepseek',
-        ingress_type: formData.ingress_type || 'api_key',
-        base_url: formData.base_url || 'https://api.deepseek.com/v1',
-        api_key: formData.api_key || '',
-        models: formData.models || ['deepseek-chat'],
-        enabled: true,
-        is_healthy: true,
-        priority: 1,
-        weight: 100,
-      };
-      const res = await testChannel(channel);
+      const res = await testChannel(channelForm);
       if (res) {
         setLocalProbeResult({
           success: res.success,
@@ -220,42 +261,45 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   };
 
   const handleFetchModels = async () => {
-    if (!formData.base_url) return;
+    if (!channelForm.base_url) return;
     setIsFetchingModels(true);
     try {
-      const models = await pullModels(formData.base_url, formData.api_key);
+      const models = await pullModels(channelForm.base_url, channelForm.api_key);
       if (models && models.length > 0) {
-        setFormData((prev) => ({ ...prev, models }));
+        setChannelForm((prev) => ({ ...prev, models }));
       }
     } finally {
       setIsFetchingModels(false);
     }
   };
 
-  const handleSave = async () => {
-    const channel: GatewayChannel = {
-      id: selectedChannelId || `ch_${Date.now()}`,
-      name: formData.name || 'AI Channel',
-      platform: formData.platform || 'deepseek',
-      ingress_type: formData.ingress_type || 'api_key',
-      base_url: formData.base_url || 'https://api.deepseek.com/v1',
-      api_key: formData.api_key || '',
-      models: formData.models || ['deepseek-chat'],
-      enabled: true,
-      is_healthy: true,
-      priority: 1,
-      weight: 100,
-    };
-    await saveChannel(channel);
-    await setActiveChannel(channel.id);
-    onClose();
+  const handleSaveChannel = async () => {
+    await saveChannel(channelForm);
+    if (!activeChannelId || channels.length <= 1) {
+      await setActiveChannel(channelForm.id);
+    }
+  };
+
+  const handleDeleteChannel = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (channels.length <= 1) {
+      alert('请至少保留一个 AI 模型渠道！');
+      return;
+    }
+    if (confirm('确定删除该渠道配置吗？')) {
+      await deleteChannel(id);
+      const remaining = channels.filter((c) => c.id !== id);
+      if (remaining.length > 0) {
+        handleSelectChannel(remaining[0]);
+      }
+    }
   };
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 select-none">
-      <div className="bg-[#FAF8F5] border border-[#E6DFD5] rounded-2xl w-[820px] max-w-[95vw] shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150 max-h-[92vh]">
+      <div className="bg-[#FAF8F5] border border-[#E6DFD5] rounded-2xl w-[900px] max-w-[96vw] shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150 h-[88vh]">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-[#E6DFD5] bg-[#F4EFEA] flex items-center justify-between">
+        <div className="px-6 py-3.5 border-b border-[#E6DFD5] bg-[#F4EFEA] flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="w-7 h-7 rounded-lg bg-[#D96B27]/10 flex items-center justify-center text-[#D96B27]">
               <Sparkles className="w-4 h-4" />
@@ -273,13 +317,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         {/* Tab Navigation */}
         <div className="px-6 border-b border-[#E6DFD5] bg-white flex items-center gap-2">
           {[
-            { id: 'gateway', label: 'AI 模型网关', icon: <Sparkles className="w-3.5 h-3.5" /> },
             {
-              id: 'plugins',
-              label: `能力插件与 MCP (${plugins.length})`,
-              icon: <Cpu className="w-3.5 h-3.5" />,
+              id: 'gateway',
+              label: `AI 模型网关 (${channels.length})`,
+              icon: <Sparkles className="w-3.5 h-3.5" />,
             },
-            { id: 'appearance', label: '外观与主题', icon: <Palette className="w-3.5 h-3.5" /> },
+            {
+              id: 'mcp',
+              label: `MCP 协议管理 (${mcpServers.length})`,
+              icon: <Layers className="w-3.5 h-3.5" />,
+            },
+            {
+              id: 'skills',
+              label: `SKILL 智能体技能 (${skills.length})`,
+              icon: <Code2 className="w-3.5 h-3.5" />,
+            },
+            { id: 'appearance', label: '外观主题', icon: <Palette className="w-3.5 h-3.5" /> },
             { id: 'about', label: '关于与安全', icon: <Info className="w-3.5 h-3.5" /> },
           ].map((tab) => (
             <button
@@ -298,340 +351,446 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         </div>
 
         {/* Tab Content Body */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-4 text-xs">
-          {/* TAB 1: AI 模型网关 */}
+        <div className="flex-1 overflow-hidden flex flex-col text-xs">
+          {/* TAB 1: AI 模型网关 (sub2api 风格动态多渠道管理) */}
           {activeTab === 'gateway' && (
-            <div className="space-y-4">
-              {/* Channel Name */}
-              <div className="space-y-1">
-                <label className="font-bold text-[#1E1C1A]">渠道别名 (Channel Name)</label>
-                <input
-                  type="text"
-                  value={formData.name || ''}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="例如: DeepSeek 官方直连"
-                  className="w-full px-3.5 py-2 bg-white border border-[#E6DFD5] focus:border-[#D96B27] rounded-lg outline-none text-[#1E1C1A] text-xs"
-                />
-              </div>
+            <div className="flex-1 flex overflow-hidden">
+              {/* Left Column: Dynamic Channels List */}
+              <div className="w-64 border-r border-[#E6DFD5] bg-[#F4EFEA]/50 flex flex-col">
+                <div className="p-3 border-b border-[#E6DFD5] flex items-center justify-between bg-white">
+                  <span className="font-bold text-[#1E1C1A]">配置渠道列表</span>
+                  <button
+                    onClick={handleAddNewChannel}
+                    className="flex items-center gap-1 px-2.5 py-1 bg-[#D96B27] hover:bg-[#B8551B] text-white rounded-lg text-[11px] font-bold shadow-xs cursor-pointer"
+                  >
+                    <Plus className="w-3 h-3" />
+                    <span>添加渠道</span>
+                  </button>
+                </div>
 
-              {/* 1. Platform Selector */}
-              <div className="space-y-2">
-                <label className="font-bold text-[#1E1C1A]">
-                  1. 选择上游平台 (Upstream Platform)
-                </label>
-                <div className="grid grid-cols-4 gap-2.5">
-                  {PLATFORM_OPTIONS.map((plat) => {
-                    const isSelected = formData.platform === plat.id;
+                <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
+                  {channels.map((ch) => {
+                    const isSelected = ch.id === selectedChannelId;
+                    const isActive = ch.id === activeChannelId;
                     return (
-                      <button
-                        key={plat.id}
-                        onClick={() => handleSelectPlatform(plat.id)}
-                        className={`flex items-center gap-2 p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                      <div
+                        key={ch.id}
+                        onClick={() => handleSelectChannel(ch)}
+                        className={`p-2.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between group ${
                           isSelected
-                            ? 'border-[#D96B27] bg-[#FAF8F5] text-[#D96B27] font-bold ring-2 ring-[#D96B27]/30 shadow-xs'
-                            : 'border-[#E6DFD5] bg-white text-[#3D3A36] hover:bg-[#FAF8F5] hover:border-[#D5CCC0]'
+                            ? 'bg-white border-[#D96B27] shadow-xs'
+                            : 'bg-white/70 hover:bg-white border-[#E6DFD5]'
                         }`}
                       >
-                        <span className="text-base">{plat.icon}</span>
-                        <span className="truncate flex-1">{plat.label}</span>
-                        {isSelected && <Check className="w-4 h-4 text-[#D96B27] flex-shrink-0" />}
-                      </button>
+                        <div className="min-w-0 flex-1 pr-2">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-bold text-[#1E1C1A] truncate text-xs">
+                              {ch.name}
+                            </span>
+                            {isActive && (
+                              <span className="px-1.5 py-0.2 bg-[#E8F5E9] text-[#2E7D32] border border-[#A5D6A7] rounded-full text-[9px] font-bold flex-shrink-0">
+                                活跃
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[10px] text-[#8A847C] font-mono truncate mt-0.5">
+                            {ch.platform} · {ch.models.length} 个模型
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={(e) => handleDeleteChannel(ch.id, e)}
+                          className="p-1 rounded text-[#8A847C] hover:text-[#C62828] hover:bg-[#FFEBEE] transition-colors opacity-0 group-hover:opacity-100 flex-shrink-0 cursor-pointer"
+                          title="删除渠道"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
                     );
                   })}
                 </div>
               </div>
 
-              {/* 2. Ingress Type Cards (Supporting API Key, OAuth, Sub2, Cap, Proxy) */}
-              <div className="space-y-2">
-                <label className="font-bold text-[#1E1C1A]">
-                  2. 接入与认证方式 (Ingress Type / Sub2 / Cap / OAuth)
-                </label>
-                <div className="grid grid-cols-3 gap-2.5">
-                  {/* Standard API Key */}
-                  <div
-                    onClick={() => setFormData({ ...formData, ingress_type: 'api_key' })}
-                    className={`p-3 rounded-xl border cursor-pointer transition-all ${
-                      formData.ingress_type === 'api_key'
-                        ? 'border-[#D96B27] bg-white ring-2 ring-[#D96B27]/30 shadow-xs'
-                        : 'border-[#E6DFD5] bg-white/70 hover:bg-white'
-                    }`}
-                  >
-                    <div className="font-bold text-[#1E1C1A] mb-0.5 flex items-center gap-1.5">
-                      <Key className="w-3.5 h-3.5 text-[#D96B27]" />
-                      <span>标准 API Key</span>
-                    </div>
-                    <p className="text-[10px] text-[#6B665F]">官方分配 sk-*** 密钥直接发起</p>
+              {/* Right Column: Channel Editor */}
+              <div className="flex-1 overflow-y-auto p-5 space-y-4 bg-[#FAF8F5]">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-1 flex-1 pr-4">
+                    <label className="font-bold text-[#1E1C1A]">渠道别名 (Channel Name)</label>
+                    <input
+                      type="text"
+                      value={channelForm.name}
+                      onChange={(e) => setChannelForm({ ...channelForm, name: e.target.value })}
+                      placeholder="例如: 我的 OpenAI 主力账号"
+                      className="w-full px-3 py-2 bg-white border border-[#E6DFD5] focus:border-[#D96B27] rounded-lg outline-none text-[#1E1C1A] text-xs"
+                    />
                   </div>
 
-                  {/* Sub2 Subscription */}
-                  <div
-                    onClick={() => setFormData({ ...formData, ingress_type: 'sub2' })}
-                    className={`p-3 rounded-xl border cursor-pointer transition-all ${
-                      formData.ingress_type === 'sub2'
-                        ? 'border-[#D96B27] bg-white ring-2 ring-[#D96B27]/30 shadow-xs'
-                        : 'border-[#E6DFD5] bg-white/70 hover:bg-white'
+                  <button
+                    onClick={() => setActiveChannel(channelForm.id)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all mt-4 cursor-pointer ${
+                      activeChannelId === channelForm.id
+                        ? 'bg-[#E8F5E9] text-[#2E7D32] border border-[#A5D6A7]'
+                        : 'bg-white border border-[#E6DFD5] hover:border-[#D96B27] text-[#3D3A36]'
                     }`}
                   >
-                    <div className="font-bold text-[#1E1C1A] mb-0.5 flex items-center gap-1.5">
-                      <Link className="w-3.5 h-3.5 text-[#2E7D32]" />
-                      <span>Sub2 订阅导入</span>
-                    </div>
-                    <p className="text-[10px] text-[#6B665F]">导入 sub2api 订阅链接或账号池</p>
-                  </div>
-
-                  {/* Cap Credential */}
-                  <div
-                    onClick={() => setFormData({ ...formData, ingress_type: 'cap' })}
-                    className={`p-3 rounded-xl border cursor-pointer transition-all ${
-                      formData.ingress_type === 'cap'
-                        ? 'border-[#D96B27] bg-white ring-2 ring-[#D96B27]/30 shadow-xs'
-                        : 'border-[#E6DFD5] bg-white/70 hover:bg-white'
-                    }`}
-                  >
-                    <div className="font-bold text-[#1E1C1A] mb-0.5 flex items-center gap-1.5">
-                      <FileCode className="w-3.5 h-3.5 text-[#1565C0]" />
-                      <span>Cap 凭据包导入</span>
-                    </div>
-                    <p className="text-[10px] text-[#6B665F]">导入 Session Token / Cap 凭据</p>
-                  </div>
-
-                  {/* OAuth 2.0 */}
-                  <div
-                    onClick={() => setFormData({ ...formData, ingress_type: 'oauth' })}
-                    className={`p-3 rounded-xl border cursor-pointer transition-all ${
-                      formData.ingress_type === 'oauth'
-                        ? 'border-[#D96B27] bg-white ring-2 ring-[#D96B27]/30 shadow-xs'
-                        : 'border-[#E6DFD5] bg-white/70 hover:bg-white'
-                    }`}
-                  >
-                    <div className="font-bold text-[#1E1C1A] mb-0.5 flex items-center gap-1.5">
-                      <ShieldCheck className="w-3.5 h-3.5 text-[#7B1FA2]" />
-                      <span>OAuth 2.0 授权</span>
-                    </div>
-                    <p className="text-[10px] text-[#6B665F]">浏览器官方授权登录换取凭据</p>
-                  </div>
-
-                  {/* Proxy 透传 */}
-                  <div
-                    onClick={() => setFormData({ ...formData, ingress_type: 'proxy' })}
-                    className={`p-3 rounded-xl border cursor-pointer transition-all col-span-2 ${
-                      formData.ingress_type === 'proxy'
-                        ? 'border-[#D96B27] bg-white ring-2 ring-[#D96B27]/30 shadow-xs'
-                        : 'border-[#E6DFD5] bg-white/70 hover:bg-white'
-                    }`}
-                  >
-                    <div className="font-bold text-[#1E1C1A] mb-0.5 flex items-center gap-1.5">
-                      <Globe className="w-3.5 h-3.5 text-[#E65100]" />
-                      <span>自建中转 / OneAPI 代理</span>
-                    </div>
-                    <p className="text-[10px] text-[#6B665F]">
-                      经由企业内部网关或自定义反代透传
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* 3. Dynamic Credential Input Panel */}
-              <div className="space-y-3 bg-white p-4 rounded-xl border border-[#E6DFD5]">
-                <div className="space-y-1">
-                  <label className="font-bold text-[#1E1C1A]">服务端点 (Endpoint URL)</label>
-                  <input
-                    type="text"
-                    value={formData.base_url || ''}
-                    onChange={(e) => setFormData({ ...formData, base_url: e.target.value })}
-                    className="w-full px-3 py-2 bg-[#FAF8F5] border border-[#E6DFD5] focus:border-[#D96B27] rounded-lg outline-none font-mono text-xs text-[#1E1C1A]"
-                  />
+                    {activeChannelId === channelForm.id ? '🟢 当前活跃渠道' : '设为活跃渠道'}
+                  </button>
                 </div>
 
-                {/* Conditional Inputs based on Ingress Type */}
-                {formData.ingress_type === 'api_key' && (
+                {/* 1. Platform Selector */}
+                <div className="space-y-1.5">
+                  <label className="font-bold text-[#1E1C1A]">
+                    1. 目标平台 (Provider Platform)
+                  </label>
+                  <div className="grid grid-cols-4 gap-2">
+                    {PLATFORM_OPTIONS.map((plat) => {
+                      const isSelected = channelForm.platform === plat.id;
+                      return (
+                        <button
+                          key={plat.id}
+                          onClick={() => handleSelectPlatform(plat.id)}
+                          className={`flex items-center gap-2 p-2 rounded-lg border text-left transition-all cursor-pointer ${
+                            isSelected
+                              ? 'border-[#D96B27] bg-[#FAF8F5] text-[#D96B27] font-bold ring-2 ring-[#D96B27]/20 shadow-xs'
+                              : 'border-[#E6DFD5] bg-white text-[#3D3A36] hover:bg-[#FAF8F5]'
+                          }`}
+                        >
+                          <span>{plat.icon}</span>
+                          <span className="truncate flex-1">{plat.label}</span>
+                          {isSelected && <Check className="w-3.5 h-3.5 text-[#D96B27]" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 2. Ingress Type */}
+                <div className="space-y-1.5">
+                  <label className="font-bold text-[#1E1C1A]">
+                    2. 认证类型 (Ingress Type / Sub2 / Cap / OAuth)
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { id: 'api_key', label: '标准 API Key', desc: '官方 sk-*** 密钥直连', icon: <Key className="w-3 h-3 text-[#D96B27]" /> },
+                      { id: 'sub2', label: 'Sub2 订阅导入', desc: 'sub2api 订阅链接或账号池', icon: <Link className="w-3 h-3 text-[#2E7D32]" /> },
+                      { id: 'cap', label: 'Cap 凭据包导入', desc: 'Session Token / Cap 凭据包', icon: <FileCode className="w-3 h-3 text-[#1565C0]" /> },
+                      { id: 'oauth', label: 'OAuth 2.0 授权', desc: '浏览器官方授权登录换取凭据', icon: <ShieldCheck className="w-3 h-3 text-[#7B1FA2]" /> },
+                      { id: 'proxy', label: '自建中转 / 代理', desc: '经由企业反代或 OneAPI 透传', icon: <Globe className="w-3 h-3 text-[#E65100]" /> },
+                    ].map((mode) => (
+                      <div
+                        key={mode.id}
+                        onClick={() => setChannelForm({ ...channelForm, ingress_type: mode.id as IngressType })}
+                        className={`p-2.5 rounded-lg border cursor-pointer transition-all ${
+                          channelForm.ingress_type === mode.id
+                            ? 'border-[#D96B27] bg-white ring-2 ring-[#D96B27]/20 shadow-xs'
+                            : 'border-[#E6DFD5] bg-white/70 hover:bg-white'
+                        }`}
+                      >
+                        <div className="font-bold text-[#1E1C1A] flex items-center gap-1.5 mb-0.5">
+                          {mode.icon}
+                          <span>{mode.label}</span>
+                        </div>
+                        <p className="text-[10px] text-[#6B665F] truncate">{mode.desc}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 3. Endpoint & Credentials */}
+                <div className="space-y-3 bg-white p-3.5 rounded-xl border border-[#E6DFD5]">
                   <div className="space-y-1">
-                    <label className="font-bold text-[#1E1C1A]">API 密钥 (API Key)</label>
+                    <label className="font-bold text-[#1E1C1A]">服务端点 (Endpoint URL)</label>
+                    <input
+                      type="text"
+                      value={channelForm.base_url}
+                      onChange={(e) => setChannelForm({ ...channelForm, base_url: e.target.value })}
+                      className="w-full px-3 py-1.5 bg-[#FAF8F5] border border-[#E6DFD5] focus:border-[#D96B27] rounded-lg outline-none font-mono text-xs text-[#1E1C1A]"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="font-bold text-[#1E1C1A]">
+                      {channelForm.ingress_type === 'sub2'
+                        ? 'Sub2 订阅链接 (Subscription URL)'
+                        : channelForm.ingress_type === 'cap'
+                        ? 'Cap 凭据包 / Session Token (JSON / Token)'
+                        : 'API 密钥 / Access Token'}
+                    </label>
                     <div className="relative">
                       <input
                         type={showKey ? 'text' : 'password'}
-                        value={formData.api_key || ''}
-                        onChange={(e) => setFormData({ ...formData, api_key: e.target.value })}
-                        placeholder="sk-..."
-                        className="w-full pl-3 pr-10 py-2 bg-[#FAF8F5] border border-[#E6DFD5] focus:border-[#D96B27] rounded-lg outline-none font-mono text-xs text-[#1E1C1A]"
+                        value={channelForm.api_key || ''}
+                        onChange={(e) => setChannelForm({ ...channelForm, api_key: e.target.value })}
+                        placeholder={channelForm.ingress_type === 'sub2' ? 'https://sub2api.../sub?token=...' : 'sk-...'}
+                        className="w-full pl-3 pr-10 py-1.5 bg-[#FAF8F5] border border-[#E6DFD5] focus:border-[#D96B27] rounded-lg outline-none font-mono text-xs text-[#1E1C1A]"
                       />
                       <button
                         type="button"
                         onClick={() => setShowKey(!showKey)}
                         className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8A847C] hover:text-[#1E1C1A] cursor-pointer"
                       >
-                        {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        {showKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                       </button>
                     </div>
                   </div>
-                )}
 
-                {formData.ingress_type === 'sub2' && (
+                  {/* Models */}
                   <div className="space-y-1">
-                    <label className="font-bold text-[#1E1C1A]">
-                      Sub2 订阅链接或 API (Subscription URL)
-                    </label>
+                    <div className="flex items-center justify-between">
+                      <label className="font-bold text-[#1E1C1A]">关联模型列表</label>
+                      <button
+                        onClick={handleFetchModels}
+                        disabled={isFetchingModels || !channelForm.base_url}
+                        className="text-[11px] text-[#D96B27] hover:underline flex items-center gap-1 disabled:opacity-50 cursor-pointer"
+                      >
+                        <RotateCw className={`w-3 h-3 ${isFetchingModels ? 'animate-spin' : ''}`} />
+                        <span>自动拉取模型</span>
+                      </button>
+                    </div>
                     <input
                       type="text"
-                      value={sub2Url}
-                      onChange={(e) => {
-                        setSub2Url(e.target.value);
-                        setFormData({ ...formData, api_key: e.target.value });
-                      }}
-                      placeholder="https://your-sub2api-domain.com/sub?token=..."
-                      className="w-full px-3 py-2 bg-[#FAF8F5] border border-[#E6DFD5] focus:border-[#D96B27] rounded-lg outline-none font-mono text-xs text-[#1E1C1A]"
-                    />
-                    <span className="text-[10px] text-[#6B665F]">
-                      支持 sub2api 格式的订阅与轮询账号池
-                    </span>
-                  </div>
-                )}
-
-                {formData.ingress_type === 'cap' && (
-                  <div className="space-y-1">
-                    <label className="font-bold text-[#1E1C1A]">
-                      Cap 凭据包 / Session Token (JSON / Token String)
-                    </label>
-                    <textarea
-                      rows={3}
-                      value={capJson}
-                      onChange={(e) => {
-                        setCapJson(e.target.value);
-                        setFormData({ ...formData, api_key: e.target.value });
-                      }}
-                      placeholder='{"session_token": "...", "refresh_token": "..."}'
-                      className="w-full px-3 py-2 bg-[#FAF8F5] border border-[#E6DFD5] focus:border-[#D96B27] rounded-lg outline-none font-mono text-xs text-[#1E1C1A]"
+                      value={channelForm.models.join(', ')}
+                      onChange={(e) =>
+                        setChannelForm({
+                          ...channelForm,
+                          models: e.target.value.split(',').map((s) => s.trim()).filter(Boolean),
+                        })
+                      }
+                      className="w-full px-3 py-1.5 bg-[#FAF8F5] border border-[#E6DFD5] focus:border-[#D96B27] rounded-lg outline-none font-mono text-xs text-[#1E1C1A]"
                     />
                   </div>
-                )}
+                </div>
 
-                {formData.ingress_type === 'oauth' && (
-                  <div className="p-3 bg-[#FAF8F5] rounded-lg border border-[#E6DFD5] flex items-center justify-between">
-                    <div>
-                      <div className="font-bold text-[#1E1C1A]">OAuth 2.0 官方授权流</div>
-                      <div className="text-[11px] text-[#6B665F]">
-                        点击授权将打开官方登录页面获取 Access Token
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => alert('正在拉起浏览器官方 OAuth 授权页面...')}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-[#D96B27] text-white rounded-lg text-xs font-bold hover:bg-[#B8551B] transition-colors cursor-pointer"
-                    >
-                      <ExternalLink className="w-3.5 h-3.5" />
-                      <span>发起授权</span>
-                    </button>
-                  </div>
-                )}
-
-                {/* Models */}
-                <div className="space-y-1">
+                {/* Live Probe & Save Bar */}
+                <div className="space-y-2 bg-[#F4EFEA] p-3.5 rounded-xl border border-[#E6DFD5]">
                   <div className="flex items-center justify-between">
-                    <label className="font-bold text-[#1E1C1A]">关联模型 (Associated Models)</label>
-                    <button
-                      onClick={handleFetchModels}
-                      disabled={isFetchingModels || !formData.base_url}
-                      className="text-[11px] text-[#D96B27] hover:underline flex items-center gap-1 disabled:opacity-50 cursor-pointer"
-                    >
-                      <RotateCw
-                        className={`w-3.5 h-3.5 ${isFetchingModels ? 'animate-spin' : ''}`}
-                      />
-                      <span>从服务端拉取 (/v1/models)</span>
-                    </button>
+                    <span className="font-bold text-[#1E1C1A] flex items-center gap-2">
+                      <Zap className="w-4 h-4 text-[#D96B27]" />
+                      实时测速探活
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={handleRunProbe}
+                        disabled={isProbing}
+                        className="px-3 py-1.5 bg-[#FAF8F5] border border-[#E6DFD5] hover:border-[#D96B27] text-[#3D3A36] rounded-lg text-xs font-bold transition-colors shadow-xs flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Zap className="w-3.5 h-3.5 text-[#D96B27]" />
+                        <span>{isProbing ? '正在探活...' : '⚡ 连通性测试'}</span>
+                      </button>
+                      <button
+                        onClick={handleSaveChannel}
+                        className="px-4 py-1.5 bg-[#D96B27] hover:bg-[#B8551B] text-white rounded-lg text-xs font-bold transition-colors shadow-xs cursor-pointer"
+                      >
+                        💾 保存当前渠道
+                      </button>
+                    </div>
                   </div>
-                  <input
-                    type="text"
-                    value={formData.models?.join(', ') || ''}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        models: e.target.value.split(',').map((s) => s.trim()).filter(Boolean),
-                      })
-                    }
-                    placeholder="deepseek-chat, deepseek-reasoner"
-                    className="w-full px-3 py-2 bg-[#FAF8F5] border border-[#E6DFD5] focus:border-[#D96B27] rounded-lg outline-none font-mono text-xs text-[#1E1C1A]"
-                  />
-                </div>
-              </div>
 
-              {/* Live Probe Card */}
-              <div className="space-y-2 bg-[#F4EFEA] p-4 rounded-xl border border-[#E6DFD5]">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-[#1E1C1A] flex items-center gap-2">
-                    <Zap className="w-4 h-4 text-[#D96B27]" />
-                    ⚡ 实时测速探活 (Live Account Probe)
-                  </span>
-                  <button
-                    onClick={handleRunProbe}
-                    disabled={isProbing}
-                    className="px-3.5 py-1.5 bg-[#D96B27] hover:bg-[#B8551B] disabled:opacity-50 text-white rounded-lg text-xs font-bold transition-colors shadow-xs flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <Zap className="w-3.5 h-3.5" />
-                    <span>{isProbing ? '正在探活...' : '⚡ 连通性测试'}</span>
-                  </button>
-                </div>
-
-                {currentProbe && (
-                  <div className="space-y-1.5 pt-1 text-[11px]">
-                    <div className="flex items-center gap-2 font-mono">
+                  {currentProbe && (
+                    <div className="pt-1 font-mono text-[11px]">
                       {currentProbe.success ? (
                         <span className="text-[#2E7D32] font-bold flex items-center gap-1">
-                          <CheckCircle className="w-3.5 h-3.5" /> 🟢 HTTP {currentProbe.http_status}{' '}
-                          OK · 首字延迟: {currentProbe.latency_ms}ms
+                          <CheckCircle className="w-3.5 h-3.5" /> 🟢 HTTP {currentProbe.http_status} OK · 首字延迟: {currentProbe.latency_ms}ms
                         </span>
                       ) : (
                         <span className="text-[#C62828] font-bold flex items-center gap-1">
-                          <AlertTriangle className="w-3.5 h-3.5" /> 探活异常: {currentProbe.message}
+                          <AlertTriangle className="w-3.5 h-3.5" /> 探活失败: {currentProbe.message}
                         </span>
                       )}
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             </div>
           )}
 
-          {/* TAB 2: 能力插件与 MCP */}
-          {activeTab === 'plugins' && (
-            <div className="space-y-3">
-              <div className="p-3 bg-white rounded-xl border border-[#E6DFD5] flex items-center justify-between">
+          {/* TAB 2: MCP 协议管理 (支持表单新建、JSON导入、预设与删除) */}
+          {activeTab === 'mcp' && (
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              <div className="flex items-center justify-between bg-white p-3.5 rounded-xl border border-[#E6DFD5]">
                 <div>
-                  <div className="font-bold text-xs text-[#1E1C1A]">内置与 MCP 能力插件</div>
-                  <div className="text-[11px] text-[#6B665F]">
-                    共检测到 {plugins.length} 个已加载插件及 {tools.length} 个工具契约
-                  </div>
+                  <div className="font-bold text-xs text-[#1E1C1A]">Model Context Protocol (MCP) 服务列表</div>
+                  <div className="text-[11px] text-[#6B665F]">标准 stdio / sse 传输协议，扩展智能体工具与生态</div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setIsImportModalOpen(true)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-[#E6DFD5] hover:border-[#D96B27] text-[#3D3A36] rounded-lg text-xs font-bold shadow-xs cursor-pointer"
+                  >
+                    <UploadCloud className="w-3.5 h-3.5 text-[#D96B27]" />
+                    <span>导入 Claude JSON</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      const name = prompt('请输入新 MCP Server 名称:', 'my-custom-mcp');
+                      if (name) {
+                        addMcpServer({
+                          name,
+                          transport: 'stdio',
+                          command: 'npx',
+                          args: ['-y', '@modelcontextprotocol/server-example'],
+                          enabled: true,
+                        });
+                      }
+                    }}
+                    className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#D96B27] hover:bg-[#B8551B] text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>添加 MCP Server</span>
+                  </button>
                 </div>
               </div>
 
-              <div className="space-y-2">
-                {plugins.length === 0 ? (
-                  <div className="p-6 text-center text-[#8A847C]">当前暂无外部挂载插件</div>
-                ) : (
-                  plugins.map((p) => (
-                    <div
-                      key={p.id}
-                      className="p-3 bg-white rounded-xl border border-[#E6DFD5] flex items-center justify-between"
-                    >
-                      <div className="flex items-center gap-3">
-                        <Cpu className="w-4 h-4 text-[#D96B27]" />
-                        <div>
-                          <div className="font-bold text-xs text-[#1E1C1A]">{p.name}</div>
-                          <div className="text-[11px] text-[#6B665F]">{p.description}</div>
-                        </div>
+              {/* Preset MCP Badges */}
+              <div className="flex items-center gap-2 text-xs">
+                <span className="text-[#8A847C]">一键挂载预设:</span>
+                {[
+                  { id: 'postgres', label: '+ PostgreSQL' },
+                  { id: 'sqlite', label: '+ SQLite' },
+                  { id: 'github', label: '+ GitHub' },
+                  { id: 'brave_search', label: '+ Brave Search' },
+                ].map((p) => (
+                  <button
+                    key={p.id}
+                    onClick={() => addPresetMcp(p.id)}
+                    className="px-2.5 py-1 bg-white hover:bg-[#FAF8F5] border border-[#E6DFD5] hover:border-[#D96B27] text-[#3D3A36] rounded-md text-[11px] font-medium transition-colors cursor-pointer"
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* MCP Servers List */}
+              <div className="space-y-2.5">
+                {mcpServers.map((server) => (
+                  <div
+                    key={server.id}
+                    className="p-3.5 bg-white rounded-xl border border-[#E6DFD5] flex items-center justify-between gap-3 shadow-xs hover:border-[#D96B27]/40 transition-all"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <Terminal className="w-4 h-4 text-[#D96B27] flex-shrink-0" />
+                        <span className="font-bold text-xs text-[#1E1C1A]">{server.name}</span>
+                        <span className="px-1.5 py-0.2 bg-[#F4EFEA] border border-[#E6DFD5] text-[#8A847C] rounded text-[10px] font-mono">
+                          {server.transport}
+                        </span>
                       </div>
-                      <span className="px-2 py-0.5 bg-[#E8F5E9] text-[#2E7D32] border border-[#A5D6A7] rounded-full text-[10px] font-bold">
-                        🟢 运行中
-                      </span>
+                      <div className="text-[11px] text-[#6B665F] font-mono mt-1 truncate">
+                        {server.command} {server.args?.join(' ')}
+                      </div>
                     </div>
-                  ))
-                )}
+
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => toggleMcpServer(server.id)}
+                        className={`w-9 h-5 rounded-full transition-colors relative p-0.5 cursor-pointer ${
+                          server.enabled ? 'bg-[#D96B27]' : 'bg-[#D5CCC0]'
+                        }`}
+                      >
+                        <div
+                          className={`w-4 h-4 rounded-full bg-white transition-transform ${
+                            server.enabled ? 'translate-x-4' : 'translate-x-0'
+                          }`}
+                        />
+                      </button>
+
+                      {!server.is_builtin && (
+                        <button
+                          onClick={() => deleteMcpServer(server.id)}
+                          className="p-1 text-[#8A847C] hover:text-[#C62828] hover:bg-[#FFEBEE] rounded transition-colors cursor-pointer"
+                          title="删除"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           )}
 
-          {/* TAB 3: 外观与主题 */}
+          {/* TAB 3: SKILL 智能体技能管理 */}
+          {activeTab === 'skills' && (
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              <div className="flex items-center justify-between bg-white p-3.5 rounded-xl border border-[#E6DFD5]">
+                <div>
+                  <div className="font-bold text-xs text-[#1E1C1A]">Agent Skills 技能清单</div>
+                  <div className="text-[11px] text-[#6B665F]">
+                    在对话中通过 /指令 快速调用的专业技能插件
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    const name = prompt('请输入技能名称:', '自定义技能');
+                    const trigger = prompt('请输入调用触发词 (如 /my-skill):', '/');
+                    if (name && trigger) {
+                      addSkill({
+                        name,
+                        trigger,
+                        description: '自定义智能体指令技能',
+                        prompt: '你是一名专业助手...',
+                        enabled: true,
+                      });
+                    }
+                  }}
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#D96B27] hover:bg-[#B8551B] text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>添加技能 (Skill)</span>
+                </button>
+              </div>
+
+              <div className="space-y-2.5">
+                {skills.map((skill) => (
+                  <div
+                    key={skill.id}
+                    className="p-3.5 bg-white rounded-xl border border-[#E6DFD5] flex items-center justify-between gap-3 shadow-xs hover:border-[#D96B27]/40 transition-all"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <Code2 className="w-4 h-4 text-[#D96B27] flex-shrink-0" />
+                        <span className="font-bold text-xs text-[#1E1C1A]">{skill.name}</span>
+                        <span className="px-2 py-0.5 bg-[#FAF8F5] border border-[#D96B27]/40 text-[#D96B27] rounded-md font-mono text-[10px] font-bold">
+                          {skill.trigger}
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-[#6B665F] mt-1">{skill.description}</div>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => toggleSkill(skill.id)}
+                        className={`w-9 h-5 rounded-full transition-colors relative p-0.5 cursor-pointer ${
+                          skill.enabled ? 'bg-[#D96B27]' : 'bg-[#D5CCC0]'
+                        }`}
+                      >
+                        <div
+                          className={`w-4 h-4 rounded-full bg-white transition-transform ${
+                            skill.enabled ? 'translate-x-4' : 'translate-x-0'
+                          }`}
+                        />
+                      </button>
+
+                      {!skill.is_builtin && (
+                        <button
+                          onClick={() => deleteSkill(skill.id)}
+                          className="p-1 text-[#8A847C] hover:text-[#C62828] hover:bg-[#FFEBEE] rounded transition-colors cursor-pointer"
+                          title="删除"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 4: 外观与主题 */}
           {activeTab === 'appearance' && (
-            <div className="space-y-4">
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
               <div className="font-bold text-[#1E1C1A]">界面色彩模式 (Theme Mode)</div>
               <div className="grid grid-cols-2 gap-4">
                 <div
@@ -681,9 +840,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           )}
 
-          {/* TAB 4: 关于与安全 */}
+          {/* TAB 5: 关于与安全 */}
           {activeTab === 'about' && (
-            <div className="space-y-4">
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
               <div className="p-4 bg-white rounded-xl border border-[#E6DFD5] space-y-2">
                 <div className="font-bold text-sm text-[#1E1C1A]">Tcode Studio v2.0.0</div>
                 <p className="text-[#6B665F]">
@@ -716,24 +875,60 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           )}
         </div>
 
-        {/* Footer Actions */}
-        <div className="px-6 py-3.5 border-t border-[#E6DFD5] bg-[#F4EFEA] flex items-center justify-end gap-3">
+        {/* Modal Footer */}
+        <div className="px-6 py-3 border-t border-[#E6DFD5] bg-[#F4EFEA] flex items-center justify-end">
           <button
             onClick={onClose}
-            className="px-4 py-2 bg-white border border-[#E6DFD5] hover:bg-[#FAF8F5] text-[#3D3A36] rounded-xl text-xs font-bold transition-colors cursor-pointer"
+            className="px-5 py-2 bg-white border border-[#E6DFD5] hover:bg-[#FAF8F5] text-[#3D3A36] rounded-xl text-xs font-bold transition-colors cursor-pointer"
           >
-            关闭
+            完成并关闭
           </button>
-          {activeTab === 'gateway' && (
-            <button
-              onClick={handleSave}
-              className="px-5 py-2 bg-[#D96B27] hover:bg-[#B8551B] text-white rounded-xl text-xs font-bold transition-colors shadow-xs cursor-pointer"
-            >
-              💾 保存并启用网关
-            </button>
-          )}
         </div>
       </div>
+
+      {/* Claude JSON Import Modal */}
+      {isImportModalOpen && (
+        <div className="fixed inset-0 z-60 bg-black/60 flex items-center justify-center p-4">
+          <div className="bg-[#FAF8F5] border border-[#E6DFD5] rounded-2xl w-[500px] shadow-2xl p-5 space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-sm text-[#1E1C1A]">导入 Claude Desktop MCP JSON</h3>
+              <button onClick={() => setIsImportModalOpen(false)}>
+                <X className="w-4 h-4 text-[#8A847C]" />
+              </button>
+            </div>
+            <textarea
+              rows={8}
+              value={jsonImportText}
+              onChange={(e) => setJsonImportText(e.target.value)}
+              placeholder='{\n  "mcpServers": {\n    "postgres": {\n      "command": "npx",\n      "args": ["-y", "@modelcontextprotocol/server-postgres", "..."]\n    }\n  }\n}'
+              className="w-full p-2.5 bg-white border border-[#E6DFD5] rounded-lg font-mono text-xs outline-none focus:border-[#D96B27]"
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setIsImportModalOpen(false)}
+                className="px-3 py-1.5 bg-white border border-[#E6DFD5] rounded-lg text-xs"
+              >
+                取消
+              </button>
+              <button
+                onClick={() => {
+                  const res = importClaudeJson(jsonImportText);
+                  if (res.success) {
+                    alert(`成功导入 ${res.count} 个 MCP Servers！`);
+                    setIsImportModalOpen(false);
+                    setJsonImportText('');
+                  } else {
+                    alert(`导入失败: ${res.error}`);
+                  }
+                }}
+                className="px-4 py-1.5 bg-[#D96B27] text-white rounded-lg text-xs font-bold"
+              >
+                确认导入
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

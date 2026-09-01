@@ -67,46 +67,7 @@ impl ProjectSessionStore {
             ProjectsDatabase::default()
         };
 
-        if data.projects.is_empty() {
-            let default_proj_id = Uuid::new_v4().to_string();
-            let default_session_id = Uuid::new_v4().to_string();
-            let now = chrono::Utc::now().timestamp_millis();
-            let default_path = std::env::current_dir()
-                .map(|p| p.to_string_lossy().to_string())
-                .unwrap_or_else(|_| "D:\\weihu\\agent-learning".to_string());
-            let default_name = std::path::Path::new(&default_path)
-                .file_name()
-                .map(|n| n.to_string_lossy().to_string())
-                .unwrap_or_else(|| "agent-learning".to_string());
-
-            let session = SessionRecord {
-                id: default_session_id.clone(),
-                project_id: default_proj_id.clone(),
-                title: "新会话 (默认)".to_string(),
-                tags: vec![],
-                is_pinned: false,
-                model_id: "deepseek-chat".to_string(),
-                created_at: now,
-                updated_at: now,
-                messages: vec![],
-            };
-
-            let project = ProjectRecord {
-                id: default_proj_id.clone(),
-                name: default_name,
-                path: default_path,
-                is_active: true,
-                created_at: now,
-                updated_at: now,
-                sessions: vec![session],
-            };
-
-            data.active_project_id = Some(default_proj_id);
-            data.active_session_id = Some(default_session_id);
-            data.projects = vec![project];
-
-            let _ = fs::write(&db_path, serde_json::to_string_pretty(&data).unwrap_or_default());
-        }
+        // By default, projects database is completely empty until user opens a folder.
 
         Self {
             db_path,
@@ -293,6 +254,20 @@ impl ProjectSessionStore {
         }
 
         Err("Session not found".to_string())
+    }
+
+    pub async fn delete_project(&self, project_id: String) -> Result<(), String> {
+        let mut db = self.db.lock().await;
+        if let Some(pos) = db.projects.iter().position(|p| p.id == project_id) {
+            db.projects.remove(pos);
+            if db.active_project_id.as_deref() == Some(&project_id) {
+                db.active_project_id = db.projects.first().map(|p| p.id.clone());
+                db.active_session_id = db.projects.first().and_then(|p| p.sessions.first()).map(|s| s.id.clone());
+            }
+            drop(db);
+            return self.save_database().await;
+        }
+        Err("Project not found".to_string())
     }
 
     pub async fn add_message(&self, session_id: &str, message: ChatMessageRecord) -> Result<(), String> {

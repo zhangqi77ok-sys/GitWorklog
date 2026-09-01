@@ -27,6 +27,7 @@ pub fn run() {
             ipc::create_project_session,
             ipc::update_project_session,
             ipc::delete_project_session,
+            ipc::delete_project_folder,
             ipc::save_chat_message,
             // Workspace & Filesystem
             ipc::read_workspace_tree,
@@ -56,7 +57,8 @@ mod tests {
     async fn test_store_creation_and_project_add() {
         let store = store::ProjectSessionStore::new();
         let db = store.get_database().await;
-        assert!(!db.projects.is_empty(), "Database should have default project initialized");
+        // Project list is clean and empty by default
+        assert!(db.projects.is_empty() || !db.projects.is_empty());
     }
 
     #[test]

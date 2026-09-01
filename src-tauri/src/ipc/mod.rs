@@ -92,6 +92,11 @@ pub async fn delete_project_session(state: State<'_, AppState>, session_id: Stri
 }
 
 #[tauri::command]
+pub async fn delete_project_folder(state: State<'_, AppState>, project_id: String) -> Result<(), String> {
+    state.session_store.delete_project(project_id).await
+}
+
+#[tauri::command]
 pub async fn save_chat_message(
     state: State<'_, AppState>,
     session_id: String,
