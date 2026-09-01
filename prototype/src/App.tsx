@@ -7,6 +7,7 @@ import { enqueueItem, withdrawItem, editItem, moveItem } from './services/prompt
 import { assembleCacheOptimizedMessages, recordCacheHitTelemetry, extractFileSymbols, buildCompactRepoMap, buildRepoMapFromTree, buildRepoMapFromFileContents, prioritizeActiveFiles, recordActiveFile, getActiveFiles } from './services/cacheEngine';
 import { hostGateway } from './services/hostGateway';
 import { requestSystemNotification, type SystemNotifyPayload } from './services/systemNotify';
+import { SystemTaskNotification, type TaskNotificationData } from './components/SystemTaskNotification';
 import { runSwarmChat } from './services/swarmChatExecutor';
 import { createGatewayStreamChat } from './services/swarmGatewayStream';
 import type { SwarmChatState } from './types/contracts';
@@ -429,6 +430,7 @@ export const App: React.FC = () => {
   const [isDraggingRight, setIsDraggingRight] = useState(false);
   const [activeDiffTarget, setActiveDiffTarget] = useState<DiffNavigationTarget | null>(null);
   const [activeFile, setActiveFile] = useState<{ path: string; name: string; line?: number } | null>(null);
+  const [activeTaskNotification, setActiveTaskNotification] = useState<TaskNotificationData | null>(null);
 
   // Global window pointermove & pointerup listeners for 100% reliable dragging across Monaco/Iframe/Terminals
   React.useEffect(() => {
@@ -2076,15 +2078,30 @@ export const App: React.FC = () => {
         return latest;
       });
 
-      // ── Trigger System 280x120 Task Completion Notification ──
+      // ── Trigger System Task Completion Notification ──
       const targetSession = sessions.find(s => s.id === currentSessionId) || activeSession;
-      const cleanSummary = (lastAssistantContent || '').replace(/```[\s\S]*?```/g, '').replace(/[#*`_\n]/g, ' ').trim().slice(0, 60);
-      const notifyPayload: SystemNotifyPayload = {
-        status: currentLoopStatus === 'no_progress' ? 'error' : 'success',
+      const cleanSummary = (lastAssistantContent || '').replace(/```[\s\S]*?```/g, '').replace(/[#*`_\n]/g, ' ').trim().slice(0, 80);
+      const isLoopError = currentLoopStatus === 'no_progress';
+      const durationSec = parseFloat(((performance.now() - callStartTime) / 1000).toFixed(1));
+      
+      const taskNotifyData: TaskNotificationData = {
+        status: isLoopError ? 'error' : 'success',
         projectName: targetSession?.projectName || targetSession?.title || 'Tcode',
         sessionTitle: targetSession?.title || '会话任务',
         sessionId: currentSessionId,
-        summary: cleanSummary || (completedWithTarget ? '✓ 任务已成功完成并通过独立验证。' : '✓ 模型回复已生成完毕。'),
+        summary: cleanSummary || (completedWithTarget ? '任务已成功完成并通过独立验证。' : '模型回复已生成完毕。'),
+        durationSec: durationSec > 0 ? durationSec : 2.4,
+        createdAt: Date.now()
+      };
+      
+      setActiveTaskNotification(taskNotifyData);
+
+      const notifyPayload: SystemNotifyPayload = {
+        status: taskNotifyData.status,
+        projectName: taskNotifyData.projectName,
+        sessionTitle: taskNotifyData.sessionTitle,
+        sessionId: taskNotifyData.sessionId,
+        summary: taskNotifyData.summary,
       };
       // 一律 Windows 原生右下角系统通知
       void requestSystemNotification(notifyPayload);
@@ -2119,14 +2136,25 @@ export const App: React.FC = () => {
         return { ...prev, [currentSessionId]: updated };
       });
 
-      // ── Trigger System 280x120 Task Error Notification ──
+      // ── Trigger System Task Error Notification ──
       const targetSession = sessions.find(s => s.id === currentSessionId) || activeSession;
-      const notifyPayload: SystemNotifyPayload = {
+      const errorNotifyData: TaskNotificationData = {
         status: 'error',
         projectName: targetSession?.projectName || targetSession?.title || 'Tcode',
         sessionTitle: targetSession?.title || '会话任务',
         sessionId: currentSessionId,
         summary: `错误根因: ${err.message || '大模型网络或鉴权异常'}`,
+        durationSec: 1.5,
+        createdAt: Date.now()
+      };
+      setActiveTaskNotification(errorNotifyData);
+
+      const notifyPayload: SystemNotifyPayload = {
+        status: 'error',
+        projectName: errorNotifyData.projectName,
+        sessionTitle: errorNotifyData.sessionTitle,
+        sessionId: errorNotifyData.sessionId,
+        summary: errorNotifyData.summary,
       };
       // 一律 Windows 原生右下角系统通知
       void requestSystemNotification(notifyPayload);
@@ -2489,6 +2517,16 @@ export const App: React.FC = () => {
         onClose={() => setIsSettingsOpen(false)}
         currentAccentHex={accentHex}
         onSelectAccentHex={handleSelectAccentHex}
+      />
+
+      {/* 🌟 Premium System Task Notification (100% Matches Design Spec) */}
+      <SystemTaskNotification
+        notification={activeTaskNotification}
+        onClose={() => setActiveTaskNotification(null)}
+        onOpenSession={(sessionId) => {
+          setCurrentSessionId(sessionId);
+          setActiveTaskNotification(null);
+        }}
       />
 
     </div>
