@@ -128,9 +128,11 @@ function persistMessageToSession(
 export function sanitizeTextContent(text: string): string {
   if (!text) return '';
   let clean = text;
-  clean = clean.replace(/<\|DSML\|tool_calls>[\s\S]*?<\/\|DSML\|tool_calls>/g, '');
-  clean = clean.replace(/<\|DSML\|invoke\s+name=["'][^"']+["']>[\s\S]*?<\/\|DSML\|invoke>/g, '');
-  clean = clean.replace(/<tool_call>[\s\S]*?<\/tool_call>/g, '');
+  clean = clean.replace(/<[\s|]*DSML[\s|]*tool_calls[\s|]*>[\s\S]*?<\/[\s|]*DSML[\s|]*tool_calls[\s|]*>/gi, '');
+  clean = clean.replace(/<[\s|]*DSML[\s|]*invoke[\s\S]*?<\/[\s|]*DSML[\s|]*invoke[\s|]*>/gi, '');
+  clean = clean.replace(/<[\s|]*DSML[\s|]*parameter[\s\S]*?<\/[\s|]*DSML[\s|]*parameter[\s|]*>/gi, '');
+  clean = clean.replace(/<[\s|]*tool_call[\s|]*>[\s\S]*?<\/[\s|]*tool_call[\s|]*>/gi, '');
+  clean = clean.replace(/<[\s|]*\/?[\s|]*DSML[\s\S]*?>/gi, '');
   return clean.trim();
 }
 
@@ -143,7 +145,7 @@ export function parseToolCallsFromText(text: string): ParsedToolCall[] {
   const calls: ParsedToolCall[] = [];
   if (!text) return calls;
 
-  const invokeRegex = /<\|DSML\|invoke\s+name=["']([^"']+)["']>([\s\S]*?)<\/\|DSML\|invoke>/g;
+  const invokeRegex = /<[\s|]*DSML[\s|]*invoke\s+name=["']([^"']+)["'][\s|]*>([\s\S]*?)<\/[\s|]*DSML[\s|]*invoke[\s|]*>/gi;
   let match: RegExpExecArray | null;
 
   while ((match = invokeRegex.exec(text)) !== null) {
@@ -151,7 +153,7 @@ export function parseToolCallsFromText(text: string): ParsedToolCall[] {
     const body = match[2];
     const args: Record<string, any> = {};
 
-    const paramRegex = /<\|DSML\|parameter\s+name=["']([^"']+)["'][^>]*>([\s\S]*?)<\/\|DSML\|parameter>/g;
+    const paramRegex = /<[\s|]*DSML[\s|]*parameter\s+name=["']([^"']+)["'][^>]*>([\s\S]*?)<\/[\s|]*DSML[\s|]*parameter[\s|]*>/gi;
     let pMatch: RegExpExecArray | null;
     while ((pMatch = paramRegex.exec(body)) !== null) {
       const pName = pMatch[1];
@@ -163,7 +165,7 @@ export function parseToolCallsFromText(text: string): ParsedToolCall[] {
   }
 
   if (calls.length === 0) {
-    const xmlRegex = /<tool_call>[\s\S]*?<name>([^<]+)<\/name>[\s\S]*?<\/tool_call>/g;
+    const xmlRegex = /<[\s|]*tool_call[\s|]*>[\s\S]*?<name>([^<]+)<\/name>[\s\S]*?<\/[\s|]*tool_call[\s|]*>/gi;
     let xMatch: RegExpExecArray | null;
     while ((xMatch = xmlRegex.exec(text)) !== null) {
       calls.push({ name: xMatch[1].trim(), args: {} });
@@ -860,26 +862,27 @@ export function initTauriBridge(): void {
           const toolCalls = parseToolCallsFromText(turnContent);
 
           if (toolCalls.length > 0 && turn < MAX_TURNS) {
+            const executedTools: any[] = [];
             for (const call of toolCalls) {
-              const execNotice = `\n\n> 🔧 **【Agent 自动调用工具】**: \`${call.name}\` (${JSON.stringify(call.args)})\n`;
-              turnContent += execNotice;
-              await emit('agent_text_chunk', { session_id: sessionId, chunk: execNotice });
-
               const toolResult = await executeToolCall(call.name, call.args, workspaceDir || 'E:\\pro\\agent-learning');
-              const resultNotice = `> 🛠️ **【工具返回输出】**:\n\`\`\`\n${toolResult.slice(0, 1000)}\n\`\`\`\n\n`;
-              turnContent += resultNotice;
-              await emit('agent_text_chunk', { session_id: sessionId, chunk: resultNotice });
+              executedTools.push({
+                name: call.name,
+                args: call.args,
+                result: toolResult.slice(0, 1000),
+              });
 
               apiPayloadMessages.push({ role: 'assistant', content: turnContent });
               apiPayloadMessages.push({ role: 'user', content: `[Tool Output for ${call.name}]:\n${toolResult}\nPlease analyze and complete the task.` });
             }
 
+            const cleanText = sanitizeTextContent(turnContent);
             if (sessionId) {
-              persistMessageToSession(sessionId, 'assistant', turnContent, turnThought);
+              persistMessageToSession(sessionId, 'assistant', cleanText, turnThought, executedTools);
             }
           } else {
+            const cleanText = sanitizeTextContent(turnContent);
             if (sessionId) {
-              persistMessageToSession(sessionId, 'assistant', turnContent, turnThought);
+              persistMessageToSession(sessionId, 'assistant', cleanText, turnThought);
             }
             shouldContinueLoop = false;
           }

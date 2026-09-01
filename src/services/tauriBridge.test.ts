@@ -22,7 +22,7 @@ if (typeof (globalThis as any).localStorage === 'undefined') {
   };
 }
 
-import { initTauriBridge, parseToolCallsFromText } from './tauriBridge';
+import { initTauriBridge, parseToolCallsFromText, sanitizeTextContent } from './tauriBridge';
 import { invoke } from '@tauri-apps/api/core';
 
 describe('tauriBridge Universal IPC Adapter', () => {
@@ -104,18 +104,21 @@ describe('tauriBridge Universal IPC Adapter', () => {
     expect(probe.latency_ms).toBeGreaterThan(0);
   });
 
-  it('parses DSML tool calls correctly', () => {
+  it('parses DSML tool calls with spaces and pipes correctly', () => {
     const rawText = `
-    我来看一下项目的整体结构。
-    <|DSML|tool_calls>
-    <|DSML|invoke name="Lookup">
-    <|DSML|parameter name="path" string="true">package.json</|DSML|parameter>
-    </|DSML|invoke>
-    </|DSML|tool_calls>
+    我来继续扫描项目的关键目录和配置文件。
+    < | | DSML | | tool_calls>
+    < | | DSML | | invoke name="Lookup">
+    < | | DSML | | parameter name="path" string="true">src</ | | DSML | | parameter>
+    </ | | DSML | | invoke>
+    </ | | DSML | | tool_calls>
     `;
     const calls = parseToolCallsFromText(rawText);
     expect(calls.length).toBe(1);
     expect(calls[0].name).toBe('Lookup');
-    expect(calls[0].args.path).toBe('package.json');
+    expect(calls[0].args.path).toBe('src');
+
+    const clean = sanitizeTextContent(rawText);
+    expect(clean).toBe('我来继续扫描项目的关键目录和配置文件。');
   });
 });

@@ -457,9 +457,11 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ onOpenSettings }) => {
               {/* Main Message Bubble */}
               {(() => {
                 const cleanText = (msg.content || '')
-                  .replace(/<\|DSML\|tool_calls>[\s\S]*?<\/\|DSML\|tool_calls>/g, '')
-                  .replace(/<\|DSML\|invoke\s+name=["'][^"']+["']>[\s\S]*?<\/\|DSML\|invoke>/g, '')
-                  .replace(/<tool_call>[\s\S]*?<\/tool_call>/g, '')
+                  .replace(/<[\s|]*DSML[\s|]*tool_calls[\s|]*>[\s\S]*?<\/[\s|]*DSML[\s|]*tool_calls[\s|]*>/gi, '')
+                  .replace(/<[\s|]*DSML[\s|]*invoke[\s\S]*?<\/[\s|]*DSML[\s|]*invoke[\s|]*>/gi, '')
+                  .replace(/<[\s|]*DSML[\s|]*parameter[\s\S]*?<\/[\s|]*DSML[\s|]*parameter[\s|]*>/gi, '')
+                  .replace(/<[\s|]*tool_call[\s|]*>[\s\S]*?<\/[\s|]*tool_call[\s|]*>/gi, '')
+                  .replace(/<[\s|]*\/?[\s|]*DSML[\s\S]*?>/gi, '')
                   .trim();
 
                 if (!cleanText && msg.role === 'assistant' && msg.toolCalls && msg.toolCalls.length > 0) {
@@ -518,11 +520,23 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ onOpenSettings }) => {
               </div>
             )}
 
-            {streamingContent && (
-              <div className="max-w-[85%] bg-white border border-[#E6DFD5] text-[#1E1C1A] rounded-2xl rounded-tl-xs p-3.5 text-xs leading-relaxed shadow-xs">
-                <div className="whitespace-pre-wrap">{streamingContent}</div>
-              </div>
-            )}
+            {(() => {
+              const cleanStreaming = (streamingContent || '')
+                .replace(/<[\s|]*DSML[\s|]*tool_calls[\s|]*>[\s\S]*?<\/[\s|]*DSML[\s|]*tool_calls[\s|]*>/gi, '')
+                .replace(/<[\s|]*DSML[\s|]*invoke[\s\S]*?<\/[\s|]*DSML[\s|]*invoke[\s|]*>/gi, '')
+                .replace(/<[\s|]*DSML[\s|]*parameter[\s\S]*?<\/[\s|]*DSML[\s|]*parameter[\s|]*>/gi, '')
+                .replace(/<[\s|]*tool_call[\s|]*>[\s\S]*?<\/[\s|]*tool_call[\s|]*>/gi, '')
+                .replace(/<[\s|]*\/?[\s|]*DSML[\s\S]*?>/gi, '')
+                .trim();
+
+              if (!cleanStreaming) return null;
+
+              return (
+                <div className="max-w-[85%] bg-white border border-[#E6DFD5] text-[#1E1C1A] rounded-2xl rounded-tl-xs p-3.5 text-xs leading-relaxed shadow-xs">
+                  <div className="whitespace-pre-wrap">{cleanStreaming}</div>
+                </div>
+              );
+            })()}
           </div>
         )}
 
