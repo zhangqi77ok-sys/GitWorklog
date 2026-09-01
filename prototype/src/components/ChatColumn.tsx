@@ -1416,6 +1416,81 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                       );
                     })}
 
+                    {/* 🔘 Interactive Options Decision Card */}
+                    {msg.interactiveOptions && msg.interactiveOptions.length > 0 && (
+                      <div style={{
+                        marginTop: '10px',
+                        marginBottom: '6px',
+                        padding: '10px 14px',
+                        background: 'rgba(217, 107, 39, 0.06)',
+                        border: '1px solid rgba(217, 107, 39, 0.35)',
+                        borderRadius: '8px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '8px'
+                      }}>
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          fontSize: '12px',
+                          fontWeight: 600,
+                          color: 'var(--accent)'
+                        }}>
+                          <Sparkles size={13} />
+                          <span>请选择后续执行路线（点击直接执行）：</span>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          {msg.interactiveOptions.map((opt) => (
+                            <button
+                              key={opt.id}
+                              onClick={() => onSendMessage(opt.promptText)}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'flex-start',
+                                gap: '8px',
+                                padding: '8px 12px',
+                                background: 'var(--bg-surface)',
+                                border: '1px solid var(--border-subtle)',
+                                borderRadius: '6px',
+                                cursor: 'pointer',
+                                textAlign: 'left',
+                                color: 'var(--text-primary)',
+                                fontSize: '12px',
+                                lineHeight: 1.4,
+                                transition: 'all 0.15s ease'
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.borderColor = 'var(--accent)';
+                                e.currentTarget.style.background = 'rgba(217, 107, 39, 0.08)';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.borderColor = 'var(--border-subtle)';
+                                e.currentTarget.style.background = 'var(--bg-surface)';
+                              }}
+                            >
+                              <span style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                width: '18px',
+                                height: '18px',
+                                borderRadius: '50%',
+                                background: 'var(--accent)',
+                                color: '#FFF',
+                                fontSize: '11px',
+                                fontWeight: 700,
+                                flexShrink: 0
+                              }}>
+                                {opt.index}
+                              </span>
+                              <span style={{ flex: 1, fontWeight: 500 }}>{opt.label.replace(/^\d+\.\s*/, '')}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                     {/* Bottom-Left Message Action Toolbar: Copy, Export, Fork, Commit */}
                     <div style={{
                       display: 'flex',
@@ -1638,6 +1713,81 @@ export const ChatColumn: React.FC<ChatColumnProps> = ({
                           }}
                         />
                       )}
+                    </div>
+                  )}
+
+                  {/* 🔘 Interactive Options Decision Card (Single Turn) */}
+                  {msg.interactiveOptions && msg.interactiveOptions.length > 0 && (
+                    <div style={{
+                      marginTop: '10px',
+                      marginBottom: '6px',
+                      padding: '10px 14px',
+                      background: 'rgba(217, 107, 39, 0.06)',
+                      border: '1px solid rgba(217, 107, 39, 0.35)',
+                      borderRadius: '8px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '8px'
+                    }}>
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        color: 'var(--accent)'
+                      }}>
+                        <Sparkles size={13} />
+                        <span>请选择后续执行路线（点击直接执行）：</span>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        {msg.interactiveOptions.map((opt) => (
+                          <button
+                            key={opt.id}
+                            onClick={() => onSendMessage(opt.promptText)}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'flex-start',
+                              gap: '8px',
+                              padding: '8px 12px',
+                              background: 'var(--bg-surface)',
+                              border: '1px solid var(--border-subtle)',
+                              borderRadius: '6px',
+                              cursor: 'pointer',
+                              textAlign: 'left',
+                              color: 'var(--text-primary)',
+                              fontSize: '12px',
+                              lineHeight: 1.4,
+                              transition: 'all 0.15s ease'
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.borderColor = 'var(--accent)';
+                              e.currentTarget.style.background = 'rgba(217, 107, 39, 0.08)';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.borderColor = 'var(--border-subtle)';
+                              e.currentTarget.style.background = 'var(--bg-surface)';
+                            }}
+                          >
+                            <span style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              width: '18px',
+                              height: '18px',
+                              borderRadius: '50%',
+                              background: 'var(--accent)',
+                              color: '#FFF',
+                              fontSize: '11px',
+                              fontWeight: 700,
+                              flexShrink: 0
+                            }}>
+                              {opt.index}
+                            </span>
+                            <span style={{ flex: 1, fontWeight: 500 }}>{opt.label.replace(/^\d+\.\s*/, '')}</span>
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   )}
 

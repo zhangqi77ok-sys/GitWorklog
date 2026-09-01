@@ -173,6 +173,7 @@ import {
   resolveAllowedTools
 } from './services/agentLoop';
 import { buildPromptRulesSnapshot } from './services/rulesStore';
+import { extractInteractiveOptions } from './services/interactiveOptions';
 import { classifyUserIntent, buildDynamicSystemPrompt } from './services/intentClassifier';
 import { buildTier1SkillsSystemPrompt } from './services/skillsEngine';
 import { buildMcpToolsModelPrompt, loadSavedMcpConfigs, initializeMcpServer } from './services/mcpGateway';
@@ -1954,6 +1955,47 @@ export const App: React.FC = () => {
         }
 
         if (actions.length === 0) {
+          // 🔘 检查是否包含人机交互决策选项 (如 "需要我继续做以下哪一步？1. ... 2. ... 3. ...")
+          const interactiveOptions = extractInteractiveOptions(finalContent);
+          if (interactiveOptions.length > 0) {
+            addLog('INFO', 'StageGate', `[人机决策] 检测到大模型提出 ${interactiveOptions.length} 个后续路线选项，挂起流程等待用户选择...`);
+            currentLoopStatus = 'needs_decision';
+            terminationSummaryText = '大模型提出了后续路线选项，等待用户决策选择。';
+
+            const durationSec = parseFloat(((performance.now() - callStartTime) / 1000).toFixed(1));
+            const addedPrompt = Math.round(text.length * 0.75);
+            const addedComp = Math.round(finalContent.length * 0.75);
+
+            stepTags[stepTags.length - 1].status = 'passed';
+            currentRoundItem.status = 'passed';
+            setSessionMessages(prev => {
+              const list = prev[currentSessionId] || [];
+              const updated = list.map(m => m.id === assistantId ? {
+                ...m,
+                content: finalContent,
+                interactiveOptions,
+                stepTags: [...stepTags],
+                rounds: [...accumulatedRounds],
+                activeRoundId: loopCount,
+                loopStatus: currentLoopStatus,
+                terminationSummary: terminationSummaryText,
+                tokensDetail: { promptTokens: addedPrompt, completionTokens: addedComp, totalTokens: addedPrompt + addedComp },
+                durationSeconds: durationSec
+              } : m);
+              return { ...prev, [currentSessionId]: updated };
+            });
+
+            setTokenStats(prev => ({
+              ...prev,
+              promptTokens: prev.promptTokens + addedPrompt,
+              completionTokens: prev.completionTokens + addedComp,
+              estimatedCostUsd: prev.estimatedCostUsd + ((addedPrompt + addedComp) * 0.0000002)
+            }));
+
+            addLog('INFO', 'AgentLoop', `[Loop #${loopCount}] 挂起等待用户点击选项 (${durationSec}s)`);
+            break; // 停止后台自动轮转，等待用户做出选择！
+          }
+
           const isShortIntroductory = finalContent.length < 350 &&
             /我来|我先|我将|让我|先列出|探索|读取|查看|审查|执行|稍等|定位|修正|逐个/i.test(finalContent);
           const hasUnfinishedCriteria = activeAcceptanceItems.some(i => i.status !== 'passed');

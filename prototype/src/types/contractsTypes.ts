@@ -276,6 +276,7 @@ export interface ChatMessage {
   terminationSummary?: string;        // 总结描述（如：4/4 项验收通过 · 测试通过）
   swarm?: SwarmChatState;            // 🐝 Swarm 真并发多角色结构化状态（存在时优先于正文正则解析）
   images?: Array<{ id: string; name: string; dataUrl: string; sizeBytes?: number }>; // 🖼️ 多模态图片/截图附件
+  interactiveOptions?: Array<{ id: string; index: number; label: string; promptText: string }>; // 🔘 人机决策选项卡片
 }
 
 // Runtime L2 Session State Snapshot
