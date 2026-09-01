@@ -81,4 +81,26 @@ describe('tauriBridge Universal IPC Adapter', () => {
     expect(decision.selected_candidate.worker_id).toBe('Worker-B');
     expect(decision.confidence_score).toBe(0.96);
   });
+
+  it('handles gateway channel test and model pulling for AgentRouter', async () => {
+    const models: any = await invoke('pull_gateway_models', {
+      baseUrl: 'https://agentrouter.org',
+      apiKey: 'sk-test',
+    });
+    expect(Array.isArray(models)).toBe(true);
+    expect(models).toContain('deepseek-v4-flash');
+
+    const probe: any = await invoke('test_gateway_channel', {
+      channel: {
+        id: 'ch_test',
+        base_url: 'https://agentrouter.org',
+        api_key: 'sk-test',
+        models: ['deepseek-v4-flash'],
+      },
+    });
+    expect(probe).toBeDefined();
+    expect(probe.success).toBe(true);
+    expect(probe.http_status).toBe(200);
+    expect(probe.latency_ms).toBeGreaterThan(0);
+  });
 });

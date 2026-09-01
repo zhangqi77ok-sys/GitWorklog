@@ -991,6 +991,82 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
             self._send_json(200, {'success': True})
             return
 
+        # Gateway Real Latency Probing
+        if self.path == '/api/gateway/test':
+            length = int(self.headers.get('Content-Length', 0))
+            body = json.loads(self.rfile.read(length).decode('utf-8')) if length else {}
+            base_url = (body.get('base_url') or '').strip().rstrip('/')
+            api_key = (body.get('api_key') or '').strip()
+            if not base_url:
+                self._send_json(400, {'error': 'Missing base_url'})
+                return
+            models_url = f"{base_url}/models" if base_url.endswith('/v1') else f"{base_url}/v1/models"
+            import time
+            start = time.time()
+            try:
+                req = urllib.request.Request(models_url, headers={
+                    'Authorization': f'Bearer {api_key}',
+                    'User-Agent': 'opencode/1.0',
+                    'Accept': 'application/json'
+                })
+                with urllib.request.urlopen(req, timeout=12) as res:
+                    latency_ms = int((time.time() - start) * 1000)
+                    data = json.loads(res.read().decode('utf-8'))
+                    models = [m.get('id') for m in data.get('data', []) if isinstance(m, dict) and m.get('id')]
+                    self._send_json(200, {
+                        'success': True,
+                        'http_status': res.status,
+                        'latency_ms': latency_ms,
+                        'models_found': models,
+                        'message': f"探活成功 (HTTP {res.status}) · 真实延迟: {latency_ms}ms"
+                    })
+            except urllib.error.HTTPError as e:
+                latency_ms = int((time.time() - start) * 1000)
+                err_body = e.read().decode('utf-8', errors='ignore')
+                self._send_json(200, {
+                    'success': False,
+                    'http_status': e.code,
+                    'latency_ms': latency_ms,
+                    'models_found': [],
+                    'message': f"上游错误 (HTTP {e.code}): {err_body[:100]}"
+                })
+            except Exception as e:
+                self._send_json(200, {
+                    'success': False,
+                    'http_status': 500,
+                    'latency_ms': 0,
+                    'models_found': [],
+                    'message': f"网络连接异常: {str(e)}"
+                })
+            return
+
+        # Gateway Real Model Pulling
+        if self.path == '/api/gateway/models':
+            length = int(self.headers.get('Content-Length', 0))
+            body = json.loads(self.rfile.read(length).decode('utf-8')) if length else {}
+            base_url = (body.get('base_url') or '').strip().rstrip('/')
+            api_key = (body.get('api_key') or '').strip()
+            if not base_url:
+                self._send_json(400, {'error': 'Missing base_url'})
+                return
+            models_url = f"{base_url}/models" if base_url.endswith('/v1') else f"{base_url}/v1/models"
+            try:
+                req = urllib.request.Request(models_url, headers={
+                    'Authorization': f'Bearer {api_key}',
+                    'User-Agent': 'opencode/1.0',
+                    'Accept': 'application/json'
+                })
+                with urllib.request.urlopen(req, timeout=12) as res:
+                    data = json.loads(res.read().decode('utf-8'))
+                    models = [m.get('id') for m in data.get('data', []) if isinstance(m, dict) and m.get('id')]
+                    self._send_json(200, {
+                        'success': True,
+                        'models': models
+                    })
+            except Exception as e:
+                self._send_json(500, {'error': str(e), 'success': False})
+            return
+
         # 1. Real File Write to Disk
         if self.path == '/api/fs/write':
             length = int(self.headers.get('Content-Length', 0))

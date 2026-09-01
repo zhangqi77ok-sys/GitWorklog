@@ -11,6 +11,7 @@ import {
   Trash2,
   Paperclip,
   Zap,
+  Check,
 } from 'lucide-react';
 import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
@@ -64,6 +65,38 @@ export const ChatPanel: React.FC = () => {
   const activeProject = projects.find((p) => p.id === activeProjectId);
   const activeSession = activeProject?.sessions.find((s) => s.id === activeSessionId);
   const activeChannel = channels.find((c) => c.id === activeChannelId) || channels[0];
+  const availableModels =
+    activeChannel?.models && activeChannel.models.length > 0
+      ? activeChannel.models
+      : ['deepseek-v4-flash', 'gpt-5.6-sol', 'claude-opus-5', 'claude-opus-4-8', 'glm-5.3'];
+
+  const [selectedModel, setSelectedModel] = useState<string>('deepseek-v4-flash');
+  const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false);
+  const modelDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handleOutside = (e: MouseEvent) => {
+      if (modelDropdownRef.current && !modelDropdownRef.current.contains(e.target as Node)) {
+        setIsModelDropdownOpen(false);
+      }
+    };
+    if (isModelDropdownOpen) {
+      document.addEventListener('mousedown', handleOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleOutside);
+  }, [isModelDropdownOpen]);
+
+  // Keep selectedModel synchronized with active session or available models
+  useEffect(() => {
+    if (activeSession?.model_id && availableModels.includes(activeSession.model_id)) {
+      setSelectedModel(activeSession.model_id);
+    } else if (availableModels.includes('deepseek-v4-flash')) {
+      setSelectedModel('deepseek-v4-flash');
+    } else if (availableModels.length > 0) {
+      setSelectedModel(availableModels[0]);
+    }
+  }, [activeSession?.model_id, availableModels]);
 
   const activeFileName = activeTabPath ? activeTabPath.split(/[/\\]/).pop() : null;
 
@@ -177,6 +210,7 @@ export const ChatPanel: React.FC = () => {
         sessionId: activeSessionId,
         workspaceDir,
         prompt: promptText,
+        model: selectedModel,
       });
     } catch (err: any) {
       setIsStreaming(false);
@@ -215,9 +249,54 @@ export const ChatPanel: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2">
-          <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono bg-white border border-[#E6DFD5] text-[#2E7D32] shadow-2xs">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#2E7D32]" />
-            <span>{activeChannel?.name || 'DeepSeek-Reasoner (64k)'}</span>
+          {/* Model Selector Dropdown */}
+          <div className="relative" ref={modelDropdownRef}>
+            <button
+              type="button"
+              onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-mono bg-white border border-[#E6DFD5] hover:border-[#D96B27] text-[#1E1C1A] shadow-2xs transition-all cursor-pointer group"
+              title="点击切换当前对话生效的 AI 模型"
+            >
+              <span className="w-2 h-2 rounded-full bg-[#2E7D32]" />
+              <span className="font-semibold">{selectedModel}</span>
+              <ChevronDown className={`w-3 h-3 text-[#8A847C] transition-transform duration-150 ${isModelDropdownOpen ? 'rotate-180 text-[#D96B27]' : ''}`} />
+            </button>
+
+            {isModelDropdownOpen && (
+              <div className="absolute right-0 top-full mt-1.5 w-64 bg-white border border-[#E6DFD5] rounded-xl shadow-xl z-50 p-1.5 text-xs animate-in fade-in zoom-in-95 duration-100">
+                <div className="px-2 py-1 text-[10px] font-bold text-[#8A847C] uppercase tracking-wider border-b border-[#F4EFEA] flex items-center justify-between">
+                  <span>切换大模型 ({availableModels.length})</span>
+                  <span className="text-[#D96B27] truncate max-w-[110px]">{activeChannel?.name || '当前渠道'}</span>
+                </div>
+                <div className="max-h-56 overflow-y-auto py-1 space-y-0.5">
+                  {availableModels.map((m) => {
+                    const isCurrent = m === selectedModel;
+                    return (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => {
+                          setSelectedModel(m);
+                          setIsModelDropdownOpen(false);
+                          toast.success(`已切换生效模型: ${m}`);
+                        }}
+                        className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between transition-colors cursor-pointer ${
+                          isCurrent
+                            ? 'bg-[#FAF8F5] text-[#D96B27] font-bold border border-[#D96B27]/20'
+                            : 'text-[#3D3A36] hover:bg-[#FAF8F5]'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 truncate">
+                          <Bot className="w-3.5 h-3.5 text-[#8A847C] flex-shrink-0" />
+                          <span className="truncate font-mono text-[11px]">{m}</span>
+                        </div>
+                        {isCurrent && <Check className="w-3.5 h-3.5 text-[#D96B27] flex-shrink-0" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -378,12 +457,25 @@ export const ChatPanel: React.FC = () => {
           />
 
           <div className="flex items-center justify-between pt-1 border-t border-[#F4EFEA]">
-            <ExecutionModeCapsule
-              mode={executionMode}
-              onModeChange={setExecutionMode}
-              swarmBudgetTokens={swarmBudgetTokens}
-              onBudgetChange={setSwarmBudgetTokens}
-            />
+            <div className="flex items-center gap-2">
+              <ExecutionModeCapsule
+                mode={executionMode}
+                onModeChange={setExecutionMode}
+                swarmBudgetTokens={swarmBudgetTokens}
+                onBudgetChange={setSwarmBudgetTokens}
+              />
+
+              <button
+                type="button"
+                onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
+                className="inline-flex items-center gap-1.5 px-2 py-1 bg-[#FAF8F5] hover:bg-white border border-[#E6DFD5] hover:border-[#D96B27] rounded-lg text-[10px] font-mono text-[#6B665F] hover:text-[#1E1C1A] transition-all cursor-pointer shadow-2xs"
+                title="当前会话模型 (点击可快速切换)"
+              >
+                <Bot className="w-3 h-3 text-[#D96B27]" />
+                <span className="font-semibold max-w-[120px] truncate">{selectedModel}</span>
+                <ChevronDown className="w-2.5 h-2.5 text-[#8A847C]" />
+              </button>
+            </div>
 
             <button
               onClick={handleSend}

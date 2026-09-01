@@ -168,6 +168,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     channels,
     activeChannelId,
     probeResults,
+    loadChannels,
     saveChannel,
     deleteChannel,
     setActiveChannel,
@@ -268,12 +269,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   });
 
   useEffect(() => {
-    if (channels.length > 0) {
-      const active = channels.find((c) => c.id === activeChannelId) || channels[0];
-      setSelectedChannelId(active.id);
-      setChannelForm(active);
+    if (isOpen) {
+      loadChannels();
     }
-  }, [channels, activeChannelId]);
+  }, [isOpen, loadChannels]);
+
+  useEffect(() => {
+    if (channels.length > 0) {
+      if (!selectedChannelId || !channels.some((c) => c.id === selectedChannelId)) {
+        const active = channels.find((c) => c.id === activeChannelId) || channels[0];
+        setSelectedChannelId(active.id);
+        setChannelForm(active);
+      }
+    }
+  }, [channels, activeChannelId, selectedChannelId]);
 
   if (!isOpen) return null;
 
@@ -291,12 +300,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     const newId = `ch_${Date.now()}`;
     const newChannel: GatewayChannel = {
       id: newId,
-      name: `新 OpenAI 渠道 ${channels.length + 1}`,
+      name: `新渠道 ${channels.length + 1}`,
       platform: 'openai',
       ingress_type: 'api_key',
-      base_url: 'https://api.openai.com/v1',
+      base_url: 'https://agentrouter.org',
       api_key: '',
-      models: ['gpt-4o', 'gpt-4o-mini'],
+      models: ['deepseek-v4-flash', 'gpt-5.6-sol', 'claude-opus-5'],
       enabled: true,
       is_healthy: true,
       priority: 1,
@@ -332,7 +341,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       const res = await testChannel(channelForm);
       if (res) {
         setLocalProbeResult({
-          success: res.success,
+          success: Boolean(res.success),
           http_status: res.http_status,
           latency_ms: res.latency_ms,
           message: res.message,
@@ -364,18 +373,36 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       const models = await pullModels(channelForm.base_url, channelForm.api_key);
       if (models && models.length > 0) {
         setChannelForm((prev) => ({ ...prev, models }));
+        toast.success(`成功拉取到 ${models.length} 个可用大模型`);
+      } else {
+        toast.error('未拉取到模型，请检查服务端点与密钥');
       }
+    } catch (err: any) {
+      toast.error(`拉取模型失败: ${err}`);
     } finally {
       setIsFetchingModels(false);
     }
   };
 
   const handleSaveChannel = async () => {
-    await saveChannel(channelForm);
-    if (!activeChannelId || channels.length <= 1) {
-      await setActiveChannel(channelForm.id);
-    }
-    toast.success('渠道配置已保存');
+    const validId = channelForm.id && channelForm.id.trim() ? channelForm.id.trim() : `ch_${Date.now()}`;
+    const validName = channelForm.name && channelForm.name.trim() ? channelForm.name.trim() : 'AgentRouter 渠道';
+    const cleanModels = channelForm.models.map((m) => m.trim()).filter(Boolean);
+
+    const channelToSave: GatewayChannel = {
+      ...channelForm,
+      id: validId,
+      name: validName,
+      base_url: channelForm.base_url.trim().replace(/\/$/, ''),
+      api_key: (channelForm.api_key || '').trim(),
+      models: cleanModels.length > 0 ? cleanModels : ['deepseek-v4-flash'],
+    };
+
+    await saveChannel(channelToSave);
+    await setActiveChannel(channelToSave.id);
+    setSelectedChannelId(channelToSave.id);
+    setChannelForm(channelToSave);
+    toast.success(`渠道「${channelToSave.name}」已保存并生效`);
   };
 
   const handleDeleteChannel = (id: string, e: React.MouseEvent) => {

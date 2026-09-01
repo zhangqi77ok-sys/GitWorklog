@@ -95,7 +95,7 @@ impl GatewayEngine {
             format!("{}/v1/models", base)
         };
 
-        let mut req = self.http_client.get(&models_url);
+        let mut req = self.http_client.get(&models_url).header("User-Agent", "opencode/1.0");
         if let Some(key) = &channel.api_key {
             if !key.trim().is_empty() {
                 req = req.header("Authorization", format!("Bearer {}", key.trim()));
@@ -159,7 +159,7 @@ impl GatewayEngine {
             format!("{}/v1/models", base)
         };
 
-        let mut req = self.http_client.get(&models_url);
+        let mut req = self.http_client.get(&models_url).header("User-Agent", "opencode/1.0");
         if let Some(key) = api_key {
             if !key.trim().is_empty() {
                 req = req.header("Authorization", format!("Bearer {}", key.trim()));

@@ -94,8 +94,19 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
   saveChannel: async (channel: GatewayChannel) => {
     try {
       const saved = await invoke<GatewayChannel>('save_gateway_channel', { channel });
+      const target = saved || channel;
+      set((state) => {
+        const exists = state.channels.some((c) => c.id === target.id);
+        const updated = exists
+          ? state.channels.map((c) => (c.id === target.id ? target : c))
+          : [...state.channels, target];
+        return {
+          channels: updated,
+          activeChannelId: state.activeChannelId || target.id,
+        };
+      });
       await get().loadChannels();
-      return saved;
+      return target;
     } catch (err: any) {
       set({ error: String(err) });
       return null;

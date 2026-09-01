@@ -251,7 +251,7 @@ pub async fn stream_chat_prompt(
         "stream": true
     });
 
-    let mut req = client.post(&url).json(&body);
+    let mut req = client.post(&url).header("User-Agent", "opencode/1.0").json(&body);
     if let Some(key) = api_key {
         if !key.trim().is_empty() {
             req = req.header("Authorization", format!("Bearer {}", key.trim()));
