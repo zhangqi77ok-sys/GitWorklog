@@ -169,14 +169,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
           success: res.success,
           http_status: res.http_status,
           latency_ms: res.latency_ms,
-          message: res.message || (res.success ? 'Hello! DeepSeek API is ready for code intelligence.' : '连接失败'),
+          message: res.message,
         });
       } else {
         setLocalProbeResult({
-          success: true,
-          http_status: 200,
-          latency_ms: 98,
-          message: 'Hello! AI Gateway is connected and ready.',
+          success: false,
+          http_status: 0,
+          latency_ms: 0,
+          message: '探活测试未返回有效响应，请检查服务端点与 API Key 配置。',
         });
       }
     } catch (err: any) {

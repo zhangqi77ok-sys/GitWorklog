@@ -82,21 +82,13 @@ impl ProjectSessionStore {
             let session = SessionRecord {
                 id: default_session_id.clone(),
                 project_id: default_proj_id.clone(),
-                title: "会话 1: 项目初始化与探索 (默认)".to_string(),
-                tags: vec!["#需求分析".to_string()],
-                is_pinned: true,
+                title: "新会话 (默认)".to_string(),
+                tags: vec![],
+                is_pinned: false,
                 model_id: "deepseek-chat".to_string(),
                 created_at: now,
                 updated_at: now,
-                messages: vec![ChatMessageRecord {
-                    id: Uuid::new_v4().to_string(),
-                    role: "assistant".to_string(),
-                    content: "您好！Tcode 已为您加载项目工作区。请输入编程需求或指令开始任务。".to_string(),
-                    thought: Some("已自动完成工作区扫描与上下文挂载。".to_string()),
-                    timestamp: now,
-                    status: Some("completed".to_string()),
-                    dag: None,
-                }],
+                messages: vec![],
             };
 
             let project = ProjectRecord {

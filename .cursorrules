@@ -1,32 +1,34 @@
-# CodeMind-Hub 项目级开发规范与规则 (Project Rules)
+# Tcode 项目级开发规范与规则 (Project Rules)
 
 ## 🚨 核心强制工作流规范 (Mandatory Workflow)
 
-每次代码修改或新功能开发完成后，**必须无条件严格执行以下四大步骤闭环**：
+每次代码修改或新功能开发完成后，**必须无条件严格执行以下闭环**：
+
+### 【铁律 0.5: 严禁假数据与 Demo 占位铁律 (Zero Demo & Fake Data Policy)】
+1. **绝对禁止展示 Demo 数据与 Demo 伪功能**：
+   - 严禁在前端界面、组件状态、后端存储或控制台输出中注入任何硬编码的 Demo 假数据（如假会话、预填的假对话气泡、假思考内容、硬编码的假插件列表、虚假日志等）；
+   - 严禁为了“界面好看或看起来丰富”而添加伪造的模拟数据；
+2. **真实状态与干净空状态原则 (Pure & Clean Empty State)**：
+   - 新建项目、初次启动或无数据时，必须展示纯净、真实的空状态提示，严禁静默预置假消息；
+   - 插件列表必须读取 Rust 内核真实挂载的插件与真实连接的 MCP Server；
+3. **严格 Fail-Closed 与零假成功 (No Fake Fallback)**：
+   - 连通性测试与网络请求未配置或失败时，必须直接暴露真实错误，严禁返回假 200 OK、假延迟或假回复；
+   - 严禁任何形式的静默降级与伪造成功。
 
 ### 1. 增量打包 EXE 安装包 (Incremental Installer Packaging)
-- **命令**：`npm run build:installer` 或 `python build_installer.py`
-- **目标产物**：`dist/CodeMind-Studio-Setup.exe` (单文件 Windows 图形化安装向导)
+- **命令**：`npm run build:installer`
+- **目标产物**：`dist/Tcode-Setup.exe` 与 `release/Tcode-Setup-v2.0.0.exe`
 - **要求**：禁止仅仅构建 Web 端，必须增量生成 EXE 安装包，便于用户在真实 Windows 宿主环境进行安装与功能验证。
 
 ### 2. 真实执行与安装探活测试 (Live Verification)
-- **严禁虚假模拟**，必须执行安装包真实解压安装；
-- 启动执行程序，验证：
-  - 后端微内核探活：`GET http://127.0.0.1:8010/health` (返回 HTTP 200)；
-  - 静态前端挂载验证：`GET http://127.0.0.1:8010/` (返回完整 HTML 页面)；
-  - 确保脱离源码目录后独立运行无缺失 DLL、黑框或白屏崩溃。
+- **严禁虚假模拟**，必须执行真实安装与验证；
+- 启动执行程序，验证核心功能与真实模型调度。
 
 ### 3. 文档同步更新 (Update Documentation)
 - 全面更新 `README.md`，同步最新的架构图、功能说明、使用指引与构建方法。
 
 ### 4. Git 提交与远程推送 (Git Commit & Push)
-- 执行代码与配置提交：
-  ```bash
-  git add <changed-files>
-  git commit -m "<semantic-commit-message>"
-  git push origin main
-  ```
-- 确保远程仓库与本地保持绝对同步，工作区保持 Clean。
+- 执行代码与配置提交，确保远程仓库与本地保持绝对同步，工作区保持 Clean。
 
 ---
 
