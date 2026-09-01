@@ -37,11 +37,13 @@ export const SessionTreeItem: React.FC<SessionTreeItemProps> = ({
     setIsEditing(false);
   };
 
-  const formatTimestamp = (ts: number) => {
+  const formatTimestamp = (ts?: number) => {
+    if (!ts || isNaN(ts)) return '刚刚';
     const diffSec = Math.floor((Date.now() - ts) / 1000);
     if (diffSec < 60) return '刚刚';
     if (diffSec < 3600) return `${Math.floor(diffSec / 60)} 分钟前`;
     const date = new Date(ts);
+    if (isNaN(date.getTime())) return '刚刚';
     return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
   };
 

@@ -216,7 +216,9 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ onOpenSettings }) => {
         const result: any = await invoke('run_swarm_flow_task', {
           prompt: promptText,
           budgetTokens: swarmBudgetTokens,
+          sessionId: activeSessionId,
         });
+        await loadInitialData();
         if (result?.selected_candidate) {
           setSwarmFlowData({
             taskPrompt: promptText,

@@ -79,6 +79,7 @@ function loadProjectsDb(): BridgeProjectsDatabase {
         tags: ['#核心', '#开发'],
         model_id: 'deepseek-v4-flash',
         created_at: Date.now(),
+        updated_at: Date.now(),
         is_pinned: true,
         messages: [],
       },
@@ -93,6 +94,27 @@ function loadProjectsDb(): BridgeProjectsDatabase {
 
   saveProjectsDb(initialDb);
   return initialDb;
+}
+
+function persistMessageToSession(sessionId: string | null, role: 'user' | 'assistant' | 'system', content: string, thought?: string) {
+  if (!sessionId) return;
+  const db = loadProjectsDb();
+  for (const proj of db.projects) {
+    const sess = proj.sessions.find((s: BridgeSessionRecord) => s.id === sessionId);
+    if (sess) {
+      if (!Array.isArray(sess.messages)) sess.messages = [];
+      sess.messages.push({
+        id: `msg_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        role,
+        content,
+        thought,
+        timestamp: Date.now(),
+      });
+      sess.updated_at = Date.now();
+      saveProjectsDb(db);
+      break;
+    }
+  }
 }
 
 function saveProjectsDb(db: BridgeProjectsDatabase): void {
@@ -618,6 +640,11 @@ export function initTauriBridge(): void {
         const baseUrl = (activeCh?.base_url || 'https://agentrouter.org').trim().replace(/\/$/, '');
         const apiKey = (activeCh?.api_key || '').trim();
 
+        // Immediately persist user prompt message
+        if (sessionId && prompt) {
+          persistMessageToSession(sessionId, 'user', prompt);
+        }
+
         // 1. Try real proxy streaming if backend running
         let streamedSuccessfully = false;
         try {
@@ -684,6 +711,11 @@ export function initTauriBridge(): void {
               }
             }
 
+            // Persist completed assistant message
+            if (sessionId) {
+              persistMessageToSession(sessionId, 'assistant', fullContent, fullThought);
+            }
+
             await emit('agent_stream_done', {
               session_id: sessionId,
               full_content: fullContent,
@@ -695,24 +727,31 @@ export function initTauriBridge(): void {
         }
 
         if (!streamedSuccessfully) {
+          const fallbackThought = `正在观察工作区上下文与任务目标: "${prompt}"\n已加载 MemoryRail 长期工程记忆，当前模型: [${targetModel}]...`;
+          const fallbackContent = `收到您的开发指令: **${prompt}**。\n\n当前已采用大模型 **${targetModel}**，已定位相关代码与上下文，正在按规范执行分析与修改。`;
+
           // Emulate streaming thoughts and content for smooth user feedback
           setTimeout(async () => {
             await emit('agent_thought_chunk', {
               session_id: sessionId,
-              chunk: `正在观察工作区上下文与任务目标: "${prompt}"\n已加载 MemoryRail 长期工程记忆，当前模型: [${targetModel}]...`,
+              chunk: fallbackThought,
             });
 
             setTimeout(async () => {
               await emit('agent_text_chunk', {
                 session_id: sessionId,
-                chunk: `收到您的开发指令: **${prompt}**。\n\n当前已采用大模型 **${targetModel}**，已定位相关代码与上下文，正在按规范执行分析与修改。`,
+                chunk: fallbackContent,
               });
 
               setTimeout(async () => {
+                if (sessionId) {
+                  persistMessageToSession(sessionId, 'assistant', fallbackContent, fallbackThought);
+                }
+
                 await emit('agent_stream_done', {
                   session_id: sessionId,
-                  full_content: `收到您的开发指令: **${prompt}**。\n\n当前已采用大模型 **${targetModel}**，已定位相关代码与上下文，正在按规范执行分析与修改。`,
-                  full_thought: `正在观察工作区上下文与任务目标: "${prompt}"\n已加载 MemoryRail 长期工程记忆，当前模型: [${targetModel}]...`,
+                  full_content: fallbackContent,
+                  full_thought: fallbackThought,
                 });
               }, 400);
             }, 400);
@@ -723,19 +762,27 @@ export function initTauriBridge(): void {
       }
 
       case 'run_swarm_flow_task': {
-        const { prompt, budgetTokens } = args || {};
+        const { prompt, budgetTokens, sessionId } = args || {};
+        const swarmPatch = `// SwarmFlow 7 算子流选出最优补丁\n// 任务目标: ${prompt}\npub fn execute_optimized() -> bool {\n    println!("Candidate Worker-B running successfully");\n    true\n}\n`;
+        const rationaleText = 'Candidate [Worker-B] chosen with highest review score 0.96 (预算配额: ' + (budgetTokens || 25000) + ' tokens)';
+        
+        if (sessionId) {
+          persistMessageToSession(sessionId, 'user', prompt);
+          persistMessageToSession(sessionId, 'assistant', `SwarmFlow 调度完成:\n\`\`\`rust\n${swarmPatch}\n\`\`\``, rationaleText);
+        }
+
         return {
           selected_candidate: {
             worker_id: 'Worker-B',
             candidate_name: 'Candidate_Worker-B (双环沙箱极致方案)',
-            code_patch: `// SwarmFlow 7 算子流选出最优补丁\n// 任务目标: ${prompt}\npub fn execute_optimized() -> bool {\n    println!("Candidate Worker-B running successfully");\n    true\n}\n`,
+            code_patch: swarmPatch,
             execution_trace: 'Worker-B: Observe -> Reason -> Act -> Verify passed with 100% tests',
             is_empty: false,
           },
           confidence_score: 0.96,
           is_confident: true,
           human_reviewed: false,
-          rationale: 'Candidate [Worker-B] chosen with highest review score 0.96 (预算配额: ' + (budgetTokens || 25000) + ' tokens)',
+          rationale: rationaleText,
         };
       }
 
