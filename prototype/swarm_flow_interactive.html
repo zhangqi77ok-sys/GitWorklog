@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>Tcode SwarmFlow & Dual-Loop Interactive Prototype</title>
+  <style>
+    :root {
+      --bg-base: #FAF8F5;
+      --bg-surface: #F4EFEA;
+      --border: #E6DFD5;
+      --accent: #D96B27;
+      --text: #1E1C1A;
+      --text-muted: #8A847C;
+      --success: #2E7D32;
+      --info: #1565C0;
+      --purple: #7B1FA2;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    body { background: var(--bg-base); color: var(--text); padding: 24px; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+    header { display: flex; align-items: center; justify-content: space-between; padding-bottom: 16px; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+    h1 { font-size: 18px; display: flex; align-items: center; gap: 8px; }
+    .badge { background: #E8F5E9; color: var(--success); font-size: 11px; padding: 2px 8px; border-radius: 99px; font-weight: bold; border: 1px solid #A5D6A7; }
+    .main-grid { display: grid; grid-template-columns: 340px 1fr 320px; gap: 16px; flex: 1; overflow: hidden; }
+    .card { background: white; border: 1px solid var(--border); border-radius: 12px; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.03); }
+    .card-header { padding: 12px 16px; background: var(--bg-surface); border-bottom: 1px solid var(--border); font-size: 12px; font-weight: bold; display: flex; align-items: center; justify-content: space-between; }
+    .card-body { padding: 16px; flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+    .operator-node { padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-base); font-size: 12px; transition: all 0.2s; position: relative; }
+    .operator-node.active { border-color: var(--accent); background: white; box-shadow: 0 0 0 2px rgba(217, 107, 39, 0.2); }
+    .operator-node.completed { border-color: #A5D6A7; background: #F1F8F2; }
+    .node-title { font-weight: bold; display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+    .node-desc { font-size: 11px; color: var(--text-muted); }
+    .btn { background: var(--accent); color: white; border: none; padding: 8px 16px; border-radius: 8px; font-size: 12px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+    .btn:hover { background: #BF5A1B; }
+    .btn-secondary { background: white; border: 1px solid var(--border); color: var(--text); }
+    .rail-item { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: var(--bg-surface); border-radius: 6px; font-size: 11px; border-left: 3px solid var(--accent); }
+    .loop-box { border: 2px dashed var(--border); border-radius: 8px; padding: 12px; background: #FCFAF8; }
+    .loop-step { display: inline-block; padding: 4px 8px; background: white; border: 1px solid var(--border); border-radius: 4px; font-size: 11px; font-weight: 600; margin-right: 4px; margin-bottom: 4px; }
+    .loop-step.highlight { border-color: var(--accent); color: var(--accent); background: #FFF7F2; }
+    .log-stream { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; line-height: 1.6; color: #333; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>
+      <span>⚡ Tcode SwarmFlow & Dual-Loop Prototype</span>
+      <span class="badge">Live Interactive Prototype</span>
+    </h1>
+    <div style="display: flex; gap: 8px;">
+      <button class="btn" id="runBtn" onclick="runSwarmFlow()">▶️ 运行 Swarm Flow 算子流</button>
+      <button class="btn btn-secondary" onclick="resetFlow()">重置</button>
+    </div>
+  </header>
+
+  <div class="main-grid">
+    <!-- Col 1: Swarm Flow Operators Tree -->
+    <div class="card">
+      <div class="card-header">
+        <span>Swarm Flow 算子编排流 (Operators)</span>
+        <span style="font-size: 10px; color: var(--text-muted);">7 大核心算子</span>
+      </div>
+      <div class="card-body" id="operatorsContainer">
+        <div class="operator-node" id="step-task">
+          <div class="node-title"><span>1. Leader Receives Task</span><span>📥</span></div>
+          <div class="node-desc">任务到达主智能体: "实现高可用双环沙箱模型调度"</div>
+        </div>
+
+        <div class="operator-node" id="step-budget">
+          <div class="node-title"><span>2. budget() 预算检查</span><span style="color: var(--success);">🟢 24,500 Tok</span></div>
+          <div class="node-desc">查询 Token 成本预算与并发上限，自适应决定 N 个 Worker</div>
+        </div>
+
+        <div class="operator-node" id="step-parallel">
+          <div class="node-title"><span>3. parallel() 栅栏同步并发派发</span><span>⚡ Fan-out: 3</span></div>
+          <div class="node-desc">Worker A, Worker B, Worker C 并行生成候选代码</div>
+        </div>
+
+        <div class="operator-node" id="step-compact">
+          <div class="node-title"><span>4. compact() 过滤空结果</span><span>🧹 Filter</span></div>
+          <div class="node-desc">自动移除失败/空分支，保留健康有效候选集 (3/3)</div>
+        </div>
+
+        <div class="operator-node" id="step-pipeline">
+          <div class="node-title"><span>5. pipeline() 流式复核</span><span>🌊 Review</span></div>
+          <div class="node-desc">流水线异步审查各候选分支：语法、安全与单元测试</div>
+        </div>
+
+        <div class="operator-node" id="step-arbiter">
+          <div class="node-title"><span>6. agent_session() 有状态仲裁者</span><span>⚖️ Arbiter</span></div>
+          <div class="node-desc">汇聚候选打分：候选 B 得分最高 (置信度 96% ≥ 80%)</div>
+        </div>
+
+        <div class="operator-node" id="step-return">
+          <div class="node-title"><span>7. return 最终结果收口</span><span>🏆 Delivered</span></div>
+          <div class="node-desc">输出最优候选方案，写入工作区完成闭环交付</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Col 2: Unified Dual-Loop Engine Visualizer -->
+    <div class="card">
+      <div class="card-header">
+        <span>统一双环执行内核 (Inner / Outer Loop Engine)</span>
+        <span style="font-size: 10px; color: var(--accent);">同一套内核支撑所有角色</span>
+      </div>
+      <div class="card-body">
+        <div class="loop-box">
+          <div style="font-weight: bold; font-size: 12px; margin-bottom: 8px; color: var(--accent);">
+            🔄 Outer Loop: 迭代收敛与全局目标评估
+          </div>
+          <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 12px;">
+            当前轮次: <b id="outerIter">1 / 5</b> · 任务状态: <b id="taskStatus">就绪</b>
+          </div>
+
+          <div style="background: white; border: 1px solid var(--border); border-radius: 8px; padding: 12px;">
+            <div style="font-weight: bold; font-size: 11px; margin-bottom: 8px; color: #333;">
+              ⚡ Inner Loop: 单轮四步闭环 (Observe - Reason - Act - Verify)
+            </div>
+            <div>
+              <span class="loop-step" id="step-obs">1. Observe (观察)</span>
+              <span class="loop-step" id="step-rea">2. Reason (推理)</span>
+              <span class="loop-step" id="step-act">3. Act (行动)</span>
+              <span class="loop-step" id="step-ver">4. Verify (验证)</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="flex: 1; border: 1px solid var(--border); border-radius: 8px; padding: 12px; background: #FAF9F7; overflow-y: auto;">
+          <div style="font-size: 11px; font-weight: bold; margin-bottom: 6px; color: var(--text-muted);">实时内核事件追踪 (Live Trace)</div>
+          <div class="log-stream" id="logStream">
+            [System]: 统一内核已就绪，等待 SwarmFlow 触发...
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Col 3: Rail Plugin Interceptors -->
+    <div class="card">
+      <div class="card-header">
+        <span>Rail 能力插件钩子 (Lifecycle Interceptors)</span>
+        <span style="font-size: 10px; color: var(--purple);">按优先级链式挂载</span>
+      </div>
+      <div class="card-body">
+        <div class="rail-item">
+          <div>
+            <div style="font-weight: bold;">SafetyRail (安全策略)</div>
+            <div style="font-size: 10px; color: var(--text-muted);">on_before_act 阻断高危操作</div>
+          </div>
+          <span style="font-size: 10px; font-weight: bold; color: var(--accent);">P-100</span>
+        </div>
+
+        <div class="rail-item">
+          <div>
+            <div style="font-weight: bold;">MemoryRail (语义记忆)</div>
+            <div style="font-size: 10px; color: var(--text-muted);">on_after_observe 注入 RepoMap</div>
+          </div>
+          <span style="font-size: 10px; font-weight: bold; color: var(--info);">P-80</span>
+        </div>
+
+        <div class="rail-item">
+          <div>
+            <div style="font-weight: bold;">ToolRail (工具治理)</div>
+            <div style="font-size: 10px; color: var(--text-muted);">on_act 调度原生与 MCP 工具</div>
+          </div>
+          <span style="font-size: 10px; font-weight: bold; color: var(--purple);">P-60</span>
+        </div>
+
+        <div class="rail-item">
+          <div>
+            <div style="font-weight: bold;">PlanningRail (任务规划)</div>
+            <div style="font-size: 10px; color: var(--text-muted);">on_reason 生成子任务 DAG</div>
+          </div>
+          <span style="font-size: 10px; font-weight: bold; color: var(--success);">P-40</span>
+        </div>
+
+        <div class="rail-item">
+          <div>
+            <div style="font-weight: bold;">ObservabilityRail (可观测)</div>
+            <div style="font-size: 10px; color: var(--text-muted);">全生命周期流式事件发布</div>
+          </div>
+          <span style="font-size: 10px; font-weight: bold; color: #8A847C;">P-20</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+    function log(text) {
+      const el = document.getElementById('logStream');
+      const time = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+      el.innerHTML += `<div><span style="color:#8A847C;">[${time}]</span> ${text}</div>`;
+      el.scrollTop = el.scrollHeight;
+    }
+
+    function setNodeState(id, state) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.className = 'operator-node ' + state;
+    }
+
+    function highlightLoopStep(step) {
+      ['step-obs', 'step-rea', 'step-act', 'step-ver'].forEach(s => {
+        document.getElementById(s).className = 'loop-step ' + (s === step ? 'highlight' : '');
+      });
+    }
+
+    async function runSwarmFlow() {
+      document.getElementById('runBtn').disabled = true;
+      resetFlow();
+
+      log('<b>[SwarmFlow]</b> Leader Agent 接收到编码任务...');
+      setNodeState('step-task', 'completed');
+      await sleep(600);
+
+      log('<b>[SwarmFlow]</b> 执行 <code>budget()</code> 算子：预算充足 (24,500 Tok)，扇出分配 3 个 Worker...');
+      setNodeState('step-budget', 'completed');
+      await sleep(700);
+
+      log('<b>[SwarmFlow]</b> 执行 <code>parallel()</code> 算子：并发拉起 Worker A, B, C...');
+      setNodeState('step-parallel', 'active');
+      
+      // Simulate Inner Loop for Worker B
+      highlightLoopStep('step-obs');
+      log('  └─ [Worker B InnerLoop] <b>Observe</b>: 观察工作区模型配置...');
+      await sleep(500);
+
+      highlightLoopStep('step-rea');
+      log('  └─ [Worker B InnerLoop] <b>Reason</b>: 规划双环安全校验实现路径...');
+      await sleep(500);
+
+      highlightLoopStep('step-act');
+      log('  └─ [Worker B InnerLoop] <b>Act</b>: SafetyRail 检查通过，调用代码生成工具...');
+      await sleep(600);
+
+      highlightLoopStep('step-ver');
+      log('  └─ [Worker B InnerLoop] <b>Verify</b>: 语法与断言验证 100% 绿灯通过！');
+      await sleep(500);
+
+      setNodeState('step-parallel', 'completed');
+      await sleep(600);
+
+      log('<b>[SwarmFlow]</b> 执行 <code>compact()</code> 算子：过滤无效分支，保留 3 个候选集...');
+      setNodeState('step-compact', 'completed');
+      await sleep(600);
+
+      log('<b>[SwarmFlow]</b> 执行 <code>pipeline()</code> 算子：流式交叉评审候选分支...');
+      setNodeState('step-pipeline', 'completed');
+      await sleep(700);
+
+      log('<b>[SwarmFlow]</b> 执行 <code>agent_session()</code> 算子：有状态仲裁者评选，候选 B 胜出 (置信度 96%)...');
+      setNodeState('step-arbiter', 'completed');
+      await sleep(600);
+
+      log('<b>[SwarmFlow]</b> 仲裁者置信度高，直接执行 <code>return</code> 收口交付成果！');
+      setNodeState('step-return', 'completed');
+      document.getElementById('taskStatus').innerHTML = '<span style="color:var(--success);">✅ 成功完成交付</span>';
+      document.getElementById('runBtn').disabled = false;
+    }
+
+    function resetFlow() {
+      ['step-task', 'step-budget', 'step-parallel', 'step-compact', 'step-pipeline', 'step-arbiter', 'step-return'].forEach(id => {
+        setNodeState(id, '');
+      });
+      highlightLoopStep('');
+      document.getElementById('logStream').innerHTML = '[System]: 准备就绪，点击运行开启流转。';
+      document.getElementById('taskStatus').innerHTML = '就绪';
+    }
+  </script>
+</body>
+</html>

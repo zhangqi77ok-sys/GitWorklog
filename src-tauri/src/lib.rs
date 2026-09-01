@@ -43,7 +43,9 @@ pub fn run() {
             ipc::test_gateway_channel,
             ipc::pull_gateway_models,
             // Real Chat Stream
-            ipc::stream_chat_prompt
+            ipc::stream_chat_prompt,
+            // Swarm Flow & Dual-Loop Engine
+            ipc::run_swarm_flow_task
         ])
         .run(tauri::generate_context!())
         .expect("error while running Tcode Studio application");
@@ -59,6 +61,24 @@ mod tests {
         let db = store.get_database().await;
         // Project list is clean and empty by default
         assert!(db.projects.is_empty() || !db.projects.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_swarm_flow_operators() {
+        let decision = core::SwarmFlowEngine::run_flow("重构双环沙箱安全拦截器", 25_000).await;
+        assert!(decision.confidence_score >= 0.80);
+        assert!(!decision.selected_candidate.worker_id.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_dual_loop_engine_execution() {
+        let registry = std::sync::Arc::new(rails::RailRegistry::new());
+        let engine = core::DualLoopEngine::new(registry, 2);
+        let results = engine.run_outer_loop("test_session", "D:/weihu", "测试Inner/Outer闭环").await;
+        assert!(results.is_ok());
+        let steps = results.unwrap();
+        assert!(!steps.is_empty());
+        assert!(steps[0].is_verified);
     }
 
     #[test]

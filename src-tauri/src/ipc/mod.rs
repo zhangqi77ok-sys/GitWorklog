@@ -430,3 +430,13 @@ pub async fn test_gateway_connection(config: ModelConfig) -> Result<String, Stri
     let gateway = crate::core::ModelGateway::new();
     gateway.test_connection(&config).await
 }
+
+#[tauri::command]
+pub async fn run_swarm_flow_task(
+    prompt: String,
+    budget_tokens: Option<u64>,
+) -> Result<crate::core::ArbiterDecision, String> {
+    let budget = budget_tokens.unwrap_or(30_000);
+    let decision = crate::core::SwarmFlowEngine::run_flow(&prompt, budget).await;
+    Ok(decision)
+}

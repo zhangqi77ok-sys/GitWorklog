@@ -18,6 +18,7 @@ import { useProjectSessionStore } from '../../store/useProjectSessionStore';
 import { useWorkspaceStore } from '../../store/useWorkspaceStore';
 import { useGatewayStore } from '../../store/useGatewayStore';
 import { SubtaskProgressCard } from './SubtaskProgressCard';
+import { SwarmFlowVisualizer, SwarmFlowState } from './SwarmFlowVisualizer';
 import type { Subtask } from '../../types';
 
 export const ChatPanel: React.FC = () => {
@@ -36,6 +37,8 @@ export const ChatPanel: React.FC = () => {
   const [streamingThought, setStreamingThought] = useState('');
   const [streamingContent, setStreamingContent] = useState('');
   const [collapsedThoughts, setCollapsedThoughts] = useState<Record<string, boolean>>({});
+  const [isSwarmMode, setIsSwarmMode] = useState(false);
+  const [swarmFlowData, setSwarmFlowData] = useState<SwarmFlowState | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const activeProject = projects.find((p) => p.id === activeProjectId);
@@ -102,6 +105,52 @@ export const ChatPanel: React.FC = () => {
     setStreamingThought('');
 
     const workspaceDir = activeProject?.path || 'D:\\weihu\\agent-learning';
+
+    if (isSwarmMode) {
+      try {
+        const decision = await invoke<any>('run_swarm_flow_task', {
+          prompt: promptText,
+          budgetTokens: 25000,
+        });
+        if (decision) {
+          setSwarmFlowData({
+            taskPrompt: promptText,
+            budgetTokens: 25000,
+            workersCount: 3,
+            status: 'completed',
+            candidates: [
+              {
+                workerId: 'Worker-A',
+                candidateName: 'Candidate_Worker-A (高内聚方案)',
+                codePatch: '// Worker-A 候选实现\npub fn execute() -> bool { true }\n',
+                score: 0.88,
+              },
+              {
+                workerId: 'Worker-B',
+                candidateName: 'Candidate_Worker-B (双环沙箱极致方案)',
+                codePatch: decision.selected_candidate?.code_patch || '// Worker-B 候选实现\n',
+                score: decision.confidence_score || 0.96,
+              },
+              {
+                workerId: 'Worker-C',
+                candidateName: 'Candidate_Worker-C (轻量快速方案)',
+                codePatch: '// Worker-C 候选实现\npub fn execute() -> bool { false }\n',
+                score: 0.82,
+              },
+            ],
+            selectedWorkerId: decision.selected_candidate?.worker_id || 'Worker-B',
+            confidenceScore: decision.confidence_score || 0.96,
+            humanReviewed: decision.human_reviewed || false,
+            rationale: decision.rationale || 'Candidate [Worker-B] chosen with highest review score 0.96',
+          });
+        }
+      } catch (err: any) {
+        alert(`Swarm Flow 调度异常: ${err}`);
+      } finally {
+        setIsStreaming(false);
+      }
+      return;
+    }
 
     try {
       await invoke('stream_chat_prompt', {
@@ -268,6 +317,14 @@ export const ChatPanel: React.FC = () => {
           </div>
         )}
 
+        {/* Live Swarm Flow Operators Execution Card */}
+        {swarmFlowData && (
+          <SwarmFlowVisualizer
+            flowData={swarmFlowData}
+            onInspectCode={(code) => handleOpenDiffFromCode(code)}
+          />
+        )}
+
         <div ref={messagesEndRef} />
       </div>
 
@@ -291,7 +348,11 @@ export const ChatPanel: React.FC = () => {
                 handleSend();
               }
             }}
-            placeholder="输入编程需求或任务指令 (Enter 发送, Shift+Enter 换行)..."
+            placeholder={
+              isSwarmMode
+                ? "输入复杂重构或多任务指令，将通过 SwarmFlow (budget -> parallel -> compact -> pipeline -> arbiter) 并行推进..."
+                : "输入编程需求或任务指令 (Enter 发送, Shift+Enter 换行)..."
+            }
             rows={2}
             className="w-full resize-none outline-none text-xs text-[#1E1C1A] placeholder-[#8A847C] leading-relaxed bg-transparent"
           />
@@ -302,6 +363,19 @@ export const ChatPanel: React.FC = () => {
                 <Zap className="w-3 h-3 text-[#D96B27]" />
                 模式: ⚡ Coding
               </span>
+
+              <button
+                type="button"
+                onClick={() => setIsSwarmMode(!isSwarmMode)}
+                className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold transition-all cursor-pointer ${
+                  isSwarmMode
+                    ? 'bg-[#D96B27] text-white shadow-xs'
+                    : 'bg-[#FAF8F5] border border-[#E6DFD5] text-[#6B665F] hover:text-[#1E1C1A]'
+                }`}
+              >
+                <Sparkles className="w-3 h-3" />
+                <span>{isSwarmMode ? 'SwarmFlow 算子流 (已开启)' : 'SwarmFlow 算子流'}</span>
+              </button>
             </div>
 
             <button

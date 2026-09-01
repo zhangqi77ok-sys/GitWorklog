@@ -58,7 +58,7 @@ impl ProjectSessionStore {
         let _ = fs::create_dir_all(&db_dir);
         let db_path = db_dir.join("projects_sessions.json");
 
-        let mut data = if db_path.exists() {
+        let data = if db_path.exists() {
             fs::read_to_string(&db_path)
                 .ok()
                 .and_then(|s| serde_json::from_str::<ProjectsDatabase>(&s).ok())
