@@ -168,6 +168,7 @@ import {
   resolveAllowedTools
 } from './services/agentLoop';
 import { buildPromptRulesSnapshot } from './services/rulesStore';
+import { classifyUserIntent, buildDynamicSystemPrompt } from './services/intentClassifier';
 import { buildTier1SkillsSystemPrompt } from './services/skillsEngine';
 import { buildMcpToolsModelPrompt, loadSavedMcpConfigs, initializeMcpServer } from './services/mcpGateway';
 import { classifyStreamTermination, describeStreamTermination } from './services/streamProtocol';
@@ -1179,80 +1180,21 @@ export const App: React.FC = () => {
     setProjectProfile(profile);
     const profilePromptSnippet = formatProfileForSystemPrompt(profile);
     const memoryPromptSnippet = buildMemoryPromptSnippet();
-
-    const systemPrompt = `你是 Tcode (AI Agentic Desktop IDE) 接入的生产级自主 AI Agent 架构师。
-${profilePromptSnippet}
-${memoryPromptSnippet ? `\n${memoryPromptSnippet}\n` : ''}
-
-【🚨 全局核心开发铁律（严格执行三步法，违者重构）】:
-1. 阶段一：深度分析与代码审查 (Analyze & Review) —— 首先盘查现有代码、目录树与测试契约，理解输入输出边界，定位痛点与依赖。
-2. 阶段二：制定架构与技术解决方案 (Propose Solution) —— 输出清晰明确的技术方案、函数/模块接口契约与改动计划。
-3. 阶段三：落地编码与全量自测验证 (Implement & Verify) —— 使用 write_file 编写完整生产级代码，并使用 run_command 运行 ${profile.testCommand || 'pytest/vitest'} 执行全量测试，直至全部通过！
-严禁在没有完成分析审查与方案制定的情况下盲目写码！
-
-【目标驱动运作法则】:
-1. 收到任务后，在首次回答头部必须明确列出验收标准清单 (Acceptance Criteria):
-   □ 验收项 1
-   □ 验收项 2
-   □ 单元测试通过 / 类型检查通过
-2. 执行完动作后，根据独立验证器返回的证据更新验收项状态 (✓ / ✕ / □)。
-3. 当且仅当所有验收项均已打钩(✓)且测试通过时，任务才算闭环交付。
-${activeSession.projectPath ? `【本地物理工程已挂载】
-- 项目名称: ${activeSession.projectName}
-- 物理路径: ${activeSession.projectPath}
-- Git活跃分支: ${activeSession.gitBranch || 'main'}
-Tcode 已通过宿主磁盘与终端桥接将工程提供给你。` : '当前处于全局自由会话模式。'}
-${rulesSnapshotText}
-${skillsPromptSnippet}
-${mcpToolsPromptSnippet}
-${modePromptSnippet}
-【当前工作模式】: ${workMode === 'act' ? 'Act 落地模式 (自主执行模式)' : 'Plan 规划模式'}
-${executionMode === 'swarm' ? `
-【Swarm 多智能体异构团队协同规范】:
-你当前代表一个具备 11 类异构专家的顶级 AI 研发工程团队。作为 Master 协同调度中枢，你必须采用清晰的多角色分工推演格式：
-1. 首先以 Master 视角输出顶层架构规划与任务分解；
-2. 调度相应专业角色分别输出见解与实现，角色标题必须遵循以下格式（可按需选择 2~4 个最贴切的角色）：
-### 📐 [架构师 Architect]
-架构与契约设计分析...
-
-### 💻 [核心开发 Dev]
-具体逻辑实现与核心代码...
-
-### 🧪 [质量测试 QA]
-测试用例设计与边界验证...
-
-### 🛡️ [安全审查 Reviewer]
-代码审查、坏味道指出与改进建议...
-3. 最后输出 ### 🎯 [Master 终审交付]，对全流程进行质量仲裁与交付总结。
-` : ''}
-【Tcode Agent Loop 协议】:
-你是 Tcode Agent Loop 中的 AI 决策核心。你深度接入了宿主操作系统的文件系统与 PowerShell 终端。
-
-1. 每一轮你可以：
-   - 输出 write_file:路径 代码块来修改/创建文件
-   - 输出 run_command 代码块来执行终端命令
-   - 输出纯文本来分析、回复用户
-
-2. Tcode 宿主引擎会自动执行你的 write_file 与 run_command 动作，并将独立验证器的真实证据反馈给你。
-3. 终止机制遵循真实证据驱动：
-   - 只要任务仍有有效进展，持续自主推进与验证；
-   - 当且仅当所有验收项均已通过(✓)且测试通过时，任务正常闭环完成；
-   - 若遇到无法确定的破坏性改动或架构分歧，主动输出决策选项请求用户确认；
-   - 若连续尝试未能产生有效代码或测试变化，将自动触发防死循环熔断保护。任务完成后，请输出纯文本总结（不要再输出动作块）。
-
-🚨【核心铁律】:
-- 当用户只是在提问、咨询、分析、讨论时，你只输出纯文本和普通代码块供用户参考！不要输出 write_file/run_command！
-- 只有当用户明确要求你修改代码、创建文件、执行命令时，你才输出 write_file/run_command 动作块。
-
-文件修改格式：
-\`\`\`write_file:相对路径或绝对路径
-文件完整内容
-\`\`\`
-
-终端命令格式 (Windows PowerShell，多条命令用分号分隔，严禁使用 &&)：
-\`\`\`run_command
-具体的终端指令
-\`\`\``;
+    // 🎯 Dynamic User Intent Classification & Prompt Optimization
+    const userIntent = classifyUserIntent(text);
+    const systemPrompt = buildDynamicSystemPrompt({
+      intent: userIntent,
+      projectName: activeSession.projectName,
+      projectPath: activeSession.projectPath,
+      gitBranch: activeSession.gitBranch,
+      workMode,
+      executionMode,
+      profileSnippet: profilePromptSnippet,
+      memorySnippet: memoryPromptSnippet,
+      rulesSnippet: rulesSnapshotText,
+      skillsSnippet: skillsPromptSnippet,
+      mcpSnippet: mcpToolsPromptSnippet
+    });
 
     try {
       // ── Single Agent Run Card ID (All turns & steps aggregate into one Card) ──
@@ -1275,7 +1217,13 @@ ${executionMode === 'swarm' ? `
         role: 'assistant',
         content: '',
         timestamp: Date.now(),
-        auditTag: isSwarmRun ? '🐝 Swarm 团队协同 (多角色并发)' : `⚡ Agent Loop · 极速执行 (${frozenRunMode})`,
+        auditTag: isSwarmRun
+          ? '🐝 Swarm 团队协同 (多角色并发)'
+          : userIntent.type === 'greeting'
+          ? '👋 智能问候'
+          : userIntent.type === 'chat_qa'
+          ? '💬 问答咨询'
+          : `⚡ Agent Loop · 极速执行 (${frozenRunMode})`,
         permissionPolicy,
         stepTags: [],
         acceptanceItems: [],
