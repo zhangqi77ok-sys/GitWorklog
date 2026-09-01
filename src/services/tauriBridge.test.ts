@@ -22,7 +22,7 @@ if (typeof (globalThis as any).localStorage === 'undefined') {
   };
 }
 
-import { initTauriBridge } from './tauriBridge';
+import { initTauriBridge, parseToolCallsFromText } from './tauriBridge';
 import { invoke } from '@tauri-apps/api/core';
 
 describe('tauriBridge Universal IPC Adapter', () => {
@@ -102,5 +102,20 @@ describe('tauriBridge Universal IPC Adapter', () => {
     expect(probe.success).toBe(true);
     expect(probe.http_status).toBe(200);
     expect(probe.latency_ms).toBeGreaterThan(0);
+  });
+
+  it('parses DSML tool calls correctly', () => {
+    const rawText = `
+    我来看一下项目的整体结构。
+    <|DSML|tool_calls>
+    <|DSML|invoke name="Lookup">
+    <|DSML|parameter name="path" string="true">package.json</|DSML|parameter>
+    </|DSML|invoke>
+    </|DSML|tool_calls>
+    `;
+    const calls = parseToolCallsFromText(rawText);
+    expect(calls.length).toBe(1);
+    expect(calls[0].name).toBe('Lookup');
+    expect(calls[0].args.path).toBe('package.json');
   });
 });
