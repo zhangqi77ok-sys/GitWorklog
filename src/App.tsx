@@ -5,7 +5,6 @@ import { LeftPanel } from './components/layout/LeftPanel';
 import { ChatPanel } from './components/chat/ChatPanel';
 import { MonacoEditorWorkspace } from './components/editor/MonacoEditorWorkspace';
 import { TerminalDrawer } from './components/terminal/TerminalDrawer';
-import { PluginManagerModal } from './components/plugins/PluginManagerModal';
 import { SettingsModal } from './components/settings/SettingsModal';
 import { useProjectSessionStore } from './store/useProjectSessionStore';
 import { useWorkspaceStore } from './store/useWorkspaceStore';
@@ -17,7 +16,6 @@ export function App() {
   const [theme, setTheme] = useState<'cream' | 'dark'>('cream');
   const [activeTab, setActiveTab] = useState<ActiveTab>('chat');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isPluginsOpen, setIsPluginsOpen] = useState(false);
   const [isTerminalOpen, setIsTerminalOpen] = useState(true);
 
   const { loadInitialData, activeProjectId, projects } = useProjectSessionStore();
@@ -62,10 +60,8 @@ export function App() {
 
   const handleSelectTab = (tab: ActiveTab) => {
     setActiveTab(tab);
-    if (tab === 'settings') {
+    if (tab === 'settings' || tab === 'plugins') {
       setIsSettingsOpen(true);
-    } else if (tab === 'plugins') {
-      setIsPluginsOpen(true);
     } else if (tab === 'terminal') {
       setIsTerminalOpen((prev) => !prev);
     }
@@ -73,14 +69,8 @@ export function App() {
 
   return (
     <div className="flex flex-col h-screen w-screen bg-[#FAF8F5] overflow-hidden">
-      {/* 1. Global Titlebar */}
-      <Titlebar
-        theme={theme}
-        onToggleTheme={toggleTheme}
-        onOpenSettings={() => setIsSettingsOpen(true)}
-        onOpenPlugins={() => setIsPluginsOpen(true)}
-        pluginCount={plugins.length || 5}
-      />
+      {/* 1. Global Titlebar (Clean, no buttons on the right except native window controls) */}
+      <Titlebar />
 
       {/* 2. Main Workbench 3-Column Layout */}
       <div className="flex flex-1 overflow-hidden">
@@ -108,17 +98,14 @@ export function App() {
         </div>
       </div>
 
-      {/* Modals */}
-      <PluginManagerModal
-        isOpen={isPluginsOpen}
-        onClose={() => setIsPluginsOpen(false)}
-        plugins={plugins}
-        tools={tools}
-      />
-
+      {/* Unified Settings & Tools Cockpit Modal */}
       <SettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
+        theme={theme}
+        onToggleTheme={toggleTheme}
+        plugins={plugins}
+        tools={tools}
       />
     </div>
   );

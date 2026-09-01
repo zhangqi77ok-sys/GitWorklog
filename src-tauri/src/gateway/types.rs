@@ -26,6 +26,8 @@ impl Default for ProviderPlatform {
 pub enum IngressType {
     ApiKey,
     Oauth,
+    Sub2,
+    Cap,
     SetupToken,
     Bedrock,
     Vertex,

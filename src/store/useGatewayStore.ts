@@ -16,6 +16,8 @@ export type ProviderPlatform =
 export type IngressType =
   | 'api_key'
   | 'oauth'
+  | 'sub2'
+  | 'cap'
   | 'setup_token'
   | 'bedrock'
   | 'vertex'
