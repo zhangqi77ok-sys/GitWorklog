@@ -2152,14 +2152,43 @@ export function parseAgentMessage(rawText: string): ParsedAgentMessage {
     text = text.replace(thinkMatch[0], '').trim();
   }
 
-  const dsmlRegex = /<\s*\|?\s*DSML\s*\|?\s*tool_calls>([\s\S]*?)<\/\s*\|?\s*DSML\s*\|?\s*tool_calls>/gi;
+  // 1. DeepSeek DSML tool_name variant (e.g. < | | DSML | | tool_name="run_command">...< | | DSML | | cmd>...</ | | DSML | | cmd></ | | DSML | | tool>)
+  const dsmlToolNameRegex = /<[\s\|\｜]*DSML[\s\|\｜]*tool_name="([^"]+)"[^>]*>([\s\S]*?)<\/[\s\|\｜]*DSML[\s\|\｜]*tool>/gi;
+  let toolNameMatch: RegExpExecArray | null;
+  while ((toolNameMatch = dsmlToolNameRegex.exec(text)) !== null) {
+    const tName = toolNameMatch[1].trim();
+    const tBody = toolNameMatch[2];
+    const parameters: Record<string, string> = {};
+
+    // Extract cmd/command, path, content/code or parameter
+    const cmdM = /<[\s\|\｜]*DSML[\s\|\｜]*(?:cmd|command)>([\s\S]*?)<\/[\s\|\｜]*DSML[\s\|\｜]*(?:cmd|command)>/i.exec(tBody);
+    if (cmdM) parameters.command = cmdM[1].trim();
+
+    const pathM = /<[\s\|\｜]*DSML[\s\|\｜]*(?:path|file|target)>([\s\S]*?)<\/[\s\|\｜]*DSML[\s\|\｜]*(?:path|file|target)>/i.exec(tBody);
+    if (pathM) parameters.path = pathM[1].trim();
+
+    const contentM = /<[\s\|\｜]*DSML[\s\|\｜]*(?:content|code)>([\s\S]*?)<\/[\s\|\｜]*DSML[\s\|\｜]*(?:content|code)>/i.exec(tBody);
+    if (contentM) parameters.content = contentM[1];
+
+    const paramRegex = /<[\s\|\｜]*DSML[\s\|\｜]*parameter\s+name="([^"]+)"[^>]*>([\s\S]*?)<\/[\s\|\｜]*DSML[\s\|\｜]*parameter>/gi;
+    let pMatch: RegExpExecArray | null;
+    while ((pMatch = paramRegex.exec(tBody)) !== null) {
+      parameters[pMatch[1].trim()] = pMatch[2].trim();
+    }
+
+    addToolCall(tName, parameters, toolNameMatch[0]);
+  }
+  text = text.replace(dsmlToolNameRegex, '').trim();
+
+  // 2. DSML tool_calls container variant (<|DSML|tool_calls><|DSML|invoke name="...">...</|DSML|invoke></|DSML|tool_calls>)
+  const dsmlRegex = /<[\s\|\｜]*DSML[\s\|\｜]*tool_calls>([\s\S]*?)<\/?[\|\｜\s]*DSML[\s\|\｜]*tool_calls>/gi;
   let dsmlMatch: RegExpExecArray | null;
   while ((dsmlMatch = dsmlRegex.exec(text)) !== null) {
-    const invokeRegex = /<\s*\|?\s*DSML\s*\|?\s*invoke\s+name="([^"]+)"[^>]*>([\s\S]*?)<\/\s*\|?\s*DSML\s*\|?\s*invoke>/gi;
+    const invokeRegex = /<[\s\|\｜]*DSML[\s\|\｜]*invoke\s+name="([^"]+)"[^>]*>([\s\S]*?)<\/?[\|\｜\s]*DSML[\s\|\｜]*invoke>/gi;
     let invokeMatch: RegExpExecArray | null;
     while ((invokeMatch = invokeRegex.exec(dsmlMatch[1])) !== null) {
       const parameters: Record<string, string> = {};
-      const parameterRegex = /<\s*\|?\s*DSML\s*\|?\s*parameter\s+name="([^"]+)"[^>]*>([\s\S]*?)<\/\s*\|?\s*DSML\s*\|?\s*parameter>/gi;
+      const parameterRegex = /<[\s\|\｜]*DSML[\s\|\｜]*parameter\s+name="([^"]+)"[^>]*>([\s\S]*?)<\/?[\|\｜\s]*DSML[\s\|\｜]*parameter>/gi;
       let parameterMatch: RegExpExecArray | null;
       while ((parameterMatch = parameterRegex.exec(invokeMatch[2])) !== null) {
         parameters[parameterMatch[1]] = parameterMatch[2].trim();
@@ -2169,6 +2198,32 @@ export function parseAgentMessage(rawText: string): ParsedAgentMessage {
   }
   text = text.replace(dsmlRegex, '').trim();
 
+  // 3. Clean any lingering DSML toolitude / metadata tags (< | | DSML | | toolitude ... > ... </ | | DSML | | tool>)
+  const dsmlToolitudeRegex = /<[\s\|\｜]*DSML[\s\|\｜]*(?:toolitude|description)[^>]*>([\s\S]*?)<\/?[\s\|\｜]*DSML[\s\|\｜]*tool>/gi;
+  text = text.replace(dsmlToolitudeRegex, '').trim();
+
+  // 4. JSON tool_call blocks (<tool_call>{"name": "...", "arguments": {...}}</tool_call>)
+  const jsonToolCallRegex = /<tool_call>\s*(\{[\s\S]*?\})\s*<\/tool_call>/gi;
+  let jsonToolMatch: RegExpExecArray | null;
+  while ((jsonToolMatch = jsonToolCallRegex.exec(text)) !== null) {
+    try {
+      const parsedObj = JSON.parse(jsonToolMatch[1]);
+      const name = parsedObj.name || parsedObj.tool_name || parsedObj.tool;
+      const args = parsedObj.arguments || parsedObj.parameters || parsedObj.args || {};
+      const parameters: Record<string, string> = {};
+      for (const [k, v] of Object.entries(args)) {
+        parameters[k] = typeof v === 'string' ? v : JSON.stringify(v);
+      }
+      if (name) {
+        addToolCall(name, parameters, jsonToolMatch[0]);
+      }
+    } catch {
+      // Ignore malformed JSON
+    }
+  }
+  text = text.replace(jsonToolCallRegex, '').trim();
+
+  // 5. XML tool_call blocks (<tool_call><run_command>...</run_command></tool_call>)
   const toolCallRegex = /<tool_call>\s*<([a-zA-Z0-9_-]+)>([\s\S]*?)<\/\1>\s*<\/tool_call>/gi;
   let toolCallMatch: RegExpExecArray | null;
   while ((toolCallMatch = toolCallRegex.exec(text)) !== null) {
@@ -2187,6 +2242,13 @@ export function parseAgentMessage(rawText: string): ParsedAgentMessage {
     addToolCall(toolCallMatch[1], parameters, toolCallMatch[0]);
   }
   text = text.replace(toolCallRegex, '').trim();
+
+  // 6. DeepSeek full-width/half-width <｜tool_calls｜> container
+  const deepseekCallsRegex = /<[\|\｜]\s*tool_calls\s*[\|\｜]>([\s\S]*?)<[\|\｜]\/\s*tool_calls\s*[\|\｜]>/gi;
+  text = text.replace(deepseekCallsRegex, '').trim();
+
+  // 7. Lingering stray DSML tags cleanup
+  text = text.replace(/<[\s\|\｜]*DSML[\s\|\｜]*[^>]*>/gi, '').replace(/<\/[\s\|\｜]*DSML[\s\|\｜]*[^>]*>/gi, '').trim();
 
   return { thinkingText, toolCalls, cleanContent: text };
 }

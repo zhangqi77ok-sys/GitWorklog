@@ -10,8 +10,30 @@ import host_auth
 import credential_crypto
 import path_sandbox
 import proxy_policy
+from pathlib import Path
+from typing import Optional, Dict, Any
 import airgap
-import notifications
+from lsp_indexer_service import LspIndexerService
+from lineage_service import LineageService, CodeLineageRecord
+
+_indexer_service_instances: Dict[str, LspIndexerService] = {}
+_lineage_service_instances: Dict[str, LineageService] = {}
+
+def get_indexer_service(workspace_path: Optional[str] = None) -> LspIndexerService:
+    ws = Path(workspace_path).resolve() if workspace_path else Path.cwd().resolve()
+    ws_key = str(ws)
+    if ws_key not in _indexer_service_instances:
+        _indexer_service_instances[ws_key] = LspIndexerService(workspace_dir=ws)
+    return _indexer_service_instances[ws_key]
+
+def get_lineage_service(workspace_path: Optional[str] = None) -> LineageService:
+    ws = Path(workspace_path).resolve() if workspace_path else Path.cwd().resolve()
+    ws_key = str(ws)
+    if ws_key not in _lineage_service_instances:
+        _lineage_service_instances[ws_key] = LineageService(workspace_dir=ws)
+    return _lineage_service_instances[ws_key]
+
+
 CREATE_NO_WINDOW = 0x08000000
 APP_NAME = 'Tcode Studio'
 APP_STORAGE_KEY = 'Tcode'
@@ -203,7 +225,8 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
         if not host_auth.host_is_allowed(self.headers.get("Host"), SERVER_PORT):
             self._send_json(403, {"error": "HOST_DENIED", "code": 403})
             return False
-        if not host_auth.token_is_valid(self.headers.get("X-Tcode-Token")):
+        token_hdr = self.headers.get("X-Tcode-Token") or self.headers.get("X-Tcode-Host-Token")
+        if not host_auth.token_is_valid(token_hdr):
             self._send_json(401, {"error": "UNAUTHORIZED", "code": 401})
             return False
         return True
@@ -445,6 +468,104 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
             self.send_header('Content-Type', 'application/json')
             self.end_headers()
             self.wfile.write(json.dumps({'success': True, 'results': results}).encode('utf-8'))
+            return
+
+        # 2a. Semantic Symbol Index Search (FTS5 + Kinds)
+        if parsed.path == '/api/index/search':
+            qs = urllib.parse.parse_qs(parsed.query)
+            ws_path = qs.get('workspace', [None])[0] or qs.get('path', [None])[0]
+            query = (qs.get('q', [''])[0] or qs.get('query', [''])[0]).strip()
+            kind = qs.get('kind', [None])[0]
+            limit = int(qs.get('limit', ['20'])[0])
+            
+            indexer = get_indexer_service(ws_path)
+            results = indexer.search(query, kind=kind, limit=limit)
+            self._send_json(200, {'status': 'success', 'results': results, 'count': len(results)})
+            return
+
+        # 2b. Semantic Symbol Subgraph (Recursive CTE Call Graph)
+        if parsed.path == '/api/index/subgraph':
+            qs = urllib.parse.parse_qs(parsed.query)
+            ws_path = qs.get('workspace', [None])[0] or qs.get('path', [None])[0]
+            sym_id_str = qs.get('symbol_id', [None])[0] or qs.get('id', [None])[0]
+            depth = int(qs.get('depth', ['2'])[0])
+
+            if not sym_id_str:
+                self._send_json(400, {'status': 'error', 'message': 'Missing symbol_id parameter'})
+                return
+
+            try:
+                sym_id = int(sym_id_str)
+                indexer = get_indexer_service(ws_path)
+                subgraph = indexer.get_subgraph(sym_id, depth=depth)
+                self._send_json(200, {'status': 'success', **subgraph})
+            except Exception as e:
+                self._send_json(500, {'status': 'error', 'message': str(e)})
+            return
+
+        # 2c. Semantic Index Status Overview
+        if parsed.path == '/api/index/status':
+            qs = urllib.parse.parse_qs(parsed.query)
+            ws_path = qs.get('workspace', [None])[0] or qs.get('path', [None])[0]
+            indexer = get_indexer_service(ws_path)
+            status_data = indexer.get_status()
+            self._send_json(200, {'status': 'success', **status_data})
+            return
+
+        # 2d. Code Semantic Graph (Full Workspace Nodes & Edges)
+        if parsed.path == '/api/graph/workspace':
+            qs = urllib.parse.parse_qs(parsed.query)
+            ws_path = qs.get('workspace', [None])[0] or qs.get('path', [None])[0]
+            kind = qs.get('kind', [None])[0]
+            limit = int(qs.get('limit', ['150'])[0])
+
+            indexer = get_indexer_service(ws_path)
+            graph_data = indexer.storage.get_workspace_graph(limit=limit, kind=kind)
+            self._send_json(200, {'status': 'success', **graph_data})
+            return
+
+        # 2e. Blast Radius Calculation
+        if parsed.path == '/api/graph/blast_radius':
+            qs = urllib.parse.parse_qs(parsed.query)
+            ws_path = qs.get('workspace', [None])[0] or qs.get('path', [None])[0]
+            sym_id_str = qs.get('symbol_id', [None])[0] or qs.get('id', [None])[0]
+            hops = int(qs.get('hops', ['2'])[0])
+
+            if not sym_id_str:
+                self._send_json(400, {'status': 'error', 'message': 'Missing symbol_id parameter'})
+                return
+
+            try:
+                sym_id = int(sym_id_str)
+                indexer = get_indexer_service(ws_path)
+                blast_data = indexer.storage.get_blast_radius(sym_id, max_hops=hops)
+                self._send_json(200, {'status': 'success', **blast_data})
+            except Exception as e:
+                self._send_json(500, {'status': 'error', 'message': str(e)})
+            return
+
+        # 2f. AI Code Lineage by File
+        if parsed.path == '/api/lineage/file':
+            qs = urllib.parse.parse_qs(parsed.query)
+            ws_path = qs.get('workspace', [None])[0] or qs.get('cwd', [None])[0]
+            file_path = qs.get('path', [None])[0]
+            if not file_path:
+                self._send_json(400, {'status': 'error', 'message': 'Missing path parameter'})
+                return
+
+            lineage_svc = get_lineage_service(ws_path)
+            lineage_data = lineage_svc.get_file_lineage(file_path)
+            self._send_json(200, {'status': 'success', 'file_path': file_path, 'lineage': lineage_data})
+            return
+
+        # 2g. Compliance Audit Timeline
+        if parsed.path == '/api/lineage/timeline':
+            qs = urllib.parse.parse_qs(parsed.query)
+            ws_path = qs.get('workspace', [None])[0]
+            limit = int(qs.get('limit', ['50'])[0])
+            lineage_svc = get_lineage_service(ws_path)
+            events = lineage_svc.get_audit_timeline(limit=limit)
+            self._send_json(200, {'status': 'success', 'events': events})
             return
 
         # Real Host & Workspace Profile Probe
@@ -939,6 +1060,59 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
 
         if self.path.startswith('/api/git/worktree'):
             self._handle_worktree('POST')
+            return
+
+        # 0. Trigger Incremental / Full Semantic Index Sync
+        if self.path == '/api/index/sync':
+            length = int(self.headers.get('Content-Length', 0))
+            try:
+                body = json.loads(self.rfile.read(length).decode('utf-8')) if length else {}
+            except Exception:
+                body = {}
+            ws_path = body.get('workspace') or body.get('path')
+            force = bool(body.get('force', False))
+            file_paths = body.get('file_paths')
+
+            try:
+                indexer = get_indexer_service(ws_path)
+                res = indexer.sync_workspace(force=force, file_paths=file_paths)
+                self._send_json(200, res)
+            except Exception as e:
+                self._send_json(500, {'status': 'error', 'message': str(e)})
+            return
+
+        # 0b. Record AI Code Lineage & Compliance Audit Event
+        if self.path == '/api/lineage/record':
+            length = int(self.headers.get('Content-Length', 0))
+            try:
+                body = json.loads(self.rfile.read(length).decode('utf-8')) if length else {}
+            except Exception as e:
+                self._send_json(400, {'status': 'error', 'message': f'Invalid JSON: {e}'})
+                return
+
+            ws_path = body.get('workspace') or body.get('cwd')
+            file_path = body.get('file_path')
+            if not file_path:
+                self._send_json(400, {'status': 'error', 'message': 'Missing file_path in payload'})
+                return
+
+            try:
+                lineage_svc = get_lineage_service(ws_path)
+                rec = CodeLineageRecord(
+                    file_path=file_path,
+                    line_start=int(body.get('line_start', 1)),
+                    line_end=int(body.get('line_end', 1)),
+                    author_type=body.get('author_type', 'AI_AGENT'),
+                    model_id=body.get('model_id', 'claude-3-5-sonnet'),
+                    prompt=body.get('prompt'),
+                    approved_by=body.get('approved_by'),
+                    checkpoint_ref=body.get('checkpoint_ref'),
+                    license_risk=body.get('license_risk')
+                )
+                lineage_id = lineage_svc.record_lineage(rec)
+                self._send_json(200, {'status': 'success', 'lineage_id': lineage_id})
+            except Exception as e:
+                self._send_json(500, {'status': 'error', 'message': str(e)})
             return
 
         # 1a. Save Share Card Image (PNG) to Local Disk

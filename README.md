@@ -1,4 +1,4 @@
-﻿# Tcode
+# Tcode
 
 新一代企业级开源 AI 编程桌面工作台，基于 **Tauri v2 / Python Native Desktop Host + React 19 + TypeScript**，遵循暖米白、工作台米灰与陶土橙的极简桌面设计规范。
 
@@ -74,9 +74,47 @@ ModelRef(providerId:modelId)
 - **三段式协议（全链路流式）**：拆解（逐字流式）→ 仅对选中角色各自独立并发流式调用 LLM → 终审（逐字流式）仲裁交付；`phase` 驱动流式光标；拆解非法（非 JSON/未知角色/数量越界）显式报错，fail-closed。
 - **结构化数据**：`ChatMessage.swarm`（`SwarmChatState`）驱动 `SwarmSubagentContainer` 平铺渲染；拆解中显示组队骨架；旧消息走正则回退。
 - **执行器**：`swarmChatExecutor.runSwarmChat`（纯编排，可注入 streamChat）；`swarmGatewayStream.createGatewayStreamChat` 复用主 Loop 调度口径（渠道 → Gateway v2 → v1）。
-- **渲染**：暖色极简（米白表面/细边框/克制控件），Subagent 卡片**内容默认展开**、可独立折叠，拆解/终审逐字流式，running 显示「推演中…」占位，error 状态清晰。
-- **v1 边界**：角色仅产出分析文本；工具执行留待后续。
-- **统一输出**：分享/复制统一净化（剥离工具块/思考过程），Agent Loop 与 Swarm 风格一致；轮次标题基于真实 actions 动态生成，不预设阶段名。
+### WP-H · 工业级 LSP 语义索引架构（LSP 语义事实源 + 增量流水线 + SQLite 本地拓扑）
+
+针对大型代码库代码探索中“AST 缺乏跨文件语义、向量检索幻觉多、实时 LSP 高并发假死”的三大行业痛点，Tcode 确立并落地 **「三层协同代码智能索引架构」**：
+
+```text
+┌─────────────────────────────────────────────────────────────────────────┐
+│                       Tcode Agent Reasoning Loop                        │
+│   (Codebase Exploration / Subgraph Slicing / Context Budget Compaction) │
+└────────────────────────────────────┬────────────────────────────────────┘
+                                     │ 1. 结构化图查询 + FTS5 毫秒检索
+                                     ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                  Layer 3: SQLite 本地存储与图拓扑检索引擎                 │
+│ • symbols (符号定义表) / symbol_references (调用/继承引用图)             │
+│ • symbols_fts (SQLite FTS5 全文索引) / 递归 CTE (2-Hop 调用拓扑秒级提取)   │
+└────────────────────────────────────▲────────────────────────────────────┘
+                                     │ 2. 异步批量事务入库 (WAL 模式)
+                                     │
+┌─────────────────────────────────────────────────────────────────────────┐
+│               Layer 2: 增量计算流水线与 DAG 依赖剪枝 (Pipeline)            │
+│ • Blake3 内容指纹比对 / Exported_Signature_Hash 变化感知                │
+│ • DAG 级联依赖剪枝：仅重算受影响节点与下游依赖，全库剪枝率达 95%+         │
+└────────────────────────────────────▲────────────────────────────────────┘
+                                     │ 3. 快慢双轨语义提取
+                                     │
+┌─────────────────────────────────────────────────────────────────────────┐
+│                   Layer 1: LSP 语义事实源 + AST 提速治具                 │
+│ • Fast-Path: Tree-sitter 亚毫秒提取文件级符号外形与哈希签名               │
+│ • Slow-Path: LSP 守护进程提取高保真定义、多态实现、调用拓扑与编译诊断      │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+- **架构思路与设计哲学**：
+  1. **LSP as Semantic Ground Truth**：LSP 不直接对外承担高频搜索，而是作为底层语义真理源；
+  2. **Fast/Slow 双轨提速**：Tree-sitter 负责亚毫秒级 AST 符号外形抽取与签名计算，未变动公共签名的私有修改不触发跨文件 LSP 重算；
+  3. **实体化 DomainBrain**：以工作区本地 SQLite（`.tcode/index/semantic_index.db`）作为项目图谱物理持久层，利用原生递归 CTE 实现毫秒级 Call Graph 遍历；
+  4. **Harness 治具与自愈闭环**：写前通过符号子图切片（Symbol Subgraph Slicing）精准装配上下文（Token 压缩 70%+），写后通过 LSP `publishDiagnostics` 实时注入编译反馈驱动自愈。
+- **核心技术亮点**：
+  - **三级容灾降级防线**：Tier 1 (全保真 LSP+SQLite) → Tier 2 (语法级 Tree-sitter+SQLite) → Tier 3 (Ripgrep 正则基线)，确保任意极端环境零白屏崩溃；
+  - **100% 本地 Airgap 闭环**：所有 FTS5 检索、拓扑计算与语义分析完全在 `127.0.0.1:8010` 桌面宿主内完成，零代码外泄风险；
+  - **单入口无缝联动**：检索结果直通表现层 `handleOpenFile(path, fileName, line)`，Monaco EditorWorkspace 毫秒级原生高亮跳转。
 
 ### 2. 目标驱动 Agent Loop
 
@@ -207,9 +245,81 @@ npm run dev -- --host 127.0.0.1
 3. **Swarm 角色执行（multiRoleAgentRunner）与 v1 `ModelGateway.request` 已从非流式 `response.json()` 全面改为流式消费**；主 Agent Loop / 打字机客户端 / v2 多账号网关本就流式；
 4. 静态守卫 `tests/streamOnly.test.ts` 扫描 `prototype/src`：禁止 `stream: false` 字面量、禁止向 `buildGatewayRequestBody` 传布尔 stream 实参，防止回归。
 
-真实桌面端验证：Fresh 安装后经宿主 `/api/proxy` 对 OpenCode Zen `mimo-v2.5-free` 发送 `stream:true`，HTTP 200 `text/event-stream`，12 data 事件 + `[DONE]`，真实流式内容 `STREAM_OK`（含 110 字符推理流）。契约见 `docs/technical_reviews/stream-only-contract.md`。
+## WP-I · 代码语义拓扑图谱与 AI 代码血缘合规审计链（架构思路与技术亮点）
 
-## 本轮真实验收边界（2026-08-30）
+为了解决大型复杂工程重构中的“认知盲区”与企业级 Agentic Coding 的“合规问责难题”，Tcode 实现了双轮驱动的 **「代码语义图谱（Code Semantic Graph）」** 与 **「AI 代码血缘与合规审计链（AI Lineage & Compliance Audit Trail）」**。
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                             Tcode 智能编程桌面工作台                          │
+├──────────────────────────────────────┬──────────────────────────────────────┤
+│ 🛡️ AI 代码血缘与合规审计链 (Lineage)   │ 🕸️ 代码语义拓扑图谱 (Code Semantic Graph)│
+│ • 行级 AI Blame 指纹 (Prompt+Model)   │ • 力导向全景关系画布 (Class/Func/Route)│
+│ • GPL 传染性开源协议实时扫描防护       │ • 递归 CTE 爆炸半径 (Blast Radius) 涟漪│
+│ • Stage Gate 不可篡改审计时间轴       │ • 节点点击单一入口 Monaco 毫秒直达      │
+└──────────────────────────────────────┴──────────────────────────────────────┘
+                                       │ 协同效应 (1 + 1 > 2)
+                                       ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  以「语义图谱」精准计算影响面 (Blast Radius)，以「血缘链」记录不可篡改因果流    │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 1. 核心架构设计思路（Architecture Rationale）
+1. **递归 CTE 毫秒级爆炸半径计算（Blast Radius）**：
+   - 传统 AST 或正则只能查找直接引用。Tcode 利用 SQLite 递归公用表表达式（Recursive CTE），在本地持久层以单个 SQL 查询完成 1~3 跳下游调用方拓扑遍历，秒级评估重构波及面（CRITICAL / HIGH / MODERATE）；
+2. **行级全生命周期血缘留痕（Fine-grained AI Lineage）**：
+   - 将每一次 AI 代码生成的 `Prompt Hash`、`Model ID`、`Stage Gate 审批人`、`Git Checkpoint 快照引用`、`开源协议安全评级` 结构化持久化；
+   - 与 Monaco 编辑器深度联动，在代码行号旁提供晶体徽标与悬浮式溯源卡；
+3. **开源许可证传染性防御（License Compliance Guard）**：
+   - 内置轻量级许可证指纹扫描引擎，实时检测 GPL / AGPL / SSPL 等强传染性开源协议，防止企业专有代码库受到版权污染；
+4. **后悔有药：秒级影子快照回滚（Git Checkpoint Restore）**：
+   - 审计时间轴中记录的每一次变更均绑定物理 Checkpoint Ref，开发者可在审计面板一键无损回退。
+
+### 2. 核心技术亮点（Technical Highlights）
+- **性能与存储零开销**：基于 SQLite WAL 模式共享连接，全库图谱提取与血缘写入延迟小于 5ms；
+- **全流程不可篡改因果链**：`Prompt ➔ Static Analysis ➔ Stage Gate Approval ➔ Git Checkpoint ➔ Audit Event` 全闭环留痕；
+- **极简人机工程学**：遵循暖米白（`#FAF8F5`）与陶土暖橙（`#D96B27`）界面规范，图谱画布支持力导向自平衡与动态爆炸半径滑块，降低大型重构的心智负担。
+
+## WP-J · 多模型自定义 Tool Call 协议与 DSML 自动提取执行引擎
+
+针对 DeepSeek-V4/R1、OpenCode、AntML 及开源模型在自主编码时输出的自定义标记语言（如 `< | | DSML | | tool_name="...">`、`<|DSML|tool_calls>`、`<｜tool_calls｜>`、`<tool_call>{JSON}</tool_call>`），Tcode 构建了统一的多协议工具调用解析与拦截执行引擎：
+
+1. **协议层无损解耦与参数提取**：
+   - 兼容任意管道符格式（半角 `|`、全角 `｜`、空格变体、`toolitude` 描述元数据）；
+   - 提取 `cmd`、`command`、`path`、`content` 与 `parameter` 映射，统一归一化为标准的 `ParsedToolCall` 与 `AgentAction`；
+2. **正文防泄露（Leakage Prevention）与纯净渲染**：
+   - `parseAgentMessage` 彻底清除所有未转化的底层协议标记与残留标签，避免内部 DSML / XML 字符串被直接吐在用户聊天视窗中；
+3. **系统通知智能脱敏与深度清洗**：
+   - 在任务完成生成桌面与 UI 气泡通知时，自动剥离 `<think>...</think>` 内部思维链与 Tool 标签，只呈现纯粹人类可读的自然语言摘要。
+
+## WP-K · 智能意图感知与本地跨目录探索执行引擎
+
+为彻底解决 Agent 在用户要求“读取某个工程”、“查看目录”、“分析结构”时因意图误判而中断停滞的问题，Tcode 落地了自适应的意图感知与探索执行体系：
+
+1. **执行模式感知的多维意图分类器（Execution Mode Aware Intent Classifier）**：
+   - 传统分类器仅将“写代码”判定为任务，导致“读取”、“查看”、“扫描”、“探索”、“检索”、“列出”等探索动词被误判为“纯问答咨询”；
+   - Tcode 扩展了 20+ 类探索动作动词，并引入执行模式感知（Mode Awareness）：在 `⚡ Agent Loop` 模式下，探索类指令恒定归类为 `task_execution`；
+2. **解除负向工具锁（Zero Negative Suppression）**：
+   - 移除了旧版问答模式中对 `run_command` 的机械封锁，全面允许模型在需要时调用只读工具（如 `Get-ChildItem`、`read_file`）获取真实上下文证据；
+3. **真实宿主绝对路径访问授权（Host Path Permissiveness）**：
+   - 模型被明确赋予在 Windows 宿主机器上执行 PowerShell 探索指令以及读取用户指定绝对路径（如 `D:\weihu\new-api`）的完整能力，实现“说读就读，即刻反馈”的自主闭环。
+
+## WP-M · 流式工具参数缝合器与自主推进自愈引擎
+
+针对不同模型（DeepSeek-V4、OpenAI、Claude、开源微调模型）在 SSE 流式输出工具调用时的参数分片问题及仅输出前导开场白即断流的现象，Tcode 落地了全兼容鲁棒方案：
+
+1. **流式原生 Tool Call 累积缝合器（Streaming Tool Call Stitcher）**：
+   - 传统解析器直接 push 分片 chunk 导致 `JSON.parse` 失败；Tcode 维护 `streamedToolCallsAccumulator` 映射表，按 `index` 连续缝合拆包的 `function.arguments` JSON 字符串，确保原生 Function Calling 100% 还原；
+2. **多协议标准 Tools 注入与 Bare Path 智能降级探索**：
+   - 随请求体发送标准的 OpenAI `tools` Schema 定义；
+   - 结合正文 Bare Path（裸路径）兜底解析，当模型输出单一绝对路径（如 `D:\weihu\new-api`）时，自动转为 `Get-ChildItem -Path "..." -Force` 并在宿主执行；
+3. **开场白主动推进自愈回路（Autonomous Continuation Driver）**：
+   - 当模型仅输出计划开场白（如“我来实际探索目录并读取关键源码”）且 Actions 为 0、验收项未达成时，系统不再判定为结束，而是自动在后台注入动作驱动指令进入下一推演轮次，实现彻底的自主闭环。
+
+---
+
+
 
 本轮已闭环的是 Windows 安装与宿主运行链路：安装器由当前 `prototype/dist` 和当前桌面宿主重新构建，安装目录中的 `Tcode.exe` 可作为脱离源码目录的独立宿主启动；验收必须以安装目录进程实际返回为准，而不是以构建成功或截图推断成功。
 

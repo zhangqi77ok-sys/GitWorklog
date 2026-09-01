@@ -1,5 +1,5 @@
 import React from 'react';
-import { MessageSquare, FolderTree, Search, GitBranch, Cpu, Settings, BookOpen, ScrollText } from 'lucide-react';
+import { MessageSquare, FolderTree, Search, GitBranch, Cpu, Settings, BookOpen, ScrollText, Network, Share2, ShieldCheck } from 'lucide-react';
 
 interface ActivityBarProps {
   activeNav: string;
@@ -13,6 +13,9 @@ export const ActivityBar: React.FC<ActivityBarProps> = ({ activeNav, setActiveNa
     { id: 'sessions', icon: MessageSquare, label: '会话管理' },
     { id: 'files', icon: FolderTree, label: '项目代码' },
     { id: 'search', icon: Search, label: '全局检索' },
+    { id: 'symbols', icon: Network, label: 'LSP 语义拓扑索引' },
+    { id: 'graph', icon: Share2, label: '代码语义拓扑图谱' },
+    { id: 'lineage', icon: ShieldCheck, label: 'AI 代码血缘与合规审计' },
     { id: 'git', icon: GitBranch, label: '源代码管理 (Source Control)' },
     { id: 'rules', icon: BookOpen, label: '规则与经验库' },
     { id: 'gateway', icon: Cpu, label: '模型网关' },

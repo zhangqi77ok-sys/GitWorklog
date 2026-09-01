@@ -1,5 +1,5 @@
 import type { ActionResult, PermissionPolicy, TargetAcceptanceItem, EvidenceItem, PermissionPolicyConfig, PathPermissionRule, CommandPermissionRule } from '../types/contracts';
-import { DEFAULT_PERMISSION_CONFIG } from '../types/contracts';
+import { DEFAULT_PERMISSION_CONFIG, parseAgentMessage } from '../types/contracts';
 
 export type AgentActionType = 'write_file' | 'run_command' | 'read_file';
 export type ActionExecutionTier = 'silent' | 'notify_after' | 'blocking_approval';
@@ -133,8 +133,8 @@ function getFenceAction(language: string, code: string, index: number): AgentAct
     };
   }
 
-  // 3. RUN_COMMAND Action (only explicit run_command fences are executed as actions)
-  const isCommand = normalizedLanguage.toLowerCase() === COMMAND_FENCE_LANGUAGE;
+  // 3. RUN_COMMAND Action (only explicit run_command/exec_command fences are executed as actions)
+  const isCommand = normalizedLanguage.toLowerCase() === COMMAND_FENCE_LANGUAGE || normalizedLanguage.toLowerCase() === 'exec_command';
   if (isCommand && code.trim()) {
     const firstLine = code.trim().split('\n')[0].slice(0, 80);
     const isHighRisk = HIGH_RISK_COMMAND.test(code);
@@ -143,7 +143,7 @@ function getFenceAction(language: string, code: string, index: number): AgentAct
       id: `action-${index}-run_command-${actionContentHash(`${firstLine}\u0000${code}`)}`,
       type: 'run_command',
       target: firstLine,
-      code,
+      code: code.trim(),
       isHighRisk,
       riskReason,
       tier: getActionTier('run_command', firstLine, isHighRisk)
@@ -317,6 +317,105 @@ export function parseAgentActions(content: string): AgentAction[] {
         isHighRisk: false,
         tier: 'silent'
       });
+    }
+  }
+
+  // 3. Parse DSML and Structured Tool Calls from parseAgentMessage
+  const parsedMsg = parseAgentMessage(content);
+  for (const tc of parsedMsg.toolCalls) {
+    const tName = tc.name.toLowerCase();
+    const params = tc.parameters || {};
+
+    if (tName === 'run_command' || tName === 'exec_command' || tName === 'bash' || tName === 'cmd') {
+      const code = (params.command || params.cmd || params.code || '').trim();
+      if (code) {
+        const firstLine = code.split('\n')[0].slice(0, 80);
+        const isHighRisk = HIGH_RISK_COMMAND.test(code);
+        // Avoid duplicate
+        if (!actions.some(a => a.type === 'run_command' && a.code === code)) {
+          actions.push({
+            id: `action-${actions.length}-run_command-${actionContentHash(code)}`,
+            type: 'run_command',
+            target: firstLine,
+            code,
+            isHighRisk,
+            riskReason: getRiskReason('run_command', firstLine, code),
+            tier: getActionTier('run_command', firstLine, isHighRisk)
+          });
+        }
+      }
+    } else if (tName === 'write_file' || tName === 'create_file') {
+      const target = (params.path || params.file || params.target || '').trim();
+      const code = params.content || params.code || '';
+      if (target && code) {
+        const isHighRisk = HIGH_RISK_FILE.test(target);
+        if (!actions.some(a => a.type === 'write_file' && a.target === target && a.code === code)) {
+          actions.push({
+            id: `action-${actions.length}-write_file-${actionContentHash(target + code)}`,
+            type: 'write_file',
+            target,
+            code,
+            isHighRisk,
+            riskReason: getRiskReason('write_file', target, code),
+            tier: getActionTier('write_file', target, isHighRisk)
+          });
+        }
+      }
+    } else if (tName === 'read_file') {
+      const target = (params.path || params.file || params.target || '').trim();
+      if (target && !actions.some(a => a.target === `查看文件内容: ${target}`)) {
+        actions.push({
+          id: `action-${actions.length}-read_file-${actionContentHash(target)}`,
+          type: 'run_command',
+          target: `查看文件内容: ${target}`,
+          code: typeof process !== 'undefined' && process.platform === 'win32' ? `Get-Content "${target}" -TotalCount 200` : `cat "${target}"`,
+          isHighRisk: false,
+          tier: 'silent'
+        });
+      }
+    }
+  }
+
+  // 4. Bare Command Heuristic Fallback (When model outputs a clear terminal command without code fences)
+  if (actions.length === 0 && content && !hasIncompleteActionBlock(content) && !content.includes('```')) {
+    const lines = content.split('\n');
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+      if (!line || line.startsWith('#') || line.startsWith('//') || line.startsWith('/*') || line.startsWith('`')) continue;
+      
+      const isBareCmd = /^(Get-ChildItem|Get-Content|Set-Location|Select-String|dir\s+-|ls\s+-|pytest|vitest)\s+[^\n]+$/i.test(line);
+      if (isBareCmd) {
+        const firstLine = line.slice(0, 80);
+        const isHighRisk = HIGH_RISK_COMMAND.test(line);
+        actions.push({
+          id: `action-${actions.length}-bare_command-${actionContentHash(line)}`,
+          type: 'run_command',
+          target: firstLine,
+          code: line,
+          isHighRisk,
+          riskReason: getRiskReason('run_command', firstLine, line),
+          tier: getActionTier('run_command', firstLine, isHighRisk)
+        });
+        break; // Extract top-level primary command in fallback mode
+      }
+
+      // Check if it is a bare path (e.g. D:\weihu\new-api or /path/to/dir)
+      const isBarePath = /^[a-zA-Z]:[\\/][^:*?"<>|\r\n]+$/.test(line) || /^(\.\/|\.\.\/|\/)[a-zA-Z0-9_.\-\\/]+$/.test(line);
+      if (isBarePath) {
+        const p = line.trim();
+        const cmd = typeof process !== 'undefined' && process.platform === 'win32'
+          ? `Get-ChildItem -Path "${p}" -Force | Select-Object Mode, Name, Length | Format-Table -AutoSize`
+          : `ls -la "${p}"`;
+        actions.push({
+          id: `action-${actions.length}-bare_path-${actionContentHash(p)}`,
+          type: 'run_command',
+          target: `探索目录: ${p}`,
+          code: cmd,
+          isHighRisk: false,
+          tier: 'silent'
+        });
+        break;
+      }
     }
   }
 

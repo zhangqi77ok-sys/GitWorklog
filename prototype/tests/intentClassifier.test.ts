@@ -16,7 +16,9 @@ describe('User Intent Classifier & Dynamic Prompt Resolver', () => {
     expect(classifyUserIntent('怎么理解两阶段提交 (2PC) 机制？').type).toBe('chat_qa');
   });
 
-  it('should correctly classify code modification and execution tasks', () => {
+  it('should correctly classify code modification, reading, and execution tasks', () => {
+    expect(classifyUserIntent('你直接读取new api的内容').type).toBe('task_execution');
+    expect(classifyUserIntent('查看一下 src 目录下的文件结构').type).toBe('task_execution');
     expect(classifyUserIntent('修改 App.tsx 修复弹窗 bug').type).toBe('task_execution');
     expect(classifyUserIntent('创建一个新的 UserCard 组件并导出').type).toBe('task_execution');
     expect(classifyUserIntent('运行 npm test 跑一下全部测试').type).toBe('task_execution');
@@ -36,8 +38,8 @@ describe('User Intent Classifier & Dynamic Prompt Resolver', () => {
     expect(prompt).not.toContain('Acceptance Criteria');
   });
 
-  it('should generate direct QA prompt for questions forbidding unsolicited write_file', () => {
-    const intent = classifyUserIntent('为什么我觉得agent loop老是答非所问呢');
+  it('should generate direct QA prompt for questions focusing on direct answering', () => {
+    const intent = classifyUserIntent('为什么我觉得agent loop老是答非所问呢', 'swarm');
     const prompt = buildDynamicSystemPrompt({
       intent,
       projectName: 'my-app',
@@ -46,8 +48,7 @@ describe('User Intent Classifier & Dynamic Prompt Resolver', () => {
       executionMode: 'act'
     });
     expect(prompt).toContain('直接回答');
-    expect(prompt).toContain('拒绝过度工程');
-    expect(prompt).toContain('严禁主动输出 write_file 或 run_command');
+    expect(prompt).toContain('按需探索');
     expect(prompt).not.toContain('验收标准清单');
   });
 

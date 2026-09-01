@@ -16,7 +16,10 @@ export const LiveLogsModal: React.FC<LiveLogsModalProps> = ({
   onClearLogs
 }) => {
   const [filterLevel, setFilterLevel] = useState<'ALL' | 'INFO' | 'WARN' | 'ERROR' | 'NET'>('ALL');
+  const [searchQuery, setSearchQuery] = useState('');
   const [copied, setCopied] = useState(false);
+  const [autoScroll, setAutoScroll] = useState(true);
+  const logContainerRef = React.useRef<HTMLDivElement>(null);
 
   // Universal ESC key support
   useEffect(() => {
@@ -29,19 +32,45 @@ export const LiveLogsModal: React.FC<LiveLogsModalProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
 
-  if (!isOpen) return null;
-
   const safeLogs = Array.isArray(logs) ? logs : [];
-  const filteredLogs = filterLevel === 'ALL'
-    ? safeLogs
-    : safeLogs.filter(l => l && l.level === filterLevel);
+  const filteredLogs = safeLogs.filter(l => {
+    if (!l) return false;
+    if (filterLevel !== 'ALL' && l.level !== filterLevel) return false;
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      const matchMsg = (l.message || '').toLowerCase().includes(q);
+      const matchMod = (l.module || '').toLowerCase().includes(q);
+      if (!matchMsg && !matchMod) return false;
+    }
+    return true;
+  });
+
+  // Auto scroll to bottom when new logs arrive
+  useEffect(() => {
+    if (autoScroll && logContainerRef.current) {
+      logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
+    }
+  }, [filteredLogs.length, autoScroll]);
 
   const handleCopyAll = () => {
-    const text = safeLogs.map(l => `[${new Date(l?.timestamp || Date.now()).toLocaleTimeString()}] [${l?.level || 'INFO'}] [${l?.module || 'App'}] ${l?.message || ''}`).join('\n');
+    const text = filteredLogs.map(l => `[${new Date(l?.timestamp || Date.now()).toLocaleTimeString()}] [${l?.level || 'INFO'}] [${l?.module || 'App'}] ${l?.message || ''}`).join('\n');
     navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
+
+  const handleExportLogs = () => {
+    const text = filteredLogs.map(l => `[${new Date(l?.timestamp || Date.now()).toISOString()}] [${l?.level || 'INFO'}] [${l?.module || 'App'}] ${l?.message || ''}`).join('\n');
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `tcode-live-logs-${new Date().toISOString().replace(/[:.]/g, '-')}.log`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  if (!isOpen) return null;
 
   return (
     <div style={{
@@ -95,6 +124,26 @@ export const LiveLogsModal: React.FC<LiveLogsModalProps> = ({
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <button
+              onClick={handleExportLogs}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                padding: '3px 8px',
+                borderRadius: '4px',
+                background: 'var(--bg-base)',
+                border: '1px solid var(--border-subtle)',
+                color: 'var(--text-secondary)',
+                fontSize: '11px',
+                cursor: 'pointer'
+              }}
+              title="导出全部日志为 .log 文件"
+            >
+              <RefreshCw size={12} />
+              <span>导出日志</span>
+            </button>
+
             <button
               onClick={handleCopyAll}
               style={{
@@ -158,47 +207,81 @@ export const LiveLogsModal: React.FC<LiveLogsModalProps> = ({
           </div>
         </div>
 
-        {/* Filter Toolbar */}
+        {/* Filter & Search Toolbar */}
         <div style={{
           padding: '6px 14px',
           background: 'var(--bg-base)',
           borderBottom: '1px solid var(--border-subtle)',
           display: 'flex',
           alignItems: 'center',
-          gap: '6px'
+          justifyContent: 'space-between',
+          gap: '8px'
         }}>
-          <Filter size={12} color="var(--text-muted)" />
-          <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginRight: '4px' }}>级别过滤:</span>
-          {(['ALL', 'INFO', 'WARN', 'ERROR', 'NET'] as const).map(lvl => (
-            <button
-              key={lvl}
-              onClick={() => setFilterLevel(lvl)}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <Filter size={12} color="var(--text-muted)" />
+            <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginRight: '2px' }}>级别:</span>
+            {(['ALL', 'INFO', 'WARN', 'ERROR', 'NET'] as const).map(lvl => (
+              <button
+                key={lvl}
+                onClick={() => setFilterLevel(lvl)}
+                style={{
+                  padding: '1px 7px',
+                  borderRadius: '3px',
+                  background: filterLevel === lvl ? 'var(--accent)' : 'var(--bg-surface)',
+                  color: filterLevel === lvl ? '#FFF' : 'var(--text-secondary)',
+                  border: '1px solid var(--border-subtle)',
+                  fontSize: '10px',
+                  fontWeight: filterLevel === lvl ? 700 : 500,
+                  cursor: 'pointer'
+                }}
+              >
+                {lvl}
+              </button>
+            ))}
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <input
+              type="text"
+              placeholder="搜索日志关键字..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
               style={{
-                padding: '1px 7px',
-                borderRadius: '3px',
-                background: filterLevel === lvl ? 'var(--accent)' : 'var(--bg-surface)',
-                color: filterLevel === lvl ? '#FFF' : 'var(--text-secondary)',
+                padding: '2px 8px',
+                fontSize: '11px',
+                background: 'var(--bg-surface)',
                 border: '1px solid var(--border-subtle)',
-                fontSize: '10px',
-                fontWeight: filterLevel === lvl ? 700 : 500,
-                cursor: 'pointer'
+                borderRadius: '4px',
+                color: 'var(--text-primary)',
+                outline: 'none',
+                width: '160px'
               }}
-            >
-              {lvl}
-            </button>
-          ))}
+            />
+            <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', color: 'var(--text-muted)', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={autoScroll}
+                onChange={e => setAutoScroll(e.target.checked)}
+                style={{ cursor: 'pointer' }}
+              />
+              自动滚底
+            </label>
+          </div>
         </div>
 
         {/* Logs Stream Body */}
-        <div style={{
-          flex: 1,
-          overflowY: 'auto',
-          padding: '8px 12px',
-          background: '#0B1120',
-          fontFamily: 'Consolas, "Fira Code", monospace',
-          fontSize: '11px',
-          lineHeight: 1.5
-        }}>
+        <div
+          ref={logContainerRef}
+          style={{
+            flex: 1,
+            overflowY: 'auto',
+            padding: '8px 12px',
+            background: '#0B1120',
+            fontFamily: 'Consolas, "Fira Code", monospace',
+            fontSize: '11px',
+            lineHeight: 1.5
+          }}
+        >
           {filteredLogs.length === 0 ? (
             <div style={{ padding: '32px', textAlign: 'center', color: '#64748B' }}>
               暂无符合条件的运行日志

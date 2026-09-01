@@ -1,5 +1,8 @@
 import { FileExplorerPanel } from './panels/FileExplorerPanel';
 import { GlobalSearchPanel } from './panels/GlobalSearchPanel';
+import { SymbolIndexPanel } from './panels/SymbolIndexPanel';
+import { CodeGraphPanel } from './panels/CodeGraphPanel';
+import { ComplianceTimelineDrawer } from './panels/ComplianceTimelineDrawer';
 import { GitSnapshotsPanel } from './panels/GitSnapshotsPanel';
 import { GatewayCockpitPanel } from './panels/GatewayCockpitPanel';
 import { RulesMemoryPanel } from './panels/RulesMemoryPanel';
@@ -194,6 +197,34 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({
           onSelectProject={handleSelectProject}
           onOpenFileAndLine={(path, name, line) => onOpenFile(path, name, line)}
         />
+      </div>
+    );
+  }
+
+  if (activeNav === 'symbols') {
+    return (
+      <div style={{ width: `${width}px`, minWidth: '220px', maxWidth: '380px', height: 'calc(100vh - 38px)', background: 'var(--bg-base)', borderRight: '1px solid var(--border-subtle)' }}>
+        <SymbolIndexPanel
+          onOpenFile={(path, name, line) => onOpenFile(path, name || (path.split('/').pop() || path), line)}
+        />
+      </div>
+    );
+  }
+
+  if (activeNav === 'graph') {
+    return (
+      <div style={{ width: `${width}px`, minWidth: '260px', maxWidth: '420px', height: 'calc(100vh - 38px)', background: 'var(--bg-base)', borderRight: '1px solid var(--border-subtle)' }}>
+        <CodeGraphPanel
+          onOpenFile={(path, name, line) => onOpenFile(path, name || (path.split('/').pop() || path), line)}
+        />
+      </div>
+    );
+  }
+
+  if (activeNav === 'lineage') {
+    return (
+      <div style={{ width: `${width}px`, minWidth: '260px', maxWidth: '420px', height: 'calc(100vh - 38px)', background: 'var(--bg-base)', borderRight: '1px solid var(--border-subtle)' }}>
+        <ComplianceTimelineDrawer />
       </div>
     );
   }

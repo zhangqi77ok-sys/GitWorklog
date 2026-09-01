@@ -6,6 +6,8 @@ import {
   resolveModelRoute,
   resolveProviderIdForModelTab,
   parseGatewayEvent,
+  accumulateStreamedToolCalls,
+  finalizeAccumulatedToolCalls,
   type ProviderRecord,
   type RawCatalogModel
 } from '../src/services/modelGateway';
@@ -156,7 +158,19 @@ describe('ModelGateway safety and protocol normalization', () => {
       choices: [{ delta: { tool_calls: [{ index: 0, id: 'call-1', function: { name: 'run_command', arguments: '{"command":"npm test"}' } }] } }]
     });
     expect(normalized.toolCalls).toEqual([
-      { id: 'call-1', name: 'run_command', arguments: '{"command":"npm test"}' }
+      { id: 'call-1', name: 'run_command', arguments: '{"command":"npm test"}', index: 0 }
+    ]);
+  });
+
+  it('correctly accumulates fragmented tool call arguments across multiple streaming chunks', () => {
+    const acc = new Map();
+    accumulateStreamedToolCalls(acc, [{ index: 0, id: 'call-99', name: 'run_command', arguments: '{"com' }]);
+    accumulateStreamedToolCalls(acc, [{ index: 0, arguments: 'mand":"Get-' }]);
+    accumulateStreamedToolCalls(acc, [{ index: 0, arguments: 'ChildItem"}' }]);
+    
+    const finalized = finalizeAccumulatedToolCalls(acc);
+    expect(finalized).toEqual([
+      { id: 'call-99', name: 'run_command', arguments: '{"command":"Get-ChildItem"}' }
     ]);
   });
 });

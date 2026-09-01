@@ -11,6 +11,7 @@ import { SystemTaskNotification, type TaskNotificationData } from './components/
 import { runSwarmChat } from './services/swarmChatExecutor';
 import { createGatewayStreamChat } from './services/swarmGatewayStream';
 import type { SwarmChatState } from './types/contracts';
+import { parseAgentMessage } from './types/contracts';
 import { getContextBudget, getContextTelemetry, compressModelContext } from './services/contextTelemetry';
 // ────────────────────────────────────────────────────────────
 // 🧠 CONTEXT TELEMETRY & SMART AUTO-COMPRESSION ENGINE
@@ -183,7 +184,9 @@ import {
   buildGatewayRequestBody,
   buildModelCatalogEntry,
   parseGatewayEvent,
-  resolveModelRoute
+  resolveModelRoute,
+  accumulateStreamedToolCalls,
+  finalizeAccumulatedToolCalls
 } from './services/modelGateway';
 
 export const App: React.FC = () => {
@@ -1184,7 +1187,8 @@ export const App: React.FC = () => {
     const profilePromptSnippet = formatProfileForSystemPrompt(profile);
     const memoryPromptSnippet = buildMemoryPromptSnippet();
     // 🎯 Dynamic User Intent Classification & Prompt Optimization
-    const userIntent = classifyUserIntent(text);
+    const userIntent = classifyUserIntent(text, executionMode);
+    addLog('INFO', 'IntentEngine', `[意图分析] 用户意图识别为: ${userIntent.summary} (类型: ${userIntent.type}, 模式: ${executionMode})`);
     const systemPrompt = buildDynamicSystemPrompt({
       intent: userIntent,
       projectName: activeSession.projectName,
@@ -1204,6 +1208,7 @@ export const App: React.FC = () => {
       const singleRunCardId = `agent-run-${Date.now()}`;
       let accumulatedActionResults: ActionResult[] = [];
       let lastAssistantContent = '';
+      let autoContinuationAttempts = 0;
 
       // Initial single assistant message container with rounds[]
       let accumulatedRounds: AgentRoundItem[] = [];
@@ -1464,10 +1469,60 @@ export const App: React.FC = () => {
             headers: requestHeaders,
             contextLimit: streamingModel.contextLimit || 128000
           };
+          const standardTools = [
+            {
+              type: 'function',
+              function: {
+                name: 'run_command',
+                description: '在用户 Windows 宿主电脑真实执行终端指令（PowerShell/CMD）。可用于探索目录 (Get-ChildItem -Path "..." -Force)、运行测试、查看文件等。',
+                parameters: {
+                  type: 'object',
+                  properties: {
+                    command: {
+                      type: 'string',
+                      description: '具体的终端指令，例如: Get-ChildItem -Path "D:\\weihu\\new-api" -Force'
+                    }
+                  },
+                  required: ['command']
+                }
+              }
+            },
+            {
+              type: 'function',
+              function: {
+                name: 'read_file',
+                description: '读取用户本地文件的文本内容。',
+                parameters: {
+                  type: 'object',
+                  properties: {
+                    path: { type: 'string', description: '文件相对路径或绝对路径' }
+                  },
+                  required: ['path']
+                }
+              }
+            },
+            {
+              type: 'function',
+              function: {
+                name: 'write_file',
+                description: '创建或覆写用户本地文件内容。',
+                parameters: {
+                  type: 'object',
+                  properties: {
+                    path: { type: 'string', description: '目标文件相对路径或绝对路径' },
+                    content: { type: 'string', description: '完整代码内容' }
+                  },
+                  required: ['path', 'content']
+                }
+              }
+            }
+          ];
+
           requestBody = JSON.stringify({
             model: targetModel,
             messages: apiMessages,
             stream: true,
+            ...(executionMode === 'act' ? { tools: standardTools } : {}),
             ...(channel.paramOverride || {})
           });
           addLog('INFO', 'ChannelRouter', `[渠道调度] ${streamingModel.name} → 渠道 [${channel.name}] (Base URL: ${channel.baseUrl}, Key已注入) · ${fullEndpoint}`);
@@ -1585,6 +1640,7 @@ export const App: React.FC = () => {
         let readerDone = false;
         let receivedAnyBytes = false;
         let toolProtocolError = false;
+        const streamedToolCallsAccumulator = new Map<number, { id: string; name: string; arguments: string }>();
 
         if (reader) {
           while (!streamFinished) {
@@ -1631,7 +1687,9 @@ export const App: React.FC = () => {
                     cacheWriteTokens: 0
                   });
                 }
-                if (normalized.toolCalls.length > 0) nativeToolCalls.push(...normalized.toolCalls);
+                if (normalized.toolCalls.length > 0) {
+                  accumulateStreamedToolCalls(streamedToolCallsAccumulator, normalized.toolCalls);
+                }
                 if (normalized.reasoning) accumulatedThinking += normalized.reasoning;
                 if (normalized.content) accumulatedContent += normalized.content;
                 if (normalized.finished) {
@@ -1707,6 +1765,13 @@ export const App: React.FC = () => {
           throw new Error(`模型流异常: ${describeStreamTermination('provider_empty_response')}`);
         }
 
+        // Finalize streamed tool calls
+        const finalizedToolCalls = finalizeAccumulatedToolCalls(streamedToolCallsAccumulator);
+        if (finalizedToolCalls.length > 0) {
+          nativeToolCalls.push(...finalizedToolCalls);
+          addLog('INFO', 'ToolEngine', `[原生工具调用捕获] 成功拼接并识别到 ${finalizedToolCalls.length} 个流式工具调用: ${finalizedToolCalls.map(t => t.name).join(', ')}`);
+        }
+
         // Finalize content
         let finalContent = '';
         if (accumulatedThinking && !accumulatedContent) {
@@ -1716,6 +1781,9 @@ export const App: React.FC = () => {
         } else {
           finalContent = accumulatedContent;
         }
+
+        const roundDurationSec = parseFloat(((performance.now() - roundStartTime) / 1000).toFixed(1));
+        addLog('NET', 'Gateway', `[Round #${loopCount}] 模型流式推理完成 -> 耗时: ${roundDurationSec}s, 正文: ${finalContent.length} 字符, 思维链: ${accumulatedThinking.length} 字符`);
 
         const cleanCheck = (accumulatedContent || accumulatedThinking || '').trim();
         const isServerBusyMessage = cleanCheck.length > 0 && cleanCheck.length < 150 && /server is busy|server is overloaded|服务器繁忙|服务繁忙|系统繁忙|try again later/i.test(cleanCheck);
@@ -1871,6 +1939,30 @@ export const App: React.FC = () => {
         }
 
         if (actions.length === 0) {
+          const isShortIntroductory = finalContent.length < 200 &&
+            /我来|我先|我将|让我|先列出|探索|读取|查看|审查|执行|稍等/i.test(finalContent);
+          const hasUnfinishedCriteria = activeAcceptanceItems.some(i => i.status !== 'passed');
+
+          if (frozenRunMode === 'act' && isShortIntroductory && hasUnfinishedCriteria && autoContinuationAttempts < 2 && loopCount < 10) {
+            autoContinuationAttempts++;
+            addLog('INFO', 'AgentLoop', `[自主推进自愈 #${autoContinuationAttempts}] 检测到模型仅输出探索计划开场白，自动注入动作执行指令驱动 Agent 实际执行探索...`);
+            
+            const pushMsg: ChatMessage = {
+              id: `auto-push-${Date.now()}`,
+              role: 'user',
+              content: '【系统自动执行指令】: 请立即输出具体的 ```run_command 或 ```write_file 代码块，以实际执行你刚才计划的探索或读取操作。例如：\n```run_command\nGet-ChildItem -Path "..." -Force\n```',
+              timestamp: Date.now(),
+              isAgentFeedback: true,
+              auditTag: `🚀 Agent 自动推进驱动 #${autoContinuationAttempts}`
+            };
+            conversationSnapshot.push(pushMsg);
+            setSessionMessages(prev => ({
+              ...prev,
+              [currentSessionId]: [...(prev[currentSessionId] || []), pushMsg]
+            }));
+            continue; // Keep looping!
+          }
+
           // A plain answer may complete a conversational turn, but an explicit unfinished
           // acceptance checklist must remain visible as needs_decision instead of completed.
           const durationSec = parseFloat(((performance.now() - callStartTime) / 1000).toFixed(1));
@@ -1959,9 +2051,12 @@ export const App: React.FC = () => {
 
           if (approvedIds.has(action.id)) {
             publishActionResult(createActionResult(action, 'executing'));
+            addLog('INFO', 'Sandbox', `[Action #${action.id}] 开始执行 ${action.type}: ${action.target.slice(0, 80)}`);
             result = await executeSandboxAction(action, allowedTools, (a) => executeActionOnHost(a, frozenRunMode));
+            addLog(result.status === 'success' ? 'INFO' : 'WARN', 'Sandbox', `[Action #${action.id}] 执行结束 (Status: ${result.status}, ExitCode: ${result.exitCode ?? 0}) -> 响应: ${(result.output || '').slice(0, 120)}...`);
           } else {
             result = createActionResult(action, 'rejected');
+            addLog('WARN', 'Sandbox', `[Action #${action.id}] 用户拒绝执行操作: ${action.target.slice(0, 80)}`);
           }
 
           results.push(result);
@@ -2092,7 +2187,13 @@ export const App: React.FC = () => {
 
       // ── Trigger System Task Completion Notification ──
       const targetSession = sessions.find(s => s.id === currentSessionId) || activeSession;
-      const cleanSummary = (lastAssistantContent || '').replace(/```[\s\S]*?```/g, '').replace(/[#*`_\n]/g, ' ').trim().slice(0, 80);
+      const parsedAssistant = parseAgentMessage(lastAssistantContent || '');
+      const cleanSummary = (parsedAssistant.cleanContent || '')
+        .replace(/```[\s\S]*?```/g, '')
+        .replace(/<[\s\S]*?>/g, '')
+        .replace(/[#*`_\n]/g, ' ')
+        .trim()
+        .slice(0, 80);
       const isLoopError = currentLoopStatus === 'no_progress';
       const durationSec = parseFloat(((performance.now() - callStartTime) / 1000).toFixed(1));
       

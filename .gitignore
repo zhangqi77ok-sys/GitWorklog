@@ -36,3 +36,5 @@ release/
 # Smoke-test install dirs (ephemeral verification targets)
 smoke-*/
 coverage/
+.tcode/
+.codemind/

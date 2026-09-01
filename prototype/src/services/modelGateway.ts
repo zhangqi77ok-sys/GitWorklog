@@ -505,10 +505,34 @@ export function parseGatewayEvent(
     finished: Boolean(choice?.finish_reason),
     toolCalls: nativeToolCalls.map((tool: any, index: number) => ({
       id: tool.id || `chat-tool-${tool.index ?? index}`,
-      name: tool.function?.name || tool.name,
-      arguments: tool.function?.arguments || (tool.arguments ? JSON.stringify(tool.arguments) : '')
+      name: tool.function?.name || tool.name || '',
+      arguments: tool.function?.arguments || (tool.arguments ? (typeof tool.arguments === 'string' ? tool.arguments : JSON.stringify(tool.arguments)) : ''),
+      index: tool.index ?? index
     }))
   };
+}
+
+/**
+ * 累积与无损组装来自 SSE 流式分片传输的工具调用参数 (Streaming Tool Call Stitcher)
+ */
+export function accumulateStreamedToolCalls(
+  accumulator: Map<number, { id: string; name: string; arguments: string }>,
+  chunks: Array<{ id?: string; name?: string; arguments?: string; index?: number }>
+): void {
+  for (const chunk of chunks) {
+    const idx = chunk.index ?? 0;
+    const existing = accumulator.get(idx) || { id: '', name: '', arguments: '' };
+    if (chunk.id) existing.id = chunk.id;
+    if (chunk.name) existing.name = chunk.name;
+    if (chunk.arguments) existing.arguments += chunk.arguments;
+    accumulator.set(idx, existing);
+  }
+}
+
+export function finalizeAccumulatedToolCalls(
+  accumulator: Map<number, { id: string; name: string; arguments: string }>
+): Array<{ id: string; name: string; arguments: string }> {
+  return Array.from(accumulator.values()).filter(t => t.name || t.arguments);
 }
 
 export function extractGatewayResponseText(adapter: ModelAdapter, data: Record<string, any>): string {

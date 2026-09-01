@@ -21,6 +21,9 @@ const QUESTION_INDICATORS = [
 ];
 
 const ACTION_INDICATORS = [
+  '读取', '查看', '浏览', '扫描', '检索', '探索', '检查', '分析', '获取', '打开', '列出',
+  'read', 'view', 'inspect', 'scan', 'search', 'list', 'find', 'check', 'explore', 'cat',
+  'dir', 'ls', 'Get-ChildItem', 'Get-Content',
   '创建', '新建', '修改', '编辑', '改写', '修复', 'fix', '重构', 'refactor', '实现', 'implement',
   '编写', '写一个', '写一段', '删除', 'remove', 'delete', '运行', '执行', 'run', '安装', 'install',
   '打包', 'build', '测试', 'npm ', 'git ', 'python ', 'cargo ', 'mvn '
@@ -29,7 +32,7 @@ const ACTION_INDICATORS = [
 /**
  * 智能判定用户当前输入的真实意图，杜绝将简单问答误判为沉重工程重构。
  */
-export function classifyUserIntent(userText: string): UserIntentAnalysis {
+export function classifyUserIntent(userText: string, executionMode: 'act' | 'swarm' = 'act'): UserIntentAnalysis {
   const text = (userText || '').trim();
 
   // 1. 打招呼 / 闲聊判定
@@ -42,19 +45,19 @@ export function classifyUserIntent(userText: string): UserIntentAnalysis {
     };
   }
 
-  // 2. 检查是否包含明确的写代码/执行命令动词
+  // 2. 检查是否包含明确的探索、读取文件、修改或执行命令动词
   const hasActionKeyword = ACTION_INDICATORS.some(keyword => text.toLowerCase().includes(keyword.toLowerCase()));
   
-  // 3. 检查是否为咨询、问答、解释、原理探究
+  // 3. 检查是否为纯咨询、问答、解释、原理探究
   const hasQuestionKeyword = QUESTION_INDICATORS.some(keyword => text.toLowerCase().includes(keyword.toLowerCase()));
 
-  // 明确要求修改文件/执行命令且不带纯解释倾向
-  if (hasActionKeyword && !text.startsWith('为什么') && !text.startsWith('怎么理解') && !text.startsWith('如何理解')) {
+  // 在 Agent Loop (act 模式) 下，只要包含动作动词或明确指向本地路径，立即归为任务执行
+  if (hasActionKeyword || (executionMode === 'act' && !hasQuestionKeyword)) {
     return {
       type: 'task_execution',
       isDirectQuestion: false,
       requiresFileEditOrCommand: true,
-      summary: '工程编码/命令执行任务'
+      summary: '工程编码/读取探索/命令执行任务'
     };
   }
 
@@ -105,7 +108,7 @@ ${config.rulesSnippet ? `\n${config.rulesSnippet}` : ''}
 
 【🚨 极高优先级核心准则（直击要害，绝不答非所问）】:
 1. **直接回答**: 开门见山，第一句话必须正面给出核心结论与答案，严禁先打空洞套话或虚无的架构师开场白！
-2. **拒绝过度工程**: 用户当前是提问、咨询、分析或讨论，**严禁主动输出 write_file 或 run_command 动作块**，严禁列出机械的验收打钩清单 (Acceptance Criteria)！
+2. **按需探索**: 若需要查阅本地项目特定文件以准确回答，可使用 \`\`\`run_command 获取真实信息；对于纯概念讨论，则直接给出精准解释。
 3. **结构清晰**: 观点明确，逻辑严密，提供精准的代码片段或技术解释供用户参考，突出核心要点。
 4. **紧扣用户原话**: 所有解释必须围绕用户提出的具体疑问展开，不要随意发散到无关的重构建议。`;
   }
@@ -120,16 +123,16 @@ ${config.skillsSnippet ? `${config.skillsSnippet}\n` : ''}
 ${config.mcpSnippet ? `${config.mcpSnippet}\n` : ''}
 【当前工作模式】: ${workMode === 'act' ? 'Act 落地模式 (自主执行模式)' : 'Plan 规划模式'}
 
-【🚨 核心执行准则】:
-1. **紧扣任务目标**: 深入理解用户的具体修改需求，先简述核心变更点，再输出精准动作。
-2. **动作格式规约**:
-   - 文件修改:
+【🚨 核心执行准则与宿主环境授权】:
+1. **真实宿主执行权限**: 你具备在用户本地宿主机器上实际执行终端命令与读写文件的完整能力！Tcode 客户端会自动拦截你的动作并在真实终端中执行并反馈输出。
+2. **动作格式强制规约**:
+   - 终端命令 (Windows PowerShell/CMD/Bash，严禁仅输出纯文本裸命令):
+     \`\`\`run_command
+     具体的终端指令 (例如: Get-ChildItem -Path "..." 或 npm test)
+     \`\`\`
+   - 文件修改/创建:
      \`\`\`write_file:相对路径或绝对路径
      完整文件内容
      \`\`\`
-   - 终端命令 (Windows PowerShell，严禁使用 &&):
-     \`\`\`run_command
-     具体的终端指令
-     \`\`\`
-3. **真实证据闭环**: Tcode 会执行你的动作并将结果反馈给你。任务完成且测试通过后，输出清晰的完成总结。`;
+3. **真实证据闭环**: 每执行一步动作，Tcode 会将终端 stdout/stderr 结果反馈给你供你分析。请基于真实执行证据完成后续步骤，直至验证通过！`;
 }
