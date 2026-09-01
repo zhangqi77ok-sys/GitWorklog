@@ -68,19 +68,25 @@ function loadProjectsDb(): BridgeProjectsDatabase {
             for (const sess of proj.sessions) {
               if (Array.isArray(sess.messages)) {
                 for (const msg of sess.messages) {
-                  if (msg.role === 'assistant' && msg.content) {
-                    const extracted = parseToolCallsFromText(msg.content);
-                    if (extracted.length > 0 && (!msg.toolCalls || msg.toolCalls.length === 0)) {
-                      msg.toolCalls = extracted.map((c) => ({
-                        name: c.name,
-                        args: c.args,
-                        result: '（历史算子工具调用日志已归档）',
-                      }));
-                      needsSave = true;
+                  if (msg.role === 'assistant') {
+                    if (msg.content) {
+                      const extracted = parseToolCallsFromText(msg.content);
+                      if (extracted.length > 0 && (!msg.toolCalls || msg.toolCalls.length === 0)) {
+                        msg.toolCalls = extracted.map((c) => ({
+                          name: c.name,
+                          args: c.args,
+                          result: '（历史算子工具调用日志已归档）',
+                        }));
+                        needsSave = true;
+                      }
+                      const cleaned = sanitizeTextContent(msg.content);
+                      if (cleaned !== msg.content) {
+                        msg.content = cleaned;
+                        needsSave = true;
+                      }
                     }
-                    const cleaned = sanitizeTextContent(msg.content);
-                    if (cleaned !== msg.content) {
-                      msg.content = cleaned;
+                    if (!msg.content && msg.toolCalls && msg.toolCalls.length > 0) {
+                      msg.content = '已为您完成文件扫描与工具调用。';
                       needsSave = true;
                     }
                   }
@@ -814,6 +820,9 @@ export function initTauriBridge(): void {
         let turn = 0;
         const MAX_TURNS = 5;
         let shouldContinueLoop = true;
+        const accumulatedToolCalls: any[] = [];
+        let accumulatedThought = '';
+        let finalReportText = '';
 
         while (turn < MAX_TURNS && shouldContinueLoop) {
           turn++;
@@ -863,6 +872,7 @@ export function initTauriBridge(): void {
                       const delta = parsed.choices?.[0]?.delta;
                       if (delta?.reasoning_content) {
                         turnThought += delta.reasoning_content;
+                        accumulatedThought += delta.reasoning_content;
                         await emit('agent_thought_chunk', {
                           session_id: sessionId,
                           chunk: delta.reasoning_content,
@@ -870,10 +880,13 @@ export function initTauriBridge(): void {
                       }
                       if (delta?.content) {
                         turnContent += delta.content;
-                        await emit('agent_text_chunk', {
-                          session_id: sessionId,
-                          chunk: delta.content,
-                        });
+                        const cleanChunk = sanitizeTextContent(delta.content);
+                        if (cleanChunk) {
+                          await emit('agent_text_chunk', {
+                            session_id: sessionId,
+                            chunk: cleanChunk,
+                          });
+                        }
                       }
                     } catch (e) {}
                   }
@@ -887,6 +900,7 @@ export function initTauriBridge(): void {
           if (!streamedSuccessfully && turn === 1) {
             turnThought = `正在观察工作区上下文与任务目标: "${prompt}"\n已加载 MemoryRail 长期工程记忆，当前模型: [${targetModel}]...`;
             turnContent = `已为您完成项目架构的全面审查分析：\n\n### 🏗️ 项目架构概览\n- **前端框架**: React 18 + Vite + TypeScript + Tailwind CSS\n- **桌面端内核**: Python 3.12 + Universal IPC Bridge + Host Proxy\n- **Agent 算子架构**: 单 Agent 极速内外双环 + SwarmFlow 多 Worker 算子编排\n- **日志与安全**: 7 天自动保留日志守护进程 + Path Sandbox 沙箱保护`;
+            accumulatedThought += turnThought;
             
             await emit('agent_thought_chunk', { session_id: sessionId, chunk: turnThought });
             await emit('agent_text_chunk', { session_id: sessionId, chunk: turnContent });
@@ -896,36 +910,52 @@ export function initTauriBridge(): void {
           const toolCalls = parseToolCallsFromText(turnContent);
 
           if (toolCalls.length > 0 && turn < MAX_TURNS) {
-            const executedTools: any[] = [];
             for (const call of toolCalls) {
               const toolResult = await executeToolCall(call.name, call.args, workspaceDir || 'E:\\pro\\agent-learning');
-              executedTools.push({
+              accumulatedToolCalls.push({
                 name: call.name,
                 args: call.args,
                 result: toolResult.slice(0, 1000),
               });
 
+              // Inform the LLM of the tool output in the multi-turn message history
               apiPayloadMessages.push({ role: 'assistant', content: turnContent });
-              apiPayloadMessages.push({ role: 'user', content: `[Tool Output for ${call.name}]:\n${toolResult}\nPlease analyze and complete the task.` });
-            }
+              apiPayloadMessages.push({
+                role: 'user',
+                content: `[Tool Output for ${call.name} (${JSON.stringify(call.args)})]:\n${toolResult}\n请结合此工具输出，继续深入分析或输出完整的审查报告。`,
+              });
 
-            const cleanText = sanitizeTextContent(turnContent);
-            if (sessionId) {
-              persistMessageToSession(sessionId, 'assistant', cleanText, turnThought, executedTools);
+              const progressMsg = `\n> ⚙️ 已调用工具: \`${call.name}\` (${JSON.stringify(call.args)})\n`;
+              await emit('agent_thought_chunk', {
+                session_id: sessionId,
+                chunk: progressMsg,
+              });
             }
           } else {
             const cleanText = sanitizeTextContent(turnContent);
-            if (sessionId) {
-              persistMessageToSession(sessionId, 'assistant', cleanText, turnThought);
-            }
+            finalReportText = cleanText || turnContent;
             shouldContinueLoop = false;
           }
         }
 
+        if (!finalReportText && accumulatedToolCalls.length > 0) {
+          finalReportText = '已为您完成所有工作区文件扫描与工具调用。';
+        }
+
+        if (sessionId) {
+          persistMessageToSession(
+            sessionId,
+            'assistant',
+            finalReportText,
+            accumulatedThought,
+            accumulatedToolCalls.length > 0 ? accumulatedToolCalls : undefined
+          );
+        }
+
         await emit('agent_stream_done', {
           session_id: sessionId,
-          full_content: '',
-          full_thought: '',
+          full_content: finalReportText,
+          full_thought: accumulatedThought,
         });
 
         return true;
