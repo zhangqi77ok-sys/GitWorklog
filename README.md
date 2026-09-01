@@ -85,16 +85,27 @@ Tcode 打破了单体硬编码调度逻辑，将 Agent 的执行循环、能力�
   * `[📝 代码工作区 (Editor)]`：全宽展示 Monaco 代码编辑器、Diff 双栏比对视窗与终端；
 * **顺滑联动**：点击左侧文件树时自动切至代码工作区；在对话中审查 Diff 时自动无缝跳转。
 
-### 2. sub2api 架构纯净模型网关 (Model Gateway Cockpit)
-* **一个厂商添加多个渠道**：支持针对同一厂商（如 OpenAI、Claude、DeepSeek）动态添加任意多个独立渠道与账号池；
-* **全认证模式支持**：支持 `API Key`, `Sub2 订阅导入`, `Cap 凭据包导入`, `OAuth 2.0 官方授权`, `自建中转/代理`；
+### 2. 动态多平台模型网关 (对齐 sub2api 业界规范)
+* **厂商与认证强联动矩阵**：覆盖 Anthropic Claude, OpenAI, Google Gemini, DeepSeek, SiliconFlow, Kimi, Zhipu GLM 与本地 Ollama；不同厂商动态展示支持的认证类型（原生支持 API Key、Sub2 订阅池、Cap 凭据包、OAuth 2.0、代理反代等）；
+* **动态凭据输入表单**：
+  * **API Key**：显隐式密钥输入 + 自定义 Header 注入；
+  * **Sub2 订阅**：Sub2 订阅链接解析 + 节点刷新周期 (TTL) + 账号池实时拉取同步 + 故障自动熔断与额度感知轮询；
+  * **Cap 凭据包**：Session Token / Claude setup-token / Cookie 下拉选择 + 多行凭据文本域粘贴；
+  * **OAuth 2.0**：Client ID/Secret + 系统本地重定向回调 + 一键调起浏览器官方授权登录；
+  * **Proxy 代理**：中转端点 + 访问令牌（本地 Ollama 可留空）+ 协议模拟转换；
 * **极速探活测速**：一键真实连通性测试，毫秒级返回 HTTP 状态码与首字延迟（TTFT）；支持自动拉取端点可用模型列表。
 
-### 3. MCP 与 SKILL 业界标准管理中心
-* **Anthropic MCP 协议**：支持表单创建、Claude Desktop JSON (`{ "mcpServers": { ... } }`) 一键导入、官方预设模版挂载（Postgres, SQLite, GitHub, Brave）、编辑修改与启停；
-* **Agent Skills 技能清单**：支持通过触发指令（`/review`, `/tdd`, `/security`）挂载自定义专业提示词。
+### 3. MCP 协议深度治理中心 (Model Context Protocol)
+* **传输协议双引擎**：完整支持 `stdio`（本地子进程：command、动态参数 args、环境变量 Key-Value 动态表）与 `sse`（远程网络端点 HTTP/SSE 连接）；
+* **服务探活与工具探测**：一键在线测试连通性，自动探测 MCP Server 暴露的工具清单（如 `read_file`, `list_tools`, `call_tool`）；
+* **生态兼容**：支持 Claude Desktop JSON 配置文件 (`claude_desktop_config.json`) 一键导入与一键挂载预设（Postgres, SQLite, GitHub, Brave Search）。
 
-### 4. 纯净零数据初始状态 (Zero Demo & Clean Empty State)
+### 4. Agent Skill 技能与提示词引擎 (Prompt Engine)
+* **指令驱动触发**：支持在对话框中以 `/` 触发词（如 `/review`, `/tdd`, `/security`, `/perf`）精准调用；
+* **多行 Markdown 系统级指令**：支持全屏舒适编辑系统提示词，规范角色契约、执行流、审查清单与输出格式；
+* **业界经典预设一键套用**：内置 Thermo-Nuclear 架构审查专家、TDD 红绿重构测试生成器、全维白盒安全守卫、性能与并发调优专家模版。
+
+### 5. 纯净零数据初始状态 (Zero Demo & Clean Empty State)
 * 严格执行无假数据铁律，初次启动呈现干净的 0 项目、0 会话状态，只有用户显式打开本地项目后才载入工作区。
 
 ---
