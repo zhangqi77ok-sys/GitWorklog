@@ -57,6 +57,7 @@ const TreeNode: React.FC<TreeNodeProps> = ({ node, depth, onSelect }) => {
     <div>
       <div
         onClick={handleClick}
+        title={node.path}
         style={{ paddingLeft: `${depth * 12 + 8}px` }}
         className="flex items-center gap-1.5 py-1 pr-2 rounded hover:bg-[#EAE4DC] text-[#3D3A36] hover:text-[#1E1C1A] cursor-pointer transition-colors group"
       >

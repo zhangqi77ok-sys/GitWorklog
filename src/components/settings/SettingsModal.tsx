@@ -35,6 +35,10 @@ import {
   IngressType,
 } from '../../store/useGatewayStore';
 import { useMcpSkillStore, McpServerConfig, SkillConfig } from '../../store/useMcpSkillStore';
+import { Dialog } from '../common/Dialog';
+import { ConfirmModal } from '../common/ConfirmModal';
+import { PromptModal } from '../common/PromptModal';
+import { toast } from '../common/Toast';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -176,6 +180,47 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [editingMcp, setEditingMcp] = useState<McpServerConfig | null>(null);
   const [editingSkill, setEditingSkill] = useState<SkillConfig | null>(null);
 
+  // Esc key listener
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
+  // Unified ConfirmModal State
+  const [confirmConfig, setConfirmConfig] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    isDanger?: boolean;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+  });
+
+  // Unified PromptModal State
+  const [promptConfig, setPromptConfig] = useState<{
+    isOpen: boolean;
+    title: string;
+    description?: string;
+    placeholder?: string;
+    defaultValue?: string;
+    onSubmit: (val: string) => void;
+  }>({
+    isOpen: false,
+    title: '',
+    onSubmit: () => {},
+  });
+
   useEffect(() => {
     if (channels.length > 0) {
       const active = channels.find((c) => c.id === activeChannelId) || channels[0];
@@ -278,21 +323,30 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     if (!activeChannelId || channels.length <= 1) {
       await setActiveChannel(channelForm.id);
     }
+    toast.success('渠道配置已保存');
   };
 
-  const handleDeleteChannel = async (id: string, e: React.MouseEvent) => {
+  const handleDeleteChannel = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (channels.length <= 1) {
-      alert('请至少保留一个 AI 模型渠道！');
+      toast.error('请至少保留一个 AI 模型渠道！');
       return;
     }
-    if (confirm('确定删除该渠道配置吗？')) {
-      await deleteChannel(id);
-      const remaining = channels.filter((c) => c.id !== id);
-      if (remaining.length > 0) {
-        handleSelectChannel(remaining[0]);
-      }
-    }
+    const ch = channels.find((c) => c.id === id);
+    setConfirmConfig({
+      isOpen: true,
+      title: '删除模型渠道',
+      message: `确定删除模型渠道「${ch?.name || id}」吗？`,
+      isDanger: true,
+      onConfirm: async () => {
+        await deleteChannel(id);
+        const remaining = channels.filter((c) => c.id !== id);
+        if (remaining.length > 0) {
+          handleSelectChannel(remaining[0]);
+        }
+        toast.success('渠道已删除');
+      },
+    });
   };
 
   return (
@@ -622,17 +676,25 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </button>
                   <button
                     onClick={() => {
-                      const name = prompt('请输入新 MCP Server 名称:', 'my-custom-mcp');
-                      if (name) {
-                        addMcpServer({
-                          name,
-                          transport: 'stdio',
-                          command: 'npx',
-                          args: ['-y', '@modelcontextprotocol/server-example'],
-                          enabled: true,
-                        });
-                      }
+                      setPromptConfig({
+                        isOpen: true,
+                        title: '添加新 MCP Server',
+                        description: '请输入要挂载的 MCP Server 标识名称',
+                        placeholder: '例如: my-custom-mcp',
+                        defaultValue: 'my-custom-mcp',
+                        onSubmit: (name) => {
+                          addMcpServer({
+                            name,
+                            transport: 'stdio',
+                            command: 'npx',
+                            args: ['-y', '@modelcontextprotocol/server-example'],
+                            enabled: true,
+                          });
+                          toast.success(`已添加 MCP Server: ${name}`);
+                        },
+                      });
                     }}
+                    title="添加新的 MCP Server 协议服务"
                     className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#D96B27] hover:bg-[#B8551B] text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer"
                   >
                     <Plus className="w-3.5 h-3.5" />
@@ -722,18 +784,26 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
                 <button
                   onClick={() => {
-                    const name = prompt('请输入技能名称:', '自定义技能');
-                    const trigger = prompt('请输入调用触发词 (如 /my-skill):', '/');
-                    if (name && trigger) {
-                      addSkill({
-                        name,
-                        trigger,
-                        description: '自定义智能体指令技能',
-                        prompt: '你是一名专业助手...',
-                        enabled: true,
-                      });
-                    }
+                    setPromptConfig({
+                      isOpen: true,
+                      title: '添加自定义 Agent 技能',
+                      description: '请输入技能名称 (创建后可自定义指令与提示词)',
+                      placeholder: '例如: 自动单测生成',
+                      defaultValue: '新技能',
+                      onSubmit: (name) => {
+                        const trigger = `/${name.toLowerCase().replace(/\s+/g, '-')}`;
+                        addSkill({
+                          name,
+                          trigger,
+                          description: '自定义智能体指令技能',
+                          prompt: '你是一名专业助手...',
+                          enabled: true,
+                        });
+                        toast.success(`已创建技能: ${name}`);
+                      },
+                    });
                   }}
+                  title="添加自定义 Agent Skill 技能"
                   className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#D96B27] hover:bg-[#B8551B] text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer"
                 >
                   <Plus className="w-3.5 h-3.5" />
@@ -887,48 +957,70 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       </div>
 
       {/* Claude JSON Import Modal */}
-      {isImportModalOpen && (
-        <div className="fixed inset-0 z-60 bg-black/60 flex items-center justify-center p-4">
-          <div className="bg-[#FAF8F5] border border-[#E6DFD5] rounded-2xl w-[500px] shadow-2xl p-5 space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="font-bold text-sm text-[#1E1C1A]">导入 Claude Desktop MCP JSON</h3>
-              <button onClick={() => setIsImportModalOpen(false)}>
-                <X className="w-4 h-4 text-[#8A847C]" />
-              </button>
-            </div>
-            <textarea
-              rows={8}
-              value={jsonImportText}
-              onChange={(e) => setJsonImportText(e.target.value)}
-              placeholder='{\n  "mcpServers": {\n    "postgres": {\n      "command": "npx",\n      "args": ["-y", "@modelcontextprotocol/server-postgres", "..."]\n    }\n  }\n}'
-              className="w-full p-2.5 bg-white border border-[#E6DFD5] rounded-lg font-mono text-xs outline-none focus:border-[#D96B27]"
-            />
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => setIsImportModalOpen(false)}
-                className="px-3 py-1.5 bg-white border border-[#E6DFD5] rounded-lg text-xs"
-              >
-                取消
-              </button>
-              <button
-                onClick={() => {
-                  const res = importClaudeJson(jsonImportText);
-                  if (res.success) {
-                    alert(`成功导入 ${res.count} 个 MCP Servers！`);
-                    setIsImportModalOpen(false);
-                    setJsonImportText('');
-                  } else {
-                    alert(`导入失败: ${res.error}`);
-                  }
-                }}
-                className="px-4 py-1.5 bg-[#D96B27] text-white rounded-lg text-xs font-bold"
-              >
-                确认导入
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* JSON Import Dialog */}
+      <Dialog
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        title="导入 Claude Desktop MCP JSON"
+        description="粘贴标准 claude_desktop_config.json 中的 mcpServers 节点配置"
+        maxWidth="max-w-lg"
+        footer={
+          <>
+            <button
+              onClick={() => setIsImportModalOpen(false)}
+              title="取消导入 (Esc)"
+              className="px-3.5 py-1.5 bg-white border border-[#E6DFD5] hover:bg-[#FAF8F5] rounded-lg text-xs font-medium cursor-pointer"
+            >
+              取消
+            </button>
+            <button
+              onClick={() => {
+                const res = importClaudeJson(jsonImportText);
+                if (res.success) {
+                  toast.success(`成功导入 ${res.count} 个 MCP Servers！`);
+                  setIsImportModalOpen(false);
+                  setJsonImportText('');
+                } else {
+                  toast.error(`导入失败: ${res.error}`);
+                }
+              }}
+              title="确认解析并导入配置"
+              className="px-4 py-1.5 bg-[#D96B27] hover:bg-[#BF5A1B] text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer"
+            >
+              确认导入
+            </button>
+          </>
+        }
+      >
+        <textarea
+          rows={8}
+          value={jsonImportText}
+          onChange={(e) => setJsonImportText(e.target.value)}
+          placeholder='{\n  "mcpServers": {\n    "postgres": {\n      "command": "npx",\n      "args": ["-y", "@modelcontextprotocol/server-postgres", "..."]\n    }\n  }\n}'
+          className="w-full p-2.5 bg-white border border-[#E6DFD5] rounded-lg font-mono text-xs outline-none focus:border-[#D96B27]"
+        />
+      </Dialog>
+
+      {/* Unified Confirm Modal */}
+      <ConfirmModal
+        isOpen={confirmConfig.isOpen}
+        onClose={() => setConfirmConfig((prev) => ({ ...prev, isOpen: false }))}
+        onConfirm={confirmConfig.onConfirm}
+        title={confirmConfig.title}
+        message={confirmConfig.message}
+        isDanger={confirmConfig.isDanger}
+      />
+
+      {/* Unified Prompt Modal */}
+      <PromptModal
+        isOpen={promptConfig.isOpen}
+        onClose={() => setPromptConfig((prev) => ({ ...prev, isOpen: false }))}
+        onSubmit={promptConfig.onSubmit}
+        title={promptConfig.title}
+        description={promptConfig.description}
+        placeholder={promptConfig.placeholder}
+        defaultValue={promptConfig.defaultValue}
+      />
     </div>
   );
 };

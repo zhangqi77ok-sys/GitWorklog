@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
 import { FolderPlus, Search, MessageSquare, FolderTree, RefreshCw, FolderOpen } from 'lucide-react';
+import { invoke } from '@tauri-apps/api/core';
 import { useProjectSessionStore, SessionRecord } from '../../store/useProjectSessionStore';
 import { useWorkspaceStore } from '../../store/useWorkspaceStore';
 import { WorkspaceTreeView } from '../workspace/WorkspaceTreeView';
 import { TagFilterBar } from './TagFilterBar';
 import { ProjectTreeItem } from './ProjectTreeItem';
+import { ConfirmModal } from '../common/ConfirmModal';
+import { toast } from '../common/Toast';
 
 interface LeftPanelProps {
   onFileSelected?: () => void;
@@ -31,6 +34,20 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ onFileSelected }) => {
   const { currentRoot, loadTree } = useWorkspaceStore();
   const [collapsedProjects, setCollapsedProjects] = useState<Record<string, boolean>>({});
 
+  // Unified ConfirmModal State
+  const [confirmConfig, setConfirmConfig] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    isDanger?: boolean;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+  });
+
   const activeProject = projects.find((p) => p.id === activeProjectId) || projects[0];
 
   // Extract all unique tags & compute tag counts
@@ -54,16 +71,19 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ onFileSelected }) => {
     }));
   };
 
+  // 2. Select system folder natively via Rust RFD
   const handleOpenFolder = async () => {
-    const inputPath = window.prompt(
-      '请输入要打开的本地项目绝对路径 (例如: D:\\weihu\\my-app):',
-      ''
-    );
-    if (inputPath && inputPath.trim()) {
-      const proj = await addProjectFolder(inputPath.trim());
-      if (proj) {
-        loadTree(proj.path);
+    try {
+      const selectedPath = await invoke<string | null>('select_folder_dialog');
+      if (selectedPath && selectedPath.trim()) {
+        const proj = await addProjectFolder(selectedPath.trim());
+        if (proj) {
+          loadTree(proj.path);
+          toast.success(`成功挂载项目: ${proj.name}`);
+        }
       }
+    } catch (err: any) {
+      toast.error(`打开文件夹失败: ${err}`);
     }
   };
 
@@ -71,6 +91,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ onFileSelected }) => {
     e.stopPropagation();
     const title = `新任务分支 ${new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`;
     await createSession(projectId, title, ['#开发']);
+    toast.success('已创建新会话分支');
   };
 
   const handleSelectSession = (projectId: string, session: SessionRecord) => {
@@ -87,18 +108,33 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ onFileSelected }) => {
     await updateSession(session.id, undefined, undefined, !session.is_pinned);
   };
 
-  const handleDeleteSession = async (sessionId: string, e: React.MouseEvent) => {
+  const handleDeleteSession = (sessionId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (confirm('确定删除该会话分支吗？')) {
-      await deleteSession(sessionId);
-    }
+    setConfirmConfig({
+      isOpen: true,
+      title: '删除会话分支',
+      message: '确定删除该会话分支及其历史记录吗？此操作不可撤销。',
+      isDanger: true,
+      onConfirm: async () => {
+        await deleteSession(sessionId);
+        toast.success('已删除会话分支');
+      },
+    });
   };
 
   const handleDeleteProject = (projectId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (confirm('确定从工作台移除该项目吗？')) {
-      deleteProject(projectId);
-    }
+    const proj = projects.find((p) => p.id === projectId);
+    setConfirmConfig({
+      isOpen: true,
+      title: '从工作台移除项目',
+      message: `确定从工作台移除项目「${proj?.name || '当前项目'}」吗？本地磁盘文件将保持完整，不会被删除。`,
+      isDanger: true,
+      onConfirm: async () => {
+        await deleteProject(projectId);
+        toast.success('已从工作台移除项目');
+      },
+    });
   };
 
   return (
@@ -231,6 +267,16 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ onFileSelected }) => {
           )}
         </div>
       </div>
+
+      {/* Unified Confirm Modal */}
+      <ConfirmModal
+        isOpen={confirmConfig.isOpen}
+        onClose={() => setConfirmConfig((prev) => ({ ...prev, isOpen: false }))}
+        onConfirm={confirmConfig.onConfirm}
+        title={confirmConfig.title}
+        message={confirmConfig.message}
+        isDanger={confirmConfig.isDanger}
+      />
     </aside>
   );
 };

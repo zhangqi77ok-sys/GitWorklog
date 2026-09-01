@@ -440,3 +440,12 @@ pub async fn run_swarm_flow_task(
     let decision = crate::core::SwarmFlowEngine::run_flow(&prompt, budget).await;
     Ok(decision)
 }
+
+#[tauri::command]
+pub async fn select_folder_dialog() -> Result<Option<String>, String> {
+    let folder = rfd::AsyncFileDialog::new()
+        .set_title("选择本地代码项目文件夹")
+        .pick_folder()
+        .await;
+    Ok(folder.map(|f| f.path().to_string_lossy().to_string()))
+}

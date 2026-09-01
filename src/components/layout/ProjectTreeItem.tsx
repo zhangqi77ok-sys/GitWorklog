@@ -16,7 +16,7 @@ interface ProjectTreeItemProps {
   onSelectSession: (projectId: string, session: SessionRecord) => void;
   onUpdateSessionTitle: (sessionId: string, title: string) => Promise<void>;
   onTogglePinSession: (session: SessionRecord, e: React.MouseEvent) => Promise<void>;
-  onDeleteSession: (sessionId: string, e: React.MouseEvent) => Promise<void>;
+  onDeleteSession: (sessionId: string, e: React.MouseEvent) => void | Promise<void>;
   onDeleteProject?: (projectId: string, e: React.MouseEvent) => void;
 }
 

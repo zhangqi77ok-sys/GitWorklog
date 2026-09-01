@@ -7,6 +7,7 @@ import { ChatPanel } from './components/chat/ChatPanel';
 import { MonacoEditorWorkspace } from './components/editor/MonacoEditorWorkspace';
 import { TerminalDrawer } from './components/terminal/TerminalDrawer';
 import { SettingsModal } from './components/settings/SettingsModal';
+import { ToastContainer } from './components/common/Toast';
 import { useProjectSessionStore } from './store/useProjectSessionStore';
 import { useWorkspaceStore } from './store/useWorkspaceStore';
 import { useGatewayStore } from './store/useGatewayStore';
@@ -146,6 +147,9 @@ export function App() {
         theme={theme}
         onToggleTheme={toggleTheme}
       />
+
+      {/* Global Toast Notification System */}
+      <ToastContainer />
     </div>
   );
 }

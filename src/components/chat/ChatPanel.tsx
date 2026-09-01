@@ -19,6 +19,7 @@ import { useWorkspaceStore } from '../../store/useWorkspaceStore';
 import { useGatewayStore } from '../../store/useGatewayStore';
 import { SubtaskProgressCard } from './SubtaskProgressCard';
 import { SwarmFlowVisualizer, SwarmFlowState } from './SwarmFlowVisualizer';
+import { toast } from '../common/Toast';
 import type { Subtask } from '../../types';
 
 export const ChatPanel: React.FC = () => {
@@ -145,7 +146,7 @@ export const ChatPanel: React.FC = () => {
           });
         }
       } catch (err: any) {
-        alert(`Swarm Flow 调度异常: ${err}`);
+        toast.error(`Swarm Flow 调度异常: ${err}`);
       } finally {
         setIsStreaming(false);
       }
@@ -160,7 +161,7 @@ export const ChatPanel: React.FC = () => {
       });
     } catch (err: any) {
       setIsStreaming(false);
-      alert(`发送失败: ${err}`);
+      toast.error(`发送失败: ${err}`);
     }
   };
 

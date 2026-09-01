@@ -8,7 +8,7 @@ interface SessionTreeItemProps {
   onSelect: () => void;
   onUpdateTitle: (newTitle: string) => Promise<void>;
   onTogglePin: (e: React.MouseEvent) => Promise<void>;
-  onDelete: (e: React.MouseEvent) => Promise<void>;
+  onDelete: (e: React.MouseEvent) => void | Promise<void>;
   onAddTag?: (tag: string) => Promise<void>;
 }
 

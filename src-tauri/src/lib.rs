@@ -45,7 +45,9 @@ pub fn run() {
             // Real Chat Stream
             ipc::stream_chat_prompt,
             // Swarm Flow & Dual-Loop Engine
-            ipc::run_swarm_flow_task
+            ipc::run_swarm_flow_task,
+            // Native Folder Dialog
+            ipc::select_folder_dialog
         ])
         .run(tauri::generate_context!())
         .expect("error while running Tcode Studio application");
