@@ -1,222 +1,303 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Send, Sparkles, CornerDownLeft, Bot, User } from 'lucide-react';
-import { ThinkingBlock } from './ThinkingBlock';
-import { SubtaskProgressCard } from './SubtaskProgressCard';
-import type { Message, Subtask } from '../../types';
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  Send,
+  Sparkles,
+  Bot,
+  User,
+  ChevronDown,
+  ChevronRight,
+  SplitSquareVertical,
+  Check,
+  Copy,
+  BrainCircuit,
+  RotateCcw,
+} from 'lucide-react';
+import { listen } from '@tauri-apps/api/event';
+import { invoke } from '@tauri-apps/api/core';
+import { useProjectSessionStore, ChatMessage } from '../../store/useProjectSessionStore';
+import { useWorkspaceStore } from '../../store/useWorkspaceStore';
+import { useGatewayStore } from '../../store/useGatewayStore';
 
-interface ChatPanelProps {
-  messages: Message[];
-  subtasks: Subtask[];
-  currentThinking: string;
-  isStreaming: boolean;
-  onSendMessage: (text: string) => void;
-}
+export const ChatPanel: React.FC = () => {
+  const {
+    projects,
+    activeProjectId,
+    activeSessionId,
+    loadInitialData,
+  } = useProjectSessionStore();
 
-export const ChatPanel: React.FC<ChatPanelProps> = ({
-  messages,
-  subtasks,
-  currentThinking,
-  isStreaming,
-  onSendMessage,
-}) => {
-  const [input, setInput] = useState('');
+  const { openDiffTab, openFile, activeTabPath } = useWorkspaceStore();
+  const { channels, activeChannelId } = useGatewayStore();
+
+  const [inputPrompt, setInputPrompt] = useState('');
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [streamingThought, setStreamingThought] = useState('');
+  const [streamingContent, setStreamingContent] = useState('');
+  const [collapsedThoughts, setCollapsedThoughts] = useState<Record<string, boolean>>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, currentThinking, subtasks]);
+  // Find active project & session
+  const activeProject = projects.find(p => p.id === activeProjectId);
+  const activeSession = activeProject?.sessions.find(s => s.id === activeSessionId);
+  const activeChannel = channels.find(c => c.id === activeChannelId) || channels[0];
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      if (input.trim() && !isStreaming) {
-        onSendMessage(input);
-        setInput('');
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [activeSession?.messages, streamingContent, streamingThought]);
+
+  // Listen to Tauri stream events
+  useEffect(() => {
+    const unlistenThought = listen<{ session_id: string; chunk: string }>(
+      'agent_thought_chunk',
+      event => {
+        if (event.payload.session_id === activeSessionId) {
+          setStreamingThought(prev => prev + event.payload.chunk);
+        }
       }
+    );
+
+    const unlistenText = listen<{ session_id: string; chunk: string }>(
+      'agent_text_chunk',
+      event => {
+        if (event.payload.session_id === activeSessionId) {
+          setStreamingContent(prev => prev + event.payload.chunk);
+        }
+      }
+    );
+
+    const unlistenDone = listen<{ session_id: string; full_content: string; full_thought: string }>(
+      'agent_stream_done',
+      async event => {
+        if (event.payload.session_id === activeSessionId) {
+          setIsStreaming(false);
+          setStreamingContent('');
+          setStreamingThought('');
+          await loadInitialData();
+        }
+      }
+    );
+
+    return () => {
+      unlistenThought.then(f => f());
+      unlistenText.then(f => f());
+      unlistenDone.then(f => f());
+    };
+  }, [activeSessionId, loadInitialData]);
+
+  const handleSend = async () => {
+    if (!inputPrompt.trim() || isStreaming || !activeSessionId) return;
+
+    const promptText = inputPrompt.trim();
+    setInputPrompt('');
+    setIsStreaming(true);
+    setStreamingContent('');
+    setStreamingThought('');
+
+    const workspaceDir = activeProject?.path || 'D:\\weihu\\agent-learning';
+
+    try {
+      await invoke('stream_chat_prompt', {
+        sessionId: activeSessionId,
+        workspaceDir,
+        prompt: promptText,
+      });
+    } catch (err: any) {
+      setIsStreaming(false);
+      alert(`发送失败: ${err}`);
     }
   };
 
+  const toggleThoughtCollapse = (msgId: string) => {
+    setCollapsedThoughts(prev => ({
+      ...prev,
+      [msgId]: !prev[msgId],
+    }));
+  };
+
+  // Helper to extract code blocks from assistant message and open diff tab
+  const handleOpenDiffFromCode = (codeBlock: string, proposedLang: string) => {
+    const targetFile = activeTabPath && !activeTabPath.startsWith('diff:')
+      ? activeTabPath
+      : `${activeProject?.path || 'D:\\weihu\\agent-learning'}\\src\\App.tsx`;
+
+    openDiffTab(targetFile, '// 当前打开的代码文件', codeBlock);
+  };
+
   return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        height: '100%',
-        background: 'var(--chat-bg)',
-        overflow: 'hidden',
-      }}
-    >
-      {/* Messages Stream */}
-      <div
-        style={{
-          flex: 1,
-          overflowY: 'auto',
-          padding: '16px 20px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '16px',
-        }}
-      >
-        {messages.length === 0 && (
-          <div
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              height: '80%',
-              color: 'var(--text-muted)',
-              gap: '12px',
-              textAlign: 'center',
-            }}
-          >
-            <div
-              style={{
-                width: '48px',
-                height: '48px',
-                borderRadius: '12px',
-                background: 'var(--accent-subtle)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: 'var(--accent)',
-              }}
-            >
-              <Sparkles size={24} />
+    <div className="flex-1 h-full bg-[#FAF8F5] flex flex-col overflow-hidden select-none">
+      {/* 1. Chat Header */}
+      <div className="h-10 px-4 border-b border-[#E6DFD5] flex items-center justify-between bg-[#F4EFEA]">
+        <div className="flex items-center gap-2">
+          <Sparkles className="w-4 h-4 text-[#D96B27]" />
+          <span className="font-semibold text-xs text-[#1E1C1A]">
+            {activeSession?.title || '新对话'}
+          </span>
+          <span className="text-[10px] text-[#8A847C] font-mono">
+            ({activeProject?.name || '未知项目'})
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono bg-white border border-[#E6DFD5] text-[#2E7D32]">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#2E7D32]" />
+            {activeChannel?.name || 'DeepSeek 官方直连'}
+          </span>
+        </div>
+      </div>
+
+      {/* 2. Messages Stream List */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {!activeSession || (activeSession.messages.length === 0 && !isStreaming) ? (
+          <div className="h-full flex flex-col items-center justify-center text-center p-6 select-none">
+            <div className="w-10 h-10 rounded-full bg-[#D96B27]/10 flex items-center justify-center text-[#D96B27] mb-3">
+              <Sparkles className="w-5 h-5" />
             </div>
-            <div style={{ fontWeight: 600, fontSize: '15px', color: 'var(--text-primary)' }}>
+            <h3 className="text-sm font-semibold text-[#1E1C1A] mb-1">
               Tcode Next-Gen Agentic Studio
+            </h3>
+            <p className="text-xs text-[#8A847C] max-w-sm">
+              基于 Rust Tokio Core 稳定双环轨道与全插件化能力生态。输入任何编程需求或任务指令即可启动。
+            </p>
+          </div>
+        ) : (
+          activeSession.messages.map(msg => (
+            <div key={msg.id} className="space-y-2">
+              {/* User Bubble */}
+              {msg.role === 'user' ? (
+                <div className="flex items-start gap-2.5 justify-end">
+                  <div className="max-w-2xl bg-white border border-[#E6DFD5] rounded-2xl rounded-tr-xs p-3.5 shadow-xs text-xs text-[#1E1C1A] leading-relaxed select-text">
+                    {msg.content}
+                  </div>
+                  <div className="w-7 h-7 rounded-full bg-[#3D3A36] text-white flex items-center justify-center flex-shrink-0">
+                    <User className="w-4 h-4" />
+                  </div>
+                </div>
+              ) : (
+                /* Assistant Bubble */
+                <div className="flex items-start gap-2.5">
+                  <div className="w-7 h-7 rounded-full bg-[#D96B27] text-white flex items-center justify-center flex-shrink-0 shadow-xs">
+                    <Bot className="w-4 h-4" />
+                  </div>
+                  <div className="flex-1 max-w-3xl space-y-2">
+                    {/* Collapsible Deep Thinking Block */}
+                    {msg.thought && (
+                      <div className="bg-[#F4EFEA] border border-[#E6DFD5] rounded-lg overflow-hidden text-xs">
+                        <button
+                          onClick={() => toggleThoughtCollapse(msg.id)}
+                          className="w-full px-3 py-2 flex items-center justify-between text-[#6B665F] hover:text-[#1E1C1A] transition-colors"
+                        >
+                          <div className="flex items-center gap-1.5 font-medium text-[11px]">
+                            <BrainCircuit className="w-3.5 h-3.5 text-[#D96B27]" />
+                            <span>深度思考过程 (Deep Thinking)</span>
+                          </div>
+                          {collapsedThoughts[msg.id] ? (
+                            <ChevronRight className="w-3.5 h-3.5" />
+                          ) : (
+                            <ChevronDown className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                        {!collapsedThoughts[msg.id] && (
+                          <div className="px-3 pb-2.5 text-[#6B665F] font-mono text-[11px] leading-relaxed border-t border-[#E6DFD5]/60 pt-2 whitespace-pre-wrap select-text">
+                            {msg.thought}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Main Content & Code Blocks */}
+                    <div className="bg-white border border-[#E6DFD5] rounded-2xl rounded-tl-xs p-4 shadow-xs text-xs text-[#1E1C1A] leading-relaxed select-text space-y-3">
+                      <div className="whitespace-pre-wrap">{msg.content}</div>
+
+                      {/* If content contains code blocks, provide quick 'Apply Diff to Monaco' button */}
+                      {msg.content.includes('```') && (
+                        <div className="pt-2 border-t border-[#E6DFD5] flex items-center justify-between">
+                          <span className="text-[11px] text-[#8A847C]">检测到生成代码补丁</span>
+                          <button
+                            onClick={() => {
+                              const match = msg.content.match(/```(?:\w+)?\n([\s\S]*?)```/);
+                              if (match && match[1]) {
+                                handleOpenDiffFromCode(match[1], 'rust');
+                              }
+                            }}
+                            className="flex items-center gap-1 px-2.5 py-1 bg-[#F4EFEA] hover:bg-[#D96B27] text-[#3D3A36] hover:text-white rounded text-xs font-medium transition-colors border border-[#E6DFD5]"
+                          >
+                            <SplitSquareVertical className="w-3.5 h-3.5" />
+                            <span>在右侧开启 Diff 审查</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
-            <div style={{ fontSize: '12px', maxWidth: '380px', lineHeight: 1.6 }}>
-              基于 Tauri v2 + Rust Core 稳定双循环轨道与全插件化能力生态。输入任务提示词即刻启动。
+          ))
+        )}
+
+        {/* Live Streaming State */}
+        {isStreaming && (
+          <div className="flex items-start gap-2.5">
+            <div className="w-7 h-7 rounded-full bg-[#D96B27] text-white flex items-center justify-center flex-shrink-0 animate-pulse">
+              <Bot className="w-4 h-4" />
+            </div>
+            <div className="flex-1 max-w-3xl space-y-2">
+              {streamingThought && (
+                <div className="bg-[#F4EFEA] border border-[#D96B27]/40 rounded-lg p-3 text-xs font-mono text-[#6B665F] whitespace-pre-wrap leading-relaxed animate-pulse select-text">
+                  <div className="flex items-center gap-1 text-[#D96B27] font-semibold text-[11px] mb-1">
+                    <BrainCircuit className="w-3.5 h-3.5" />
+                    <span>正在深度推理思考中...</span>
+                  </div>
+                  {streamingThought}
+                </div>
+              )}
+
+              {streamingContent && (
+                <div className="bg-white border border-[#E6DFD5] rounded-2xl rounded-tl-xs p-4 shadow-xs text-xs text-[#1E1C1A] leading-relaxed whitespace-pre-wrap select-text">
+                  {streamingContent}
+                  <span className="inline-block w-1.5 h-3 bg-[#D96B27] ml-1 animate-pulse" />
+                </div>
+              )}
             </div>
           </div>
         )}
 
-        {messages.map((msg) => {
-          const isUser = msg.role === 'user';
-          return (
-            <div
-              key={msg.id}
-              style={{
-                display: 'flex',
-                gap: '10px',
-                alignItems: 'flex-start',
-              }}
-            >
-              <div
-                style={{
-                  width: '28px',
-                  height: '28px',
-                  borderRadius: '6px',
-                  background: isUser ? 'var(--bg-surface-elevated)' : 'var(--accent)',
-                  color: isUser ? 'var(--text-primary)' : '#FFFFFF',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexShrink: 0,
-                }}
-              >
-                {isUser ? <User size={15} /> : <Bot size={15} />}
-              </div>
-
-              <div style={{ flex: 1, overflow: 'hidden' }}>
-                <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '4px' }}>
-                  {isUser ? 'User' : 'Tcode Agent'}
-                </div>
-                {msg.thinking && <ThinkingBlock thinking={msg.thinking} />}
-                <div
-                  style={{
-                    padding: '10px 14px',
-                    borderRadius: '8px',
-                    background: isUser ? 'var(--chat-user-bg)' : 'var(--chat-system-bg)',
-                    border: '1px solid var(--border-subtle)',
-                    fontSize: '13px',
-                    lineHeight: 1.6,
-                    color: 'var(--text-primary)',
-                    whiteSpace: 'pre-wrap',
-                    wordBreak: 'break-word',
-                  }}
-                >
-                  {msg.content}
-                </div>
-              </div>
-            </div>
-          );
-        })}
-
-        {isStreaming && currentThinking && (
-          <div style={{ paddingLeft: '38px' }}>
-            <ThinkingBlock thinking={currentThinking} />
-          </div>
-        )}
-
-        <SubtaskProgressCard subtasks={subtasks} />
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input Box */}
-      <div
-        style={{
-          padding: '12px 16px',
-          background: 'var(--bg-surface)',
-          borderTop: '1px solid var(--border-subtle)',
-        }}
-      >
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'flex-end',
-            gap: '8px',
-            background: 'var(--chat-input-bg)',
-            border: '1px solid var(--border-strong)',
-            borderRadius: '8px',
-            padding: '8px 12px',
-          }}
-        >
+      {/* 3. Chat Input Box */}
+      <div className="p-3 bg-[#F4EFEA] border-t border-[#E6DFD5]">
+        <div className="bg-white border border-[#E6DFD5] focus-within:border-[#D96B27] rounded-xl p-2 shadow-xs transition-colors">
           <textarea
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="输入编程需求或任务指令 (Enter 发送, Shift+Enter 换行)..."
-            rows={2}
-            style={{
-              flex: 1,
-              border: 'none',
-              background: 'transparent',
-              resize: 'none',
-              outline: 'none',
-              fontSize: '13px',
-              color: 'var(--text-primary)',
-              lineHeight: 1.5,
-              fontFamily: 'inherit',
-            }}
-          />
-          <button
-            onClick={() => {
-              if (input.trim() && !isStreaming) {
-                onSendMessage(input);
-                setInput('');
+            value={inputPrompt}
+            onChange={e => setInputPrompt(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSend();
               }
             }}
-            disabled={!input.trim() || isStreaming}
-            style={{
-              padding: '6px 12px',
-              borderRadius: '6px',
-              border: 'none',
-              background: input.trim() && !isStreaming ? 'var(--accent)' : 'var(--border-subtle)',
-              color: '#FFFFFF',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-              fontSize: '12px',
-              fontWeight: 600,
-              cursor: input.trim() && !isStreaming ? 'pointer' : 'not-allowed',
-            }}
-          >
-            <Send size={13} />
-            <span>发送</span>
-          </button>
+            placeholder="输入编程需求或任务指令 (Enter 发送, Shift+Enter 换行)..."
+            rows={2}
+            className="w-full resize-none outline-none text-xs text-[#1E1C1A] placeholder-[#8A847C] leading-relaxed"
+          />
+          <div className="flex items-center justify-between pt-2 border-t border-[#F4EFEA]">
+            <div className="flex items-center gap-1.5 text-[11px] text-[#8A847C]">
+              <span>当前项目:</span>
+              <span className="font-semibold text-[#3D3A36]">{activeProject?.name || '未选择'}</span>
+            </div>
+            <button
+              onClick={handleSend}
+              disabled={!inputPrompt.trim() || isStreaming}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#D96B27] hover:bg-[#B8551B] disabled:opacity-50 text-white rounded-lg text-xs font-medium transition-colors shadow-xs"
+            >
+              <Send className="w-3.5 h-3.5" />
+              <span>{isStreaming ? '生成中...' : '发送'}</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>
