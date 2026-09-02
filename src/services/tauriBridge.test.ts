@@ -102,7 +102,7 @@ describe('tauriBridge Universal IPC Adapter', () => {
     expect(probe.success).toBe(true);
     expect(probe.http_status).toBe(200);
     expect(probe.latency_ms).toBeGreaterThan(0);
-  });
+  }, 30000);
 
   it('parses DSML tool calls with spaces and pipes correctly', () => {
     const rawText = `

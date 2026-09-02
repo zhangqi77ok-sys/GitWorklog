@@ -30,6 +30,7 @@ import { SubtaskProgressCard } from './SubtaskProgressCard';
 import { SwarmFlowVisualizer, SwarmFlowState } from './SwarmFlowVisualizer';
 import { ExecutionModeCapsule } from './ExecutionModeCapsule';
 import { ToolCallCard } from './ToolCallCard';
+import { ThinkingBlock } from './ThinkingBlock';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { ResizableMessageBubble } from './ResizableMessageBubble';
 import { sanitizeTextContent } from '../../services/tauriBridge';
@@ -606,8 +607,10 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
             <div
               key={msg.id}
               className={`group/msg flex flex-col ${
-                msg.role === 'user' ? 'items-end' : 'items-start'
-              } space-y-1`}
+                msg.role === 'user'
+                  ? 'items-end self-end max-w-[85%]'
+                  : 'items-start self-start max-w-[85%] w-full'
+              } space-y-1.5`}
             >
               <div className="flex items-center gap-1.5 text-[10px] text-[#8A847C] px-1 select-none">
                 {msg.role === 'user' ? (
@@ -629,44 +632,26 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                 </span>
               </div>
 
-              {/* Collapsible Deep Thinking Block */}
+              {/* 1. Collapsible & Draggable Deep Thinking Block */}
               {msg.thought && (
-                <div className="max-w-[85%] w-full my-1 bg-[#F4EFEA] border border-[#E6DFD5] rounded-xl overflow-hidden text-xs">
-                  <div
-                    onClick={() => toggleThoughtCollapse(msg.id)}
-                    className="flex items-center justify-between p-2 px-3 bg-[#EAE4DC]/60 cursor-pointer hover:bg-[#EAE4DC] transition-colors select-none"
-                  >
-                    <div className="flex items-center gap-1.5 text-[#6B665F] font-mono text-[11px]">
-                      <BrainCircuit className="w-3.5 h-3.5 text-[#D96B27]" />
-                      <span className="font-semibold">深度思考推理过程</span>
-                    </div>
-                    {collapsedThoughts[msg.id] ? (
-                      <ChevronRight className="w-3.5 h-3.5 text-[#8A847C]" />
-                    ) : (
-                      <ChevronDown className="w-3.5 h-3.5 text-[#8A847C]" />
-                    )}
-                  </div>
-                  {!collapsedThoughts[msg.id] && (
-                    <div className="p-3 font-mono text-[11px] text-[#6B665F] whitespace-pre-wrap leading-relaxed border-t border-[#E6DFD5]/50 bg-[#FAF8F5] select-text">
-                      {msg.thought}
-                    </div>
-                  )}
-                </div>
+                <ThinkingBlock thinking={msg.thought} defaultExpanded={false} />
               )}
 
-              {/* Subtask DAG / Progress Card */}
+              {/* 2. Subtask DAG / Progress Card */}
               {msg.dag && (
-                <div className="max-w-[85%] w-full my-1">
+                <div className="w-full">
                   <SubtaskProgressCard subtasks={msg.dag?.subtasks || (Array.isArray(msg.dag) ? msg.dag : [])} />
                 </div>
               )}
 
-              {/* Tool Execution Card (Image 2 Specification) */}
+              {/* 3. Tool Execution Card */}
               {msg.toolCalls && msg.toolCalls.length > 0 && (
-                <ToolCallCard toolCalls={msg.toolCalls} />
+                <div className="w-full">
+                  <ToolCallCard toolCalls={msg.toolCalls} />
+                </div>
               )}
 
-              {/* Main Message Bubble */}
+              {/* 4. Main Answer Bubble (Aligned 100% with Thinking Block) */}
               {(() => {
                 const cleanText = sanitizeTextContent(msg.content || '');
 
@@ -692,22 +677,14 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
 
         {/* Live Streaming Indicator & Partial Message */}
         {isStreaming && (
-          <div className="flex flex-col items-start space-y-1">
-            <div className="flex items-center gap-1.5 text-[10px] text-[#8A847C] px-1">
+          <div className="flex flex-col items-start self-start max-w-[85%] w-full space-y-1.5">
+            <div className="flex items-center gap-1.5 text-[10px] text-[#8A847C] px-1 select-none">
               <Bot className="w-3 h-3 text-[#D96B27] animate-pulse" />
               <span className="font-medium text-[#D96B27]">Tcode Agent (正在实时生成...)</span>
             </div>
 
             {streamingThought && (
-              <div className="max-w-[85%] w-full my-1 bg-[#F4EFEA] border border-[#E6DFD5] rounded-xl overflow-hidden text-xs">
-                <div className="flex items-center gap-1.5 p-2 px-3 bg-[#EAE4DC]/60 font-mono text-[11px] text-[#6B665F]">
-                  <BrainCircuit className="w-3.5 h-3.5 text-[#D96B27] animate-spin" />
-                  <span className="font-semibold">正在深度思考推理...</span>
-                </div>
-                <div className="p-3 font-mono text-[11px] text-[#6B665F] whitespace-pre-wrap leading-relaxed border-t border-[#E6DFD5]/50 bg-[#FAF8F5]">
-                  {streamingThought}
-                </div>
-              </div>
+              <ThinkingBlock thinking={streamingThought} defaultExpanded={true} />
             )}
 
             {(() => {

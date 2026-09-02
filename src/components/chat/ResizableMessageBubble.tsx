@@ -61,7 +61,7 @@ export const ResizableMessageBubble: React.FC<ResizableMessageBubbleProps> = ({
 
   return (
     <div
-      className={`relative max-w-[85%] rounded-2xl p-3.5 text-xs leading-relaxed select-text transition-all duration-75 ${
+      className={`relative w-full rounded-2xl p-3.5 text-xs leading-relaxed select-text transition-all duration-75 ${
         role === 'user'
           ? 'bg-[#D96B27] text-white rounded-tr-xs shadow-xs'
           : 'bg-white border border-[#E6DFD5] text-[#1E1C1A] rounded-tl-xs shadow-xs'

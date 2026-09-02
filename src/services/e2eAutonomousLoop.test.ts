@@ -64,17 +64,29 @@ When the user asks to review, inspect, or write code for this project, you MUST 
         stream: true,
       };
 
-      const res = await fetch(`${baseUrl}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`,
-          'User-Agent': 'opencode/1.0',
-        },
-        body: JSON.stringify(payload),
-      });
+      let res: Response | null = null;
+      let lastErr: any = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          res = await fetch(`${baseUrl}/chat/completions`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${apiKey}`,
+              'User-Agent': 'opencode/1.0',
+            },
+            body: JSON.stringify(payload),
+          });
+          if (res.ok) break;
+        } catch (err) {
+          lastErr = err;
+          await new Promise((r) => setTimeout(r, 1000));
+        }
+      }
 
-      expect(res.ok).toBe(true);
+      if (!res || !res.ok) {
+        throw new Error(`API fetch failed after 3 attempts: ${lastErr || res?.statusText}`);
+      }
 
       const text = await res.text();
       let turnContent = '';
