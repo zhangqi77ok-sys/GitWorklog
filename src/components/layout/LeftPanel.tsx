@@ -89,19 +89,58 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ onFileSelected }) => {
     );
   });
 
-  // 2. Select system folder natively via Rust RFD
+  // 2. Select system folder natively via Rust RFD / Pywebview desktop API / Web picker
   const handleOpenFolder = async () => {
+    let selectedPath: string | null = null;
     try {
-      const selectedPath = await invoke<string | null>('select_folder_dialog');
-      if (selectedPath && selectedPath.trim()) {
-        const proj = await addProjectFolder(selectedPath.trim());
-        if (proj) {
-          loadTree(proj.path);
-          toast.success(`成功挂载项目: ${proj.name}`);
+      if (typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__?.invoke) {
+        selectedPath = await invoke<string | null>('select_folder_dialog');
+      }
+    } catch (e) {}
+
+    if (!selectedPath) {
+      try {
+        const token = typeof window !== 'undefined' ? (window as any).__TCODE_HOST_TOKEN__ || '' : '';
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (token) headers['X-Tcode-Token'] = token;
+
+        const res = await fetch('/api/fs/pick_folder', { headers });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && data.path) {
+            selectedPath = data.path;
+          }
         }
+      } catch (err) {
+        console.warn('Desktop API folder picker failed:', err);
+      }
+    }
+
+    if (!selectedPath && typeof window !== 'undefined' && 'showDirectoryPicker' in window) {
+      try {
+        const dirHandle = await (window as any).showDirectoryPicker();
+        if (dirHandle && dirHandle.name) {
+          selectedPath = dirHandle.name;
+        }
+      } catch (err: any) {
+        if (err.name === 'AbortError') return;
+      }
+    }
+
+    if (!selectedPath) {
+      return;
+    }
+
+    try {
+      const proj = await addProjectFolder(selectedPath.trim());
+      if (proj) {
+        await loadTree(proj.path);
+        toast.success(`成功挂载项目: ${proj.name}`);
+      } else {
+        toast.info(`项目已激活: ${selectedPath}`);
       }
     } catch (err: any) {
-      toast.error(`打开文件夹失败: ${err}`);
+      toast.error(`挂载项目失败: ${err?.message || err}`);
     }
   };
 

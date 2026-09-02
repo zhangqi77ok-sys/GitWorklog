@@ -447,6 +447,15 @@ export function initTauriBridge(): void {
         const { path, name } = args || {};
         if (!path) throw new Error('Missing project path');
         const db = loadProjectsDb();
+        const existing = db.projects.find((p: BridgeProjectRecord) => p.path.toLowerCase() === path.toLowerCase());
+        if (existing) {
+          db.active_project_id = existing.id;
+          if (existing.sessions?.[0]?.id) {
+            db.active_session_id = existing.sessions[0].id;
+          }
+          saveProjectsDb(db);
+          return existing;
+        }
         const derivedName = name || path.split(/[\/\\]/).filter(Boolean).pop() || 'Untitled';
         const newProj: BridgeProjectRecord = {
           id: `proj_${Date.now()}`,
@@ -457,7 +466,7 @@ export function initTauriBridge(): void {
             {
               id: `sess_${Date.now()}`,
               title: '新开发会话',
-              tags: ['#新会话'],
+              tags: ['#开发'],
               model_id: 'deepseek-v4-flash',
               created_at: Date.now(),
               is_pinned: false,

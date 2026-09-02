@@ -890,18 +890,28 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                   <button
                     type="button"
                     onClick={() => setIsBottomDropdownOpen(!isBottomDropdownOpen)}
-                    className="flex items-center gap-1 px-1.5 py-0.5 bg-transparent hover:bg-black/[0.04] rounded-md text-[11px] text-[#52525B] hover:text-[#18181B] cursor-pointer"
+                    className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-black/[0.03] hover:bg-black/[0.06] text-[#18181B] text-xs font-mono transition-colors cursor-pointer border border-black/[0.06] shadow-2xs"
+                    title="选择当前会话大模型"
                   >
-                    <Cpu className="w-2.5 h-2.5 text-[#D96B27]" />
-                    <span className="font-mono font-medium max-w-[110px] truncate">{activeModelId}</span>
-                    <ChevronDown className="w-2.5 h-2.5 text-[#71717A]" />
+                    <Cpu className="w-3 h-3 text-[#D96B27]" />
+                    <span className="max-w-[130px] truncate">{activeModelId}</span>
+                    <ChevronDown
+                      className={`w-3 h-3 text-[#71717A] transition-transform duration-150 ${
+                        isBottomDropdownOpen ? 'rotate-180' : ''
+                      }`}
+                    />
                   </button>
 
                   {/* Upward Model Selector Popover */}
                   {isBottomDropdownOpen && (
-                    <div className="absolute bottom-full left-0 mb-2 w-60 bg-white border border-black/[0.08] rounded-xl shadow-lg p-1.5 z-50 select-none animate-in fade-in slide-in-from-bottom-2 duration-150">
-                      <div className="px-2 py-1.5 text-[10px] font-bold text-[#71717A] uppercase tracking-wider border-b border-black/[0.04] mb-1">
-                        选择模型
+                    <div className="absolute bottom-full left-0 mb-1.5 w-64 bg-[#FAF9F6] border border-black/[0.08] rounded-xl shadow-xl p-1.5 z-50 select-none animate-in fade-in slide-in-from-bottom-2 duration-150">
+                      <div className="flex items-center justify-between px-2.5 py-1.5 border-b border-black/[0.05] mb-1">
+                        <span className="text-[10px] font-semibold text-[#71717A] uppercase tracking-wider">
+                          选择运行模型
+                        </span>
+                        <span className="text-[10px] text-[#71717A] font-mono">
+                          {availableModels.length} 个可用
+                        </span>
                       </div>
                       <div className="max-h-52 overflow-y-auto space-y-0.5">
                         {availableModels.map((m) => (
@@ -909,10 +919,10 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                             key={m}
                             type="button"
                             onClick={() => handleSelectModel(m)}
-                            className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs cursor-pointer text-left ${
+                            className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs cursor-pointer text-left transition-colors ${
                               activeModelId === m
-                                ? 'bg-black/[0.03] text-[#D96B27] font-semibold'
-                                : 'text-[#18181B] hover:bg-black/[0.02]'
+                                ? 'bg-white text-[#D96B27] font-semibold shadow-2xs border border-black/[0.05]'
+                                : 'text-[#18181B] hover:bg-black/[0.03]'
                             }`}
                           >
                             <span className="font-mono truncate">{m}</span>

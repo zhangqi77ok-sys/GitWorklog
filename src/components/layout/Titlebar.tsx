@@ -10,43 +10,55 @@ export const Titlebar: React.FC = () => {
   const activeChannel = channels.find((c) => c.id === activeChannelId) || channels[0];
   const activeProject = projects.find((p) => p.id === activeProjectId) || projects[0];
 
-  const handleMinimize = async () => {
+  const getHeaders = (): Record<string, string> => {
+    const token = typeof window !== 'undefined' ? (window as any).__TCODE_HOST_TOKEN__ || '' : '';
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers['X-Tcode-Token'] = token;
+    }
+    return headers;
+  };
+
+  const handleMinimize = async (e: React.MouseEvent) => {
+    e.stopPropagation();
     try {
-      if (typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__) {
+      if (typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__?.invoke) {
         await getCurrentWindow().minimize();
         return;
       }
     } catch (e) {}
     try {
-      await fetch('/api/window/minimize');
+      await fetch('/api/window/minimize', { headers: getHeaders() });
     } catch (e) {
       console.warn('Window minimize error:', e);
     }
   };
 
-  const handleMaximize = async () => {
+  const handleMaximize = async (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
     try {
-      if (typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__) {
+      if (typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__?.invoke) {
         await getCurrentWindow().toggleMaximize();
         return;
       }
     } catch (e) {}
     try {
-      await fetch('/api/window/maximize');
+      await fetch('/api/window/maximize', { headers: getHeaders() });
     } catch (e) {
       console.warn('Window maximize error:', e);
     }
   };
 
-  const handleClose = async () => {
+  const handleClose = async (e: React.MouseEvent) => {
+    e.stopPropagation();
     try {
-      if (typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__) {
+      if (typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__?.invoke) {
         await getCurrentWindow().close();
         return;
       }
     } catch (e) {}
     try {
-      await fetch('/api/window/close');
+      await fetch('/api/window/close', { headers: getHeaders() });
     } catch (e) {
       console.warn('Window close error:', e);
     }
@@ -54,9 +66,9 @@ export const Titlebar: React.FC = () => {
 
   return (
     <header
-      onDoubleClick={handleMaximize}
+      onDoubleClick={(e) => handleMaximize(e)}
       data-tauri-drag-region
-      className="h-9.5 bg-[#FAF9F6] border-b border-[#E8E5DF] flex items-center justify-between px-3 select-none z-20 pywebview-drag-region cursor-default"
+      className="h-9.5 bg-[#FAF9F6] border-b border-[#E8E5DF] flex items-center justify-between px-3 select-none z-30 relative pywebview-drag-region cursor-default"
     >
       {/* Left: Brand Logo + Project Breadcrumb Pill + Discrete Gateway Indicator */}
       <div className="flex items-center gap-2.5" data-tauri-no-drag>

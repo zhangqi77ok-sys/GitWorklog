@@ -149,8 +149,45 @@ def scan_directory(root_path, max_depth=2, current_depth=0):
         items.append(item)
     return items
 
+_cached_hwnd = None
+
+def get_app_hwnd():
+    global _cached_hwnd
+    if _cached_hwnd:
+        return _cached_hwnd
+    if os.name == 'nt':
+        try:
+            import ctypes
+            user32 = ctypes.windll.user32
+            if global_window and hasattr(global_window, 'native') and global_window.native:
+                try:
+                    _cached_hwnd = global_window.native.Handle.ToInt32()
+                    return _cached_hwnd
+                except Exception:
+                    pass
+            _cached_hwnd = user32.FindWindowW(None, f"{APP_NAME} - Enterprise AI Agentic IDE")
+            return _cached_hwnd
+        except Exception:
+            pass
+    return None
+
 def pick_folder_native(window=None):
-    # 1. Primary: In-process Tkinter folder browser (0 external process, 0 CMD console window)
+    target_win = window or global_window
+    # 1. Primary: Pywebview window built-in create_file_dialog (uses active HWND, thread-safe, 0 external process)
+    if target_win and hasattr(target_win, 'create_file_dialog'):
+        try:
+            import webview
+            res = target_win.create_file_dialog(webview.FOLDER_DIALOG)
+            if res and len(res) > 0:
+                selected = res[0]
+                if selected and Path(selected).exists():
+                    return str(selected).replace('\\', '/')
+            elif res is not None:
+                return None
+        except Exception as e:
+            print(f"[DesktopApp] pywebview create_file_dialog notice: {e}")
+
+    # 2. Secondary: In-process Tkinter folder browser
     try:
         import tkinter as tk
         from tkinter import filedialog
@@ -164,7 +201,7 @@ def pick_folder_native(window=None):
     except Exception:
         pass
 
-    # 2. Fallback: PowerShell FolderBrowserDialog with CREATE_NO_WINDOW (strictly suppresses console window)
+    # 3. Fallback: PowerShell FolderBrowserDialog with CREATE_NO_WINDOW (strictly suppresses console window)
     CREATE_NO_WINDOW = 0x08000000
     ps_cmd = "[System.Reflection.Assembly]::LoadWithPartialName('System.Windows.Forms') | Out-Null; $f = New-Object System.Windows.Forms.FolderBrowserDialog; $f.Description = '选择要打开的工作区工程文件夹'; $f.ShowNewFolderButton = $true; if ($f.ShowDialog() -eq 'OK') { Write-Output $f.SelectedPath }"
     try:
@@ -198,6 +235,10 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
             self.send_header("Vary", "Origin")
 
     def _guard(self) -> bool:
+        parsed = urllib.parse.urlparse(self.path)
+        # Safe local client operations (window controls and native file dialog)
+        if parsed.path.startswith('/api/window/') or parsed.path == '/api/fs/pick_folder':
+            return True
         origin = self.headers.get("Origin")
         if origin is not None and not host_auth.origin_is_allowed(origin):
             self._send_json(403, {"error": "ORIGIN_DENIED", "code": 403})
@@ -803,13 +844,22 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
                 self.wfile.write(json.dumps({'error': str(e)}).encode('utf-8'))
             return
 
-        # 6. Frameless Window Controls API
+        # 6. Frameless Window Controls API (Native Win32 + Pywebview Dual-Engine)
         if parsed.path == '/api/window/minimize':
+            if os.name == 'nt':
+                try:
+                    import ctypes
+                    user32 = ctypes.windll.user32
+                    hwnd = get_app_hwnd()
+                    if hwnd:
+                        user32.ShowWindow(hwnd, 6)  # SW_MINIMIZE = 6
+                except Exception as e:
+                    print(f"[DesktopApp] Native Win32 minimize error: {e}")
             if global_window:
                 try:
                     global_window.minimize()
                 except Exception as e:
-                    print(f"[DesktopApp] Minimize error: {e}")
+                    print(f"[DesktopApp] Pywebview minimize error: {e}")
             self.send_response(200)
             self._apply_cors()
             self.send_header('Content-Type', 'application/json')
@@ -818,14 +868,30 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
             return
 
         if parsed.path == '/api/window/maximize':
-            if global_window:
+            if os.name == 'nt':
                 try:
-                    if getattr(global_window, 'maximized', False):
-                        global_window.restore()
-                    else:
-                        global_window.maximize()
+                    import ctypes
+                    user32 = ctypes.windll.user32
+                    hwnd = get_app_hwnd()
+                    if hwnd:
+                        if user32.IsZoomed(hwnd):
+                            user32.ShowWindow(hwnd, 9)  # SW_RESTORE = 9
+                            if global_window:
+                                try: global_window.restore()
+                                except Exception: pass
+                        else:
+                            user32.ShowWindow(hwnd, 3)  # SW_MAXIMIZE = 3
+                            if global_window:
+                                try: global_window.maximize()
+                                except Exception: pass
                 except Exception as e:
-                    print(f"[DesktopApp] Maximize error: {e}")
+                    print(f"[DesktopApp] Native Win32 maximize error: {e}")
+            else:
+                if global_window:
+                    try:
+                        global_window.maximize()
+                    except Exception as e:
+                        print(f"[DesktopApp] Pywebview maximize error: {e}")
             self.send_response(200)
             self._apply_cors()
             self.send_header('Content-Type', 'application/json')
@@ -839,8 +905,23 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
             self.send_header('Content-Type', 'application/json')
             self.end_headers()
             self.wfile.write(b'{"success": true}')
-            if global_window:
-                threading.Timer(0.05, global_window.destroy).start()
+            def do_safe_shutdown():
+                time.sleep(0.08)
+                if os.name == 'nt':
+                    try:
+                        import ctypes
+                        hwnd = get_app_hwnd()
+                        if hwnd:
+                            ctypes.windll.user32.PostMessageW(hwnd, 0x0010, 0, 0)  # WM_CLOSE = 0x0010
+                    except Exception:
+                        pass
+                if global_window:
+                    try:
+                        global_window.destroy()
+                    except Exception:
+                        pass
+                os._exit(0)
+            threading.Thread(target=do_safe_shutdown, daemon=True).start()
             return
 
         if parsed.path == '/api/window/resize':
