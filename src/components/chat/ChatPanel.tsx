@@ -17,6 +17,7 @@ import {
   Copy,
   Plus,
   Square,
+  Cpu,
 } from 'lucide-react';
 import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
@@ -143,6 +144,45 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
 
   const [swarmFlowData, setSwarmFlowData] = useState<SwarmFlowState | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const [inputHeight, setInputHeight] = useState<number>(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        const saved = localStorage.getItem('tcode_chat_input_height');
+        return saved ? parseInt(saved, 10) : 130;
+      }
+    } catch (e) {}
+    return 130;
+  });
+  const isDraggingInputRef = useRef(false);
+  const startYRef = useRef(0);
+  const startHeightRef = useRef(130);
+
+  const handleInputResizeStart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    isDraggingInputRef.current = true;
+    startYRef.current = e.clientY;
+    startHeightRef.current = inputHeight;
+
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      if (!isDraggingInputRef.current) return;
+      const deltaY = startYRef.current - moveEvent.clientY;
+      const newHeight = Math.min(Math.max(startHeightRef.current + deltaY, 90), 450);
+      setInputHeight(newHeight);
+    };
+
+    const onMouseUp = () => {
+      isDraggingInputRef.current = false;
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+      try {
+        localStorage.setItem('tcode_chat_input_height', String(inputHeight));
+      } catch (e) {}
+    };
+
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+  };
 
   const [isBottomDropdownOpen, setIsBottomDropdownOpen] = useState(false);
   const bottomDropdownRef = useRef<HTMLDivElement>(null);
@@ -727,11 +767,17 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
           <div className="my-3">
             <SwarmFlowVisualizer
               flowData={swarmFlowData}
-              onInspectCode={(code) => {
+              onInspectCode={(workerName, code) => {
                 if (onToggleEditor && !isEditorOpen) {
                   onToggleEditor();
                 }
-                toast.info('已在工作区载入此分支方案代码');
+                const tabName = `[SwarmFlow] ${workerName}.ts`;
+                openDiffTab(
+                  tabName,
+                  '// 当前代码基线 (Original Baseline)\n\n// 尚未应用此 Worker 分支方案',
+                  code
+                );
+                toast.success(`已在右侧 Diff 工作台载入 [${workerName}] 方案代码`);
               }}
               onSelectWinner={(workerId) => {
                 setSwarmFlowData((prev) => (prev ? { ...prev, selectedWorkerId: workerId } : null));
@@ -744,158 +790,135 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
         <div ref={messagesEndRef} />
       </div>
 
-      {/* 3. Chat Input Box & Prompt Queue */}
-      <div className="p-3 bg-[#F4EFEA] border-t border-[#E6DFD5]">
-        {/* Reorderable & Preemptible Prompt Queue Bar */}
-        <PromptQueueBar
-          queue={promptQueue}
-          onDelete={handleDeleteQueueItem}
-          onEdit={handleEditQueueItem}
-          onMoveUp={handleMoveUpQueueItem}
-          onMoveDown={handleMoveDownQueueItem}
-          onPreemptSend={handlePreemptSend}
-          onClearAll={handleClearAllQueue}
-          isStreaming={isStreaming}
-        />
+      {/* 3. Chat Input Box & Prompt Queue with Vertical Drag Handle */}
+      <div
+        style={{ height: `${inputHeight}px` }}
+        className="bg-[#F4EFEA] border-t border-[#E6DFD5] flex flex-col flex-shrink-0 relative transition-[height] duration-75"
+      >
+        {/* Top Drag Handle for Resizing Input Box Height */}
+        <div
+          onMouseDown={handleInputResizeStart}
+          className="h-2 w-full -top-1 absolute left-0 right-0 cursor-row-resize z-20 flex items-center justify-center group select-none hover:bg-[#D96B27]/20 transition-colors"
+          title="上下拖动调整输入区域高度"
+        >
+          <div className="w-10 h-1 rounded-full bg-[#D4CCC2] group-hover:bg-[#D96B27] transition-colors" />
+        </div>
 
-        <div className="bg-white border border-[#E6DFD5] focus-within:border-[#D96B27] rounded-xl p-2.5 shadow-xs transition-colors space-y-2">
-          {activeFileName && (
-            <div className="flex items-center gap-1.5 text-[11px] text-[#6B665F] bg-[#FAF8F5] px-2 py-0.5 rounded border border-[#E6DFD5] w-fit select-none">
-              <Paperclip className="w-3 h-3 text-[#D96B27]" />
-              <span>已引用当前文件:</span>
-              <span className="font-mono font-medium text-[#1E1C1A]">{activeFileName}</span>
-            </div>
-          )}
-
-          <textarea
-            value={inputPrompt}
-            onChange={(e) => setInputPrompt(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Escape' && isStreaming) {
-                e.preventDefault();
-                handleStopGeneration();
-              } else if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleSend();
-              }
-            }}
-            placeholder={
-              isStreaming
-                ? "Agent 正在生成中... 输入指令按 Enter 可直接加入待发送队列（生成完毕后自动执行）"
-                : executionMode === 'swarm'
-                ? "输入复杂重构或多任务方案设计，将通过 SwarmFlow 7 算子流并行竞标与仲裁推进 (Alt+2)..."
-                : "输入日常编程需求或任务指令，由单 Agent 极速执行内外双环 (Enter 发送, Alt+1 切换)..."
-            }
-            rows={2}
-            className="w-full resize-none outline-none text-xs text-[#1E1C1A] placeholder-[#8A847C] leading-relaxed bg-transparent select-text"
+        <div className="p-2.5 flex-1 flex flex-col overflow-hidden space-y-1.5">
+          {/* Reorderable & Preemptible Prompt Queue Bar */}
+          <PromptQueueBar
+            queue={promptQueue}
+            onDelete={handleDeleteQueueItem}
+            onEdit={handleEditQueueItem}
+            onMoveUp={handleMoveUpQueueItem}
+            onMoveDown={handleMoveDownQueueItem}
+            onPreemptSend={handlePreemptSend}
+            onClearAll={handleClearAllQueue}
+            isStreaming={isStreaming}
           />
 
-          <div className="flex items-center justify-between pt-1 border-t border-[#F4EFEA]">
-            <div className="flex items-center gap-2 select-none">
-              <ExecutionModeCapsule
-                mode={executionMode}
-                onModeChange={handleModeChange}
-                swarmBudgetTokens={swarmBudgetTokens}
-                onBudgetChange={handleBudgetChange}
-                swarmWorkersCount={swarmWorkersCount}
-                onWorkersCountChange={handleWorkersCountChange}
-                confidenceThreshold={confidenceThreshold}
-                onConfidenceThresholdChange={handleConfidenceThresholdChange}
-              />
+          <div className="bg-white border border-[#E6DFD5] focus-within:border-[#D96B27] rounded-xl p-2 shadow-2xs transition-colors flex-1 flex flex-col justify-between overflow-hidden">
+            {activeFileName && (
+              <div className="flex items-center gap-1.5 text-[10px] text-[#6B665F] bg-[#FAF8F5] px-2 py-0.5 rounded border border-[#E6DFD5] w-fit select-none">
+                <Paperclip className="w-3 h-3 text-[#D96B27]" />
+                <span>已引用当前文件:</span>
+                <span className="font-mono font-medium text-[#1E1C1A]">{activeFileName}</span>
+              </div>
+            )}
 
-              {/* Bottom Model Selector Button & Upward Popover */}
-              <div className="relative" ref={bottomDropdownRef}>
-                <button
-                  type="button"
-                  onClick={() => setIsBottomDropdownOpen(!isBottomDropdownOpen)}
-                  className="inline-flex items-center gap-1.5 px-2 py-1 bg-[#FAF8F5] hover:bg-white border border-[#E6DFD5] hover:border-[#D96B27] rounded-lg text-[10px] font-mono text-[#6B665F] hover:text-[#1E1C1A] transition-all cursor-pointer shadow-2xs group"
-                  title="当前会话模型 (点击弹出模型列表切换)"
-                >
-                  <Bot className="w-3 h-3 text-[#D96B27]" />
-                  <span className="font-semibold max-w-[120px] truncate">{activeModelId}</span>
-                  <ChevronDown className={`w-2.5 h-2.5 text-[#8A847C] transition-transform duration-150 ${isBottomDropdownOpen ? 'rotate-180 text-[#D96B27]' : ''}`} />
-                </button>
+            <textarea
+              value={inputPrompt}
+              onChange={(e) => setInputPrompt(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape' && isStreaming) {
+                  e.preventDefault();
+                  handleStopGeneration();
+                } else if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSend();
+                }
+              }}
+              placeholder={
+                isStreaming
+                  ? "Agent 正在生成中... 输入指令按 Enter 可直接加入待发送队列（生成完毕后自动执行）"
+                  : executionMode === 'swarm'
+                  ? "输入复杂重构或多任务方案设计，将通过 SwarmFlow 7 算子流并行竞标与仲裁推进 (Alt+2)..."
+                  : "输入日常编程需求或任务指令，由单 Agent 极速执行内外双环 (Enter 发送, Alt+1 切换)..."
+              }
+              className="w-full flex-1 resize-none outline-none text-xs text-[#1E1C1A] placeholder-[#8A847C] leading-relaxed bg-transparent select-text overflow-y-auto"
+            />
 
-                {isBottomDropdownOpen && (
-                  <div className="absolute left-0 bottom-full mb-1.5 w-64 bg-white border border-[#E6DFD5] rounded-xl shadow-xl z-50 p-1.5 text-xs animate-in fade-in slide-in-from-bottom-2 duration-100">
-                    <div className="px-2 py-1 text-[10px] font-bold text-[#8A847C] uppercase tracking-wider border-b border-[#F4EFEA] flex items-center justify-between">
-                      <span>切换生效模型 ({availableModels.length})</span>
-                      <span className="text-[#D96B27] truncate max-w-[110px]">{activeChannel?.name || '当前渠道'}</span>
-                    </div>
-                    <div className="max-h-56 overflow-y-auto py-1 space-y-0.5">
-                      {availableModels.map((m) => {
-                        const isCurrent = m === activeModelId;
-                        return (
+            <div className="flex items-center justify-between pt-1 border-t border-[#F4EFEA]">
+              <div className="flex items-center gap-2 select-none">
+                <ExecutionModeCapsule
+                  mode={executionMode}
+                  onModeChange={handleModeChange}
+                  swarmBudgetTokens={swarmBudgetTokens}
+                  onBudgetChange={handleBudgetChange}
+                  swarmWorkersCount={swarmWorkersCount}
+                  onWorkersCountChange={handleWorkersCountChange}
+                  confidenceThreshold={confidenceThreshold}
+                  onConfidenceThresholdChange={handleConfidenceThresholdChange}
+                />
+
+                {/* Bottom Model Selector Button & Upward Popover */}
+                <div className="relative" ref={bottomDropdownRef}>
+                  <button
+                    type="button"
+                    onClick={() => setIsBottomDropdownOpen(!isBottomDropdownOpen)}
+                    className="flex items-center gap-1.5 px-2.5 py-1 bg-[#FAF8F5] hover:bg-[#F4EFEA] border border-[#E6DFD5] rounded-lg text-[11px] text-[#6B665F] hover:text-[#1E1C1A] transition-colors cursor-pointer shadow-2xs"
+                  >
+                    <Cpu className="w-3 h-3 text-[#D96B27]" />
+                    <span className="font-mono font-medium max-w-[110px] truncate">{activeModelId}</span>
+                    <ChevronDown className="w-3 h-3 text-[#8A847C]" />
+                  </button>
+
+                  {/* Upward Model Selector Popover */}
+                  {isBottomDropdownOpen && (
+                    <div className="absolute bottom-full left-0 mb-1.5 w-56 bg-white border border-[#E6DFD5] rounded-xl shadow-lg p-1.5 z-50 space-y-1 select-none animate-in fade-in slide-in-from-bottom-2 duration-150">
+                      <div className="px-2 py-1 text-[10px] font-bold text-[#8A847C] border-b border-[#F4EFEA]">
+                        选择生效模型
+                      </div>
+                      <div className="max-h-48 overflow-y-auto space-y-0.5">
+                        {availableModels.map((m) => (
                           <button
                             key={m}
                             type="button"
                             onClick={() => handleSelectModel(m)}
-                            className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between transition-colors cursor-pointer ${
-                              isCurrent
-                                ? 'bg-[#FAF8F5] text-[#D96B27] font-bold border border-[#D96B27]/20'
-                                : 'text-[#3D3A36] hover:bg-[#FAF8F5]'
+                            className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer text-left ${
+                              activeModelId === m
+                                ? 'bg-[#FAF8F5] text-[#D96B27] font-semibold border border-[#E6DFD5]'
+                                : 'text-[#1E1C1A] hover:bg-[#FAF8F5]'
                             }`}
                           >
-                            <div className="flex items-center gap-2 truncate">
-                              <Bot className="w-3.5 h-3.5 text-[#8A847C] flex-shrink-0" />
-                              <span className="truncate font-mono text-[11px]">{m}</span>
-                            </div>
-                            {isCurrent && <Check className="w-3.5 h-3.5 text-[#D96B27] flex-shrink-0" />}
+                            <span className="font-mono truncate">{m}</span>
+                            {activeModelId === m && <Check className="w-3.5 h-3.5 text-[#D96B27]" />}
                           </button>
-                        );
-                      })}
-                    </div>
-                    {onOpenSettings && (
-                      <div className="pt-1 mt-1 border-t border-[#F4EFEA]">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setIsBottomDropdownOpen(false);
-                            onOpenSettings();
-                          }}
-                          className="w-full text-left px-2.5 py-1 rounded text-[10px] text-[#8A847C] hover:text-[#D96B27] hover:bg-[#FAF8F5] transition-colors flex items-center gap-1.5 cursor-pointer font-medium"
-                        >
-                          <Settings className="w-3 h-3" />
-                          <span>管理 AI 模型网关与渠道...</span>
-                        </button>
+                        ))}
                       </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Action Buttons: Stop Generation, Add to Queue, or Send */}
-            <div className="flex items-center gap-2">
-              {isStreaming ? (
-                <>
-                  {inputPrompt.trim() && (
-                    <button
-                      type="button"
-                      onClick={handleSend}
-                      title="将当前输入加入待发送队列"
-                      className="flex items-center gap-1 px-3 py-1.5 bg-[#FAF8F5] hover:bg-white border border-[#D96B27] text-[#D96B27] rounded-lg text-xs font-bold transition-all shadow-2xs cursor-pointer"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>加入队列</span>
-                    </button>
+                    </div>
                   )}
-                  <button
-                    type="button"
-                    onClick={handleStopGeneration}
-                    title="立即中断当前对话生成 (Esc)"
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-[#C62828] hover:bg-[#B71C1C] text-white rounded-lg text-xs font-semibold transition-all shadow-xs cursor-pointer animate-pulse"
-                  >
-                    <Square className="w-3 h-3 fill-current" />
-                    <span>停止生成</span>
-                  </button>
-                </>
+                </div>
+              </div>
+
+              {/* Right Action Button (Stop or Send) */}
+              {isStreaming ? (
+                <button
+                  type="button"
+                  onClick={handleStopGeneration}
+                  className="flex items-center gap-1.5 px-3 py-1 bg-[#FFF0F0] hover:bg-[#FFE5E5] border border-[#FFCDD2] text-[#D32F2F] rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer animate-pulse"
+                  title="中断生成 (Esc)"
+                >
+                  <Square className="w-3.5 h-3.5 fill-current" />
+                  <span>停止生成</span>
+                </button>
               ) : (
                 <button
                   type="button"
                   onClick={handleSend}
-                  disabled={!inputPrompt.trim()}
-                  className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#D96B27] hover:bg-[#B8551B] disabled:opacity-50 text-white rounded-lg text-xs font-medium transition-colors shadow-xs cursor-pointer"
+                  disabled={!inputPrompt.trim() || !activeSessionId}
+                  className="flex items-center gap-1.5 px-3.5 py-1 bg-[#D96B27] hover:bg-[#B8551B] disabled:bg-[#E6DFD5] text-white disabled:text-[#8A847C] rounded-lg text-xs font-bold transition-all shadow-xs disabled:shadow-none cursor-pointer disabled:cursor-not-allowed"
+                  title="发送指令 (Enter)"
                 >
                   <Send className="w-3.5 h-3.5" />
                   <span>发送</span>
