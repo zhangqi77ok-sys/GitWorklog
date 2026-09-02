@@ -214,51 +214,19 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ onOpenSettings }) => {
     const workspaceDir = activeProject?.path || 'E:\\pro\\agent-learning';
 
     if (executionMode === 'swarm') {
-      try {
-        const result: any = await invoke('run_swarm_flow_task', {
-          prompt: promptText,
-          budgetTokens: swarmBudgetTokens,
-          sessionId: activeSessionId,
-        });
-        await loadInitialData();
-        if (result?.selected_candidate) {
-          setSwarmFlowData({
-            taskPrompt: promptText,
-            budgetTokens: swarmBudgetTokens,
-            workersCount: 3,
-            status: 'completed',
-            candidates: [
-              {
-                workerId: 'Worker-A',
-                candidateName: '极速重构候选 A',
-                codePatch: '// Worker A Patch',
-                score: 0.91,
-              },
-              {
-                workerId: result.selected_candidate.worker_id,
-                candidateName: '最优仲裁补丁 B',
-                codePatch: result.selected_candidate.code_patch || '// Optimized Patch',
-                score: result.confidence_score || 0.96,
-              },
-              {
-                workerId: 'Worker-C',
-                candidateName: '保守安全候选 C',
-                codePatch: '// Worker C Patch',
-                score: 0.88,
-              },
-            ],
-            selectedWorkerId: result.selected_candidate.worker_id,
-            confidenceScore: result.confidence_score || 0.96,
-            humanReviewed: true,
-            rationale: '基于双环沙箱编译验证与单元测试通过率最高，由仲裁引擎选定为最优执行方案。',
-          });
-        }
-      } catch (err: any) {
-        toast.error(`Swarm Flow 调度异常: ${err}`);
-      } finally {
-        setIsStreaming(false);
-      }
-      return;
+      setSwarmFlowData({
+        taskPrompt: promptText,
+        budgetTokens: swarmBudgetTokens,
+        workersCount: 3,
+        status: 'running',
+        candidates: [],
+        selectedWorkerId: '',
+        confidenceScore: 0,
+        humanReviewed: false,
+        rationale: '正在启动 SwarmFlow 7 算子流并行多视角分析与仲裁...',
+      });
+    } else {
+      setSwarmFlowData(null);
     }
 
     try {
@@ -267,6 +235,8 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ onOpenSettings }) => {
         workspaceDir,
         prompt: promptText,
         model: activeModelId,
+        executionMode,
+        budgetTokens: swarmBudgetTokens,
       });
     } catch (err: any) {
       setIsStreaming(false);

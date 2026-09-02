@@ -817,7 +817,7 @@ export function initTauriBridge(): void {
 
       // 6. Chat Streaming & Swarm Flow
       case 'stream_chat_prompt': {
-        const { sessionId, prompt, model, workspaceDir } = args || {};
+        const { sessionId, workspaceDir, prompt, model, executionMode, budgetTokens } = args || {};
         const channelsDb = loadChannelsDb();
         const activeCh = channelsDb.channels.find((c: any) => c.id === channelsDb.active_channel_id) || channelsDb.channels[0];
         const targetModel = model || activeCh?.models?.[0] || 'deepseek-v4-flash';
@@ -849,7 +849,7 @@ export function initTauriBridge(): void {
 
         const targetWorkspace = workspaceDir || 'E:\\pro\\agent-learning';
         const workspaceContext = await buildWorkspaceContextSummary(targetWorkspace);
-        const systemPrompt = `You are Tcode Next-Gen Autonomous AI Coding Assistant in Tcode Studio.
+        let systemPrompt = `You are Tcode Next-Gen Autonomous AI Coding Assistant in Tcode Studio.
 
 ${workspaceContext}
 
@@ -863,6 +863,16 @@ When the user asks to review, inspect, analyze, or code for this project:
 2. If you need specific files, invoke read_file immediately.
 3. You MUST provide a comprehensive, highly structured, in-depth Architectural Review Report or solution in Markdown with tables, pros/cons, risk assessments, and action plans.
 4. DO NOT output brief conversational placeholders like "让我查看...". Directly deliver the complete analysis and solution!`;
+
+        if (executionMode === 'swarm') {
+          systemPrompt += `\n\n【SwarmFlow Multi-Agent Execution Mode】:
+You are operating in SwarmFlow 7-Operator Multi-Agent Synthesis Mode with token budget ${budgetTokens || 25000}.
+Evaluate the user prompt from 3 distinct expert perspectives:
+1. Architecture & System Scalability
+2. Correctness, Testing & Error Boundaries
+3. Performance, Security & Clean Code
+Synthesize the optimal unified patch/solution with step-by-step rationale and deliver the complete report.`;
+        }
 
         const apiPayloadMessages = [
           { role: 'system', content: systemPrompt },
