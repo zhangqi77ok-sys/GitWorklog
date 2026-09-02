@@ -13,6 +13,7 @@ import {
   Zap,
   Check,
   Settings,
+  Code2,
 } from 'lucide-react';
 import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
@@ -29,9 +30,15 @@ import type { Subtask, ExecutionMode } from '../../types';
 
 interface ChatPanelProps {
   onOpenSettings?: () => void;
+  isEditorOpen?: boolean;
+  onToggleEditor?: () => void;
 }
 
-export const ChatPanel: React.FC<ChatPanelProps> = ({ onOpenSettings }) => {
+export const ChatPanel: React.FC<ChatPanelProps> = ({
+  onOpenSettings,
+  isEditorOpen = false,
+  onToggleEditor,
+}) => {
   const {
     projects,
     activeProjectId,
@@ -75,9 +82,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ onOpenSettings }) => {
   const [swarmFlowData, setSwarmFlowData] = useState<SwarmFlowState | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const [isHeaderDropdownOpen, setIsHeaderDropdownOpen] = useState(false);
   const [isBottomDropdownOpen, setIsBottomDropdownOpen] = useState(false);
-  const headerDropdownRef = useRef<HTMLDivElement>(null);
   const bottomDropdownRef = useRef<HTMLDivElement>(null);
 
   const handleModeChange = (mode: ExecutionMode) => {
@@ -122,25 +127,21 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ onOpenSettings }) => {
   // Close dropdown on outside click
   useEffect(() => {
     const handleOutside = (e: MouseEvent) => {
-      if (headerDropdownRef.current && !headerDropdownRef.current.contains(e.target as Node)) {
-        setIsHeaderDropdownOpen(false);
-      }
       if (bottomDropdownRef.current && !bottomDropdownRef.current.contains(e.target as Node)) {
         setIsBottomDropdownOpen(false);
       }
     };
-    if (isHeaderDropdownOpen || isBottomDropdownOpen) {
+    if (isBottomDropdownOpen) {
       document.addEventListener('mousedown', handleOutside);
     }
     return () => document.removeEventListener('mousedown', handleOutside);
-  }, [isHeaderDropdownOpen, isBottomDropdownOpen]);
+  }, [isBottomDropdownOpen]);
 
   const handleSelectModel = (model: string) => {
     setActiveModel(model);
     if (activeSession) {
       updateSession(activeSession.id, undefined, undefined, undefined, model);
     }
-    setIsHeaderDropdownOpen(false);
     setIsBottomDropdownOpen(false);
     toast.success(`已切换生效模型: ${model}`);
   };
@@ -266,11 +267,14 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ onOpenSettings }) => {
         : `${activeProject?.path || 'E:\\pro\\agent-learning'}\\src\\App.tsx`;
 
     openDiffTab(targetFile, '// 原始文件代码', codeBlock);
+    if (!isEditorOpen && onToggleEditor) {
+      onToggleEditor();
+    }
   };
 
   return (
     <div className="flex-1 h-full bg-[#FAF8F5] flex flex-col overflow-hidden select-none">
-      {/* 1. Chat Header */}
+      {/* 1. Chat Header (Clean & Minimalist, no redundant model dropdown) */}
       <div className="h-10 px-3 border-b border-[#E6DFD5] flex items-center justify-between bg-[#F4EFEA]">
         <div className="flex items-center gap-2">
           <Sparkles className="w-4 h-4 text-[#D96B27]" />
@@ -283,66 +287,21 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ onOpenSettings }) => {
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Model Selector Dropdown in Header */}
-          <div className="relative" ref={headerDropdownRef}>
+          {onToggleEditor && (
             <button
               type="button"
-              onClick={() => setIsHeaderDropdownOpen(!isHeaderDropdownOpen)}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-mono bg-white border border-[#E6DFD5] hover:border-[#D96B27] text-[#1E1C1A] shadow-2xs transition-all cursor-pointer group"
-              title="点击切换当前对话生效的 AI 模型"
+              onClick={onToggleEditor}
+              title={isEditorOpen ? '收起右侧代码工作区 (Alt+E)' : '弹出右侧代码工作区与 Diff 审查 (Alt+E)'}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer border ${
+                isEditorOpen
+                  ? 'bg-white text-[#D96B27] border-[#D96B27]/40 shadow-xs'
+                  : 'bg-white/80 text-[#6B665F] hover:text-[#1E1C1A] hover:bg-white border-[#E6DFD5]'
+              }`}
             >
-              <span className="w-2 h-2 rounded-full bg-[#2E7D32]" />
-              <span className="font-semibold">{activeModelId}</span>
-              <ChevronDown className={`w-3 h-3 text-[#8A847C] transition-transform duration-150 ${isHeaderDropdownOpen ? 'rotate-180 text-[#D96B27]' : ''}`} />
+              <Code2 className={`w-3.5 h-3.5 ${isEditorOpen ? 'text-[#D96B27]' : 'text-[#8A847C]'}`} />
+              <span>{isEditorOpen ? '收起代码区' : '代码工作区'}</span>
             </button>
-
-            {isHeaderDropdownOpen && (
-              <div className="absolute right-0 top-full mt-1.5 w-64 bg-white border border-[#E6DFD5] rounded-xl shadow-xl z-50 p-1.5 text-xs animate-in fade-in zoom-in-95 duration-100">
-                <div className="px-2 py-1 text-[10px] font-bold text-[#8A847C] uppercase tracking-wider border-b border-[#F4EFEA] flex items-center justify-between">
-                  <span>切换大模型 ({availableModels.length})</span>
-                  <span className="text-[#D96B27] truncate max-w-[110px]">{activeChannel?.name || '当前渠道'}</span>
-                </div>
-                <div className="max-h-56 overflow-y-auto py-1 space-y-0.5">
-                  {availableModels.map((m) => {
-                    const isCurrent = m === activeModelId;
-                    return (
-                      <button
-                        key={m}
-                        type="button"
-                        onClick={() => handleSelectModel(m)}
-                        className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between transition-colors cursor-pointer ${
-                          isCurrent
-                            ? 'bg-[#FAF8F5] text-[#D96B27] font-bold border border-[#D96B27]/20'
-                            : 'text-[#3D3A36] hover:bg-[#FAF8F5]'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2 truncate">
-                          <Bot className="w-3.5 h-3.5 text-[#8A847C] flex-shrink-0" />
-                          <span className="truncate font-mono text-[11px]">{m}</span>
-                        </div>
-                        {isCurrent && <Check className="w-3.5 h-3.5 text-[#D96B27] flex-shrink-0" />}
-                      </button>
-                    );
-                  })}
-                </div>
-                {onOpenSettings && (
-                  <div className="pt-1 mt-1 border-t border-[#F4EFEA]">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsHeaderDropdownOpen(false);
-                        onOpenSettings();
-                      }}
-                      className="w-full text-left px-2.5 py-1 rounded text-[10px] text-[#8A847C] hover:text-[#D96B27] hover:bg-[#FAF8F5] transition-colors flex items-center gap-1.5 cursor-pointer font-medium"
-                    >
-                      <Settings className="w-3 h-3" />
-                      <span>管理 AI 模型网关与渠道...</span>
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+          )}
         </div>
       </div>
 

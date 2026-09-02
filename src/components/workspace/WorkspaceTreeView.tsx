@@ -17,7 +17,11 @@ export const WorkspaceTreeView: React.FC<WorkspaceTreeViewProps> = ({ rootNode }
     );
   }
 
-  if (!rootNode.children || rootNode.children.length === 0) {
+  const children = Array.isArray(rootNode)
+    ? rootNode
+    : (rootNode.children && rootNode.children.length > 0 ? rootNode.children : (rootNode.is_dir ? [] : [rootNode]));
+
+  if (children.length === 0) {
     return (
       <div className="p-4 text-xs text-[#8A847C] text-center italic">
         该目录为空
@@ -27,7 +31,7 @@ export const WorkspaceTreeView: React.FC<WorkspaceTreeViewProps> = ({ rootNode }
 
   return (
     <div className="text-xs select-none space-y-0.5">
-      {rootNode.children.map(child => (
+      {children.map((child) => (
         <TreeNode key={child.path} node={child} depth={0} onSelect={openFile} />
       ))}
     </div>

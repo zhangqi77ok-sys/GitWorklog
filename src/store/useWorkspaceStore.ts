@@ -103,6 +103,39 @@ function detectLanguage(path: string): string {
   }
 }
 
+function normalizeFileNode(raw: any, fallbackName = 'root', fallbackPath = ''): FileNode {
+  if (!raw) {
+    return { name: fallbackName, path: fallbackPath, is_dir: true, size: 0, children: [] };
+  }
+
+  // If raw is an array of items (e.g. from Python scan_directory or Tauri bridge mock)
+  if (Array.isArray(raw)) {
+    return {
+      name: fallbackName,
+      path: fallbackPath,
+      is_dir: true,
+      size: 0,
+      children: raw.map((child: any) => normalizeFileNode(child, child.name || 'item', child.path || '')),
+    };
+  }
+
+  const name = raw.name || fallbackName;
+  const path = raw.path || fallbackPath;
+  const is_dir = raw.is_dir === true || raw.type === 'directory' || Boolean(raw.children);
+  const size = typeof raw.size === 'number' ? raw.size : 0;
+  const children = Array.isArray(raw.children)
+    ? raw.children.map((child: any) => normalizeFileNode(child, child.name || 'item', child.path || ''))
+    : undefined;
+
+  return {
+    name,
+    path,
+    is_dir,
+    size,
+    children,
+  };
+}
+
 const initialSaved = loadSavedTabs();
 
 export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
@@ -116,8 +149,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     if (!rootPath) return;
     set({ isLoadingTree: true, error: null });
     try {
-      const tree = await invoke<FileNode>('read_workspace_tree', { path: rootPath });
-      set({ currentRoot: tree, isLoadingTree: false });
+      const rawTree = await invoke<any>('read_workspace_tree', { path: rootPath });
+      const rootName = rootPath.split(/[\/\\]/).filter(Boolean).pop() || 'workspace';
+      const normalized = normalizeFileNode(rawTree, rootName, rootPath);
+      set({ currentRoot: normalized, isLoadingTree: false });
     } catch (err: any) {
       set({ error: String(err), isLoadingTree: false });
     }

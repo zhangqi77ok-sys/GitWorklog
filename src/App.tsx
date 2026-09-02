@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { MessageSquare, Code2 } from 'lucide-react';
+import { Code2, X } from 'lucide-react';
 import { Titlebar } from './components/layout/Titlebar';
 import { ActivityBar, ActiveTab } from './components/layout/ActivityBar';
 import { LeftPanel } from './components/layout/LeftPanel';
@@ -33,13 +33,14 @@ export function App() {
     return 'chat';
   });
 
-  const [primaryView, setPrimaryView] = useState<'chat' | 'editor'>(() => {
+  const [isEditorOpen, setIsEditorOpen] = useState<boolean>(() => {
     try {
       if (typeof window !== 'undefined') {
-        return (localStorage.getItem('tcode_primary_view') as 'chat' | 'editor') || 'chat';
+        const saved = localStorage.getItem('tcode_editor_open');
+        return saved !== null ? saved === 'true' : false;
       }
     } catch (e) {}
-    return 'chat';
+    return false;
   });
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -74,15 +75,13 @@ export function App() {
     }
   }, [activeProjectId, projects, loadTree]);
 
-  // When active tab path changes (user opens a file), automatically switch to editor view
+  // When user opens a file in the tree or accepts a diff, automatically pop out the right editor workspace
   useEffect(() => {
     if (activeTabPath) {
-      setPrimaryView('editor');
-      setActiveTab('files');
+      setIsEditorOpen(true);
       try {
         if (typeof window !== 'undefined') {
-          localStorage.setItem('tcode_primary_view', 'editor');
-          localStorage.setItem('tcode_active_tab', 'files');
+          localStorage.setItem('tcode_editor_open', 'true');
         }
       } catch (e) {}
     }
@@ -99,6 +98,18 @@ export function App() {
     document.documentElement.setAttribute('data-theme', next);
   };
 
+  const toggleEditor = () => {
+    setIsEditorOpen((prev) => {
+      const next = !prev;
+      try {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('tcode_editor_open', String(next));
+        }
+      } catch (e) {}
+      return next;
+    });
+  };
+
   const handleSelectTab = (tab: ActiveTab) => {
     setActiveTab(tab);
     try {
@@ -108,15 +119,9 @@ export function App() {
     } catch (e) {}
 
     if (tab === 'chat') {
-      setPrimaryView('chat');
-      try {
-        if (typeof window !== 'undefined') localStorage.setItem('tcode_primary_view', 'chat');
-      } catch (e) {}
+      // Keep conversation in view
     } else if (tab === 'files') {
-      setPrimaryView('editor');
-      try {
-        if (typeof window !== 'undefined') localStorage.setItem('tcode_primary_view', 'editor');
-      } catch (e) {}
+      toggleEditor();
     } else if (tab === 'plugins') {
       setSettingsInitialTab('skills');
       setIsSettingsOpen(true);
@@ -140,97 +145,67 @@ export function App() {
         {/* 1. Global Titlebar (Clean, no buttons on the right except native window controls) */}
         <Titlebar />
 
-        {/* 2. Main Workbench Layout (Left Panel + Single Primary Focus View) */}
+        {/* 2. Main Workbench Layout (LeftPanel + Middle ChatPanel + Popout Right EditorPanel) */}
         <div className="flex flex-1 overflow-hidden">
           <ActivityBar activeTab={activeTab} onSelectTab={handleSelectTab} />
 
           {/* Column 1: Multi-Project & Session Tree + Files Explorer */}
           <LeftPanel />
 
-          {/* Column 2: Single-Focus Primary Workspace (Chat OR Editor) */}
-          <div className="flex-1 min-w-[500px] h-full flex flex-col overflow-hidden bg-[#FAF8F5]">
-            {/* Top Switcher Bar: 智能对话 vs 代码工作区 */}
-            <div className="h-9 px-3 bg-[#F4EFEA] border-b border-[#E6DFD5] flex items-center justify-between select-none">
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => {
-                    setPrimaryView('chat');
-                    setActiveTab('chat');
-                    try {
-                      if (typeof window !== 'undefined') {
-                        localStorage.setItem('tcode_primary_view', 'chat');
-                        localStorage.setItem('tcode_active_tab', 'chat');
-                      }
-                    } catch (e) {}
-                  }}
-                  className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-bold transition-all cursor-pointer ${
-                    primaryView === 'chat'
-                      ? 'bg-white text-[#D96B27] shadow-xs border border-[#E6DFD5]'
-                      : 'text-[#6B665F] hover:text-[#1E1C1A] hover:bg-white/50'
-                  }`}
-                >
-                  <MessageSquare className="w-3.5 h-3.5" />
-                  <span>智能对话 (Chat)</span>
-                </button>
-
-                <button
-                  onClick={() => {
-                    setPrimaryView('editor');
-                    setActiveTab('files');
-                    try {
-                      if (typeof window !== 'undefined') {
-                        localStorage.setItem('tcode_primary_view', 'editor');
-                        localStorage.setItem('tcode_active_tab', 'files');
-                      }
-                    } catch (e) {}
-                  }}
-                  className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-bold transition-all cursor-pointer ${
-                    primaryView === 'editor'
-                      ? 'bg-white text-[#D96B27] shadow-xs border border-[#E6DFD5]'
-                      : 'text-[#6B665F] hover:text-[#1E1C1A] hover:bg-white/50'
-                  }`}
-                >
-                  <Code2 className="w-3.5 h-3.5" />
-                  <span>代码工作区 (Editor)</span>
-                </button>
-              </div>
-
-              <div className="text-[11px] text-[#8A847C] font-mono">
-                {primaryView === 'chat' ? '双环安全沙箱就绪' : 'Monaco 代码与 Diff 审查'}
-              </div>
-            </div>
-
-            {/* Primary View Body */}
-            <div className="flex-1 overflow-hidden relative">
-              {primaryView === 'chat' ? (
-                <div className="h-full w-full">
-                  <ChatPanel onOpenSettings={() => {
-                    setSettingsInitialTab('gateway');
-                    setIsSettingsOpen(true);
-                  }} />
-                </div>
-              ) : (
-                <div className="h-full w-full flex flex-col">
-                  <div className="flex-1 overflow-hidden">
-                    <MonacoEditorWorkspace />
-                  </div>
-                  {/* Bottom Drawer: Integrated PowerShell Terminal */}
-                  <TerminalDrawer
-                    isOpen={isTerminalOpen}
-                    onToggle={() => {
-                      setIsTerminalOpen((prev) => {
-                        const next = !prev;
-                        try {
-                          if (typeof window !== 'undefined') localStorage.setItem('tcode_terminal_open', String(next));
-                        } catch (e) {}
-                        return next;
-                      });
-                    }}
-                  />
-                </div>
-              )}
-            </div>
+          {/* Column 2: Middle Conversation Panel (ALWAYS VISIBLE & CENTRAL) */}
+          <div className="flex-1 min-w-[420px] h-full flex flex-col overflow-hidden bg-[#FAF8F5]">
+            <ChatPanel
+              onOpenSettings={() => {
+                setSettingsInitialTab('gateway');
+                setIsSettingsOpen(true);
+              }}
+              isEditorOpen={isEditorOpen}
+              onToggleEditor={toggleEditor}
+            />
           </div>
+
+          {/* Column 3: Popout Right Code Workspace & Diff Review (Side-by-Side, Non-Intrusive) */}
+          {isEditorOpen && (
+            <div className="w-[48%] min-w-[460px] max-w-[65%] h-full flex flex-col border-l border-[#E6DFD5] bg-white animate-in slide-in-from-right-4 duration-150 shadow-sm z-10">
+              {/* Right Editor Header */}
+              <div className="h-10 px-3 bg-[#F4EFEA] border-b border-[#E6DFD5] flex items-center justify-between select-none">
+                <div className="flex items-center gap-2">
+                  <Code2 className="w-4 h-4 text-[#D96B27]" />
+                  <span className="font-semibold text-xs text-[#1E1C1A]">代码工作区 (Editor & Diff)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-[#8A847C] font-mono">Monaco 语法与补丁审查</span>
+                  <button
+                    onClick={toggleEditor}
+                    title="收起代码工作区 (Alt+E)"
+                    className="p-1 hover:bg-white rounded-md text-[#8A847C] hover:text-[#1E1C1A] transition-colors cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Right Editor Body */}
+              <div className="flex-1 overflow-hidden flex flex-col">
+                <div className="flex-1 overflow-hidden">
+                  <MonacoEditorWorkspace />
+                </div>
+                {/* Bottom Drawer: Integrated PowerShell Terminal */}
+                <TerminalDrawer
+                  isOpen={isTerminalOpen}
+                  onToggle={() => {
+                    setIsTerminalOpen((prev) => {
+                      const next = !prev;
+                      try {
+                        if (typeof window !== 'undefined') localStorage.setItem('tcode_terminal_open', String(next));
+                      } catch (e) {}
+                      return next;
+                    });
+                  }}
+                />
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Unified Settings & Tools Cockpit Modal */}

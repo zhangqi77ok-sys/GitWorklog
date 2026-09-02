@@ -115,6 +115,10 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ onFileSelected }) => {
   const handleSelectSession = (projectId: string, session: SessionRecord) => {
     setActiveProject(projectId);
     setActiveSession(session.id);
+    const targetProj = safeProjects.find((p) => p.id === projectId);
+    if (targetProj?.path) {
+      loadTree(targetProj.path);
+    }
   };
 
   const handleUpdateSessionTitle = async (sessionId: string, title: string) => {
