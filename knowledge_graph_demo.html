@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tcode Studio v2.0 - 项目全局知识图谱与文件变更历史 (Knowledge Graph & Temporal Evolution)</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.15); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(0, 0, 0, 0.25); }
+    .font-code { font-family: 'JetBrains Mono', 'Fira Code', Consolas, Monaco, monospace; }
+    @keyframes flowDash {
+      to { stroke-dashoffset: -20; }
+    }
+    .edge-active {
+      stroke: #D96B27 !important;
+      stroke-width: 2.5 !important;
+      stroke-dasharray: 6 4;
+      animation: flowDash 0.8s linear infinite;
+    }
+    .edge-cochange {
+      stroke: #8B5CF6 !important;
+      stroke-width: 2 !important;
+      stroke-dasharray: 4 2;
+      animation: flowDash 1.2s linear infinite;
+    }
+    .edge-dim { opacity: 0.12; }
+    .node-dim { opacity: 0.22; filter: grayscale(80%); }
+    .pulse-hot { animation: pulseHot 1.8s infinite; }
+    @keyframes pulseHot {
+      0% { box-shadow: 0 0 0 0 rgba(217, 107, 39, 0.4); }
+      70% { box-shadow: 0 0 0 8px rgba(217, 107, 39, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(217, 107, 39, 0); }
+    }
+  </style>
+</head>
+<body class="h-full bg-[#FAF8F5] text-[#18181B] flex flex-col font-sans select-none overflow-hidden antialiased">
+
+  <!-- ========================================================================= -->
+  <!-- 1. 顶部控制与时间轴回溯条 (Header & Time-Travel Bar) -->
+  <!-- ========================================================================= -->
+  <header class="h-[52px] min-h-[52px] bg-[#FAF8F5] border-b border-black/[0.08] flex items-center justify-between px-4 z-30 select-none">
+    <div class="flex items-center gap-3">
+      <div class="w-7 h-7 rounded-xl bg-[#D96B27] text-white flex items-center justify-center font-bold text-sm shadow-xs">🕸️</div>
+      <div>
+        <div class="flex items-center gap-2">
+          <span class="text-xs font-bold text-[#18181B]">代码知识图谱与文件变更演进 (Knowledge Graph & File History)</span>
+          <span id="statBadge" class="text-[10px] text-[#10A37F] bg-[#10A37F]/10 px-1.5 py-0.2 rounded font-mono font-medium">12 个实体 · 4 次重大演进</span>
+        </div>
+        <div class="text-[10px] text-[#71717A] flex items-center gap-2">
+          <span>Git 仓库: <strong class="text-[#27272A] font-mono">agent-learning</strong></span>
+          <span>·</span>
+          <span>当前分支: <span class="text-[#D96B27] font-mono font-semibold">main</span></span>
+          <span>·</span>
+          <span>最新提交: <span class="font-mono text-[#52525B]">e82a1cf (刚刚)</span></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 中间：核心视图模式切换器 (架构拓扑 vs 文件变更历史) -->
+    <div class="flex items-center p-1 bg-black/[0.04] rounded-xl text-xs font-semibold">
+      <button onclick="switchViewMode('architecture')" id="btn-mode-arch" class="mode-btn px-3 py-1 rounded-lg bg-white text-[#D96B27] shadow-xs transition-all flex items-center gap-1.5">
+        <span>🏛️ 静态架构拓扑</span>
+      </button>
+      <button onclick="switchViewMode('history')" id="btn-mode-hist" class="mode-btn px-3 py-1 rounded-lg text-[#71717A] hover:text-[#18181B] transition-all flex items-center gap-1.5">
+        <span>⏱️ 文件变更历史与演进</span>
+        <span class="w-1.5 h-1.5 rounded-full bg-[#D96B27] animate-ping"></span>
+      </button>
+    </div>
+
+    <!-- 右侧操作组 -->
+    <div class="flex items-center gap-2">
+      <button onclick="runASTScan()" id="scanBtn" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white hover:bg-black/[0.03] text-xs font-medium text-[#18181B] border border-black/[0.08] shadow-2xs transition-all cursor-pointer">
+        <svg class="w-3.5 h-3.5 text-[#D96B27]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+        <span>扫描 Git 变更</span>
+      </button>
+
+      <button onclick="openAddNodeModal()" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#D96B27] hover:bg-[#B8551B] text-white text-xs font-semibold shadow-xs transition-all cursor-pointer">
+        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        <span>记录架构决策 (ADR)</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- ========================================================================= -->
+  <!-- 2. 【核心亮点】时间演进滑块条 (Time-Travel Evolution Slider) -->
+  <!-- ========================================================================= -->
+  <div id="timelineBar" class="h-10 min-h-[40px] bg-[#EFEAE4] border-b border-black/[0.08] px-6 flex items-center justify-between z-20 text-xs">
+    <div class="flex items-center gap-2 font-medium text-[#52525B]">
+      <span class="text-sm">⏳</span>
+      <span class="font-bold text-[#18181B]">代码演进时间线 (Time-Travel):</span>
+    </div>
+
+    <!-- 时间节点分段控制器 -->
+    <div class="flex items-center gap-1">
+      <button onclick="seekTimeline(1)" id="step-1" class="time-step px-2.5 py-1 rounded-lg text-xs font-medium text-[#71717A] hover:bg-white/60 transition-all flex items-center gap-1">
+        <span class="w-1.5 h-1.5 rounded-full bg-black/30"></span>
+        <span>① 初始架设 (v1.0)</span>
+      </button>
+      <span class="text-[#A1A1AA]">➔</span>
+
+      <button onclick="seekTimeline(2)" id="step-2" class="time-step px-2.5 py-1 rounded-lg text-xs font-medium text-[#71717A] hover:bg-white/60 transition-all flex items-center gap-1">
+        <span class="w-1.5 h-1.5 rounded-full bg-black/30"></span>
+        <span>② 接入 Sub2API (v1.5)</span>
+      </button>
+      <span class="text-[#A1A1AA]">➔</span>
+
+      <button onclick="seekTimeline(3)" id="step-3" class="time-step px-2.5 py-1 rounded-lg text-xs font-medium text-[#71717A] hover:bg-white/60 transition-all flex items-center gap-1">
+        <span class="w-1.5 h-1.5 rounded-full bg-black/30"></span>
+        <span>③ 重构 Go+Wails 原生 (v1.9)</span>
+      </button>
+      <span class="text-[#A1A1AA]">➔</span>
+
+      <button onclick="seekTimeline(4)" id="step-4" class="time-step active px-2.5 py-1 rounded-lg text-xs font-semibold bg-white text-[#D96B27] shadow-xs border border-black/[0.06] transition-all flex items-center gap-1">
+        <span class="w-2 h-2 rounded-full bg-[#10A37F] animate-pulse"></span>
+        <span>④ CAP/Sub2 认证 (v2.0 最新)</span>
+      </button>
+      <span class="text-[#A1A1AA]">➔</span>
+
+      <button onclick="seekTimeline(5)" id="step-5" class="time-step px-2.5 py-1 rounded-lg text-xs font-medium text-amber-700 bg-amber-500/10 hover:bg-amber-500/20 transition-all flex items-center gap-1">
+        <span class="w-1.5 h-1.5 rounded-full bg-amber-600"></span>
+        <span>⑤ 工作区更改 (2 文件待暂存)</span>
+      </button>
+    </div>
+
+    <div class="text-[11px] text-[#71717A] font-mono">
+      当前选中快照: <span id="currentSnapshotTag" class="text-[#18181B] font-bold">commit e82a1c · 最新稳定版</span>
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- 3. 主体工作区 (左侧筛选 + 中间拓扑画布 + 右侧实体与文件变更历史面板) -->
+  <!-- ========================================================================= -->
+  <div class="flex-1 flex overflow-hidden relative">
+
+    <!-- 1. 左侧过滤器 (180px) -->
+    <aside class="w-[180px] bg-[#F4EFEA] border-r border-black/[0.08] p-3 flex flex-col justify-between shrink-0">
+      <div class="space-y-1">
+        <div class="px-2 py-1 text-[11px] font-bold text-[#71717A] uppercase tracking-wider">实体与变更维度</div>
+        
+        <button onclick="filterCategory('all')" id="cat-all" class="cat-btn active w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-white text-[#D96B27] shadow-2xs border border-black/[0.06] transition-all flex items-center justify-between">
+          <span class="flex items-center gap-1.5"><span>🌐</span><span>全部图谱实体</span></span>
+          <span class="text-[10px] text-[#71717A] font-mono">10</span>
+        </button>
+
+        <button onclick="filterCategory('layer')" id="cat-layer" class="cat-btn w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-medium text-[#71717A] hover:bg-black/[0.04] transition-all flex items-center justify-between">
+          <span class="flex items-center gap-1.5"><span>🏛️</span><span>系统架构层</span></span>
+          <span class="text-[10px] text-[#71717A] font-mono">4</span>
+        </button>
+
+        <button onclick="filterCategory('hotspot')" id="cat-hotspot" class="cat-btn w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-medium text-[#71717A] hover:bg-black/[0.04] transition-all flex items-center justify-between">
+          <span class="flex items-center gap-1.5"><span>🔥</span><span>高频变更热点</span></span>
+          <span class="text-[10px] text-red-600 font-mono font-bold">3</span>
+        </button>
+
+        <button onclick="filterCategory('adr')" id="cat-adr" class="cat-btn w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-medium text-[#71717A] hover:bg-black/[0.04] transition-all flex items-center justify-between">
+          <span class="flex items-center gap-1.5"><span>📜</span><span>架构决策 ADR</span></span>
+          <span class="text-[10px] text-[#71717A] font-mono">3</span>
+        </button>
+      </div>
+
+      <div class="p-2.5 rounded-xl bg-white/80 border border-black/[0.06] text-[11px] text-[#71717A] space-y-1.5">
+        <div class="font-bold text-[#18181B] flex items-center gap-1"><span>💡</span><span>变更历史说明</span></div>
+        <p>• <span class="text-orange-600 font-bold">橙色虚线</span>：架构依赖与接口调用关系</p>
+        <p>• <span class="text-purple-600 font-bold">紫色波浪线</span>：历史协同修改耦合（经常一起被提交的代码）</p>
+        <p>• 右侧可查看任意文件的历次 Commit 日志与差异行数！</p>
+      </div>
+    </aside>
+
+    <!-- 2. 中间交互式拓扑画布 (SVG 贝塞尔曲线 + 节点卡片) -->
+    <main class="flex-1 bg-[#F5F2ED] relative overflow-hidden flex flex-col">
+      <!-- 画布浮动控制工具栏 -->
+      <div class="absolute top-4 left-4 z-20 flex items-center gap-2 bg-white/90 backdrop-blur-xs p-1.5 rounded-xl border border-black/[0.08] shadow-xs text-xs">
+        <span class="text-[11px] font-semibold text-[#71717A] px-1">模式:</span>
+        <span id="modeBadgeText" class="px-2 py-0.5 rounded-md bg-[#D96B27]/10 text-[#D96B27] font-semibold">架构拓扑模式</span>
+        <div class="h-3 w-[1px] bg-black/[0.1] mx-1"></div>
+        <span class="text-[11px] text-[#71717A]">状态图例:</span>
+        <span class="flex items-center gap-1 text-[10px]"><span class="w-2 h-2 rounded-full bg-emerald-500"></span> 稳定</span>
+        <span class="flex items-center gap-1 text-[10px]"><span class="w-2 h-2 rounded-full bg-amber-500"></span> 本次修改</span>
+        <span class="flex items-center gap-1 text-[10px]"><span class="w-2 h-2 rounded-full bg-red-500"></span> 高频热力</span>
+        <button onclick="resetGraphView()" class="ml-2 text-[#71717A] hover:text-[#18181B] px-1.5 py-0.5 rounded hover:bg-black/[0.05]">重置视角</button>
+      </div>
+
+      <!-- 画布主体 -->
+      <div id="canvasContainer" class="flex-1 relative overflow-auto p-8 flex items-center justify-center">
+        <!-- SVG 连线层 -->
+        <svg id="kgSvgLines" class="absolute inset-0 w-full h-full pointer-events-none" style="min-width: 1100px; min-height: 600px;">
+          <!-- 静态调用连线 (橙灰色) -->
+          <path id="edge-wails-runtime" d="M 240 120 C 310 120, 320 120, 380 120" stroke="#71717A" stroke-width="1.8" fill="none" opacity="0.4" />
+          <path id="edge-runtime-sub2api" d="M 580 120 C 640 120, 650 120, 720 120" stroke="#71717A" stroke-width="1.8" fill="none" opacity="0.4" />
+          <path id="edge-sub2api-channel" d="M 820 160 C 820 220, 820 230, 820 280" stroke="#71717A" stroke-width="1.8" fill="none" opacity="0.4" />
+          <path id="edge-wails-adr001" d="M 140 170 C 140 220, 140 230, 140 280" stroke="#71717A" stroke-width="1.8" fill="none" opacity="0.4" />
+          <path id="edge-runtime-vue" d="M 480 170 C 480 220, 480 230, 480 280" stroke="#71717A" stroke-width="1.8" fill="none" opacity="0.4" />
+          <path id="edge-sub2api-adr003" d="M 920 120 C 990 120, 990 120, 1020 120" stroke="#71717A" stroke-width="1.8" fill="none" opacity="0.4" />
+
+          <!-- 【新增】协同变更耦合历史连线 (Co-Change Coupling Lines, 紫色) -->
+          <!-- main.go 与 app.go 在 80% 的 Commit 中一同修改 -->
+          <path id="cochange-main-app" d="M 240 140 C 310 180, 320 180, 380 280" stroke="#8B5CF6" stroke-width="2" stroke-dasharray="4 2" fill="none" opacity="0.6" />
+          <!-- sub2api 与 channel 在本次提交中强关联修改 -->
+          <path id="cochange-sub2api-channel" d="M 780 160 C 740 220, 740 220, 760 280" stroke="#8B5CF6" stroke-width="2" stroke-dasharray="4 2" fill="none" opacity="0.6" />
+        </svg>
+
+        <!-- 节点容器 (网格绝对定位) -->
+        <div class="relative" style="width: 1200px; height: 580px;">
+
+          <!-- 节点 1: Wails Native Host -->
+          <div onclick="selectNode('wails')" id="node-wails" class="kg-node layer hotspot cursor-pointer absolute left-[40px] top-[70px] w-[200px] p-3.5 rounded-2xl bg-white border-2 border-[#D96B27] shadow-md hover:shadow-xl transition-all pulse-hot">
+            <div class="flex items-center justify-between text-xs font-bold text-[#18181B]">
+              <span class="flex items-center gap-1.5"><span class="text-base">🏛️</span><span>Wails 宿主层</span></span>
+              <span class="text-[9px] text-red-600 bg-red-50 px-1.5 py-0.2 rounded font-mono font-bold">🔥 14次变更</span>
+            </div>
+            <div class="text-[11px] text-[#71717A] mt-1.5 font-mono">backend/main.go</div>
+            <div class="flex items-center justify-between mt-2 text-[10px]">
+              <span class="text-amber-600 font-bold bg-amber-50 px-1.5 py-0.2 rounded font-mono">~M 修改中 (+112/-45)</span>
+              <span class="text-[#71717A] font-mono">20分钟前</span>
+            </div>
+          </div>
+
+          <!-- 节点 2: Go Agent Runtime -->
+          <div onclick="selectNode('runtime')" id="node-runtime" class="kg-node layer cursor-pointer absolute left-[380px] top-[70px] w-[200px] p-3.5 rounded-2xl bg-white border border-black/[0.12] shadow-md hover:shadow-xl transition-all">
+            <div class="flex items-center justify-between text-xs font-bold text-[#18181B]">
+              <span class="flex items-center gap-1.5"><span class="text-base">⚡</span><span>Go 执行核心</span></span>
+              <span class="text-[9px] text-[#10A37F] bg-[#10A37F]/10 px-1.5 py-0.2 rounded font-mono font-bold">8次变更</span>
+            </div>
+            <div class="text-[11px] text-[#71717A] mt-1.5 font-mono">internal/agent/executor.go</div>
+            <div class="flex items-center justify-between mt-2 text-[10px]">
+              <span class="text-[#10A37F] font-bold bg-emerald-50 px-1.5 py-0.2 rounded font-mono">稳定 · v2.0 就绪</span>
+              <span class="text-[#71717A] font-mono">1小时前</span>
+            </div>
+          </div>
+
+          <!-- 节点 3: Sub2API Gateway Pool -->
+          <div onclick="selectNode('sub2api')" id="node-sub2api" class="kg-node layer hotspot cursor-pointer absolute left-[720px] top-[70px] w-[200px] p-3.5 rounded-2xl bg-white border-2 border-blue-500 shadow-md hover:shadow-xl transition-all">
+            <div class="flex items-center justify-between text-xs font-bold text-[#18181B]">
+              <span class="flex items-center gap-1.5"><span class="text-base">🌐</span><span>Sub2API 网关池</span></span>
+              <span class="text-[9px] text-blue-600 bg-blue-50 px-1.5 py-0.2 rounded font-mono font-bold">🔥 19次变更</span>
+            </div>
+            <div class="text-[11px] text-[#71717A] mt-1.5 font-mono">internal/service/gateway.go</div>
+            <div class="flex items-center justify-between mt-2 text-[10px]">
+              <span class="text-blue-600 font-bold bg-blue-50 px-1.5 py-0.2 rounded font-mono">+A 接入 CAP/Sub2</span>
+              <span class="text-[#71717A] font-mono">刚刚提交</span>
+            </div>
+          </div>
+
+          <!-- 节点 4: ADR-003 OpenAI 认证支持 -->
+          <div onclick="selectNode('adr003')" id="node-adr003" class="kg-node adr cursor-pointer absolute left-[1020px] top-[70px] w-[170px] p-3 rounded-2xl bg-[#FAF8F5] border border-amber-300 shadow-xs hover:shadow-md transition-all">
+            <div class="flex items-center justify-between text-xs font-bold text-[#18181B]">
+              <span class="flex items-center gap-1"><span>📜</span><span>ADR-003</span></span>
+              <span class="text-[9px] text-amber-700 bg-amber-100 px-1.5 py-0.2 rounded font-mono">新增决策</span>
+            </div>
+            <div class="text-[11px] font-semibold text-[#18181B] mt-1">CAP/auth.json 规范</div>
+            <div class="text-[10px] text-[#71717A] mt-1">commit e82a1c 固化</div>
+          </div>
+
+          <!-- 节点 5: ADR-001 Wails 原生架构 -->
+          <div onclick="selectNode('adr001')" id="node-adr001" class="kg-node adr cursor-pointer absolute left-[40px] top-[260px] w-[200px] p-3 rounded-2xl bg-[#FAF8F5] border border-amber-300 shadow-xs hover:shadow-md transition-all">
+            <div class="flex items-center justify-between text-xs font-bold text-[#18181B]">
+              <span class="flex items-center gap-1"><span>📜</span><span>ADR-001</span></span>
+              <span class="text-[9px] text-amber-700 bg-amber-100 px-1.5 py-0.2 rounded font-mono">已合入</span>
+            </div>
+            <div class="text-[11px] font-semibold text-[#18181B] mt-1">确立纯原生 Go+Wails</div>
+            <div class="text-[10px] text-[#71717A] mt-1">彻底移除遗留跨进程 Mock</div>
+          </div>
+
+          <!-- 节点 6: Vue 3.4 响应式前端 -->
+          <div onclick="selectNode('vue')" id="node-vue" class="kg-node layer hotspot cursor-pointer absolute left-[380px] top-[260px] w-[200px] p-3.5 rounded-2xl bg-white border border-black/[0.12] shadow-md hover:shadow-xl transition-all">
+            <div class="flex items-center justify-between text-xs font-bold text-[#18181B]">
+              <span class="flex items-center gap-1.5"><span class="text-base">🎨</span><span>Vue 3.4 前端层</span></span>
+              <span class="text-[9px] text-red-600 bg-red-50 px-1.5 py-0.2 rounded font-mono font-bold">🔥 22次变更</span>
+            </div>
+            <div class="text-[11px] text-[#71717A] mt-1.5 font-mono">frontend/src/App.vue</div>
+            <div class="flex items-center justify-between mt-2 text-[10px]">
+              <span class="text-purple-600 font-bold bg-purple-50 px-1.5 py-0.2 rounded font-mono">协同改动: main.go</span>
+              <span class="text-[#71717A] font-mono">刚刚</span>
+            </div>
+          </div>
+
+          <!-- 节点 7: Channel Pool 渠道池实体 -->
+          <div onclick="selectNode('channel')" id="node-channel" class="kg-node entity cursor-pointer absolute left-[720px] top-[260px] w-[200px] p-3.5 rounded-2xl bg-white border border-black/[0.12] shadow-md hover:shadow-xl transition-all">
+            <div class="flex items-center justify-between text-xs font-bold text-[#18181B]">
+              <span class="flex items-center gap-1.5"><span class="text-base">📦</span><span>渠道调度池 (Pool)</span></span>
+              <span class="text-[9px] text-purple-600 bg-purple-50 px-1.5 py-0.2 rounded font-mono font-bold">6次修改</span>
+            </div>
+            <div class="text-[11px] text-[#71717A] mt-1.5 font-mono">models/channel.go</div>
+            <div class="flex items-center justify-between mt-2 text-[10px]">
+              <span class="text-amber-600 font-bold bg-amber-50 px-1.5 py-0.2 rounded font-mono">+Sub2 订阅字段</span>
+              <span class="text-[#71717A] font-mono">昨天</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </main>
+
+    <!-- 3. 右侧实体智能检查器与【文件变更历史 Commit 链】(360px) -->
+    <aside class="w-[360px] bg-white border-l border-black/[0.08] p-4 flex flex-col justify-between overflow-y-auto shrink-0 shadow-lg z-20">
+      <div class="space-y-4">
+        <!-- 头部标题 -->
+        <div class="flex items-start justify-between border-b border-black/[0.06] pb-3">
+          <div class="flex items-center gap-2.5">
+            <span id="insIcon" class="text-2xl p-1.5 rounded-xl bg-[#FAF8F5] border border-black/[0.06]">🏛️</span>
+            <div>
+              <h3 id="insTitle" class="text-sm font-bold text-[#18181B]">Wails 宿主层 (Host Application)</h3>
+              <span id="insType" class="text-[10px] text-[#D96B27] font-mono font-bold bg-[#D96B27]/10 px-1.5 py-0.2 rounded">架构核心分层 (Core Layer)</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 语义说明 -->
+        <div class="space-y-1 text-xs">
+          <label class="font-semibold text-[#18181B]">实体职责与上下文语义:</label>
+          <p id="insDesc" class="text-[#52525B] leading-relaxed bg-[#FAF8F5] p-2.5 rounded-xl border border-black/[0.06] text-xs">
+            负责托管 Edge WebView2 窗体，通过 Wails v2 纯原生 Binding 暴露 Go API，管理多实例互斥与退出清理。
+          </p>
+        </div>
+
+        <!-- 【核心重磅新增】文件变更历史与 Commit 演进时间链 (Per-Node Git History) -->
+        <div class="space-y-2 text-xs">
+          <div class="flex items-center justify-between">
+            <label class="font-bold text-[#18181B] flex items-center gap-1.5">
+              <span>📜</span><span>该文件变更历史链 (Git Commit History):</span>
+            </label>
+            <span id="insChurnRate" class="text-[10px] text-red-600 bg-red-50 px-1.5 py-0.2 rounded font-mono font-bold">代码热度: 92%</span>
+          </div>
+
+          <!-- 提交历史列表 -->
+          <div id="insCommitList" class="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+            <!-- 提交项 1 -->
+            <div class="p-2.5 rounded-xl bg-[#FAF8F5] border border-black/[0.06] hover:border-[#D96B27] transition-all space-y-1 cursor-pointer">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-1.5 font-mono text-[11px] font-bold text-[#18181B]">
+                  <span class="w-1.5 h-1.5 rounded-full bg-[#10A37F]"></span>
+                  <span>commit e82a1c</span>
+                </div>
+                <span class="text-[10px] text-[#10A37F] font-mono font-bold">+112 / -45 行</span>
+              </div>
+              <p class="text-[11px] text-[#27272A] font-medium leading-tight">feat: 接入 Wails v2 原生启动绑定并清理遗留代理</p>
+              <div class="flex items-center justify-between text-[10px] text-[#71717A] pt-0.5">
+                <span>作者: Antigravity Dev</span>
+                <span>20分钟前</span>
+              </div>
+            </div>
+
+            <!-- 提交项 2 -->
+            <div class="p-2.5 rounded-xl bg-[#FAF8F5] border border-black/[0.06] hover:border-[#D96B27] transition-all space-y-1 cursor-pointer">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-1.5 font-mono text-[11px] font-bold text-[#52525B]">
+                  <span class="w-1.5 h-1.5 rounded-full bg-black/30"></span>
+                  <span>commit 9b3d0f</span>
+                </div>
+                <span class="text-[10px] text-[#52525B] font-mono">+48 / -12 行</span>
+              </div>
+              <p class="text-[11px] text-[#52525B] leading-tight">refactor: 增加 Windows 无边框拖拽区域与窗口阴影约束</p>
+              <div class="flex items-center justify-between text-[10px] text-[#71717A] pt-0.5">
+                <span>作者: Antigravity Dev</span>
+                <span>2小时前</span>
+              </div>
+            </div>
+
+            <!-- 提交项 3 -->
+            <div class="p-2.5 rounded-xl bg-[#FAF8F5] border border-black/[0.06] hover:border-[#D96B27] transition-all space-y-1 cursor-pointer">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-1.5 font-mono text-[11px] font-bold text-[#52525B]">
+                  <span class="w-1.5 h-1.5 rounded-full bg-black/30"></span>
+                  <span>commit 41a27e</span>
+                </div>
+                <span class="text-[10px] text-[#52525B] font-mono">+85 / -0 行</span>
+              </div>
+              <p class="text-[11px] text-[#52525B] leading-tight">chore: 初始化 Go 宿主工程结构与 wails.json 配置</p>
+              <div class="flex items-center justify-between text-[10px] text-[#71717A] pt-0.5">
+                <span>作者: Antigravity Dev</span>
+                <span>昨天</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 关联源文件路径与行号锚点 -->
+        <div class="space-y-1.5 text-xs">
+          <div class="flex items-center justify-between">
+            <label class="font-semibold text-[#18181B]">当前关联物理文件:</label>
+            <span class="text-[10px] text-[#D96B27] font-semibold cursor-pointer" onclick="showToast('已在右侧拉起 Diff 对比视窗')">打开 Diff 对比 ➔</span>
+          </div>
+          <div id="insFiles" class="space-y-1 font-mono text-[11px] text-[#27272A]">
+            <div class="p-2 rounded-lg bg-[#FAF8F5] border border-black/[0.04] flex items-center justify-between">
+              <span>backend/main.go</span>
+              <span class="text-amber-600 font-bold font-mono">工作区修改中</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 底部动作条 -->
+      <div class="pt-3 border-t border-black/[0.06] space-y-2 shrink-0">
+        <button onclick="injectNodeToPrompt()" class="w-full py-2 rounded-xl bg-[#D96B27] hover:bg-[#B8551B] text-white text-xs font-semibold shadow-xs transition-all cursor-pointer flex items-center justify-center gap-1.5">
+          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          <span>将该文件变更历史注入 Agent 讨论</span>
+        </button>
+        <button onclick="showToast('正在调取 Git Log 完整提交图谱...')" class="w-full py-1.5 rounded-xl bg-[#FAF8F5] hover:bg-black/[0.04] text-xs font-medium text-[#27272A] border border-black/[0.08] transition-all cursor-pointer">
+          查看完整 Git 提交图谱 (Git Graph)
+        </button>
+      </div>
+    </aside>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="hidden fixed bottom-5 right-5 z-50 px-3.5 py-2 rounded-xl bg-[#18181B] text-white text-xs shadow-xl flex items-center gap-2 transition-all">
+    <span id="toastText">操作成功</span>
+  </div>
+
+  <!-- JavaScript 交互逻辑 -->
+  <script>
+    const NODE_DETAILS = {
+      wails: {
+        icon: "🏛️",
+        title: "Wails 宿主层 (Host Application)",
+        type: "架构核心分层 (Core Layer)",
+        desc: "负责托管基于 Edge WebView2 的无边框桌面窗体，通过 Wails v2 纯原生 Binding 机制暴露 Go 原生运行时 API，管理窗口阴影、无边框缩放、进程单实例保护与退出清理。",
+        churn: "代码热度: 92% (高频修改)",
+        commits: [
+          { hash: "e82a1cf", diff: "+112 / -45 行", msg: "feat: 接入 Wails v2 原生启动绑定并清理遗留代理", time: "20分钟前" },
+          { hash: "9b3d0fe", diff: "+48 / -12 行", msg: "refactor: 增加 Windows 无边框拖拽区域与窗口阴影约束", time: "2小时前" },
+          { hash: "41a27e1", diff: "+85 / -0 行", msg: "chore: 初始化 Go 宿主工程结构与 wails.json 配置", time: "昨天" }
+        ],
+        files: [{ name: "backend/main.go", role: "工作区修改中" }],
+        edges: ["edge-wails-runtime", "edge-wails-adr001"],
+        cochanges: ["cochange-main-app"]
+      },
+      runtime: {
+        icon: "⚡",
+        title: "Go 业务执行核心 (Agent Runtime)",
+        type: "执行引擎 (Runtime Engine)",
+        desc: "自主 Agent 的极速调度大脑，基于 Go 1.22 强类型并发模型实现 Act 模式极速双环、AST 静态代码语义解析、Diff 生成与测试自愈调度。",
+        churn: "代码热度: 68% (中度活跃)",
+        commits: [
+          { hash: "f391b4a", diff: "+64 / -8 行", msg: "feat: 完善 Go 极速双环调度状态机与超时熔断保护", time: "1小时前" },
+          { hash: "7c12d09", diff: "+120 / -15 行", msg: "feat: 实现 AST 静态代码解析器与本地受控沙箱", time: "昨天" }
+        ],
+        files: [{ name: "backend/internal/agent/executor.go", role: "稳定版本" }],
+        edges: ["edge-wails-runtime", "edge-runtime-sub2api", "edge-runtime-vue"],
+        cochanges: ["cochange-main-app"]
+      },
+      sub2api: {
+        icon: "🌐",
+        title: "Sub2API 多网关认证池 (Gateway Pool)",
+        type: "路由与凭据中枢 (Gateway & Auth)",
+        desc: "对齐 E:/pro/sub2api 工业级网关规范，统一管理 Anthropic OAuth、OpenAI CAP/Sub2、DeepSeek、Gemini 与 xAI 等多厂商凭据池与毫秒级自动容灾探活。",
+        churn: "代码热度: 95% (极高频修改)",
+        commits: [
+          { hash: "e82a1cf", diff: "+92 / -6 行", msg: "feat: 增加 OpenAI CAP (Codex auth.json) 与 Sub2 跨实例透传", time: "刚刚" },
+          { hash: "b284ac1", diff: "+140 / -22 行", msg: "feat: 对齐 Sub2API 8大厂商凭据数据结构与动态认证表单", time: "3小时前" }
+        ],
+        files: [{ name: "backend/internal/service/gateway.go", role: "最新接入" }],
+        edges: ["edge-runtime-sub2api", "edge-sub2api-channel", "edge-sub2api-adr003"],
+        cochanges: ["cochange-sub2api-channel"]
+      },
+      vue: {
+        icon: "🎨",
+        title: "Vue 3.4 响应式前端 (Cockpit)",
+        type: "用户界面层 (UI & Workspace)",
+        desc: "遵循 Linear / OpenAI 现代工程极简美学，采用 60-30-10 陶土暖橙高对比阶梯，内嵌 Monaco Split Diff 双栏审查器与平滑会话树。",
+        churn: "代码热度: 98% (极高频迭代)",
+        commits: [
+          { hash: "e82a1cf", diff: "+180 / -30 行", msg: "feat: 新增最左侧 48px 主活动导航栏与项目全局知识图谱 Demo", time: "刚刚" },
+          { hash: "d8102fa", diff: "+85 / -12 行", msg: "style: 纠正设置面板为 Master-Detail 保存列表到按需弹窗模式", time: "1小时前" }
+        ],
+        files: [{ name: "frontend/src/App.vue", role: "最新热更新" }],
+        edges: ["edge-runtime-vue"],
+        cochanges: ["cochange-main-app"]
+      },
+      channel: {
+        icon: "📦",
+        title: "渠道调度池 (Channel Pool)",
+        type: "核心业务模型 (Domain Entity)",
+        desc: "维护活跃主用渠道、备用渠道队列、各端点测速延迟（Ping Latency）与配额健康度，支持并发无锁读取。",
+        churn: "代码热度: 54% (稳定)",
+        commits: [
+          { hash: "b284ac1", diff: "+35 / -4 行", msg: "refactor: 新增 Sub2API 专享订阅标签与自动静默重试字段", time: "3小时前" }
+        ],
+        files: [{ name: "models/channel.go", role: "结构体固化" }],
+        edges: ["edge-sub2api-channel"],
+        cochanges: ["cochange-sub2api-channel"]
+      },
+      adr001: {
+        icon: "📜",
+        title: "ADR-001: 确立纯原生 Go+Wails 架构",
+        type: "架构决策记录 (ADR)",
+        desc: "【架构决议】坚决废弃任何由 Tauri 遗留的跨进程代理方案，使用 Go 1.22 + Wails v2 + Vue 3.4 纯原生编译为单一二进制，杜绝控制台黑框与中间 Mock 欺骗。",
+        churn: "状态: 已合入 (Immutable)",
+        commits: [
+          { hash: "9b3d0fe", diff: "+240 / -0 行", msg: "docs(adr): 撰写并确认 ADR-001 原生架构白皮书", time: "昨天" }
+        ],
+        files: [{ name: "TECHNICAL_AND_PRD_REPORT.md", role: "白皮书" }],
+        edges: ["edge-wails-adr001"]
+      },
+      adr003: {
+        icon: "📜",
+        title: "ADR-003: OpenAI 引入 CAP 与 Sub2 规范",
+        type: "架构决策记录 (ADR)",
+        desc: "【架构决议】模型网关深度集成 Codex OAuth auth.json (CAP) 会话一键导入与 Sub2 订阅卡密跨实例透传，实现与商用集群的平滑接轨。",
+        churn: "状态: 最新确认 (Active)",
+        commits: [
+          { hash: "e82a1cf", diff: "+110 / -0 行", msg: "docs(adr): 沉淀 ADR-003 关于 OpenAI CAP/Sub2 的集成规约", time: "刚刚" }
+        ],
+        files: [{ name: "docs/TECHNICAL_AND_PRD_REPORT.md", role: "PRD规范" }],
+        edges: ["edge-sub2api-adr003"]
+      }
+    };
+
+    let currentMode = 'architecture';
+
+    function switchViewMode(mode) {
+      currentMode = mode;
+      document.querySelectorAll('.mode-btn').forEach(b => {
+        b.className = "mode-btn px-3 py-1 rounded-lg text-[#71717A] hover:text-[#18181B] transition-all flex items-center gap-1.5";
+      });
+
+      if (mode === 'architecture') {
+        document.getElementById('btn-mode-arch').className = "mode-btn px-3 py-1 rounded-lg bg-white text-[#D96B27] shadow-xs transition-all flex items-center gap-1.5 font-semibold";
+        document.getElementById('modeBadgeText').innerText = "架构拓扑模式 (静态依赖)";
+        document.querySelectorAll('#kgSvgLines path').forEach(p => {
+          if (p.id.startsWith('cochange-')) p.style.display = 'none';
+          else p.style.display = 'block';
+        });
+        showToast('已切换至【静态架构拓扑视图】');
+      } else {
+        document.getElementById('btn-mode-hist').className = "mode-btn px-3 py-1 rounded-lg bg-white text-[#D96B27] shadow-xs transition-all flex items-center gap-1.5 font-semibold";
+        document.getElementById('modeBadgeText').innerText = "文件变更历史演进 (紫色虚线: 协同提交耦合)";
+        document.querySelectorAll('#kgSvgLines path').forEach(p => {
+          p.style.display = 'block';
+        });
+        showToast('已切换至【文件变更历史与时间线视图】');
+      }
+      selectNode('wails');
+    }
+
+    function seekTimeline(step) {
+      document.querySelectorAll('.time-step').forEach(btn => {
+        btn.className = "time-step px-2.5 py-1 rounded-lg text-xs font-medium text-[#71717A] hover:bg-white/60 transition-all flex items-center gap-1";
+      });
+      const activeBtn = document.getElementById('step-' + step);
+      if (activeBtn) {
+        activeBtn.className = "time-step active px-2.5 py-1 rounded-lg text-xs font-semibold bg-white text-[#D96B27] shadow-xs border border-black/[0.06] transition-all flex items-center gap-1";
+      }
+
+      const tag = document.getElementById('currentSnapshotTag');
+      if (step === 1) {
+        tag.innerText = "commit a1029c · 初始项目脚手架";
+        document.getElementById('node-sub2api').classList.add('node-dim');
+        document.getElementById('node-adr003').classList.add('node-dim');
+        showToast('已回溯至 [阶段 1: 初始架设]');
+      } else if (step === 2) {
+        tag.innerText = "commit 7c12d0 · 接入 Sub2API 凭据管理";
+        document.getElementById('node-sub2api').classList.remove('node-dim');
+        document.getElementById('node-adr003').classList.add('node-dim');
+        showToast('已回溯至 [阶段 2: 接入 Sub2API]');
+      } else if (step === 3) {
+        tag.innerText = "commit 9b3d0f · 废除 Tauri 重构为 Go+Wails 原生";
+        document.getElementById('node-sub2api').classList.remove('node-dim');
+        document.getElementById('node-adr003').classList.add('node-dim');
+        showToast('已回溯至 [阶段 3: Wails 原生重构]');
+      } else if (step === 4) {
+        tag.innerText = "commit e82a1c · 增加 OpenAI CAP 与 Sub2 认证 (最新稳定版)";
+        document.querySelectorAll('.kg-node').forEach(n => n.classList.remove('node-dim'));
+        showToast('已切换至 [阶段 4: 当前最新正式版本]');
+      } else if (step === 5) {
+        tag.innerText = "Working Tree · 2 个文件待暂存提交 (main.go, app.go)";
+        document.querySelectorAll('.kg-node').forEach(n => n.classList.remove('node-dim'));
+        showToast('已定位至 [阶段 5: 当前本地未提交工作区]');
+      }
+    }
+
+    function selectNode(key) {
+      const data = NODE_DETAILS[key];
+      if (!data) return;
+
+      document.querySelectorAll('.kg-node').forEach(node => {
+        node.classList.remove('border-2', 'border-[#D96B27]', 'ring-4', 'ring-[#D96B27]/20', 'shadow-2xl');
+        node.classList.add('border', 'border-black/[0.12]');
+      });
+      const activeEl = document.getElementById('node-' + key);
+      if (activeEl) {
+        activeEl.classList.remove('border-black/[0.12]');
+        activeEl.classList.add('border-2', 'border-[#D96B27]', 'ring-4', 'ring-[#D96B27]/20', 'shadow-2xl');
+      }
+
+      document.querySelectorAll('#kgSvgLines path').forEach(path => {
+        path.classList.remove('edge-active', 'edge-cochange');
+        path.classList.add('edge-dim');
+      });
+
+      (data.edges || []).forEach(edgeId => {
+        const p = document.getElementById(edgeId);
+        if (p) {
+          p.classList.remove('edge-dim');
+          p.classList.add('edge-active');
+        }
+      });
+
+      (data.cochanges || []).forEach(edgeId => {
+        const p = document.getElementById(edgeId);
+        if (p) {
+          p.classList.remove('edge-dim');
+          p.classList.add('edge-cochange');
+        }
+      });
+
+      document.getElementById('insIcon').innerText = data.icon;
+      document.getElementById('insTitle').innerText = data.title;
+      document.getElementById('insType').innerText = data.type;
+      document.getElementById('insDesc').innerText = data.desc;
+      document.getElementById('insChurnRate').innerText = data.churn || '热度: 正常';
+
+      // 渲染提交历史
+      const commitList = document.getElementById('insCommitList');
+      commitList.innerHTML = '';
+      (data.commits || []).forEach(c => {
+        const div = document.createElement('div');
+        div.className = "p-2.5 rounded-xl bg-[#FAF8F5] border border-black/[0.06] hover:border-[#D96B27] transition-all space-y-1 cursor-pointer";
+        div.onclick = () => showToast(`已加载提交 ${c.hash} 的历史 Diff 补丁`);
+        div.innerHTML = `
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-1.5 font-mono text-[11px] font-bold text-[#18181B]">
+              <span class="w-1.5 h-1.5 rounded-full bg-[#10A37F]"></span>
+              <span>commit ${c.hash}</span>
+            </div>
+            <span class="text-[10px] text-[#10A37F] font-mono font-bold">${c.diff}</span>
+          </div>
+          <p class="text-[11px] text-[#27272A] font-medium leading-tight">${c.msg}</p>
+          <div class="flex items-center justify-between text-[10px] text-[#71717A] pt-0.5">
+            <span>作者: Antigravity Dev</span>
+            <span>${c.time}</span>
+          </div>
+        `;
+        commitList.appendChild(div);
+      });
+
+      const filesContainer = document.getElementById('insFiles');
+      filesContainer.innerHTML = '';
+      (data.files || []).forEach(f => {
+        const d = document.createElement('div');
+        d.className = 'p-2 rounded-lg bg-[#FAF8F5] border border-black/[0.04] flex items-center justify-between';
+        d.innerHTML = `<span>${f.name}</span><span class="text-amber-600 font-bold font-mono">${f.role}</span>`;
+        filesContainer.appendChild(d);
+      });
+
+      showToast(`已展开【${data.title.split(' ')[0]}】的文件变更历史`);
+    }
+
+    function filterCategory(cat) {
+      document.querySelectorAll('.cat-btn').forEach(b => {
+        b.className = "cat-btn w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-medium text-[#71717A] hover:bg-black/[0.04] transition-all flex items-center justify-between";
+      });
+      const activeBtn = document.getElementById('cat-' + cat);
+      if (activeBtn) {
+        activeBtn.className = "cat-btn active w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-white text-[#D96B27] shadow-2xs border border-black/[0.06] transition-all flex items-center justify-between";
+      }
+
+      document.querySelectorAll('.kg-node').forEach(n => {
+        if (cat === 'all') {
+          n.classList.remove('node-dim', 'hidden');
+        } else if (n.classList.contains(cat)) {
+          n.classList.remove('node-dim', 'hidden');
+        } else {
+          n.classList.add('node-dim');
+        }
+      });
+      showToast(`已筛选: ${cat.toUpperCase()}`);
+    }
+
+    function runASTScan() {
+      const btn = document.getElementById('scanBtn');
+      btn.innerHTML = `<span class="animate-spin mr-1">⏳</span><span>解析 Git Commit 历史与 AST...</span>`;
+      setTimeout(() => {
+        btn.innerHTML = `<svg class="w-3.5 h-3.5 text-[#D96B27]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg><span>扫描 Git 变更</span>`;
+        showToast('✓ 变更历史已同步：检测到最近 14 次提交，高频耦合对: [main.go <-> App.vue]');
+      }, 700);
+    }
+
+    function injectNodeToPrompt() {
+      const title = document.getElementById('insTitle').innerText;
+      showToast(`✓ 已将【${title}】的最新变更历史与差异摘要注入 Agent 对话上下文！`);
+    }
+
+    function resetGraphView() {
+      document.querySelectorAll('.kg-node').forEach(n => n.classList.remove('node-dim', 'hidden'));
+      document.querySelectorAll('#kgSvgLines path').forEach(p => p.classList.remove('edge-dim', 'edge-active'));
+      selectNode('wails');
+      showToast('已重置知识图谱视角');
+    }
+
+    function showToast(msg) {
+      const toast = document.getElementById('toast');
+      const text = document.getElementById('toastText');
+      text.innerText = msg;
+      toast.classList.remove('hidden');
+      setTimeout(() => { toast.classList.add('hidden'); }, 2400);
+    }
+
+    // 初始化
+    switchViewMode('architecture');
+  </script>
+</body>
+</html>
