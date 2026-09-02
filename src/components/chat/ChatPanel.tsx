@@ -120,6 +120,26 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     return 25000;
   });
 
+  const [swarmWorkersCount, setSwarmWorkersCount] = useState<number>(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        const saved = localStorage.getItem('tcode_swarm_workers');
+        return saved ? parseInt(saved, 10) : 3;
+      }
+    } catch (e) {}
+    return 3;
+  });
+
+  const [confidenceThreshold, setConfidenceThreshold] = useState<number>(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        const saved = localStorage.getItem('tcode_swarm_confidence');
+        return saved ? parseFloat(saved) : 0.8;
+      }
+    } catch (e) {}
+    return 0.8;
+  });
+
   const [swarmFlowData, setSwarmFlowData] = useState<SwarmFlowState | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -137,6 +157,21 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     setSwarmBudgetTokens(tokens);
     if (typeof window !== 'undefined') {
       localStorage.setItem('tcode_swarm_budget', String(tokens));
+    }
+  };
+
+  const handleWorkersCountChange = (count: number) => {
+    setSwarmWorkersCount(count);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('tcode_swarm_workers', String(count));
+    }
+    toast.success(`已配置 Swarm 并发 Worker 数: ${count} 路并行`);
+  };
+
+  const handleConfidenceThresholdChange = (threshold: number) => {
+    setConfidenceThreshold(threshold);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('tcode_swarm_confidence', String(threshold));
     }
   };
 
@@ -233,13 +268,13 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       setSwarmFlowData({
         taskPrompt: promptText,
         budgetTokens: budget,
-        workersCount: 3,
+        workersCount: swarmWorkersCount,
         status: 'running',
         candidates: [],
         selectedWorkerId: '',
         confidenceScore: 0,
         humanReviewed: false,
-        rationale: '正在启动 SwarmFlow 7 算子流并行多视角分析与仲裁...',
+        rationale: `正在启动 SwarmFlow 7 算子流并行多视角分析与仲裁 (${swarmWorkersCount} 路竞标 · 门禁 ${(confidenceThreshold * 100).toFixed(0)}%)...`,
       });
     } else {
       setSwarmFlowData(null);
@@ -717,6 +752,10 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                 onModeChange={handleModeChange}
                 swarmBudgetTokens={swarmBudgetTokens}
                 onBudgetChange={handleBudgetChange}
+                swarmWorkersCount={swarmWorkersCount}
+                onWorkersCountChange={handleWorkersCountChange}
+                confidenceThreshold={confidenceThreshold}
+                onConfidenceThresholdChange={handleConfidenceThresholdChange}
               />
 
               {/* Bottom Model Selector Button & Upward Popover */}
