@@ -220,6 +220,13 @@ function renderInlineMarkdown(text: string): React.ReactNode {
 
 const CodeBlock: React.FC<{ language: string; code: string }> = ({ language, code }) => {
   const [copied, setCopied] = useState(false);
+  const lineCount = code.split('\n').length;
+  const isLong = lineCount > 10;
+  const [blockHeight, setBlockHeight] = useState<number>(isLong ? 260 : 0);
+  const [isExpandedFull, setIsExpandedFull] = useState(!isLong);
+  const [isDragging, setIsDragging] = useState(false);
+  const startYRef = React.useRef(0);
+  const startHeightRef = React.useRef(260);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(code);
@@ -227,25 +234,80 @@ const CodeBlock: React.FC<{ language: string; code: string }> = ({ language, cod
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const handleResizeStart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+    startYRef.current = e.clientY;
+    startHeightRef.current = blockHeight || 260;
+
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      const deltaY = moveEvent.clientY - startYRef.current;
+      const newH = Math.max(100, Math.min(800, startHeightRef.current + deltaY));
+      setBlockHeight(newH);
+      setIsExpandedFull(false);
+    };
+
+    const onMouseUp = () => {
+      setIsDragging(false);
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+    };
+
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+  };
+
   return (
-    <div className="my-3 rounded-xl overflow-hidden border border-[#E6DFD5] bg-[#1E1C1A] text-white shadow-xs">
+    <div className="my-3 rounded-xl overflow-hidden border border-[#E6DFD5] bg-[#1E1C1A] text-white shadow-xs select-none">
       <div className="px-3 py-1.5 bg-[#2D2A26] border-b border-[#3D3A36] flex items-center justify-between text-[11px]">
-        <div className="flex items-center gap-1.5 text-[#D5CCC0] font-mono font-semibold">
+        <div className="flex items-center gap-2 text-[#D5CCC0] font-mono font-semibold">
           <Terminal className="w-3.5 h-3.5 text-[#D96B27]" />
           <span>{language}</span>
+          <span className="text-[10px] text-[#8A847C]">({lineCount} 行)</span>
         </div>
-        <button
-          onClick={handleCopy}
-          className="flex items-center gap-1 px-2 py-0.5 rounded bg-[#1E1C1A] hover:bg-[#3D3A36] text-[#D5CCC0] hover:text-white transition-colors cursor-pointer text-[10px]"
-          title="复制全部代码"
-        >
-          {copied ? <Check className="w-3 h-3 text-[#4CAF50]" /> : <Copy className="w-3 h-3" />}
-          <span>{copied ? '已复制' : '复制代码'}</span>
-        </button>
+        <div className="flex items-center gap-1.5">
+          {isLong && (
+            <button
+              type="button"
+              onClick={() => setIsExpandedFull(!isExpandedFull)}
+              className="px-2 py-0.5 rounded bg-[#1E1C1A] hover:bg-[#3D3A36] text-[#D5CCC0] hover:text-white transition-colors cursor-pointer text-[10px]"
+            >
+              {isExpandedFull ? '折叠至默认高度' : '展开全屏高度'}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={handleCopy}
+            className="flex items-center gap-1 px-2 py-0.5 rounded bg-[#1E1C1A] hover:bg-[#3D3A36] text-[#D5CCC0] hover:text-white transition-colors cursor-pointer text-[10px]"
+            title="复制全部代码"
+          >
+            {copied ? <Check className="w-3 h-3 text-[#4CAF50]" /> : <Copy className="w-3 h-3" />}
+            <span>{copied ? '已复制' : '复制代码'}</span>
+          </button>
+        </div>
       </div>
-      <pre className="p-3.5 overflow-x-auto text-[11px] font-mono text-[#E6DFD5] leading-relaxed select-text">
+      <pre
+        style={{
+          maxHeight: isExpandedFull ? 'none' : `${blockHeight || 260}px`,
+          height: isExpandedFull ? 'auto' : undefined,
+        }}
+        className="p-3.5 overflow-x-auto overflow-y-auto text-[11px] font-mono text-[#E6DFD5] leading-relaxed select-text transition-[height] duration-75"
+      >
         <code>{code}</code>
       </pre>
+
+      {/* Draggable bottom resize handle for code block */}
+      {isLong && (
+        <div
+          onMouseDown={handleResizeStart}
+          className={`h-2 w-full cursor-row-resize flex items-center justify-center border-t border-[#3D3A36] transition-colors ${
+            isDragging ? 'bg-[#D96B27]' : 'bg-[#2D2A26] hover:bg-[#D96B27]/40'
+          }`}
+          title="上下拖动调整代码块高度"
+        >
+          <div className="w-8 h-0.5 bg-[#8A847C]/50 rounded-full" />
+        </div>
+      )}
     </div>
   );
 };

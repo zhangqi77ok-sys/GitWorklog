@@ -154,6 +154,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     } catch (e) {}
     return 130;
   });
+  const [isDraggingInput, setIsDraggingInput] = useState(false);
   const isDraggingInputRef = useRef(false);
   const startYRef = useRef(0);
   const startHeightRef = useRef(130);
@@ -161,6 +162,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   const handleInputResizeStart = (e: React.MouseEvent) => {
     e.preventDefault();
     isDraggingInputRef.current = true;
+    setIsDraggingInput(true);
     startYRef.current = e.clientY;
     startHeightRef.current = inputHeight;
 
@@ -173,6 +175,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
 
     const onMouseUp = () => {
       isDraggingInputRef.current = false;
+      setIsDraggingInput(false);
       document.removeEventListener('mousemove', onMouseMove);
       document.removeEventListener('mouseup', onMouseUp);
       try {
@@ -790,21 +793,25 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
         <div ref={messagesEndRef} />
       </div>
 
-      {/* 3. Chat Input Box & Prompt Queue with Vertical Drag Handle */}
+      {/* ──────────────────────────────────────────────────────────── */}
+      {/* 对话区上下拖拽分割条 (Draggable Vertical Splitter for Chat)   */}
+      {/* ──────────────────────────────────────────────────────────── */}
+      <div
+        onMouseDown={handleInputResizeStart}
+        className={`h-2.5 w-full cursor-row-resize z-30 flex items-center justify-center select-none transition-colors border-t border-[#E6DFD5] flex-shrink-0 group ${
+          isDraggingInput ? 'bg-[#D96B27]' : 'bg-[#F4EFEA] hover:bg-[#D96B27]/40'
+        }`}
+        title="上下拖动调节对话区与输入框高度"
+      >
+        <div className="w-12 h-1 rounded-full bg-[#8A847C]/40 group-hover:bg-[#D96B27] transition-colors" />
+      </div>
+
+      {/* 3. Chat Input Box & Prompt Queue Container */}
       <div
         style={{ height: `${inputHeight}px` }}
-        className="bg-[#F4EFEA] border-t border-[#E6DFD5] flex flex-col flex-shrink-0 relative transition-[height] duration-75"
+        className="bg-[#F4EFEA] flex flex-col flex-shrink-0 relative transition-[height] duration-75 z-20"
       >
-        {/* Top Drag Handle for Resizing Input Box Height */}
-        <div
-          onMouseDown={handleInputResizeStart}
-          className="h-2 w-full -top-1 absolute left-0 right-0 cursor-row-resize z-20 flex items-center justify-center group select-none hover:bg-[#D96B27]/20 transition-colors"
-          title="上下拖动调整输入区域高度"
-        >
-          <div className="w-10 h-1 rounded-full bg-[#D4CCC2] group-hover:bg-[#D96B27] transition-colors" />
-        </div>
-
-        <div className="p-2.5 flex-1 flex flex-col overflow-hidden space-y-1.5">
+        <div className="p-2.5 flex-1 flex flex-col space-y-1.5 relative">
           {/* Reorderable & Preemptible Prompt Queue Bar */}
           <PromptQueueBar
             queue={promptQueue}
@@ -817,7 +824,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
             isStreaming={isStreaming}
           />
 
-          <div className="bg-white border border-[#E6DFD5] focus-within:border-[#D96B27] rounded-xl p-2 shadow-2xs transition-colors flex-1 flex flex-col justify-between overflow-hidden">
+          <div className="bg-white border border-[#E6DFD5] focus-within:border-[#D96B27] rounded-xl p-2 shadow-2xs transition-colors flex-1 flex flex-col justify-between relative">
             {activeFileName && (
               <div className="flex items-center gap-1.5 text-[10px] text-[#6B665F] bg-[#FAF8F5] px-2 py-0.5 rounded border border-[#E6DFD5] w-fit select-none">
                 <Paperclip className="w-3 h-3 text-[#D96B27]" />
@@ -848,7 +855,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
               className="w-full flex-1 resize-none outline-none text-xs text-[#1E1C1A] placeholder-[#8A847C] leading-relaxed bg-transparent select-text overflow-y-auto"
             />
 
-            <div className="flex items-center justify-between pt-1 border-t border-[#F4EFEA]">
+            <div className="flex items-center justify-between pt-1 border-t border-[#F4EFEA] relative z-30">
               <div className="flex items-center gap-2 select-none">
                 <ExecutionModeCapsule
                   mode={executionMode}

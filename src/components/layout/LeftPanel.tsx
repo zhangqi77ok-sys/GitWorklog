@@ -318,13 +318,13 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ onFileSelected }) => {
       <div
         onMouseDown={handleVerticalMouseDown}
         title="上下拖动调节项目会话与文件管理区域高度比例"
-        className={`h-2 w-full cursor-row-resize flex items-center justify-center select-none transition-colors border-y border-[#E6DFD5] ${
+        className={`h-2.5 w-full cursor-row-resize flex items-center justify-center select-none transition-colors border-y border-[#E6DFD5] flex-shrink-0 group ${
           isDraggingVertical
             ? 'bg-[#D96B27]'
             : 'bg-[#F4EFEA] hover:bg-[#D96B27]/40'
         }`}
       >
-        <div className="w-10 h-0.5 bg-[#8A847C]/40 rounded-full" />
+        <div className="w-12 h-1 bg-[#8A847C]/40 group-hover:bg-[#D96B27] rounded-full transition-colors" />
       </div>
 
       {/* ──────────────────────────────────────────────────────────── */}
