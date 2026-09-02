@@ -23,6 +23,7 @@ export const SessionTabBar: React.FC<SessionTabBarProps> = ({
     activeSessionId,
     openSessionIds,
     setActiveSession,
+    openSessionTab,
     closeSessionTab,
     closeOtherSessionTabs,
     closeAllSessionTabs,
@@ -41,12 +42,10 @@ export const SessionTabBar: React.FC<SessionTabBarProps> = ({
 
   const tabContainerRef = useRef<HTMLDivElement>(null);
 
-  // Close context menu on global click
+  // Close context menu on outside click
   useEffect(() => {
     const handleGlobalClick = () => {
-      if (contextMenu?.visible) {
-        setContextMenu(null);
-      }
+      if (contextMenu) setContextMenu(null);
     };
     window.addEventListener('click', handleGlobalClick);
     return () => window.removeEventListener('click', handleGlobalClick);
@@ -63,6 +62,16 @@ export const SessionTabBar: React.FC<SessionTabBarProps> = ({
   const openSessions = openSessionIds
     .map((id) => ({ id, item: allSessionsMap.get(id) }))
     .filter((entry): entry is { id: string; item: { session: SessionRecord; projectName: string } } => !!entry.item);
+
+  // Auto-recover session tab if empty
+  useEffect(() => {
+    if (openSessions.length === 0) {
+      const fallbackSessId = activeSessionId || projects?.[0]?.sessions?.[0]?.id;
+      if (fallbackSessId) {
+        openSessionTab(fallbackSessId);
+      }
+    }
+  }, [openSessions.length, activeSessionId, projects, openSessionTab]);
 
   const handleContextMenu = (e: React.MouseEvent, sessionId: string, index: number) => {
     e.preventDefault();
@@ -111,11 +120,11 @@ export const SessionTabBar: React.FC<SessionTabBarProps> = ({
   };
 
   return (
-    <div className="h-[34px] min-h-[34px] max-h-[34px] bg-[#F4F2EE] border-b border-[#E8E5DF] flex items-center justify-between px-2 select-none z-10 overflow-hidden relative">
+    <div className="h-9 min-h-[36px] max-h-[36px] bg-[#FAF9F6] border-b border-[#E8E5DF] flex items-center justify-between px-3 select-none z-10 relative">
       {/* Left / Center: Draggable Multi-Session Tabs Scroll Area */}
       <div
         ref={tabContainerRef}
-        className="flex items-center gap-1 overflow-x-auto no-scrollbar flex-1 h-full py-1"
+        className="flex items-center gap-1.5 overflow-x-auto no-scrollbar flex-1 h-full py-1"
       >
         {openSessions.map(({ id, item }, idx) => {
           const { session, projectName } = item;
@@ -130,7 +139,7 @@ export const SessionTabBar: React.FC<SessionTabBarProps> = ({
               onDrop={(e) => handleDrop(idx, e)}
               onClick={() => setActiveSession(id)}
               onContextMenu={(e) => handleContextMenu(e, id, idx)}
-              className={`group flex items-center gap-1.5 px-2.5 h-6.5 rounded-md text-xs cursor-pointer transition-all flex-shrink-0 ${
+              className={`group flex items-center gap-1.5 px-2.5 h-6.5 rounded-lg text-xs cursor-pointer transition-all flex-shrink-0 ${
                 isActive
                   ? 'bg-white text-[#18181B] font-medium shadow-2xs border border-black/[0.08]'
                   : 'bg-transparent hover:bg-black/[0.03] text-[#71717A] hover:text-[#18181B]'
@@ -166,7 +175,7 @@ export const SessionTabBar: React.FC<SessionTabBarProps> = ({
             type="button"
             onClick={handleNewSession}
             title="在当前项目中开启新会话分支"
-            className="p-1 h-6 w-6 flex items-center justify-center rounded-md hover:bg-black/[0.05] text-[#71717A] hover:text-[#18181B] transition-all cursor-pointer flex-shrink-0"
+            className="p-1 h-6 w-6 flex items-center justify-center rounded-lg hover:bg-black/[0.05] text-[#71717A] hover:text-[#18181B] transition-all cursor-pointer flex-shrink-0"
           >
             <Plus className="w-3 h-3" />
           </button>
@@ -174,20 +183,20 @@ export const SessionTabBar: React.FC<SessionTabBarProps> = ({
       </div>
 
       {/* Right Action Tools: Popout Code Workspace */}
-      <div className="flex items-center gap-1.5 flex-shrink-0 pl-2 pr-2 bg-[#F4F2EE]">
+      <div className="flex items-center gap-2 flex-shrink-0 pl-3">
         {onToggleEditor && (
           <button
             type="button"
             onClick={onToggleEditor}
             title={isEditorOpen ? '收起右侧代码工作区 (Alt+E)' : '弹出右侧代码工作区与 Diff 审查 (Alt+E)'}
-            className={`flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-medium transition-all cursor-pointer border shadow-2xs ${
+            className={`flex items-center gap-1.5 px-3 h-6 rounded-full text-xs font-medium transition-all cursor-pointer border shadow-2xs ${
               isEditorOpen
-                ? 'bg-white text-[#D96B27] border-black/[0.1] font-semibold'
-                : 'bg-white/80 hover:bg-white text-[#52525B] hover:text-[#18181B] border-black/[0.06]'
+                ? 'bg-white text-[#D96B27] border-black/[0.12] font-semibold'
+                : 'bg-white/80 hover:bg-white text-[#52525B] hover:text-[#18181B] border-black/[0.08]'
             }`}
           >
-            <Code2 className="w-3 h-3 text-[#D96B27]" />
-            <span>代码区</span>
+            <Code2 className="w-3.5 h-3.5 text-[#D96B27]" />
+            <span>代码工作区</span>
           </button>
         )}
       </div>

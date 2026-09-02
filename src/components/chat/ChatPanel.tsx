@@ -31,7 +31,6 @@ import { SessionTabBar } from './SessionTabBar';
 import { PromptQueueBar, QueuedPrompt } from './PromptQueueBar';
 import { SubtaskProgressCard } from './SubtaskProgressCard';
 import { SwarmFlowVisualizer, SwarmFlowState } from './SwarmFlowVisualizer';
-import { ExecutionModeCapsule } from './ExecutionModeCapsule';
 import { ToolCallCard } from './ToolCallCard';
 import { ThinkingBlock } from './ThinkingBlock';
 import { MarkdownRenderer } from './MarkdownRenderer';
@@ -853,33 +852,13 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                   handleSend();
                 }
               }}
-              placeholder={
-                isStreaming
-                  ? "Agent 正在生成中... 输入按 Enter 加入待发送队列"
-                  : executionMode === 'swarm'
-                  ? "输入复杂任务指令，将通过 SwarmFlow 7 算子流推进 (Alt+2)..."
-                  : "输入日常编程需求或任务指令 (Enter 发送, Alt+1 切换极速双环)..."
-              }
+              placeholder="输入代码需求、架构设计或任务指令 (Enter 发送, Shift+Enter 换行)..."
               className="w-full flex-1 resize-none outline-none text-xs text-[#18181B] placeholder-[#71717A] leading-normal bg-transparent select-text overflow-y-auto min-h-[28px]"
             />
 
             <div className="flex items-center justify-between pt-1.5 border-t border-black/[0.05] relative z-30">
-              {/* Left group: mode capsule + model selector */}
+              {/* Left group: Model Selector & Workspace Context */}
               <div className="flex items-center gap-2 select-none">
-                <ExecutionModeCapsule
-                  mode={executionMode}
-                  onModeChange={handleModeChange}
-                  swarmBudgetTokens={swarmBudgetTokens}
-                  onBudgetChange={handleBudgetChange}
-                  swarmWorkersCount={swarmWorkersCount}
-                  onWorkersCountChange={handleWorkersCountChange}
-                  confidenceThreshold={confidenceThreshold}
-                  onConfidenceThresholdChange={handleConfidenceThresholdChange}
-                />
-
-                {/* Divider */}
-                <div className="w-px h-3.5 bg-black/[0.08] flex-shrink-0" />
-
                 {/* Bottom Model Selector Layered Capsule Button & Upward Popover */}
                 <div className="relative" ref={bottomDropdownRef}>
                   <button

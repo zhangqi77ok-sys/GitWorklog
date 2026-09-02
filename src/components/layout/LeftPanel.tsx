@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { FolderPlus, Search, MessageSquare, FolderTree, RefreshCw, FolderOpen } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { useProjectSessionStore, SessionRecord } from '../../store/useProjectSessionStore';
@@ -20,6 +20,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ onFileSelected }) => {
     activeSessionId,
     searchQuery,
     selectedTag,
+    loadInitialData,
     setActiveSession,
     setActiveProject,
     addProjectFolder,
@@ -32,6 +33,12 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ onFileSelected }) => {
   } = useProjectSessionStore();
 
   const { currentRoot, loadTree } = useWorkspaceStore();
+
+  useEffect(() => {
+    if (!projects || projects.length === 0) {
+      loadInitialData();
+    }
+  }, [projects, loadInitialData]);
 
   const [collapsedProjects, setCollapsedProjects] = useState<Record<string, boolean>>(() => {
     try {
@@ -134,9 +141,14 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ onFileSelected }) => {
     try {
       const proj = await addProjectFolder(selectedPath.trim());
       if (proj) {
+        setActiveProject(proj.id);
+        if (proj.sessions?.[0]?.id) {
+          setActiveSession(proj.sessions[0].id);
+        }
         await loadTree(proj.path);
         toast.success(`成功挂载项目: ${proj.name}`);
       } else {
+        await loadInitialData();
         toast.info(`项目已激活: ${selectedPath}`);
       }
     } catch (err: any) {

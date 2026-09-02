@@ -65,7 +65,7 @@ function loadProjectsDb(): BridgeProjectsDatabase {
     if (raw) {
       const db: BridgeProjectsDatabase = JSON.parse(raw);
       let needsSave = false;
-      if (Array.isArray(db.projects)) {
+      if (Array.isArray(db.projects) && db.projects.length > 0) {
         for (const proj of db.projects) {
           if (Array.isArray(proj.sessions)) {
             for (const sess of proj.sessions) {
@@ -98,11 +98,11 @@ function loadProjectsDb(): BridgeProjectsDatabase {
             }
           }
         }
+        if (needsSave) {
+          saveProjectsDb(db);
+        }
+        return db;
       }
-      if (needsSave) {
-        saveProjectsDb(db);
-      }
-      return db;
     }
   } catch (e) {
     console.warn('Failed to parse projects db from localStorage:', e);
@@ -447,12 +447,24 @@ export function initTauriBridge(): void {
         const { path, name } = args || {};
         if (!path) throw new Error('Missing project path');
         const db = loadProjectsDb();
-        const existing = db.projects.find((p: BridgeProjectRecord) => p.path.toLowerCase() === path.toLowerCase());
+        const norm = (p?: string) => (p || '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+        const existing = (db.projects || []).find((p: BridgeProjectRecord) => norm(p.path) === norm(path));
         if (existing) {
           db.active_project_id = existing.id;
-          if (existing.sessions?.[0]?.id) {
-            db.active_session_id = existing.sessions[0].id;
+          if (!Array.isArray(existing.sessions) || existing.sessions.length === 0) {
+            existing.sessions = [
+              {
+                id: `sess_${Date.now()}`,
+                title: '主工作区会话',
+                tags: ['#开发'],
+                model_id: 'deepseek-v4-flash',
+                created_at: Date.now(),
+                is_pinned: true,
+                messages: [],
+              },
+            ];
           }
+          db.active_session_id = existing.sessions[0].id;
           saveProjectsDb(db);
           return existing;
         }
@@ -460,16 +472,16 @@ export function initTauriBridge(): void {
         const newProj: BridgeProjectRecord = {
           id: `proj_${Date.now()}`,
           name: derivedName,
-          path,
+          path: path.replace(/\\/g, '/'),
           created_at: Date.now(),
           sessions: [
             {
               id: `sess_${Date.now()}`,
-              title: '新开发会话',
+              title: '主工作区会话',
               tags: ['#开发'],
               model_id: 'deepseek-v4-flash',
               created_at: Date.now(),
-              is_pinned: false,
+              is_pinned: true,
               messages: [],
             },
           ],

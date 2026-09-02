@@ -254,18 +254,40 @@ export const useProjectSessionStore = create<ProjectSessionState>((set, get) => 
 
   addProjectFolder: async (path: string, name?: string) => {
     try {
-      const project = await invoke<ProjectRecord>('add_project_folder', { path, name });
-      if (project && typeof window !== 'undefined') {
-        localStorage.setItem(STORAGE_ACTIVE_PROJ_KEY, project.id);
-        if (project.sessions?.[0]?.id) {
-          localStorage.setItem(STORAGE_ACTIVE_SESS_KEY, project.sessions[0].id);
-        }
-      }
+      const cleanPath = (path || '').trim().replace(/\\/g, '/');
+      const project = await invoke<ProjectRecord>('add_project_folder', { path: cleanPath, name });
       await get().loadInitialData();
-      return project;
-    } catch (err: any) {
-      set({ error: String(err) });
+      
+      const currentProjects = get().projects;
+      const targetProj = project || currentProjects.find(
+        (p) => (p.path || '').replace(/\\/g, '/').toLowerCase() === cleanPath.toLowerCase()
+      ) || currentProjects[0];
+
+      if (targetProj) {
+        const sessId = targetProj.sessions?.[0]?.id || null;
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(STORAGE_ACTIVE_PROJ_KEY, targetProj.id);
+          if (sessId) {
+            localStorage.setItem(STORAGE_ACTIVE_SESS_KEY, sessId);
+          }
+        }
+        const openIds = sessId ? Array.from(new Set([...get().openSessionIds, sessId])) : get().openSessionIds;
+        if (typeof window !== 'undefined' && openIds.length > 0) {
+          localStorage.setItem(STORAGE_OPEN_SESSIONS_KEY, JSON.stringify(openIds));
+        }
+        set({
+          activeProjectId: targetProj.id,
+          activeSessionId: sessId || get().activeSessionId,
+          openSessionIds: openIds,
+        });
+        return targetProj;
+      }
       return null;
+    } catch (err: any) {
+      console.warn('[useProjectSessionStore] addProjectFolder error:', err);
+      set({ error: String(err) });
+      await get().loadInitialData();
+      return get().projects[0] || null;
     }
   },
 
