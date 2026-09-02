@@ -227,23 +227,23 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ onFileSelected }) => {
         <div className="p-2.5 px-3 border-b border-[#E6DFD5] flex items-center justify-between bg-[#F4EFEA]">
           <div className="flex items-center gap-1.5 min-w-0">
             <MessageSquare className="w-4 h-4 text-[#D96B27] flex-shrink-0" />
-            <span className="font-semibold text-xs text-[#1E1C1A] tracking-wider uppercase truncate">
-              项目与会话 (Sessions)
+            <span className="font-bold text-xs text-[#1E1C1A] tracking-tight truncate">
+              项目与会话
             </span>
           </div>
           <button
             onClick={handleOpenFolder}
-            className="flex items-center gap-1 px-2 py-1 bg-white hover:bg-[#FAF8F5] border border-[#E6DFD5] hover:border-[#D96B27] rounded text-[11px] font-medium text-[#3D3A36] hover:text-[#D96B27] transition-all shadow-xs cursor-pointer"
+            className="flex items-center gap-1 px-2.5 py-1 bg-white hover:bg-[#FAF8F5] border border-[#E6DFD5] hover:border-[#D96B27]/60 rounded-lg text-xs font-semibold text-[#3D3A36] hover:text-[#D96B27] transition-all shadow-2xs cursor-pointer"
             title="打开本地项目文件夹"
           >
-            <FolderPlus className="w-3.5 h-3.5" />
+            <FolderPlus className="w-3.5 h-3.5 text-[#D96B27]" />
             <span>打开项目</span>
           </button>
         </div>
 
         {/* 1.2 Search & Tag Filter Bar */}
         {safeProjects.length > 0 && (
-          <div className="p-2 border-b border-[#E6DFD5] space-y-1.5 bg-[#FAF8F5]/50">
+          <div className="p-2 border-b border-[#E6DFD5] space-y-1.5 bg-[#FAF8F5]/60">
             <div className="relative">
               <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-[#8A847C]" />
               <input
@@ -251,7 +251,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ onFileSelected }) => {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="搜索项目、会话或标签..."
-                className="w-full pl-8 pr-2.5 py-1 bg-white border border-[#E6DFD5] focus:border-[#D96B27] rounded text-xs text-[#1E1C1A] placeholder-[#8A847C] outline-none transition-colors"
+                className="w-full pl-8 pr-2.5 py-1.5 bg-white border border-[#E6DFD5] focus:border-[#D96B27] rounded-lg text-xs text-[#1E1C1A] placeholder-[#8A847C] outline-none transition-colors"
               />
             </div>
 

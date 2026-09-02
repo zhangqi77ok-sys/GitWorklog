@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Copy, Check, SplitSquareVertical, Maximize2, Minimize2 } from 'lucide-react';
+import { Copy, Check, SplitSquareVertical, Maximize2, Minimize2, GripHorizontal } from 'lucide-react';
 import { MarkdownRenderer } from './MarkdownRenderer';
 
 interface ResizableMessageBubbleProps {
@@ -61,20 +61,20 @@ export const ResizableMessageBubble: React.FC<ResizableMessageBubbleProps> = ({
 
   return (
     <div
-      className={`relative w-full rounded-2xl p-3.5 text-xs leading-relaxed select-text transition-all duration-75 ${
+      className={`relative w-full text-xs leading-relaxed select-text transition-all duration-150 ${
         role === 'user'
-          ? 'bg-[#D96B27] text-white rounded-tr-xs shadow-xs'
-          : 'bg-white border border-[#E6DFD5] text-[#1E1C1A] rounded-tl-xs shadow-xs'
+          ? 'bg-[#F6EFEA] border border-[#EAE0D5] text-[#241E1A] rounded-2xl rounded-tr-xs p-4 shadow-[0_1px_3px_rgba(0,0,0,0.02)]'
+          : 'bg-white border border-[#E8E2D8] text-[#1E1C1A] rounded-2xl rounded-tl-xs p-4 shadow-[0_2px_12px_-4px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.02)]'
       }`}
     >
       {/* 1-Click Action Buttons on Bubble Top Right */}
-      <div className="absolute top-2.5 right-2.5 opacity-0 group-hover/msg:opacity-100 transition-opacity select-none flex items-center gap-1 z-10">
+      <div className="absolute top-3 right-3 opacity-0 group-hover/msg:opacity-100 transition-opacity select-none flex items-center gap-1.5 z-10">
         {isLongMessage && (
           <button
             type="button"
             onClick={toggleFullExpand}
             title={isExpandedFull ? '限制气泡高度' : '展开气泡全文'}
-            className="p-1 rounded-md bg-[#FAF8F5] text-[#8A847C] hover:text-[#1E1C1A] hover:bg-white border border-[#E6DFD5] transition-all shadow-2xs cursor-pointer"
+            className="p-1 rounded-md bg-white/90 hover:bg-white text-[#8A847C] hover:text-[#1E1C1A] border border-[#E6DFD5] transition-all shadow-2xs cursor-pointer"
           >
             {isExpandedFull ? <Minimize2 className="w-3 h-3" /> : <Maximize2 className="w-3 h-3" />}
           </button>
@@ -83,26 +83,24 @@ export const ResizableMessageBubble: React.FC<ResizableMessageBubbleProps> = ({
           type="button"
           onClick={onCopy}
           title="复制对话内容"
-          className={`p-1 rounded-md transition-all shadow-2xs cursor-pointer ${
-            role === 'user'
-              ? 'bg-[#B8551B] text-white hover:bg-[#9E4514]'
-              : 'bg-[#FAF8F5] text-[#8A847C] hover:text-[#1E1C1A] hover:bg-white border border-[#E6DFD5]'
-          }`}
+          className="p-1 rounded-md bg-white/90 hover:bg-white text-[#8A847C] hover:text-[#1E1C1A] border border-[#E6DFD5] transition-all shadow-2xs cursor-pointer"
         >
-          {isCopied ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
+          {isCopied ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
         </button>
       </div>
 
       {/* Content Container (Auto or Clamped with scroll) */}
       {role === 'user' ? (
-        <div className="whitespace-pre-wrap select-text pr-6">{cleanText}</div>
+        <div className="whitespace-pre-wrap select-text pr-6 font-normal text-[13px] leading-relaxed text-[#2C2420]">
+          {cleanText}
+        </div>
       ) : (
         <div
           ref={contentRef}
           style={{
             maxHeight: isExpandedFull ? 'none' : `${bubbleHeight}px`,
           }}
-          className={`select-text pr-6 ${
+          className={`select-text pr-4 ${
             isExpandedFull ? 'overflow-visible' : 'overflow-y-auto scrollbar-thin'
           }`}
         >
@@ -112,17 +110,18 @@ export const ResizableMessageBubble: React.FC<ResizableMessageBubbleProps> = ({
 
       {/* Diff Viewer Button for Agent Code Patches */}
       {isAssistant && rawContent.includes('```') && onOpenDiff && (
-        <div className="mt-3 pt-2.5 border-t border-[#E6DFD5] flex items-center justify-between select-none">
-          <span className="text-[10px] text-[#8A847C] font-mono">
-            包含代码补丁变更
-          </span>
+        <div className="mt-3.5 pt-2.5 border-t border-[#F0ECE4] flex items-center justify-between select-none">
+          <div className="flex items-center gap-1.5 text-[11px] text-[#8A847C]">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#D96B27]" />
+            <span>包含代码补丁变更</span>
+          </div>
           <button
             type="button"
             onClick={onOpenDiff}
-            className="flex items-center gap-1 px-2.5 py-1 bg-[#FAF8F5] border border-[#E6DFD5] hover:border-[#D96B27] text-[#D96B27] rounded-lg text-[11px] font-bold transition-all shadow-2xs cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1 bg-[#FAF8F5] hover:bg-[#F4EFEA] border border-[#E6DFD5] hover:border-[#D96B27]/50 text-[#D96B27] rounded-lg text-xs font-semibold transition-all shadow-2xs cursor-pointer"
           >
-            <SplitSquareVertical className="w-3 h-3" />
-            <span>在编辑器中审查 Diff</span>
+            <SplitSquareVertical className="w-3.5 h-3.5" />
+            <span>在右侧编辑器中审查 Diff</span>
           </button>
         </div>
       )}
@@ -131,13 +130,13 @@ export const ResizableMessageBubble: React.FC<ResizableMessageBubbleProps> = ({
       {isLongMessage && (
         <div
           onMouseDown={handleResizeStart}
-          className={`-mx-3.5 -mb-3.5 mt-2.5 h-3 cursor-row-resize flex items-center justify-center border-t border-[#E6DFD5]/60 rounded-b-2xl transition-colors select-none group/resize ${
-            isDragging ? 'bg-[#D96B27]' : 'bg-[#FAF8F5] hover:bg-[#D96B27]/20'
+          className={`-mx-4 -mb-4 mt-3 h-3.5 cursor-row-resize flex items-center justify-center border-t border-[#F0ECE4] rounded-b-2xl transition-colors select-none group/resize ${
+            isDragging ? 'bg-[#D96B27]/15' : 'bg-transparent hover:bg-[#FAF8F5]'
           }`}
           title="上下拖拽调整当前对话气泡高度 (双击可一键全展/收起)"
           onDoubleClick={toggleFullExpand}
         >
-          <div className="w-10 h-1 bg-[#8A847C]/40 group-hover/resize:bg-[#D96B27] rounded-full transition-colors" />
+          <div className="w-8 h-1 bg-[#8A847C]/30 group-hover/resize:bg-[#D96B27] rounded-full transition-colors flex items-center justify-center" />
         </div>
       )}
     </div>

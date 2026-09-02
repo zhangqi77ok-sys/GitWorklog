@@ -84,14 +84,14 @@ export const ExecutionModeCapsule: React.FC<ExecutionModeCapsuleProps> = ({
           aria-checked={mode === 'coding'}
           onClick={() => onModeChange('coding')}
           title="⚡ 单智能体内外双环极速闭环 (Alt+1)"
-          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+          className={`inline-flex items-center gap-1 px-2 py-1 rounded-md transition-all cursor-pointer ${
             mode === 'coding'
-              ? 'bg-white text-[#1E1C1A] font-semibold shadow-2xs border border-[#E6DFD5]'
+              ? 'bg-white text-[#1E1C1A] font-bold shadow-2xs border border-[#E6DFD5]'
               : 'text-[#6B665F] hover:text-[#1E1C1A]'
           }`}
         >
           <Zap className={`w-3 h-3 ${mode === 'coding' ? 'text-[#D96B27]' : 'text-[#8A847C]'}`} />
-          <span>⚡ 极速双环 (Coding)</span>
+          <span>极速双环</span>
         </button>
 
         {/* State 2: Multi-Agent Swarm Flow */}
@@ -101,14 +101,14 @@ export const ExecutionModeCapsule: React.FC<ExecutionModeCapsuleProps> = ({
           aria-checked={mode === 'swarm'}
           onClick={() => onModeChange('swarm')}
           title="✨ 多智能体 7 算子并行竞标与仲裁编排 (Alt+2)"
-          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+          className={`inline-flex items-center gap-1 px-2 py-1 rounded-md transition-all cursor-pointer ${
             mode === 'swarm'
               ? 'bg-[#D96B27] text-white font-bold shadow-2xs'
               : 'text-[#6B665F] hover:text-[#1E1C1A]'
           }`}
         >
           <Sparkles className="w-3 h-3" />
-          <span>✨ SwarmFlow 算子流</span>
+          <span>SwarmFlow</span>
         </button>
       </div>
 
@@ -118,14 +118,14 @@ export const ExecutionModeCapsule: React.FC<ExecutionModeCapsuleProps> = ({
           type="button"
           onClick={() => setIsPopoverOpen(!isPopoverOpen)}
           title="点击配置 SwarmFlow 算力配额、并发 Worker 数与仲裁门禁"
-          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-mono transition-all cursor-pointer border shadow-2xs ${
+          className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-[10px] font-mono transition-all cursor-pointer border shadow-2xs ${
             isPopoverOpen
               ? 'bg-white text-[#D96B27] border-[#D96B27] ring-1 ring-[#D96B27]/20 font-bold'
               : 'bg-[#FAF8F5] hover:bg-white text-[#6B665F] hover:text-[#1E1C1A] border-[#E6DFD5] hover:border-[#D96B27]/50'
           }`}
         >
           <Sliders className="w-3 h-3 text-[#D96B27]" />
-          <span>配额: {(swarmBudgetTokens / 1000).toFixed(0)}k tokens · {swarmWorkersCount} Workers 竞标</span>
+          <span>{(swarmBudgetTokens / 1000).toFixed(0)}k · {swarmWorkersCount}W 竞标</span>
           <ChevronDown
             className={`w-2.5 h-2.5 text-[#8A847C] transition-transform duration-150 ${
               isPopoverOpen ? 'rotate-180 text-[#D96B27]' : ''

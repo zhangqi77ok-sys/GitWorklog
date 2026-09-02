@@ -766,9 +766,9 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
             isStreaming={isStreaming}
           />
 
-          <div className="bg-white border border-[#E6DFD5] focus-within:border-[#D96B27] rounded-xl p-2 shadow-2xs transition-colors flex-1 flex flex-col justify-between relative">
+          <div className="bg-white border border-[#E2D8CC] focus-within:border-[#D96B27] focus-within:ring-2 focus-within:ring-[#D96B27]/10 rounded-2xl p-3 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] transition-all flex-1 flex flex-col justify-between relative">
             {activeFileName && (
-              <div className="flex items-center gap-1.5 text-[10px] text-[#6B665F] bg-[#FAF8F5] px-2 py-0.5 rounded border border-[#E6DFD5] w-fit select-none">
+              <div className="flex items-center gap-1.5 text-[10px] text-[#6B665F] bg-[#FAF8F5] px-2 py-0.5 rounded border border-[#E6DFD5] w-fit select-none mb-1">
                 <Paperclip className="w-3 h-3 text-[#D96B27]" />
                 <span>已引用当前文件:</span>
                 <span className="font-mono font-medium text-[#1E1C1A]">{activeFileName}</span>
@@ -797,7 +797,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
               className="w-full flex-1 resize-none outline-none text-xs text-[#1E1C1A] placeholder-[#8A847C] leading-relaxed bg-transparent select-text overflow-y-auto"
             />
 
-            <div className="flex items-center justify-between pt-1 border-t border-[#F4EFEA] relative z-30">
+            <div className="flex items-center justify-between pt-2 border-t border-[#F2ECE4] relative z-30">
               <div className="flex items-center gap-2 select-none">
                 <ExecutionModeCapsule
                   mode={executionMode}
@@ -815,7 +815,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                   <button
                     type="button"
                     onClick={() => setIsBottomDropdownOpen(!isBottomDropdownOpen)}
-                    className="flex items-center gap-1.5 px-2.5 py-1 bg-[#FAF8F5] hover:bg-[#F4EFEA] border border-[#E6DFD5] rounded-lg text-[11px] text-[#6B665F] hover:text-[#1E1C1A] transition-colors cursor-pointer shadow-2xs"
+                    className="flex items-center gap-1.5 px-2.5 py-1 bg-[#FAF8F5] hover:bg-[#F4EFEA] border border-[#E6DFD5] hover:border-[#D96B27]/40 rounded-lg text-[11px] text-[#5C564E] hover:text-[#1E1C1A] transition-colors cursor-pointer shadow-2xs"
                   >
                     <Cpu className="w-3 h-3 text-[#D96B27]" />
                     <span className="font-mono font-medium max-w-[110px] truncate">{activeModelId}</span>
@@ -855,7 +855,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                 <button
                   type="button"
                   onClick={handleStopGeneration}
-                  className="flex items-center gap-1.5 px-3 py-1 bg-[#FFF0F0] hover:bg-[#FFE5E5] border border-[#FFCDD2] text-[#D32F2F] rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer animate-pulse"
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#FFF0F0] hover:bg-[#FFE5E5] active:scale-95 border border-[#FFCDD2] text-[#D32F2F] rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer animate-pulse"
                   title="中断生成 (Esc)"
                 >
                   <Square className="w-3.5 h-3.5 fill-current" />
@@ -866,7 +866,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                   type="button"
                   onClick={handleSend}
                   disabled={!inputPrompt.trim() || !activeSessionId}
-                  className="flex items-center gap-1.5 px-3.5 py-1 bg-[#D96B27] hover:bg-[#B8551B] disabled:bg-[#E6DFD5] text-white disabled:text-[#8A847C] rounded-lg text-xs font-bold transition-all shadow-xs disabled:shadow-none cursor-pointer disabled:cursor-not-allowed"
+                  className="flex items-center gap-1.5 px-4 py-1.5 bg-[#D96B27] hover:bg-[#B8551B] active:scale-95 disabled:bg-[#EAE4DC] text-white disabled:text-[#8A847C] rounded-xl text-xs font-bold transition-all shadow-xs disabled:shadow-none cursor-pointer disabled:cursor-not-allowed"
                   title="发送指令 (Enter)"
                 >
                   <Send className="w-3.5 h-3.5" />

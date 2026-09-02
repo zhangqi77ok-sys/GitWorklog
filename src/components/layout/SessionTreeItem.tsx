@@ -70,32 +70,18 @@ export const SessionTreeItem: React.FC<SessionTreeItemProps> = ({
     return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
   };
 
-  const getTagBadgeClass = (tag: string) => {
-    const lower = (tag || '').toLowerCase();
-    if (lower.includes('refactor') || lower.includes('重构')) {
-      return 'bg-[#FBE9E7] text-[#D84315] border border-[#FFAB91]';
-    }
-    if (lower.includes('bug') || lower.includes('修复')) {
-      return 'bg-[#E3F2FD] text-[#1565C0] border border-[#90CAF9]';
-    }
-    if (lower.includes('test') || lower.includes('单测')) {
-      return 'bg-[#E8F5E9] text-[#2E7D32] border border-[#A5D6A7]';
-    }
-    return 'bg-[#F4EFEA] text-[#6B665F] border border-[#E6DFD5]';
-  };
-
   return (
     <div
       onClick={onSelect}
-      className={`group relative flex flex-col gap-1 p-2 rounded-md cursor-pointer transition-all border ${
+      className={`group relative flex flex-col gap-1 p-2.5 rounded-xl cursor-pointer transition-all border ${
         isActive
-          ? 'bg-white border-[#D96B27]/50 shadow-xs ring-1 ring-[#D96B27]/20'
-          : 'bg-white/60 hover:bg-white border-transparent hover:border-[#E6DFD5]'
+          ? 'bg-white border-[#E0D6C8] shadow-xs relative before:absolute before:left-0 before:top-2.5 before:bottom-2.5 before:w-1 before:bg-[#D96B27] before:rounded-r'
+          : 'bg-white/40 hover:bg-white border-transparent hover:border-[#E8E2D8]'
       }`}
     >
       {/* Title & Actions Row */}
       <div className="flex items-center justify-between gap-1.5 min-w-0">
-        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+        <div className="flex items-center gap-1.5 min-w-0 flex-1 pl-1">
           {session.is_pinned ? (
             <Pin className="w-3.5 h-3.5 text-[#D96B27] flex-shrink-0 fill-[#D96B27]" />
           ) : (
@@ -117,18 +103,18 @@ export const SessionTreeItem: React.FC<SessionTreeItemProps> = ({
                   if (e.key === 'Escape') handleCancelTitle(e);
                 }}
                 autoFocus
-                className="w-full px-1.5 py-0.5 text-xs bg-white border border-[#D96B27] rounded outline-none text-[#1E1C1A]"
+                className="w-full px-1.5 py-0.5 text-xs bg-white border border-[#D96B27] rounded-md outline-none text-[#1E1C1A]"
               />
               <button
                 onClick={handleSaveTitle}
-                className="p-0.5 text-[#2E7D32] hover:bg-[#E8F5E9] rounded"
+                className="p-0.5 text-[#2E7D32] hover:bg-[#E8F5E9] rounded cursor-pointer"
                 title="保存"
               >
                 <Check className="w-3 h-3" />
               </button>
               <button
                 onClick={handleCancelTitle}
-                className="p-0.5 text-[#6B665F] hover:bg-[#F4EFEA] rounded"
+                className="p-0.5 text-[#6B665F] hover:bg-[#F4EFEA] rounded cursor-pointer"
                 title="取消"
               >
                 <X className="w-3 h-3" />
@@ -140,129 +126,77 @@ export const SessionTreeItem: React.FC<SessionTreeItemProps> = ({
                 e.stopPropagation();
                 setIsEditing(true);
               }}
-              className={`text-xs truncate font-medium ${
-                isActive ? 'text-[#1E1C1A]' : 'text-[#3D3A36]'
+              className={`text-xs font-semibold truncate ${
+                isActive ? 'text-[#1E1C1A]' : 'text-[#5C564E] group-hover:text-[#1E1C1A]'
               }`}
-              title={session.title}
+              title={`${session.title} (双击重命名)`}
             >
-              {session.title}
+              {session.title || '新开发会话'}
             </span>
           )}
         </div>
 
         {/* Hover Action Buttons */}
-        {!isEditing && (
-          <div className="hidden group-hover:flex items-center gap-1 flex-shrink-0 bg-white/90 px-1 rounded shadow-2xs">
-            <button
-              onClick={onTogglePin}
-              title={session.is_pinned ? '取消置顶' : '置顶会话'}
-              className={`p-1 rounded transition-colors ${
-                session.is_pinned
-                  ? 'text-[#D96B27] hover:bg-[#FAF8F5]'
-                  : 'text-[#8A847C] hover:text-[#D96B27] hover:bg-[#FAF8F5]'
-              }`}
-            >
-              <Pin className="w-3 h-3" />
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setIsTagEditing((prev) => !prev);
-              }}
-              title="添加/管理标签"
-              className={`p-1 rounded transition-colors ${
-                isTagEditing
-                  ? 'text-[#D96B27] bg-[#FAF8F5]'
-                  : 'text-[#8A847C] hover:text-[#D96B27] hover:bg-[#FAF8F5]'
-              }`}
-            >
-              <Tag className="w-3 h-3" />
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setIsEditing(true);
-              }}
-              title="重命名"
-              className="p-1 rounded text-[#8A847C] hover:text-[#1E1C1A] hover:bg-[#FAF8F5] transition-colors"
-            >
-              <Edit2 className="w-3 h-3" />
-            </button>
-            <button
-              onClick={onDelete}
-              title="删除会话"
-              className="p-1 rounded text-[#8A847C] hover:text-[#C62828] hover:bg-[#FFEBEE] transition-colors"
-            >
-              <Trash2 className="w-3 h-3" />
-            </button>
-          </div>
-        )}
+        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button
+            onClick={onTogglePin}
+            className={`p-1 rounded hover:bg-[#F4EFEA] transition-colors cursor-pointer ${
+              session.is_pinned ? 'text-[#D96B27]' : 'text-[#8A847C] hover:text-[#1E1C1A]'
+            }`}
+            title={session.is_pinned ? '取消置顶' : '置顶此会话'}
+          >
+            <Pin className="w-3 h-3" />
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsEditing(true);
+            }}
+            className="p-1 rounded text-[#8A847C] hover:text-[#1E1C1A] hover:bg-[#F4EFEA] transition-colors cursor-pointer"
+            title="重命名会话"
+          >
+            <Edit2 className="w-3 h-3" />
+          </button>
+          <button
+            onClick={onDelete}
+            className="p-1 rounded text-[#8A847C] hover:text-[#C62828] hover:bg-[#FFEBEE] transition-colors cursor-pointer"
+            title="删除会话"
+          >
+            <Trash2 className="w-3 h-3" />
+          </button>
+        </div>
       </div>
 
-      {/* Tags Row & Tag Editor */}
-      {((session.tags && session.tags.length > 0) || isTagEditing) && (
-        <div className="flex flex-wrap gap-1 items-center pl-5 pt-0.5" onClick={(e) => e.stopPropagation()}>
-          {(session.tags || []).map((tag) => (
+      {/* Metadata Row: Model + Message Count + Time */}
+      <div className="flex items-center justify-between text-[10px] text-[#8A847C] pl-6 pr-1 font-mono">
+        <span className="truncate max-w-[120px]">
+          {session.model_id || 'deepseek-v3'} · {session.messages?.length || 0} 轮
+        </span>
+        <span>{formatTimestamp(session.updated_at)}</span>
+      </div>
+
+      {/* Tags Row */}
+      {session.tags && session.tags.length > 0 && (
+        <div className="flex items-center gap-1 pl-6 overflow-x-auto pt-0.5">
+          {session.tags.map((tag) => (
             <span
               key={tag}
-              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-medium ${getTagBadgeClass(tag)}`}
+              className="text-[9px] font-medium px-1.5 py-0.2 rounded-md bg-[#FAF8F5] text-[#8A847C] border border-[#E8E2D8] flex items-center gap-1"
             >
               <span>#{tag}</span>
               {isTagEditing && (
                 <button
-                  type="button"
                   onClick={(e) => handleRemoveTag(tag, e)}
+                  className="hover:text-red-600 rounded-full"
                   title="删除标签"
-                  className="hover:text-red-600 rounded-full cursor-pointer"
                 >
                   <X className="w-2.5 h-2.5" />
                 </button>
               )}
             </span>
           ))}
-
-          {isTagEditing && (
-            <div className="flex items-center gap-1">
-              <input
-                type="text"
-                value={newTagInput}
-                onChange={(e) => setNewTagInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleAddTag(e);
-                  if (e.key === 'Escape') setIsTagEditing(false);
-                }}
-                placeholder="新标签(回车)..."
-                autoFocus
-                className="w-20 px-1 py-0.2 text-[10px] bg-white border border-[#D96B27] rounded outline-none text-[#1E1C1A]"
-              />
-              <button
-                type="button"
-                onClick={handleAddTag}
-                title="添加标签"
-                className="p-0.5 bg-[#D96B27] text-white rounded hover:bg-[#B8551B]"
-              >
-                <Check className="w-2.5 h-2.5" />
-              </button>
-              <button
-                type="button"
-                onClick={() => setIsTagEditing(false)}
-                title="完成"
-                className="p-0.5 text-[#8A847C] hover:text-[#1E1C1A]"
-              >
-                <X className="w-2.5 h-2.5" />
-              </button>
-            </div>
-          )}
         </div>
       )}
-
-      {/* Subtitle / Model Info & Turn Count */}
-      <div className="flex items-center justify-between text-[10px] text-[#8A847C] pl-5">
-        <span className="truncate">
-          {session.model_id || 'DeepSeek-V3'} · {session.messages?.length || 0} 轮对话
-        </span>
-        <span className="flex-shrink-0">{formatTimestamp(session.updated_at)}</span>
-      </div>
     </div>
   );
 };

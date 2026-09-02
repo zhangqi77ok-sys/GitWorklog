@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Copy, Check, Terminal } from 'lucide-react';
+import { Copy, Check, Terminal, Code2 } from 'lucide-react';
 
 interface MarkdownRendererProps {
   content: string;
@@ -24,7 +24,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, cla
   const elements = parseMarkdownBlocks(cleanContent);
 
   return (
-    <div className={`space-y-2.5 text-xs text-[#1E1C1A] leading-relaxed font-sans ${className}`}>
+    <div className={`space-y-3 text-[13px] text-[#1E1C1A] leading-relaxed font-sans select-text ${className}`}>
       {elements}
     </div>
   );
@@ -87,7 +87,7 @@ function parseMarkdownBlocks(text: string): React.ReactNode[] {
       nodes.push(
         <blockquote
           key={`quote-${nodes.length}`}
-          className="my-2 pl-3 border-l-3 border-[#D96B27] bg-[#FAF8F5] py-1.5 px-2 rounded-r text-[#6B665F] italic"
+          className="my-2.5 pl-3.5 border-l-2 border-[#D96B27] bg-[#FAF8F5] py-2 px-3 rounded-r-xl text-[#5C564E] text-xs leading-relaxed"
         >
           {quoteLines.map((ql, qIdx) => (
             <div key={qIdx}>{renderInlineMarkdown(ql)}</div>
@@ -105,7 +105,7 @@ function parseMarkdownBlocks(text: string): React.ReactNode[] {
         i++;
       }
       nodes.push(
-        <ul key={`ul-${nodes.length}`} className="my-1.5 pl-4 list-disc space-y-1 text-[#1E1C1A]">
+        <ul key={`ul-${nodes.length}`} className="my-2 pl-4 list-disc space-y-1.5 text-[#2C2420]">
           {listItems.map((item, idx) => (
             <li key={idx} className="leading-relaxed">
               {renderInlineMarkdown(item)}
@@ -124,7 +124,7 @@ function parseMarkdownBlocks(text: string): React.ReactNode[] {
         i++;
       }
       nodes.push(
-        <ol key={`ol-${nodes.length}`} className="my-1.5 pl-4 list-decimal space-y-1 text-[#1E1C1A]">
+        <ol key={`ol-${nodes.length}`} className="my-2 pl-4 list-decimal space-y-1.5 text-[#2C2420]">
           {listItems.map((item, idx) => (
             <li key={idx} className="leading-relaxed">
               {renderInlineMarkdown(item)}
@@ -143,7 +143,7 @@ function parseMarkdownBlocks(text: string): React.ReactNode[] {
 
     // Paragraph
     nodes.push(
-      <p key={`p-${nodes.length}`} className="leading-relaxed my-1">
+      <p key={`p-${nodes.length}`} className="leading-relaxed my-1 text-[#2C2420]">
         {renderInlineMarkdown(line)}
       </p>
     );
@@ -168,7 +168,7 @@ function renderInlineMarkdown(text: string): React.ReactNode {
       parts.push(
         <code
           key={`inline-code-${keyIdx++}`}
-          className="px-1.5 py-0.5 mx-0.5 bg-[#F4EFEA] border border-[#E6DFD5] text-[#D96B27] rounded text-[11px] font-mono font-medium"
+          className="px-1.5 py-0.5 mx-0.5 bg-[#F4EFEA] border border-[#E6DFD5] text-[#D96B27] rounded-md text-[11px] font-mono font-semibold"
         >
           {codeMatch[1]}
         </code>
@@ -193,7 +193,7 @@ function renderInlineMarkdown(text: string): React.ReactNode {
     const italicMatch = remaining.match(/^(\*|_)(.*?)\1/);
     if (italicMatch && !boldMatch) {
       parts.push(
-        <em key={`italic-${keyIdx++}`} className="italic text-[#3D3A36]">
+        <em key={`italic-${keyIdx++}`} className="italic text-[#4A4540]">
           {italicMatch[2]}
         </em>
       );
@@ -258,30 +258,35 @@ const CodeBlock: React.FC<{ language: string; code: string }> = ({ language, cod
   };
 
   return (
-    <div className="my-3 rounded-xl overflow-hidden border border-[#E6DFD5] bg-[#1E1C1A] text-white shadow-xs select-none">
-      <div className="px-3 py-1.5 bg-[#2D2A26] border-b border-[#3D3A36] flex items-center justify-between text-[11px]">
-        <div className="flex items-center gap-2 text-[#D5CCC0] font-mono font-semibold">
-          <Terminal className="w-3.5 h-3.5 text-[#D96B27]" />
-          <span>{language}</span>
-          <span className="text-[10px] text-[#8A847C]">({lineCount} 行)</span>
+    <div className="my-3 rounded-2xl overflow-hidden border border-[#2E2B27] bg-[#181716] text-white shadow-md select-none">
+      {/* Header bar with Mac dots */}
+      <div className="px-4 py-2 bg-[#22201E] border-b border-[#2E2B27] flex items-center justify-between text-xs">
+        <div className="flex items-center gap-2 text-[#D5CCC0] font-mono font-medium">
+          <div className="flex items-center gap-1.5 mr-1.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-[#E06C75]/60" />
+            <span className="w-2.5 h-2.5 rounded-full bg-[#E5C07B]/60" />
+            <span className="w-2.5 h-2.5 rounded-full bg-[#98C379]/60" />
+          </div>
+          <span className="text-[#E6DFD5] text-[11px] font-semibold">{language || 'code'}</span>
+          <span className="text-[10px] text-[#7A746C]">({lineCount} 行)</span>
         </div>
         <div className="flex items-center gap-1.5">
           {isLong && (
             <button
               type="button"
               onClick={() => setIsExpandedFull(!isExpandedFull)}
-              className="px-2 py-0.5 rounded bg-[#1E1C1A] hover:bg-[#3D3A36] text-[#D5CCC0] hover:text-white transition-colors cursor-pointer text-[10px]"
+              className="px-2 py-0.5 rounded-md bg-[#2D2A26] hover:bg-[#3D3A36] text-[#D5CCC0] hover:text-white transition-colors cursor-pointer text-[10px]"
             >
-              {isExpandedFull ? '折叠至默认高度' : '展开全屏高度'}
+              {isExpandedFull ? '限制高度' : '展开全屏'}
             </button>
           )}
           <button
             type="button"
             onClick={handleCopy}
-            className="flex items-center gap-1 px-2 py-0.5 rounded bg-[#1E1C1A] hover:bg-[#3D3A36] text-[#D5CCC0] hover:text-white transition-colors cursor-pointer text-[10px]"
-            title="复制全部代码"
+            className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-[#2D2A26] hover:bg-[#3D3A36] text-[#D5CCC0] hover:text-white transition-colors cursor-pointer text-[11px] font-medium"
+            title="复制代码"
           >
-            {copied ? <Check className="w-3 h-3 text-[#4CAF50]" /> : <Copy className="w-3 h-3" />}
+            {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
             <span>{copied ? '已复制' : '复制代码'}</span>
           </button>
         </div>
@@ -291,7 +296,7 @@ const CodeBlock: React.FC<{ language: string; code: string }> = ({ language, cod
           maxHeight: isExpandedFull ? 'none' : `${blockHeight || 260}px`,
           height: isExpandedFull ? 'auto' : undefined,
         }}
-        className="p-3.5 overflow-x-auto overflow-y-auto text-[11px] font-mono text-[#E6DFD5] leading-relaxed select-text transition-[height] duration-75"
+        className="p-4 overflow-x-auto overflow-y-auto text-[12px] font-mono text-[#E8E2D8] leading-relaxed select-text"
       >
         <code>{code}</code>
       </pre>
@@ -300,12 +305,12 @@ const CodeBlock: React.FC<{ language: string; code: string }> = ({ language, cod
       {isLong && (
         <div
           onMouseDown={handleResizeStart}
-          className={`h-2 w-full cursor-row-resize flex items-center justify-center border-t border-[#3D3A36] transition-colors ${
-            isDragging ? 'bg-[#D96B27]' : 'bg-[#2D2A26] hover:bg-[#D96B27]/40'
+          className={`h-2.5 w-full cursor-row-resize flex items-center justify-center border-t border-[#2E2B27] transition-colors ${
+            isDragging ? 'bg-[#D96B27]/40' : 'bg-[#22201E] hover:bg-[#D96B27]/20'
           }`}
           title="上下拖动调整代码块高度"
         >
-          <div className="w-8 h-0.5 bg-[#8A847C]/50 rounded-full" />
+          <div className="w-8 h-1 bg-[#7A746C]/40 rounded-full" />
         </div>
       )}
     </div>
@@ -328,27 +333,27 @@ const TableBlock: React.FC<{ rawLines: string[] }> = ({ rawLines }) => {
   );
 
   return (
-    <div className="my-3 overflow-x-auto rounded-xl border border-[#E6DFD5] shadow-xs">
-      <table className="w-full text-left border-collapse text-[11px]">
+    <div className="my-3 overflow-x-auto rounded-xl border border-[#E8E2D8] shadow-xs bg-white">
+      <table className="w-full text-left border-collapse text-xs">
         <thead>
-          <tr className="bg-[#F4EFEA] border-b border-[#E6DFD5]">
+          <tr className="bg-[#FAF8F5] border-b border-[#E8E2D8]">
             {headerCells.map((h, i) => (
-              <th key={i} className="p-2.5 font-bold text-[#1E1C1A] border-r border-[#E6DFD5] last:border-r-0">
+              <th key={i} className="py-2.5 px-3.5 font-bold text-[#1E1C1A] border-r border-[#E8E2D8]/60 last:border-r-0 text-[11px] uppercase tracking-wider">
                 {renderInlineMarkdown(h)}
               </th>
             ))}
           </tr>
         </thead>
-        <tbody>
+        <tbody className="divide-y divide-[#F2ECE4]">
           {bodyRows.map((row, rIdx) => (
             <tr
               key={rIdx}
-              className={`border-b border-[#E6DFD5]/70 last:border-b-0 hover:bg-[#FAF8F5] transition-colors ${
-                rIdx % 2 === 1 ? 'bg-[#FDFCFA]' : 'bg-white'
+              className={`hover:bg-[#FAF8F5]/80 transition-colors ${
+                rIdx % 2 === 1 ? 'bg-[#FDFBF7]' : 'bg-white'
               }`}
             >
               {row.map((cell, cIdx) => (
-                <td key={cIdx} className="p-2.5 text-[#3D3A36] border-r border-[#E6DFD5]/70 last:border-r-0">
+                <td key={cIdx} className="py-2.5 px-3.5 text-[#3D3A36] border-r border-[#F2ECE4]/60 last:border-r-0">
                   {renderInlineMarkdown(cell)}
                 </td>
               ))}
@@ -364,13 +369,13 @@ const HeadingBlock: React.FC<{ level: number; text: string }> = ({ level, text }
   const content = renderInlineMarkdown(text);
   switch (level) {
     case 1:
-      return <h1 className="text-base font-bold text-[#1E1C1A] mt-3 mb-1 border-b border-[#E6DFD5] pb-1">{content}</h1>;
+      return <h1 className="text-base font-bold text-[#1E1C1A] mt-3.5 mb-1.5 border-b border-[#E8E2D8] pb-1.5">{content}</h1>;
     case 2:
-      return <h2 className="text-sm font-bold text-[#1E1C1A] mt-2.5 mb-1">{content}</h2>;
+      return <h2 className="text-sm font-bold text-[#1E1C1A] mt-3 mb-1">{content}</h2>;
     case 3:
-      return <h3 className="text-xs font-bold text-[#D96B27] mt-2 mb-0.5">{content}</h3>;
+      return <h3 className="text-xs font-bold text-[#D96B27] mt-2.5 mb-1">{content}</h3>;
     case 4:
     default:
-      return <h4 className="text-xs font-semibold text-[#1E1C1A] mt-1.5 mb-0.5">{content}</h4>;
+      return <h4 className="text-xs font-semibold text-[#1E1C1A] mt-2 mb-0.5">{content}</h4>;
   }
 };
