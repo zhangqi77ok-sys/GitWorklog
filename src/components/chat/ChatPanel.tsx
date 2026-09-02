@@ -567,7 +567,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       />
 
       {/* 2. Messages Stream List */}
-      <div className="flex-1 overflow-y-auto px-6 py-6 space-y-8">
+      <div className="flex-1 overflow-y-auto px-6 py-6 space-y-12">
         {!activeSession ? (
           <div className="h-full flex flex-col items-center justify-center text-center p-6 select-none">
             <div className="w-12 h-12 rounded-2xl bg-[#D96B27]/10 flex items-center justify-center text-[#D96B27] mb-3">
@@ -794,8 +794,9 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
               className="w-full flex-1 resize-none outline-none text-xs text-[#1E1C1A] placeholder-[#8A847C] leading-relaxed bg-transparent select-text overflow-y-auto"
             />
 
-            <div className="flex items-center justify-between pt-2 border-t border-[#F2ECE4] relative z-30">
-              <div className="flex items-center gap-2 select-none">
+            <div className="flex items-center justify-between pt-3 border-t border-[#EDE8E0] relative z-30">
+              {/* Left group: mode capsule + model selector */}
+              <div className="flex items-center gap-3 select-none">
                 <ExecutionModeCapsule
                   mode={executionMode}
                   onModeChange={handleModeChange}
@@ -807,38 +808,41 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                   onConfidenceThresholdChange={handleConfidenceThresholdChange}
                 />
 
+                {/* Divider */}
+                <div className="w-px h-4 bg-[#DDD6CE] flex-shrink-0" />
+
                 {/* Bottom Model Selector Button & Upward Popover */}
                 <div className="relative" ref={bottomDropdownRef}>
                   <button
                     type="button"
                     onClick={() => setIsBottomDropdownOpen(!isBottomDropdownOpen)}
-                    className="flex items-center gap-1.5 px-2.5 py-1 bg-[#FAF8F5] hover:bg-[#F4EFEA] border border-[#E6DFD5] hover:border-[#D96B27]/40 rounded-lg text-[11px] text-[#5C564E] hover:text-[#1E1C1A] transition-colors cursor-pointer shadow-2xs"
+                    className="flex items-center gap-1.5 px-2.5 py-1 bg-transparent hover:bg-[#F4EFEA] rounded-lg text-xs text-[#5C564E] hover:text-[#1E1C1A] cursor-pointer"
                   >
                     <Cpu className="w-3 h-3 text-[#D96B27]" />
-                    <span className="font-mono font-medium max-w-[110px] truncate">{activeModelId}</span>
+                    <span className="font-mono font-medium max-w-[120px] truncate">{activeModelId}</span>
                     <ChevronDown className="w-3 h-3 text-[#8A847C]" />
                   </button>
 
                   {/* Upward Model Selector Popover */}
                   {isBottomDropdownOpen && (
-                    <div className="absolute bottom-full left-0 mb-1.5 w-56 bg-white border border-[#E6DFD5] rounded-xl shadow-lg p-1.5 z-50 space-y-1 select-none animate-in fade-in slide-in-from-bottom-2 duration-150">
-                      <div className="px-2 py-1 text-[10px] font-bold text-[#8A847C] border-b border-[#F4EFEA]">
-                        选择生效模型
+                    <div className="absolute bottom-full left-0 mb-2 w-60 bg-white border border-[#E6DFD5] rounded-xl shadow-lg p-1.5 z-50 select-none animate-in fade-in slide-in-from-bottom-2 duration-150">
+                      <div className="px-2 py-1.5 text-[10px] font-bold text-[#8A847C] uppercase tracking-wider border-b border-[#F4EFEA] mb-1">
+                        选择模型
                       </div>
-                      <div className="max-h-48 overflow-y-auto space-y-0.5">
+                      <div className="max-h-52 overflow-y-auto space-y-0.5">
                         {availableModels.map((m) => (
                           <button
                             key={m}
                             type="button"
                             onClick={() => handleSelectModel(m)}
-                            className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer text-left ${
+                            className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs cursor-pointer text-left ${
                               activeModelId === m
-                                ? 'bg-[#FAF8F5] text-[#D96B27] font-semibold border border-[#E6DFD5]'
+                                ? 'bg-[#FAF8F5] text-[#D96B27] font-semibold'
                                 : 'text-[#1E1C1A] hover:bg-[#FAF8F5]'
                             }`}
                           >
                             <span className="font-mono truncate">{m}</span>
-                            {activeModelId === m && <Check className="w-3.5 h-3.5 text-[#D96B27]" />}
+                            {activeModelId === m && <Check className="w-3.5 h-3.5 text-[#D96B27] flex-shrink-0" />}
                           </button>
                         ))}
                       </div>
@@ -847,12 +851,12 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                 </div>
               </div>
 
-              {/* Right Action Button (Stop or Send) */}
+              {/* Right: Stop or Send */}
               {isStreaming ? (
                 <button
                   type="button"
                   onClick={handleStopGeneration}
-                  className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#FFF0F0] hover:bg-[#FFE5E5] active:scale-95 border border-[#FFCDD2] text-[#D32F2F] rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer animate-pulse"
+                  className="flex items-center gap-1.5 px-4 py-1.5 bg-[#FFF0F0] hover:bg-[#FFE5E5] border border-[#FFCDD2] text-[#D32F2F] rounded-xl text-xs font-semibold cursor-pointer animate-pulse"
                   title="中断生成 (Esc)"
                 >
                   <Square className="w-3.5 h-3.5 fill-current" />
@@ -863,7 +867,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                   type="button"
                   onClick={handleSend}
                   disabled={!inputPrompt.trim() || !activeSessionId}
-                  className="flex items-center gap-1.5 px-4 py-1.5 bg-[#D96B27] hover:bg-[#B8551B] active:scale-95 disabled:bg-[#EAE4DC] text-white disabled:text-[#8A847C] rounded-xl text-xs font-bold transition-all shadow-xs disabled:shadow-none cursor-pointer disabled:cursor-not-allowed"
+                  className="flex items-center gap-1.5 px-5 py-1.5 bg-[#D96B27] hover:bg-[#B8551B] disabled:bg-[#EAE4DC] text-white disabled:text-[#8A847C] rounded-xl text-xs font-semibold shadow-sm disabled:shadow-none cursor-pointer disabled:cursor-not-allowed"
                   title="发送指令 (Enter)"
                 >
                   <Send className="w-3.5 h-3.5" />

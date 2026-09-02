@@ -329,4 +329,26 @@
       scroll-behavior: auto !important;
     }
   }
+
+  /* ── 全局按钮点击压感动效 ─────────────────────────────────────────
+     覆盖范围：应用内所有可点击按钮（对话框底部栏、设置弹窗、工作台、
+     活动栏图标、左侧导航操作按钮等）。
+     原理：@layer base 低于 Tailwind utilities，不会覆盖组件级 active:scale-*；
+     但对未显式设置缩放的按钮提供统一压感默认值。
+  ─────────────────────────────────────────────────────────────────── */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]) {
+    transition:
+      transform 100ms cubic-bezier(0.34, 1.56, 0.64, 1),
+      background-color 120ms ease,
+      border-color 120ms ease,
+      color 120ms ease,
+      box-shadow 120ms ease,
+      opacity 120ms ease;
+  }
+
+  button:not(:disabled):active,
+  [role="button"]:not([aria-disabled="true"]):active {
+    transform: scale(0.95);
+  }
 }
