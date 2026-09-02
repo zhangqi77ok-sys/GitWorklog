@@ -109,7 +109,7 @@ export const ResizableMessageBubble: React.FC<ResizableMessageBubbleProps> = ({
       {/* Content — no card wrapper, flows directly on page background */}
       <div
         style={{ maxHeight: isExpandedFull ? 'none' : `${bubbleHeight}px` }}
-        className={`select-text text-[13px] leading-[1.7] ${
+        className={`select-text ${
           isExpandedFull ? 'overflow-visible' : 'overflow-y-auto scrollbar-thin'
         }`}
       >

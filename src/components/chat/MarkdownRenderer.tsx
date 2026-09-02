@@ -24,7 +24,7 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, cla
   const elements = parseMarkdownBlocks(cleanContent);
 
   return (
-    <div className={`space-y-3 text-[13px] text-[#1E1C1A] leading-relaxed font-sans select-text ${className}`}>
+    <div className={`space-y-4 text-[14px] text-[#1E1C1A] leading-[1.75] font-sans select-text ${className}`}>
       {elements}
     </div>
   );
@@ -143,7 +143,7 @@ function parseMarkdownBlocks(text: string): React.ReactNode[] {
 
     // Paragraph
     nodes.push(
-      <p key={`p-${nodes.length}`} className="leading-relaxed my-1 text-[#2C2420]">
+      <p key={`p-${nodes.length}`} className="leading-[1.75] my-1.5 text-[#2C2420]">
         {renderInlineMarkdown(line)}
       </p>
     );
@@ -369,13 +369,29 @@ const HeadingBlock: React.FC<{ level: number; text: string }> = ({ level, text }
   const content = renderInlineMarkdown(text);
   switch (level) {
     case 1:
-      return <h1 className="text-base font-bold text-[#1E1C1A] mt-3.5 mb-1.5 border-b border-[#E8E2D8] pb-1.5">{content}</h1>;
+      return (
+        <h1 className="text-[22px] font-bold text-[#1E1C1A] mt-6 mb-3 pb-2 border-b border-[#EDE8E0] leading-tight">
+          {content}
+        </h1>
+      );
     case 2:
-      return <h2 className="text-sm font-bold text-[#1E1C1A] mt-3 mb-1">{content}</h2>;
+      return (
+        <h2 className="text-[18px] font-semibold text-[#1E1C1A] mt-5 mb-2.5 leading-snug">
+          {content}
+        </h2>
+      );
     case 3:
-      return <h3 className="text-xs font-bold text-[#D96B27] mt-2.5 mb-1">{content}</h3>;
+      return (
+        <h3 className="text-[15px] font-semibold text-[#2C2420] mt-4 mb-2 leading-snug">
+          {content}
+        </h3>
+      );
     case 4:
     default:
-      return <h4 className="text-xs font-semibold text-[#1E1C1A] mt-2 mb-0.5">{content}</h4>;
+      return (
+        <h4 className="text-[13px] font-semibold text-[#3D3A36] mt-3 mb-1.5 uppercase tracking-wide">
+          {content}
+        </h4>
+      );
   }
 };
