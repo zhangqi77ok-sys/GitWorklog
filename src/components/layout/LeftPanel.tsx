@@ -159,12 +159,66 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ onFileSelected }) => {
     });
   };
 
+  const [splitRatio, setSplitRatio] = useState<number>(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        const saved = localStorage.getItem('tcode_left_panel_split_ratio');
+        return saved ? parseFloat(saved) : 55;
+      }
+    } catch (e) {}
+    return 55;
+  });
+
+  const [isDraggingVertical, setIsDraggingVertical] = useState(false);
+  const containerRef = React.useRef<HTMLDivElement>(null);
+
+  const handleVerticalMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDraggingVertical(true);
+  };
+
+  React.useEffect(() => {
+    if (!isDraggingVertical) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!containerRef.current) return;
+      const rect = containerRef.current.getBoundingClientRect();
+      const totalHeight = rect.height;
+      if (totalHeight <= 0) return;
+      const offsetY = e.clientY - rect.top;
+      const newRatio = Math.max(20, Math.min(80, (offsetY / totalHeight) * 100));
+      setSplitRatio(newRatio);
+    };
+
+    const handleMouseUp = () => {
+      setIsDraggingVertical(false);
+      try {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('tcode_left_panel_split_ratio', String(splitRatio));
+        }
+      } catch (e) {}
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDraggingVertical, splitRatio]);
+
   return (
-    <aside className="w-80 h-full bg-[#F4EFEA] border-r border-[#E6DFD5] flex flex-col flex-shrink-0 select-none overflow-hidden">
+    <aside
+      ref={containerRef}
+      className="w-full h-full bg-[#FAF8F5] flex flex-col select-none overflow-hidden"
+    >
       {/* ──────────────────────────────────────────────────────────── */}
       {/* 栏 1 (上半部)：项目与会话管理 (Projects & Sessions)             */}
       {/* ──────────────────────────────────────────────────────────── */}
-      <div className="h-1/2 min-h-[220px] flex flex-col border-b-2 border-[#E6DFD5] bg-[#F4EFEA]">
+      <div
+        style={{ height: `${splitRatio}%` }}
+        className="flex flex-col border-b border-[#E6DFD5] bg-[#F4EFEA] overflow-hidden"
+      >
         {/* 1.1 Header with Open Project */}
         <div className="p-2.5 px-3 border-b border-[#E6DFD5] flex items-center justify-between bg-[#F4EFEA]">
           <div className="flex items-center gap-1.5 min-w-0">
@@ -254,9 +308,27 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ onFileSelected }) => {
       </div>
 
       {/* ──────────────────────────────────────────────────────────── */}
+      {/* 上下拖拽分割条 (Draggable Vertical Splitter)                  */}
+      {/* ──────────────────────────────────────────────────────────── */}
+      <div
+        onMouseDown={handleVerticalMouseDown}
+        title="上下拖动调节项目会话与文件管理区域高度比例"
+        className={`h-2 w-full cursor-row-resize flex items-center justify-center select-none transition-colors border-y border-[#E6DFD5] ${
+          isDraggingVertical
+            ? 'bg-[#D96B27]'
+            : 'bg-[#F4EFEA] hover:bg-[#D96B27]/40'
+        }`}
+      >
+        <div className="w-10 h-0.5 bg-[#8A847C]/40 rounded-full" />
+      </div>
+
+      {/* ──────────────────────────────────────────────────────────── */}
       {/* 栏 2 (下半部)：工作区文件系统树 (Workspace Files Tree)           */}
       {/* ──────────────────────────────────────────────────────────── */}
-      <div className="h-1/2 flex flex-col bg-[#FAF8F5]">
+      <div
+        style={{ height: `${100 - splitRatio}%` }}
+        className="flex flex-col bg-[#FAF8F5] overflow-hidden"
+      >
         {/* 2.1 Workspace Header */}
         <div className="p-2 px-3 border-b border-[#E6DFD5] flex items-center justify-between bg-[#F4EFEA]">
           <div className="flex items-center gap-1.5 min-w-0">

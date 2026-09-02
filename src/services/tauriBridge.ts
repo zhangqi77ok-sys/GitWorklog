@@ -549,7 +549,7 @@ export function initTauriBridge(): void {
         return false;
       }
 
-      // 2. Workspace File System & Tree
+      // 2. Workspace File System & Tree (Zero Mock Demo Data)
       case 'read_workspace_tree': {
         const { path } = args || {};
         try {
@@ -561,20 +561,7 @@ export function initTauriBridge(): void {
           }
         } catch (e) {}
 
-        // Mock tree if backend not reachable
-        const mockTree: BridgeTreeNode[] = [
-          {
-            name: 'src',
-            path: `${path || 'E:/pro/agent-learning'}/src`,
-            is_dir: true,
-            children: [
-              { name: 'App.tsx', path: `${path || 'E:/pro/agent-learning'}/src/App.tsx`, is_dir: false },
-              { name: 'main.tsx', path: `${path || 'E:/pro/agent-learning'}/src/main.tsx`, is_dir: false },
-            ],
-          },
-          { name: 'package.json', path: `${path || 'E:/pro/agent-learning'}/package.json`, is_dir: false },
-        ];
-        return mockTree;
+        return [];
       }
 
       case 'read_file_content': {
@@ -588,7 +575,7 @@ export function initTauriBridge(): void {
             return data.content ?? '';
           }
         } catch (e) {}
-        return `// File: ${path}\n// Loaded in universal adapter mode\n`;
+        return '';
       }
 
       case 'save_file_content': {

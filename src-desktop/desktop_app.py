@@ -386,13 +386,17 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(json.dumps({'error': 'Invalid or missing directory path'}).encode('utf-8'))
                 return
+            
+            if os.path.isdir(target_path):
+                path_sandbox.register_roots([target_path])
+
             try:
                 path_sandbox.assert_path_allowed(target_path)
             except path_sandbox.PathSandboxError:
                 self._send_json(403, {'error': 'PATH_OUTSIDE_WORKSPACE', 'code': 403})
                 return
 
-            tree = scan_directory(target_path, max_depth=2)
+            tree = scan_directory(target_path, max_depth=3)
             self.send_response(200)
             self._apply_cors()
             self.send_header('Content-Type', 'application/json')
@@ -764,6 +768,10 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
                 file_path = os.path.normpath(os.path.join(cwd, raw_path))
             else:
                 file_path = os.path.normpath(raw_path)
+
+            parent_dir = os.path.dirname(file_path)
+            if parent_dir and os.path.isdir(parent_dir):
+                path_sandbox.register_roots([parent_dir])
 
             if not Path(file_path).is_file():
                 self.send_response(404)
