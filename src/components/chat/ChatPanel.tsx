@@ -567,7 +567,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       />
 
       {/* 2. Messages Stream List */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 overflow-y-auto px-6 py-6 space-y-8">
         {!activeSession ? (
           <div className="h-full flex flex-col items-center justify-center text-center p-6 select-none">
             <div className="w-12 h-12 rounded-2xl bg-[#D96B27]/10 flex items-center justify-center text-[#D96B27] mb-3">
@@ -608,31 +608,31 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
               key={msg.id}
               className={`group/msg flex flex-col ${
                 msg.role === 'user'
-                  ? 'items-end self-end max-w-[85%]'
-                  : 'items-start self-start max-w-[85%] w-full'
-              } space-y-1.5`}
+                  ? 'items-end self-end max-w-[62%]'
+                  : 'items-start self-start w-full'
+              } space-y-2`}
             >
-              <div className="flex items-center gap-1.5 text-[10px] text-[#8A847C] px-1 select-none">
+              {/* Role label */}
+              <div className="flex items-center gap-1.5 text-[10px] text-[#8A847C] px-0.5 select-none">
                 {msg.role === 'user' ? (
                   <>
-                    <User className="w-3 h-3 text-[#1E1C1A]" />
-                    <span className="font-medium text-[#1E1C1A]">You</span>
+                    <span className="font-medium text-[#5C564E]">You</span>
+                    <span className="opacity-60">
+                      {new Date(msg.timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
+                    </span>
                   </>
                 ) : (
                   <>
                     <Bot className="w-3 h-3 text-[#D96B27]" />
-                    <span className="font-medium text-[#D96B27]">Tcode Agent</span>
+                    <span className="font-semibold text-[#D96B27]">Tcode Agent</span>
+                    <span className="opacity-60">
+                      {new Date(msg.timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
+                    </span>
                   </>
                 )}
-                <span>
-                  {new Date(msg.timestamp).toLocaleTimeString('zh-CN', {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
-                </span>
               </div>
 
-              {/* 1. Collapsible & Draggable Deep Thinking Block */}
+              {/* 1. Collapsible Deep Thinking Block */}
               {msg.thought && (
                 <ThinkingBlock thinking={msg.thought} defaultExpanded={false} />
               )}
@@ -651,14 +651,10 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                 </div>
               )}
 
-              {/* 4. Main Answer Bubble (Aligned 100% with Thinking Block) */}
+              {/* 4. Main Answer Bubble */}
               {(() => {
                 const cleanText = sanitizeTextContent(msg.content || '');
-
-                if (!cleanText && msg.role === 'assistant') {
-                  return null;
-                }
-
+                if (!cleanText && msg.role === 'assistant') return null;
                 return (
                   <ResizableMessageBubble
                     msgId={msg.id}
@@ -677,10 +673,11 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
 
         {/* Live Streaming Indicator & Partial Message */}
         {isStreaming && (
-          <div className="flex flex-col items-start self-start max-w-[85%] w-full space-y-1.5">
-            <div className="flex items-center gap-1.5 text-[10px] text-[#8A847C] px-1 select-none">
+          <div className="flex flex-col items-start self-start w-full space-y-2">
+            <div className="flex items-center gap-1.5 text-[10px] text-[#8A847C] px-0.5 select-none">
               <Bot className="w-3 h-3 text-[#D96B27] animate-pulse" />
-              <span className="font-medium text-[#D96B27]">Tcode Agent (正在实时生成...)</span>
+              <span className="font-semibold text-[#D96B27]">Tcode Agent</span>
+              <span className="opacity-60">正在生成...</span>
             </div>
 
             {streamingThought && (
