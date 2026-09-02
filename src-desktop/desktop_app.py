@@ -806,7 +806,10 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
         # 6. Frameless Window Controls API
         if parsed.path == '/api/window/minimize':
             if global_window:
-                global_window.minimize()
+                try:
+                    global_window.minimize()
+                except Exception as e:
+                    print(f"[DesktopApp] Minimize error: {e}")
             self.send_response(200)
             self._apply_cors()
             self.send_header('Content-Type', 'application/json')
@@ -816,7 +819,13 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
 
         if parsed.path == '/api/window/maximize':
             if global_window:
-                global_window.toggle_fullscreen()
+                try:
+                    if getattr(global_window, 'maximized', False):
+                        global_window.restore()
+                    else:
+                        global_window.maximize()
+                except Exception as e:
+                    print(f"[DesktopApp] Maximize error: {e}")
             self.send_response(200)
             self._apply_cors()
             self.send_header('Content-Type', 'application/json')
@@ -831,7 +840,34 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(b'{"success": true}')
             if global_window:
-                threading.Timer(0.1, global_window.destroy).start()
+                threading.Timer(0.05, global_window.destroy).start()
+            return
+
+        if parsed.path == '/api/window/resize':
+            qs = urllib.parse.parse_qs(parsed.query)
+            try:
+                w = int(qs.get('width', [1440])[0])
+                h = int(qs.get('height', [900])[0])
+                if global_window:
+                    global_window.resize(max(w, 800), max(h, 500))
+            except Exception as e:
+                print(f"[DesktopApp] Resize error: {e}")
+            self.send_response(200)
+            self._apply_cors()
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(b'{"success": true}')
+            return
+
+        if parsed.path == '/api/window/state':
+            state = {
+                'width': getattr(global_window, 'width', 1440) if global_window else 1440,
+                'height': getattr(global_window, 'height', 900) if global_window else 900,
+                'x': getattr(global_window, 'x', 0) if global_window else 0,
+                'y': getattr(global_window, 'y', 0) if global_window else 0,
+                'maximized': getattr(global_window, 'maximized', False) if global_window else False,
+            }
+            self._send_json(200, state)
             return
 
         # 6b. Restore & Foreground the Frameless Window (OS Toast click activation)
@@ -1783,6 +1819,35 @@ if __name__ == '__main__':
                 global_window.move(cx, cy)
         except Exception as e:
             print(f"[WindowGeometry] Warning: Failed to re-align window: {e}")
+
+        # Enable native Windows edge resizing (WS_THICKFRAME) on frameless window
+        if os.name == 'nt' and global_window:
+            try:
+                import ctypes
+                user32 = ctypes.windll.user32
+                hwnd = None
+                if hasattr(global_window, 'native') and global_window.native:
+                    try:
+                        hwnd = global_window.native.Handle.ToInt32()
+                    except Exception:
+                        pass
+                if not hwnd:
+                    hwnd = user32.FindWindowW(None, f"{APP_NAME} - Enterprise AI Agentic IDE")
+                if hwnd:
+                    GWL_STYLE = -16
+                    WS_THICKFRAME = 0x00040000
+                    WS_MINIMIZEBOX = 0x00020000
+                    WS_MAXIMIZEBOX = 0x00010000
+                    SWP_FRAMECHANGED = 0x0020
+                    SWP_NOMOVE = 0x0002
+                    SWP_NOSIZE = 0x0001
+                    SWP_NOZORDER = 0x0004
+                    style = user32.GetWindowLongW(hwnd, GWL_STYLE)
+                    user32.SetWindowLongW(hwnd, GWL_STYLE, style | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX)
+                    user32.SetWindowPos(hwnd, 0, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED)
+                    print(f"[DesktopApp] Native resize frame (WS_THICKFRAME) enabled on HWND {hwnd}")
+            except Exception as e:
+                print(f"[DesktopApp] Warning: Failed to enable WS_THICKFRAME: {e}")
 
     window = webview.create_window(
         title=f"{APP_NAME} - Enterprise AI Agentic IDE",

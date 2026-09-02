@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Code2, X } from 'lucide-react';
 import { Titlebar } from './components/layout/Titlebar';
+import { WindowResizeHandles } from './components/layout/WindowResizeHandles';
 import { ActivityBar, ActiveTab } from './components/layout/ActivityBar';
 import { LeftPanel } from './components/layout/LeftPanel';
 import { ChatPanel } from './components/chat/ChatPanel';
@@ -334,6 +335,9 @@ export function App() {
           isOpen={isSnippetsOpen}
           onClose={() => setIsSnippetsOpen(false)}
         />
+
+        {/* Frameless Desktop Window Interactive Resize Handles */}
+        <WindowResizeHandles />
 
         {/* Global Toast Notification System */}
         <ToastContainer />

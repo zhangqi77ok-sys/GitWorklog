@@ -151,15 +151,19 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     try {
       if (typeof window !== 'undefined') {
         const saved = localStorage.getItem('tcode_chat_input_height');
-        return saved ? parseInt(saved, 10) : 130;
+        if (saved) {
+          const val = parseInt(saved, 10);
+          return val > 120 ? 90 : Math.max(val, 76);
+        }
+        return 90;
       }
     } catch (e) {}
-    return 130;
+    return 90;
   });
   const [isDraggingInput, setIsDraggingInput] = useState(false);
   const isDraggingInputRef = useRef(false);
   const startYRef = useRef(0);
-  const startHeightRef = useRef(130);
+  const startHeightRef = useRef(90);
 
   const handleInputResizeStart = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -171,7 +175,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     const onMouseMove = (moveEvent: MouseEvent) => {
       if (!isDraggingInputRef.current) return;
       const deltaY = startYRef.current - moveEvent.clientY;
-      const newHeight = Math.min(Math.max(startHeightRef.current + deltaY, 90), 450);
+      const newHeight = Math.min(Math.max(startHeightRef.current + deltaY, 76), 400);
       setInputHeight(newHeight);
     };
 
@@ -737,12 +741,12 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       {/* ──────────────────────────────────────────────────────────── */}
       <div
         onMouseDown={handleInputResizeStart}
-        className={`h-2.5 w-full cursor-row-resize z-30 flex items-center justify-center select-none transition-colors border-t border-[#E6DFD5] flex-shrink-0 group ${
+        className={`h-1.5 w-full cursor-row-resize z-30 flex items-center justify-center select-none transition-colors border-t border-[#E6DFD5] flex-shrink-0 group ${
           isDraggingInput ? 'bg-[#D96B27]' : 'bg-[#F4EFEA] hover:bg-[#D96B27]/40'
         }`}
         title="上下拖动调节对话区与输入框高度"
       >
-        <div className="w-12 h-1 rounded-full bg-[#8A847C]/40 group-hover:bg-[#D96B27] transition-colors" />
+        <div className="w-10 h-0.5 rounded-full bg-[#8A847C]/40 group-hover:bg-[#D96B27] transition-colors" />
       </div>
 
       {/* 3. Chat Input Box & Prompt Queue Container */}
@@ -750,7 +754,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
         style={{ height: `${inputHeight}px` }}
         className="bg-[#F4EFEA] flex flex-col flex-shrink-0 relative transition-[height] duration-75 z-20"
       >
-        <div className="p-2.5 flex-1 flex flex-col space-y-1.5 relative">
+        <div className="p-1.5 px-2 flex-1 flex flex-col space-y-1 relative">
           {/* Reorderable & Preemptible Prompt Queue Bar */}
           <PromptQueueBar
             queue={promptQueue}
@@ -763,11 +767,11 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
             isStreaming={isStreaming}
           />
 
-          <div className="bg-white border border-[#E2D8CC] focus-within:border-[#D96B27] focus-within:ring-2 focus-within:ring-[#D96B27]/10 rounded-2xl p-3 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] transition-all flex-1 flex flex-col justify-between relative">
+          <div className="bg-white border border-[#E2D8CC] focus-within:border-[#D96B27] focus-within:ring-1 focus-within:ring-[#D96B27]/10 rounded-xl p-2 px-2.5 shadow-2xs transition-all flex-1 flex flex-col justify-between relative">
             {activeFileName && (
-              <div className="flex items-center gap-1.5 text-[10px] text-[#6B665F] bg-[#FAF8F5] px-2 py-0.5 rounded border border-[#E6DFD5] w-fit select-none mb-1">
-                <Paperclip className="w-3 h-3 text-[#D96B27]" />
-                <span>已引用当前文件:</span>
+              <div className="flex items-center gap-1 text-[9px] text-[#6B665F] bg-[#FAF8F5] px-1.5 py-0.5 rounded border border-[#E6DFD5] w-fit select-none mb-0.5">
+                <Paperclip className="w-2.5 h-2.5 text-[#D96B27]" />
+                <span>已引用:</span>
                 <span className="font-mono font-medium text-[#1E1C1A]">{activeFileName}</span>
               </div>
             )}
@@ -786,17 +790,17 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
               }}
               placeholder={
                 isStreaming
-                  ? "Agent 正在生成中... 输入指令按 Enter 可直接加入待发送队列（生成完毕后自动执行）"
+                  ? "Agent 正在生成中... 输入按 Enter 加入待发送队列"
                   : executionMode === 'swarm'
-                  ? "输入复杂重构或多任务方案设计，将通过 SwarmFlow 7 算子流并行竞标与仲裁推进 (Alt+2)..."
-                  : "输入日常编程需求或任务指令，由单 Agent 极速执行内外双环 (Enter 发送, Alt+1 切换)..."
+                  ? "输入复杂任务指令，将通过 SwarmFlow 7 算子流推进 (Alt+2)..."
+                  : "输入日常编程需求或任务指令 (Enter 发送, Alt+1 切换极速双环)..."
               }
-              className="w-full flex-1 resize-none outline-none text-xs text-[#1E1C1A] placeholder-[#8A847C] leading-relaxed bg-transparent select-text overflow-y-auto"
+              className="w-full flex-1 resize-none outline-none text-xs text-[#1E1C1A] placeholder-[#8A847C] leading-normal bg-transparent select-text overflow-y-auto min-h-[28px]"
             />
 
-            <div className="flex items-center justify-between pt-3 border-t border-[#EDE8E0] relative z-30">
+            <div className="flex items-center justify-between pt-1.5 border-t border-[#F4EFEA] relative z-30">
               {/* Left group: mode capsule + model selector */}
-              <div className="flex items-center gap-3 select-none">
+              <div className="flex items-center gap-2 select-none">
                 <ExecutionModeCapsule
                   mode={executionMode}
                   onModeChange={handleModeChange}
@@ -809,18 +813,18 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                 />
 
                 {/* Divider */}
-                <div className="w-px h-4 bg-[#DDD6CE] flex-shrink-0" />
+                <div className="w-px h-3.5 bg-[#DDD6CE] flex-shrink-0" />
 
                 {/* Bottom Model Selector Button & Upward Popover */}
                 <div className="relative" ref={bottomDropdownRef}>
                   <button
                     type="button"
                     onClick={() => setIsBottomDropdownOpen(!isBottomDropdownOpen)}
-                    className="flex items-center gap-1.5 px-2.5 py-1 bg-transparent hover:bg-[#F4EFEA] rounded-lg text-xs text-[#5C564E] hover:text-[#1E1C1A] cursor-pointer"
+                    className="flex items-center gap-1 px-1.5 py-0.5 bg-transparent hover:bg-[#F4EFEA] rounded-md text-[11px] text-[#5C564E] hover:text-[#1E1C1A] cursor-pointer"
                   >
-                    <Cpu className="w-3 h-3 text-[#D96B27]" />
-                    <span className="font-mono font-medium max-w-[120px] truncate">{activeModelId}</span>
-                    <ChevronDown className="w-3 h-3 text-[#8A847C]" />
+                    <Cpu className="w-2.5 h-2.5 text-[#D96B27]" />
+                    <span className="font-mono font-medium max-w-[110px] truncate">{activeModelId}</span>
+                    <ChevronDown className="w-2.5 h-2.5 text-[#8A847C]" />
                   </button>
 
                   {/* Upward Model Selector Popover */}
@@ -856,10 +860,10 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                 <button
                   type="button"
                   onClick={handleStopGeneration}
-                  className="flex items-center gap-1.5 px-4 py-1.5 bg-[#FFF0F0] hover:bg-[#FFE5E5] border border-[#FFCDD2] text-[#D32F2F] rounded-xl text-xs font-semibold cursor-pointer animate-pulse"
+                  className="flex items-center gap-1 px-3 py-1 bg-[#FFF0F0] hover:bg-[#FFE5E5] border border-[#FFCDD2] text-[#D32F2F] rounded-lg text-xs font-semibold cursor-pointer animate-pulse"
                   title="中断生成 (Esc)"
                 >
-                  <Square className="w-3.5 h-3.5 fill-current" />
+                  <Square className="w-3 h-3 fill-current" />
                   <span>停止生成</span>
                 </button>
               ) : (
@@ -867,10 +871,10 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                   type="button"
                   onClick={handleSend}
                   disabled={!inputPrompt.trim() || !activeSessionId}
-                  className="flex items-center gap-1.5 px-5 py-1.5 bg-[#D96B27] hover:bg-[#B8551B] disabled:bg-[#EAE4DC] text-white disabled:text-[#8A847C] rounded-xl text-xs font-semibold shadow-sm disabled:shadow-none cursor-pointer disabled:cursor-not-allowed"
+                  className="flex items-center gap-1 px-3.5 py-1 bg-[#D96B27] hover:bg-[#B8551B] disabled:bg-[#EAE4DC] text-white disabled:text-[#8A847C] rounded-lg text-xs font-semibold shadow-2xs disabled:shadow-none cursor-pointer disabled:cursor-not-allowed"
                   title="发送指令 (Enter)"
                 >
-                  <Send className="w-3.5 h-3.5" />
+                  <Send className="w-3 h-3" />
                   <span>发送</span>
                 </button>
               )}

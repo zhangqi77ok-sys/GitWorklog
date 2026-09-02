@@ -12,30 +12,52 @@ export const Titlebar: React.FC = () => {
 
   const handleMinimize = async () => {
     try {
-      await getCurrentWindow().minimize();
+      if (typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__) {
+        await getCurrentWindow().minimize();
+        return;
+      }
+    } catch (e) {}
+    try {
+      await fetch('/api/window/minimize');
     } catch (e) {
-      console.warn('Tauri window minimize error:', e);
+      console.warn('Window minimize error:', e);
     }
   };
 
   const handleMaximize = async () => {
     try {
-      await getCurrentWindow().toggleMaximize();
+      if (typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__) {
+        await getCurrentWindow().toggleMaximize();
+        return;
+      }
+    } catch (e) {}
+    try {
+      await fetch('/api/window/maximize');
     } catch (e) {
-      console.warn('Tauri window maximize error:', e);
+      console.warn('Window maximize error:', e);
     }
   };
 
   const handleClose = async () => {
     try {
-      await getCurrentWindow().close();
+      if (typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__) {
+        await getCurrentWindow().close();
+        return;
+      }
+    } catch (e) {}
+    try {
+      await fetch('/api/window/close');
     } catch (e) {
-      console.warn('Tauri window close error:', e);
+      console.warn('Window close error:', e);
     }
   };
 
   return (
-    <header className="h-9 bg-[#FAF8F5] border-b border-[#E6DFD5] flex items-center justify-between px-3 select-none z-20">
+    <header
+      onDoubleClick={handleMaximize}
+      data-tauri-drag-region
+      className="h-9 bg-[#FAF8F5] border-b border-[#E6DFD5] flex items-center justify-between px-3 select-none z-20 pywebview-drag-region cursor-default"
+    >
       {/* Left: Brand Logo + Project Name + Discrete Gateway Indicator */}
       <div className="flex items-center gap-2.5">
         <div className="w-4.5 h-4.5 rounded bg-[#D96B27] flex items-center justify-center text-white font-extrabold text-[11px] shadow-xs">
