@@ -68,7 +68,7 @@ export const ExecutionModeCapsule: React.FC<ExecutionModeCapsuleProps> = ({
   };
 
   return (
-    <div className="flex items-center gap-1.5 relative" ref={containerRef}>
+    <div className="flex items-center gap-2 relative" ref={containerRef}>
       {/* 1. Single Compact Mode Selector: Defaults to Act, toggles between Act and Swarm */}
       <div className="relative">
         <button
@@ -77,39 +77,42 @@ export const ExecutionModeCapsule: React.FC<ExecutionModeCapsuleProps> = ({
             setIsModeDropdownOpen(!isModeDropdownOpen);
             setIsPopoverOpen(false);
           }}
-          className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-black/[0.03] hover:bg-black/[0.06] text-[#18181B] text-xs font-medium transition-colors cursor-pointer border border-black/[0.06] shadow-2xs"
+          className={`flex items-center gap-1.5 px-3 h-7 rounded-full bg-gradient-to-b from-white to-[#F7F6F2] hover:to-white text-[#18181B] text-xs font-medium transition-all cursor-pointer border border-black/[0.12] hover:border-black/[0.22] shadow-[0_1px_2px_rgba(0,0,0,0.06)] active:scale-[0.98] ${
+            isModeDropdownOpen ? 'ring-2 ring-black/[0.1] border-black/[0.25]' : ''
+          }`}
           title="切换智能体执行模式 (Alt+1 / Alt+2)"
         >
+          <span className="w-1.5 h-1.5 rounded-full bg-[#D96B27]" />
           {mode === 'swarm' ? (
             <>
               <Sparkles className="w-3 h-3 text-[#D96B27]" />
-              <span>Swarm</span>
+              <span className="tracking-tight">Swarm</span>
             </>
           ) : (
             <>
               <Zap className="w-3 h-3 text-[#D96B27]" />
-              <span>Act</span>
+              <span className="tracking-tight">Act</span>
             </>
           )}
           <ChevronDown
-            className={`w-3 h-3 text-[#71717A] transition-transform duration-150 ${
-              isModeDropdownOpen ? 'rotate-180' : ''
+            className={`w-2.5 h-2.5 text-[#71717A] transition-transform duration-150 ml-0.5 ${
+              isModeDropdownOpen ? 'rotate-180 text-[#18181B]' : ''
             }`}
           />
         </button>
 
         {/* Upward Dropdown for Act / Swarm */}
         {isModeDropdownOpen && (
-          <div className="absolute left-0 bottom-full mb-1.5 w-44 bg-[#FAF9F6] border border-black/[0.08] rounded-xl shadow-lg p-1 z-50 animate-in fade-in slide-in-from-bottom-2 duration-150 select-none">
+          <div className="absolute left-0 bottom-full mb-1.5 w-44 bg-[#FAF9F6] border border-black/[0.08] rounded-2xl shadow-xl p-1.5 z-50 animate-in fade-in slide-in-from-bottom-2 duration-150 select-none">
             <button
               type="button"
               onClick={() => {
                 onModeChange('coding');
                 setIsModeDropdownOpen(false);
               }}
-              className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs cursor-pointer transition-colors ${
+              className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl text-xs cursor-pointer transition-colors ${
                 mode === 'coding'
-                  ? 'bg-white text-[#18181B] font-medium shadow-2xs border border-black/[0.05]'
+                  ? 'bg-white text-[#18181B] font-medium shadow-2xs border border-black/[0.06]'
                   : 'text-[#52525B] hover:bg-black/[0.03]'
               }`}
             >
@@ -126,9 +129,9 @@ export const ExecutionModeCapsule: React.FC<ExecutionModeCapsuleProps> = ({
                 onModeChange('swarm');
                 setIsModeDropdownOpen(false);
               }}
-              className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs cursor-pointer transition-colors ${
+              className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl text-xs cursor-pointer transition-colors ${
                 mode === 'swarm'
-                  ? 'bg-white text-[#18181B] font-medium shadow-2xs border border-black/[0.05]'
+                  ? 'bg-white text-[#18181B] font-medium shadow-2xs border border-black/[0.06]'
                   : 'text-[#52525B] hover:bg-black/[0.03]'
               }`}
             >
@@ -142,7 +145,7 @@ export const ExecutionModeCapsule: React.FC<ExecutionModeCapsuleProps> = ({
         )}
       </div>
 
-      {/* 2. Sleek Orchestration Button (ONLY VISIBLE IN SWARM MODE) */}
+      {/* 2. Sleek Layered Orchestration Capsule Button (ONLY VISIBLE IN SWARM MODE) */}
       {mode === 'swarm' && (
         <button
           type="button"
@@ -151,17 +154,17 @@ export const ExecutionModeCapsule: React.FC<ExecutionModeCapsuleProps> = ({
             setIsModeDropdownOpen(false);
           }}
           title="配置 Swarm 算力配额与并发参数"
-          className={`flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs font-mono transition-all cursor-pointer border ${
+          className={`flex items-center gap-1.5 px-3 h-7 rounded-full bg-gradient-to-b from-white to-[#F7F6F2] hover:to-white text-xs font-mono transition-all cursor-pointer border shadow-[0_1px_2px_rgba(0,0,0,0.06)] active:scale-[0.98] ${
             isPopoverOpen
-              ? 'bg-white text-[#D96B27] border-black/[0.12] shadow-2xs'
-              : 'bg-black/[0.03] hover:bg-black/[0.06] text-[#52525B] hover:text-[#18181B] border-black/[0.06]'
+              ? 'border-[#D96B27] ring-2 ring-[#D96B27]/15 text-[#D96B27] font-semibold'
+              : 'border-black/[0.12] hover:border-black/[0.22] text-[#52525B] hover:text-[#18181B]'
           }`}
         >
           <Sliders className="w-3 h-3 text-[#D96B27]" />
           <span>{(swarmBudgetTokens / 1000).toFixed(0)}k · {swarmWorkersCount}W</span>
           <ChevronDown
-            className={`w-2.5 h-2.5 text-[#71717A] transition-transform duration-150 ${
-              isPopoverOpen ? 'rotate-180' : ''
+            className={`w-2.5 h-2.5 text-[#71717A] transition-transform duration-150 ml-0.5 ${
+              isPopoverOpen ? 'rotate-180 text-[#D96B27]' : ''
             }`}
           />
         </button>

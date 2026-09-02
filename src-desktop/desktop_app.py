@@ -1930,6 +1930,64 @@ if __name__ == '__main__':
             except Exception as e:
                 print(f"[DesktopApp] Warning: Failed to enable WS_THICKFRAME: {e}")
 
+    class DesktopWindowApi:
+        def minimize(self):
+            if os.name == 'nt':
+                try:
+                    import ctypes
+                    hwnd = get_app_hwnd()
+                    if hwnd:
+                        ctypes.windll.user32.ShowWindow(hwnd, 6)
+                except Exception as e:
+                    print(f"[DesktopWindowApi] Win32 minimize error: {e}")
+            if global_window:
+                try: global_window.minimize()
+                except Exception: pass
+            return True
+
+        def maximize(self):
+            if os.name == 'nt':
+                try:
+                    import ctypes
+                    hwnd = get_app_hwnd()
+                    if hwnd:
+                        if ctypes.windll.user32.IsZoomed(hwnd):
+                            ctypes.windll.user32.ShowWindow(hwnd, 9)
+                            if global_window:
+                                try: global_window.restore()
+                                except Exception: pass
+                        else:
+                            ctypes.windll.user32.ShowWindow(hwnd, 3)
+                            if global_window:
+                                try: global_window.maximize()
+                                except Exception: pass
+                        return True
+                except Exception as e:
+                    print(f"[DesktopWindowApi] Win32 maximize error: {e}")
+            if global_window:
+                try: global_window.maximize()
+                except Exception: pass
+            return True
+
+        def close(self):
+            def do_close():
+                time.sleep(0.05)
+                if os.name == 'nt':
+                    try:
+                        import ctypes
+                        hwnd = get_app_hwnd()
+                        if hwnd:
+                            ctypes.windll.user32.PostMessageW(hwnd, 0x0010, 0, 0)
+                    except Exception: pass
+                if global_window:
+                    try: global_window.destroy()
+                    except Exception: pass
+                os._exit(0)
+            threading.Thread(target=do_close, daemon=True).start()
+            return True
+
+    webview.settings['DRAG_REGION_DIRECT_TARGET_ONLY'] = True
+
     window = webview.create_window(
         title=f"{APP_NAME} - Enterprise AI Agentic IDE",
         url=url,
@@ -1942,7 +2000,8 @@ if __name__ == '__main__':
         text_select=True,
         zoomable=True,
         frameless=True,
-        easy_drag=False
+        easy_drag=False,
+        js_api=DesktopWindowApi()
     )
     global_window = window
     appdata = os.environ.get('LOCALAPPDATA', os.path.expanduser('~'))

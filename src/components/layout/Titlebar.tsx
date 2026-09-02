@@ -19,8 +19,17 @@ export const Titlebar: React.FC = () => {
     return headers;
   };
 
-  const handleMinimize = async (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleMinimize = async (e?: React.SyntheticEvent) => {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+    try {
+      if ((window as any).pywebview?.api?.minimize) {
+        (window as any).pywebview.api.minimize();
+        return;
+      }
+    } catch (err) {}
     try {
       if (typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__?.invoke) {
         await getCurrentWindow().minimize();
@@ -34,8 +43,17 @@ export const Titlebar: React.FC = () => {
     }
   };
 
-  const handleMaximize = async (e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
+  const handleMaximize = async (e?: React.SyntheticEvent) => {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+    try {
+      if ((window as any).pywebview?.api?.maximize) {
+        (window as any).pywebview.api.maximize();
+        return;
+      }
+    } catch (err) {}
     try {
       if (typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__?.invoke) {
         await getCurrentWindow().toggleMaximize();
@@ -49,8 +67,17 @@ export const Titlebar: React.FC = () => {
     }
   };
 
-  const handleClose = async (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleClose = async (e?: React.SyntheticEvent) => {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+    try {
+      if ((window as any).pywebview?.api?.close) {
+        (window as any).pywebview.api.close();
+        return;
+      }
+    } catch (err) {}
     try {
       if (typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__?.invoke) {
         await getCurrentWindow().close();
@@ -66,12 +93,10 @@ export const Titlebar: React.FC = () => {
 
   return (
     <header
-      onDoubleClick={(e) => handleMaximize(e)}
-      data-tauri-drag-region
-      className="h-9.5 bg-[#FAF9F6] border-b border-[#E8E5DF] flex items-center justify-between px-3 select-none z-30 relative pywebview-drag-region cursor-default"
+      className="h-[38px] min-h-[38px] max-h-[38px] bg-[#FAF9F6] border-b border-[#E8E5DF] flex items-center justify-between px-3 select-none z-30 relative cursor-default"
     >
       {/* Left: Brand Logo + Project Breadcrumb Pill + Discrete Gateway Indicator */}
-      <div className="flex items-center gap-2.5" data-tauri-no-drag>
+      <div className="flex items-center gap-2.5 no-drag pywebview-no-drag" data-tauri-no-drag>
         <div className="flex items-center gap-2">
           <div className="w-5 h-5 rounded-md bg-[#18181B] flex items-center justify-center text-white font-bold text-[11px] shadow-2xs">
             T
@@ -96,26 +121,39 @@ export const Titlebar: React.FC = () => {
         </div>
       </div>
 
-      {/* Right: Clean Window Controls Only */}
-      <div className="flex items-center gap-0.5" data-tauri-no-drag>
+      {/* Center Draggable Spacer Area (Window Dragging Safe Zone) */}
+      <div
+        className="flex-1 h-full pywebview-drag-region cursor-move"
+        data-tauri-drag-region
+        onDoubleClick={handleMaximize}
+      />
+
+      {/* Right: Clean Window Controls Only (Explicitly Excluded from Dragging) */}
+      <div className="flex items-center gap-0.5 no-drag pywebview-no-drag relative z-40" data-tauri-no-drag>
         <button
+          type="button"
           onClick={handleMinimize}
-          className="w-7 h-7 flex items-center justify-center hover:bg-black/[0.06] active:bg-black/[0.1] rounded text-[#71717A] hover:text-[#18181B] transition-colors cursor-pointer"
+          onMouseDown={(e) => e.stopPropagation()}
+          className="w-7 h-7 flex items-center justify-center hover:bg-black/[0.06] active:bg-black/[0.1] rounded text-[#71717A] hover:text-[#18181B] transition-colors cursor-pointer no-drag pywebview-no-drag"
           title="最小化"
         >
           <Minus className="w-3.5 h-3.5" />
         </button>
         <button
+          type="button"
           onClick={handleMaximize}
-          className="w-7 h-7 flex items-center justify-center hover:bg-black/[0.06] active:bg-black/[0.1] rounded text-[#71717A] hover:text-[#18181B] transition-colors cursor-pointer"
+          onMouseDown={(e) => e.stopPropagation()}
+          className="w-7 h-7 flex items-center justify-center hover:bg-black/[0.06] active:bg-black/[0.1] rounded text-[#71717A] hover:text-[#18181B] transition-colors cursor-pointer no-drag pywebview-no-drag"
           title="最大化 / 还原"
         >
           <Square className="w-2.5 h-2.5" />
         </button>
         <button
+          type="button"
           onClick={handleClose}
-          className="w-7 h-7 flex items-center justify-center hover:bg-[#EF4444] hover:text-white active:bg-[#DC2626] rounded text-[#71717A] transition-colors cursor-pointer"
-          title="关闭"
+          onMouseDown={(e) => e.stopPropagation()}
+          className="w-7 h-7 flex items-center justify-center hover:bg-[#EF4444] hover:text-white active:bg-[#DC2626] rounded text-[#71717A] transition-colors cursor-pointer no-drag pywebview-no-drag"
+          title="关闭窗口"
         >
           <X className="w-3.5 h-3.5" />
         </button>

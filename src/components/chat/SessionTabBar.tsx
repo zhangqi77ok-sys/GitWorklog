@@ -111,7 +111,7 @@ export const SessionTabBar: React.FC<SessionTabBarProps> = ({
   };
 
   return (
-    <div className="h-9 bg-[#F4F2EE] border-b border-[#E8E5DF] flex items-center justify-between px-2 select-none z-10 overflow-hidden relative">
+    <div className="h-[34px] min-h-[34px] max-h-[34px] bg-[#F4F2EE] border-b border-[#E8E5DF] flex items-center justify-between px-2 select-none z-10 overflow-hidden relative">
       {/* Left / Center: Draggable Multi-Session Tabs Scroll Area */}
       <div
         ref={tabContainerRef}
@@ -130,7 +130,7 @@ export const SessionTabBar: React.FC<SessionTabBarProps> = ({
               onDrop={(e) => handleDrop(idx, e)}
               onClick={() => setActiveSession(id)}
               onContextMenu={(e) => handleContextMenu(e, id, idx)}
-              className={`group flex items-center gap-1.5 px-2.5 h-7 rounded-md text-xs cursor-pointer transition-all flex-shrink-0 ${
+              className={`group flex items-center gap-1.5 px-2.5 h-6.5 rounded-md text-xs cursor-pointer transition-all flex-shrink-0 ${
                 isActive
                   ? 'bg-white text-[#18181B] font-medium shadow-2xs border border-black/[0.08]'
                   : 'bg-transparent hover:bg-black/[0.03] text-[#71717A] hover:text-[#18181B]'
@@ -138,26 +138,23 @@ export const SessionTabBar: React.FC<SessionTabBarProps> = ({
               title={`${session.title} (${projectName})\n拖动可调整标签顺序，右键查看快捷操作`}
             >
               {session.is_pinned ? (
-                <Pin className="w-3 h-3 text-[#D96B27] fill-[#D96B27] flex-shrink-0" />
+                <Pin className="w-2.5 h-2.5 text-[#D96B27] flex-shrink-0" />
               ) : (
-                <MessageSquare className={`w-3 h-3 flex-shrink-0 ${isActive ? 'text-[#D96B27]' : 'text-[#71717A]'}`} />
+                <MessageSquare className="w-3 h-3 text-[#71717A] flex-shrink-0" />
               )}
+              <span className="truncate max-w-[130px] font-mono text-[11px]">{session.title}</span>
 
-              <span className="max-w-[150px] truncate text-[11px]">
-                {session.title || '新会话'}
-              </span>
-
-              {/* Close Tab Button [X] */}
+              {/* Close Tab Button */}
               <button
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   closeSessionTab(id);
                 }}
-                title="关闭会话标签"
-                className="p-0.5 rounded hover:bg-black/[0.08] text-[#71717A] hover:text-[#18181B] transition-colors ml-0.5"
+                title="关闭标签页"
+                className="p-0.5 rounded text-[#71717A] hover:text-[#18181B] hover:bg-black/[0.06] transition-opacity cursor-pointer opacity-0 group-hover:opacity-100"
               >
-                <X className="w-3 h-3" />
+                <X className="w-2.5 h-2.5" />
               </button>
             </div>
           );
@@ -169,28 +166,28 @@ export const SessionTabBar: React.FC<SessionTabBarProps> = ({
             type="button"
             onClick={handleNewSession}
             title="在当前项目中开启新会话分支"
-            className="p-1 h-6.5 w-6.5 flex items-center justify-center rounded-md hover:bg-black/[0.05] text-[#71717A] hover:text-[#18181B] transition-all cursor-pointer flex-shrink-0"
+            className="p-1 h-6 w-6 flex items-center justify-center rounded-md hover:bg-black/[0.05] text-[#71717A] hover:text-[#18181B] transition-all cursor-pointer flex-shrink-0"
           >
-            <Plus className="w-3.5 h-3.5" />
+            <Plus className="w-3 h-3" />
           </button>
         )}
       </div>
 
       {/* Right Action Tools: Popout Code Workspace */}
-      <div className="flex items-center gap-1.5 flex-shrink-0 pl-2 bg-[#F4F2EE]">
+      <div className="flex items-center gap-1.5 flex-shrink-0 pl-2 pr-2 bg-[#F4F2EE]">
         {onToggleEditor && (
           <button
             type="button"
             onClick={onToggleEditor}
             title={isEditorOpen ? '收起右侧代码工作区 (Alt+E)' : '弹出右侧代码工作区与 Diff 审查 (Alt+E)'}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all cursor-pointer border ${
+            className={`flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-medium transition-all cursor-pointer border shadow-2xs ${
               isEditorOpen
-                ? 'bg-white text-[#D96B27] border-black/[0.08] shadow-2xs'
-                : 'bg-white/80 text-[#52525B] hover:text-[#18181B] hover:bg-white border-black/[0.06]'
+                ? 'bg-white text-[#D96B27] border-black/[0.1] font-semibold'
+                : 'bg-white/80 hover:bg-white text-[#52525B] hover:text-[#18181B] border-black/[0.06]'
             }`}
           >
-            <Code2 className="w-3.5 h-3.5 text-[#D96B27]" />
-            <span className="hidden sm:inline">代码工作区</span>
+            <Code2 className="w-3 h-3 text-[#D96B27]" />
+            <span>代码区</span>
           </button>
         )}
       </div>

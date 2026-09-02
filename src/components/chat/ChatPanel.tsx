@@ -112,12 +112,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     }
   };
 
-  const [executionMode, setExecutionMode] = useState<ExecutionMode>(() => {
-    if (typeof window !== 'undefined') {
-      return (localStorage.getItem('tcode_execution_mode') as ExecutionMode) || 'coding';
-    }
-    return 'coding';
-  });
+  const [executionMode, setExecutionMode] = useState<ExecutionMode>('coding');
 
   const [swarmBudgetTokens, setSwarmBudgetTokens] = useState<number>(() => {
     if (typeof window !== 'undefined') {
@@ -885,26 +880,28 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                 {/* Divider */}
                 <div className="w-px h-3.5 bg-black/[0.08] flex-shrink-0" />
 
-                {/* Bottom Model Selector Button & Upward Popover */}
+                {/* Bottom Model Selector Layered Capsule Button & Upward Popover */}
                 <div className="relative" ref={bottomDropdownRef}>
                   <button
                     type="button"
                     onClick={() => setIsBottomDropdownOpen(!isBottomDropdownOpen)}
-                    className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-black/[0.03] hover:bg-black/[0.06] text-[#18181B] text-xs font-mono transition-colors cursor-pointer border border-black/[0.06] shadow-2xs"
+                    className={`flex items-center gap-1.5 px-3 h-7 rounded-full bg-gradient-to-b from-white to-[#F7F6F2] hover:to-white text-[#18181B] text-xs font-mono transition-all cursor-pointer border border-black/[0.12] hover:border-black/[0.22] shadow-[0_1px_2px_rgba(0,0,0,0.06)] active:scale-[0.98] ${
+                      isBottomDropdownOpen ? 'ring-2 ring-black/[0.1] border-black/[0.25]' : ''
+                    }`}
                     title="选择当前会话大模型"
                   >
                     <Cpu className="w-3 h-3 text-[#D96B27]" />
                     <span className="max-w-[130px] truncate">{activeModelId}</span>
                     <ChevronDown
-                      className={`w-3 h-3 text-[#71717A] transition-transform duration-150 ${
-                        isBottomDropdownOpen ? 'rotate-180' : ''
+                      className={`w-2.5 h-2.5 text-[#71717A] transition-transform duration-150 ml-0.5 ${
+                        isBottomDropdownOpen ? 'rotate-180 text-[#18181B]' : ''
                       }`}
                     />
                   </button>
 
                   {/* Upward Model Selector Popover */}
                   {isBottomDropdownOpen && (
-                    <div className="absolute bottom-full left-0 mb-1.5 w-64 bg-[#FAF9F6] border border-black/[0.08] rounded-xl shadow-xl p-1.5 z-50 select-none animate-in fade-in slide-in-from-bottom-2 duration-150">
+                    <div className="absolute bottom-full left-0 mb-1.5 w-64 bg-[#FAF9F6] border border-black/[0.08] rounded-2xl shadow-xl p-1.5 z-50 select-none animate-in fade-in slide-in-from-bottom-2 duration-150">
                       <div className="flex items-center justify-between px-2.5 py-1.5 border-b border-black/[0.05] mb-1">
                         <span className="text-[10px] font-semibold text-[#71717A] uppercase tracking-wider">
                           选择运行模型
@@ -919,9 +916,9 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                             key={m}
                             type="button"
                             onClick={() => handleSelectModel(m)}
-                            className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs cursor-pointer text-left transition-colors ${
+                            className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl text-xs cursor-pointer text-left transition-colors ${
                               activeModelId === m
-                                ? 'bg-white text-[#D96B27] font-semibold shadow-2xs border border-black/[0.05]'
+                                ? 'bg-white text-[#D96B27] font-semibold shadow-2xs border border-black/[0.06]'
                                 : 'text-[#18181B] hover:bg-black/[0.03]'
                             }`}
                           >
