@@ -30,6 +30,7 @@ import { SwarmFlowVisualizer, SwarmFlowState } from './SwarmFlowVisualizer';
 import { ExecutionModeCapsule } from './ExecutionModeCapsule';
 import { ToolCallCard } from './ToolCallCard';
 import { MarkdownRenderer } from './MarkdownRenderer';
+import { sanitizeTextContent } from '../../services/tauriBridge';
 import { toast } from '../common/Toast';
 import type { Subtask, ExecutionMode } from '../../types';
 
@@ -288,6 +289,8 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
         model: targetModel,
         executionMode: execMode,
         budgetTokens: budget,
+        workersCount: swarmWorkersCount,
+        confidenceThreshold,
       });
     } catch (err: any) {
       setIsStreaming(false);
@@ -301,6 +304,8 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     let unlistenText: () => void = () => {};
     let unlistenDone: () => void = () => {};
     let unlistenError: () => void = () => {};
+    let unlistenSwarmState: () => void = () => {};
+    let unlistenSwarmWorker: () => void = () => {};
 
     const setupListeners = async () => {
       unlistenThought = await listen<any>('agent_thought_chunk', (event) => {
@@ -312,6 +317,45 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       unlistenText = await listen<any>('agent_text_chunk', (event) => {
         if (event.payload.session_id === activeSessionId) {
           setStreamingContent((prev) => prev + event.payload.chunk);
+        }
+      });
+
+      unlistenSwarmState = await listen<any>('swarm_flow_state_update', (event) => {
+        if (event.payload.session_id === activeSessionId) {
+          setSwarmFlowData((prev) => ({
+            taskPrompt: event.payload.taskPrompt || prev?.taskPrompt || '',
+            budgetTokens: event.payload.budgetTokens || prev?.budgetTokens || 25000,
+            workersCount: event.payload.workersCount || prev?.workersCount || 3,
+            status: event.payload.status || 'running',
+            candidates: event.payload.candidates || prev?.candidates || [],
+            selectedWorkerId: event.payload.selectedWorkerId || prev?.selectedWorkerId || '',
+            confidenceScore: event.payload.confidenceScore ?? prev?.confidenceScore ?? 0,
+            humanReviewed: event.payload.humanReviewed ?? false,
+            rationale: event.payload.rationale || prev?.rationale || '',
+          }));
+        }
+      });
+
+      unlistenSwarmWorker = await listen<any>('swarm_worker_chunk', (event) => {
+        if (event.payload.session_id === activeSessionId) {
+          setSwarmFlowData((prev) => {
+            if (!prev) return null;
+            const updated = prev.candidates.map((c) => {
+              if (c.workerId === event.payload.workerId) {
+                return {
+                  ...c,
+                  codePatch: (c.codePatch || '') + event.payload.chunk,
+                  progress: event.payload.progress || c.progress || 50,
+                  status: 'streaming' as const,
+                };
+              }
+              return c;
+            });
+            return {
+              ...prev,
+              candidates: updated,
+            };
+          });
         }
       });
 
@@ -348,6 +392,8 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       unlistenText();
       unlistenDone();
       unlistenError();
+      unlistenSwarmState();
+      unlistenSwarmWorker();
     };
   }, [activeSessionId, loadInitialData]);
 
@@ -578,14 +624,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
 
               {/* Main Message Bubble */}
               {(() => {
-                const cleanText = (msg.content || '')
-                  .replace(/<[\s\/\u007C\uFF5C\u2502\u00A6]*DSML[\s\/\u007C\uFF5C\u2502\u00A6]*tool_calls[\s\/\u007C\uFF5C\u2502\u00A6>|]*>[\s\S]*?<\/[\s\/\u007C\uFF5C\u2502\u00A6]*DSML[\s\/\u007C\uFF5C\u2502\u00A6]*tool_calls[\s\/\u007C\uFF5C\u2502\u00A6>|]*>/gi, '')
-                  .replace(/<[\s\/\u007C\uFF5C\u2502\u00A6]*DSML[\s\/\u007C\uFF5C\u2502\u00A6]*invoke[\s\S]*?<\/[\s\/\u007C\uFF5C\u2502\u00A6]*DSML[\s\/\u007C\uFF5C\u2502\u00A6]*invoke[\s\/\u007C\uFF5C\u2502\u00A6>|]*>/gi, '')
-                  .replace(/<[\s\/\u007C\uFF5C\u2502\u00A6]*DSML[\s\/\u007C\uFF5C\u2502\u00A6]*parameter[\s\S]*?<\/[\s\/\u007C\uFF5C\u2502\u00A6]*DSML[\s\/\u007C\uFF5C\u2502\u00A6]*parameter[\s\/\u007C\uFF5C\u2502\u00A6>|]*>/gi, '')
-                  .replace(/<[\s\/\u007C\uFF5C\u2502\u00A6]*tool_call[\s\/\u007C\uFF5C\u2502\u00A6]*>[\s\S]*?<\/[\s\/\u007C\uFF5C\u2502\u00A6]*tool_call[\s\/\u007C\uFF5C\u2502\u00A6>|]*>/gi, '')
-                  .replace(/<[\s\/\u007C\uFF5C\u2502\u00A6]*\/?[\s\/\u007C\uFF5C\u2502\u00A6]*DSML[\s\S]*?>/gi, '')
-                  .replace(/<[\s\/\u007C\uFF5C\u2502\u00A6]*\/?[\s\/\u007C\uFF5C\u2502\u00A6]*tool_call[\s\S]*?>/gi, '')
-                  .trim();
+                const cleanText = sanitizeTextContent(msg.content || '');
 
                 if (!cleanText && msg.role === 'assistant') {
                   return null;
@@ -670,13 +709,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
             )}
 
             {(() => {
-              const cleanStreaming = (streamingContent || '')
-                .replace(/<[\s|]*DSML[\s|]*tool_calls[\s|]*>[\s\S]*?<\/[\s|]*DSML[\s|]*tool_calls[\s|]*>/gi, '')
-                .replace(/<[\s|]*DSML[\s|]*invoke[\s\S]*?<\/[\s|]*DSML[\s|]*invoke[\s|]*>/gi, '')
-                .replace(/<[\s|]*DSML[\s|]*parameter[\s\S]*?<\/[\s|]*DSML[\s|]*parameter[\s|]*>/gi, '')
-                .replace(/<[\s|]*tool_call[\s|]*>[\s\S]*?<\/[\s|]*tool_call[\s|]*>/gi, '')
-                .replace(/<[\s|]*\/?[\s|]*DSML[\s\S]*?>/gi, '')
-                .trim();
+              const cleanStreaming = sanitizeTextContent(streamingContent || '');
 
               if (!cleanStreaming) return null;
 
@@ -692,7 +725,19 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
         {/* Swarm Flow Visualization Overlay */}
         {swarmFlowData && (
           <div className="my-3">
-            <SwarmFlowVisualizer flowData={swarmFlowData} />
+            <SwarmFlowVisualizer
+              flowData={swarmFlowData}
+              onInspectCode={(code) => {
+                if (onToggleEditor && !isEditorOpen) {
+                  onToggleEditor();
+                }
+                toast.info('已在工作区载入此分支方案代码');
+              }}
+              onSelectWinner={(workerId) => {
+                setSwarmFlowData((prev) => (prev ? { ...prev, selectedWorkerId: workerId } : null));
+                toast.success(`已人工指定选用 [${workerId}] 方案`);
+              }}
+            />
           </div>
         )}
 

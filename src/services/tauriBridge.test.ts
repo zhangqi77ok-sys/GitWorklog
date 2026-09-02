@@ -158,4 +158,26 @@ describe('tauriBridge Universal IPC Adapter', () => {
     const cleaned = sanitizeTextContent(brokenText);
     expect(cleaned).toBe('工具输出疑似有误。我用终端命令来验证真实情况。');
   });
+
+  it('parses standard XML invoke tags without DSM prefix and sanitizes all 6 dangling invoke tags', () => {
+    const standardXml = `我先读取工作区的关键文件来审查架构和逻辑。\n<invoke name="execute_command">\n<parameter name="command">dir /s /b</parameter>\n</invoke>\n</invoke>\n</invoke>\n</invoke>\n</invoke>\n</invoke>`;
+    const calls = parseToolCallsFromText(standardXml);
+    expect(calls.length).toBe(1);
+    expect(calls[0].name).toBe('execute_command');
+    expect(calls[0].args.command).toBe('dir /s /b');
+
+    const clean = sanitizeTextContent(standardXml);
+    expect(clean).toBe('我先读取工作区的关键文件来审查架构和逻辑。');
+  });
+
+  it('parses Anthropic style tool_call with JSON arguments', () => {
+    const anthropicXml = `Here is the tool invocation:\n<tool_call><name>read_file</name><arguments>{"path": "vite.config.ts"}</arguments></tool_call>`;
+    const calls = parseToolCallsFromText(anthropicXml);
+    expect(calls.length).toBe(1);
+    expect(calls[0].name).toBe('read_file');
+    expect(calls[0].args.path).toBe('vite.config.ts');
+
+    const clean = sanitizeTextContent(anthropicXml);
+    expect(clean).toBe('Here is the tool invocation:');
+  });
 });

@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import { Copy, Check, Terminal } from 'lucide-react';
 
 interface MarkdownRendererProps {
@@ -9,14 +9,17 @@ interface MarkdownRendererProps {
 export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, className = '' }) => {
   if (!content) return null;
 
-  // Clean DSML and internal tool invocation tags
+  // Clean all DSML, standard XML <invoke>, <parameter>, <tool_call>, <function_call> and dangling tags
   const cleanContent = content
-    .replace(/<[\s\/\u007C\uFF5C\u2502\u00A6]*DSML[\s\/\u007C\uFF5C\u2502\u00A6]*tool_calls[\s\/\u007C\uFF5C\u2502\u00A6>|]*>[\s\S]*?<\/[\s\/\u007C\uFF5C\u2502\u00A6]*DSML[\s\/\u007C\uFF5C\u2502\u00A6]*tool_calls[\s\/\u007C\uFF5C\u2502\u00A6>|]*>/gi, '')
-    .replace(/<[\s\/\u007C\uFF5C\u2502\u00A6]*DSML[\s\/\u007C\uFF5C\u2502\u00A6]*invoke[\s\S]*?<\/[\s\/\u007C\uFF5C\u2502\u00A6]*DSML[\s\/\u007C\uFF5C\u2502\u00A6]*invoke[\s\/\u007C\uFF5C\u2502\u00A6>|]*>/gi, '')
-    .replace(/<[\s\/\u007C\uFF5C\u2502\u00A6]*DSML[\s\/\u007C\uFF5C\u2502\u00A6]*parameter[\s\S]*?<\/[\s\/\u007C\uFF5C\u2502\u00A6]*DSML[\s\/\u007C\uFF5C\u2502\u00A6]*parameter[\s\/\u007C\uFF5C\u2502\u00A6>|]*>/gi, '')
+    // 1. Paired tool blocks
+    .replace(/<[\s\/\u007C\uFF5C\u2502\u00A6]*(?:DSM[A-Z0-9]*[\s\/\u007C\uFF5C\u2502\u00A6]*)?tool_calls[\s\S]*?<\/[\s\/\u007C\uFF5C\u2502\u00A6]*(?:DSM[A-Z0-9]*[\s\/\u007C\uFF5C\u2502\u00A6]*)?tool_calls[\s\/\u007C\uFF5C\u2502\u00A6>|]*>/gi, '')
+    .replace(/<[\s\/\u007C\uFF5C\u2502\u00A6]*(?:DSM[A-Z0-9]*[\s\/\u007C\uFF5C\u2502\u00A6]*)?invoke[\s\S]*?<\/[\s\/\u007C\uFF5C\u2502\u00A6]*(?:DSM[A-Z0-9]*[\s\/\u007C\uFF5C\u2502\u00A6]*)?invoke[\s\/\u007C\uFF5C\u2502\u00A6>|]*>/gi, '')
+    .replace(/<[\s\/\u007C\uFF5C\u2502\u00A6]*(?:DSM[A-Z0-9]*[\s\/\u007C\uFF5C\u2502\u00A6]*)?parameter[\s\S]*?<\/[\s\/\u007C\uFF5C\u2502\u00A6]*(?:DSM[A-Z0-9]*[\s\/\u007C\uFF5C\u2502\u00A6]*)?parameter[\s\/\u007C\uFF5C\u2502\u00A6>|]*>/gi, '')
+    .replace(/<[\s\/\u007C\uFF5C\u2502\u00A6]*(?:DSM[A-Z0-9]*[\s\/\u007C\uFF5C\u2502\u00A6]*)?function_call[\s\S]*?<\/[\s\/\u007C\uFF5C\u2502\u00A6]*(?:DSM[A-Z0-9]*[\s\/\u007C\uFF5C\u2502\u00A6]*)?function_call[\s\/\u007C\uFF5C\u2502\u00A6>|]*>/gi, '')
     .replace(/<[\s\/\u007C\uFF5C\u2502\u00A6]*tool_call[\s\/\u007C\uFF5C\u2502\u00A6]*>[\s\S]*?<\/[\s\/\u007C\uFF5C\u2502\u00A6]*tool_call[\s\/\u007C\uFF5C\u2502\u00A6>|]*>/gi, '')
-    .replace(/<[\s\/\u007C\uFF5C\u2502\u00A6]*\/?[\s\/\u007C\uFF5C\u2502\u00A6]*DSML[\s\S]*?>/gi, '')
-    .replace(/<[\s\/\u007C\uFF5C\u2502\u00A6]*\/?[\s\/\u007C\uFF5C\u2502\u00A6]*tool_call[\s\S]*?>/gi, '');
+    // 2. Isolated / dangling opening & closing tags
+    .replace(/<[\s\/\u007C\uFF5C\u2502\u00A6]*\/?[\s\/\u007C\uFF5C\u2502\u00A6]*(?:DSM[A-Z0-9]*[\s\/\u007C\uFF5C\u2502\u00A6]*)?(?:invoke|parameter|tool_calls?|function_call)[\s\S]*?>/gi, '')
+    .replace(/<[\s\/\u007C\uFF5C\u2502\u00A6]*\/?[\s\/\u007C\uFF5C\u2502\u00A6]*DSM[A-Z0-9]*[\s\S]*?>/gi, '');
 
   const elements = parseMarkdownBlocks(cleanContent);
 

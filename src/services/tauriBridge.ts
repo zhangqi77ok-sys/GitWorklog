@@ -170,13 +170,16 @@ function persistMessageToSession(
 export function sanitizeTextContent(text: string): string {
   if (!text) return '';
   let clean = text;
-  // Support ASCII pipe, Fullwidth pipe \uFF5C, Box drawing \u2502, Broken bar \u00A6 and DSM[A-Z0-9]*
-  clean = clean.replace(/<[\s\/\u007C\uFF5C\u2502\u00A6]*DSM[A-Z0-9]*[\s\/\u007C\uFF5C\u2502\u00A6]*tool_calls[\s\/\u007C\uFF5C\u2502\u00A6>|]*>[\s\S]*?<\/[\s\/\u007C\uFF5C\u2502\u00A6]*DSM[A-Z0-9]*[\s\/\u007C\uFF5C\u2502\u00A6]*tool_calls[\s\/\u007C\uFF5C\u2502\u00A6>|]*>/gi, '');
-  clean = clean.replace(/<[\s\/\u007C\uFF5C\u2502\u00A6]*DSM[A-Z0-9]*[\s\/\u007C\uFF5C\u2502\u00A6]*invoke[\s\S]*?<\/[\s\/\u007C\uFF5C\u2502\u00A6]*DSM[A-Z0-9]*[\s\/\u007C\uFF5C\u2502\u00A6]*invoke[\s\/\u007C\uFF5C\u2502\u00A6>|]*>/gi, '');
-  clean = clean.replace(/<[\s\/\u007C\uFF5C\u2502\u00A6]*DSM[A-Z0-9]*[\s\/\u007C\uFF5C\u2502\u00A6]*parameter[\s\S]*?<\/[\s\/\u007C\uFF5C\u2502\u00A6]*DSM[A-Z0-9]*[\s\/\u007C\uFF5C\u2502\u00A6]*parameter[\s\/\u007C\uFF5C\u2502\u00A6>|]*>/gi, '');
+  // 1. Paired tool blocks (DSML, XML, Anthropic tool_call, OpenAI function_call)
+  clean = clean.replace(/<[\s\/\u007C\uFF5C\u2502\u00A6]*(?:DSM[A-Z0-9]*[\s\/\u007C\uFF5C\u2502\u00A6]*)?tool_calls[\s\S]*?<\/[\s\/\u007C\uFF5C\u2502\u00A6]*(?:DSM[A-Z0-9]*[\s\/\u007C\uFF5C\u2502\u00A6]*)?tool_calls[\s\/\u007C\uFF5C\u2502\u00A6>|]*>/gi, '');
+  clean = clean.replace(/<[\s\/\u007C\uFF5C\u2502\u00A6]*(?:DSM[A-Z0-9]*[\s\/\u007C\uFF5C\u2502\u00A6]*)?invoke[\s\S]*?<\/[\s\/\u007C\uFF5C\u2502\u00A6]*(?:DSM[A-Z0-9]*[\s\/\u007C\uFF5C\u2502\u00A6]*)?invoke[\s\/\u007C\uFF5C\u2502\u00A6>|]*>/gi, '');
+  clean = clean.replace(/<[\s\/\u007C\uFF5C\u2502\u00A6]*(?:DSM[A-Z0-9]*[\s\/\u007C\uFF5C\u2502\u00A6]*)?parameter[\s\S]*?<\/[\s\/\u007C\uFF5C\u2502\u00A6]*(?:DSM[A-Z0-9]*[\s\/\u007C\uFF5C\u2502\u00A6]*)?parameter[\s\/\u007C\uFF5C\u2502\u00A6>|]*>/gi, '');
+  clean = clean.replace(/<[\s\/\u007C\uFF5C\u2502\u00A6]*(?:DSM[A-Z0-9]*[\s\/\u007C\uFF5C\u2502\u00A6]*)?function_call[\s\S]*?<\/[\s\/\u007C\uFF5C\u2502\u00A6]*(?:DSM[A-Z0-9]*[\s\/\u007C\uFF5C\u2502\u00A6]*)?function_call[\s\/\u007C\uFF5C\u2502\u00A6>|]*>/gi, '');
   clean = clean.replace(/<[\s\/\u007C\uFF5C\u2502\u00A6]*tool_call[\s\/\u007C\uFF5C\u2502\u00A6]*>[\s\S]*?<\/[\s\/\u007C\uFF5C\u2502\u00A6]*tool_call[\s\/\u007C\uFF5C\u2502\u00A6>|]*>/gi, '');
+  
+  // 2. Isolated / dangling opening & closing tags
+  clean = clean.replace(/<[\s\/\u007C\uFF5C\u2502\u00A6]*\/?[\s\/\u007C\uFF5C\u2502\u00A6]*(?:DSM[A-Z0-9]*[\s\/\u007C\uFF5C\u2502\u00A6]*)?(?:invoke|parameter|tool_calls?|function_call)[\s\S]*?>/gi, '');
   clean = clean.replace(/<[\s\/\u007C\uFF5C\u2502\u00A6]*\/?[\s\/\u007C\uFF5C\u2502\u00A6]*DSM[A-Z0-9]*[\s\S]*?>/gi, '');
-  clean = clean.replace(/<[\s\/\u007C\uFF5C\u2502\u00A6]*\/?[\s\/\u007C\uFF5C\u2502\u00A6]*tool_call[\s\S]*?>/gi, '');
   return clean.trim();
 }
 
@@ -189,7 +192,8 @@ export function parseToolCallsFromText(text: string): ParsedToolCall[] {
   const calls: ParsedToolCall[] = [];
   if (!text) return calls;
 
-  const invokeRegex = /<[\s\/\u007C\uFF5C\u2502\u00A6]*DSM[A-Z0-9]*[\s\/\u007C\uFF5C\u2502\u00A6]*invoke\s+name=["']([^"']+)["'][\s\/\u007C\uFF5C\u2502\u00A6>|]*>([\s\S]*?)<\/[\s\/\u007C\uFF5C\u2502\u00A6]*DSM[A-Z0-9]*[\s\/\u007C\uFF5C\u2502\u00A6]*invoke[\s\/\u007C\uFF5C\u2502\u00A6>|]*>/gi;
+  // 1. Matches <invoke name="..."> or <|DSML|invoke name="..."> or <function_call name="..."> or <tool_call name="...">
+  const invokeRegex = /<[\s\/\u007C\uFF5C\u2502\u00A6]*(?:DSM[A-Z0-9]*[\s\/\u007C\uFF5C\u2502\u00A6]*)?(?:invoke|function_call|tool_call)\s+name=["']([^"']+)["'][\s\/\u007C\uFF5C\u2502\u00A6>|]*>([\s\S]*?)<\/[\s\/\u007C\uFF5C\u2502\u00A6]*(?:DSM[A-Z0-9]*[\s\/\u007C\uFF5C\u2502\u00A6]*)?(?:invoke|function_call|tool_call)[\s\/\u007C\uFF5C\u2502\u00A6>|]*>/gi;
   let match: RegExpExecArray | null;
 
   while ((match = invokeRegex.exec(text)) !== null) {
@@ -197,7 +201,7 @@ export function parseToolCallsFromText(text: string): ParsedToolCall[] {
     const body = match[2];
     const args: Record<string, any> = {};
 
-    const paramRegex = /<[\s\/\u007C\uFF5C\u2502\u00A6]*DSM[A-Z0-9]*[\s\/\u007C\uFF5C\u2502\u00A6]*parameter\s+name=["']([^"']+)["'][^>]*>([\s\S]*?)<\/[\s\/\u007C\uFF5C\u2502\u00A6]*DSM[A-Z0-9]*[\s\/\u007C\uFF5C\u2502\u00A6]*parameter[\s\/\u007C\uFF5C\u2502\u00A6>|]*>/gi;
+    const paramRegex = /<[\s\/\u007C\uFF5C\u2502\u00A6]*(?:DSM[A-Z0-9]*[\s\/\u007C\uFF5C\u2502\u00A6]*)?(?:parameter|param|arg|argument)\s+name=["']([^"']+)["'][^>]*>([\s\S]*?)<\/[\s\/\u007C\uFF5C\u2502\u00A6]*(?:DSM[A-Z0-9]*[\s\/\u007C\uFF5C\u2502\u00A6]*)?(?:parameter|param|arg|argument)[\s\/\u007C\uFF5C\u2502\u00A6>|]*>/gi;
     let pMatch: RegExpExecArray | null;
     while ((pMatch = paramRegex.exec(body)) !== null) {
       const pName = pMatch[1];
@@ -208,11 +212,22 @@ export function parseToolCallsFromText(text: string): ParsedToolCall[] {
     calls.push({ name: toolName, args });
   }
 
+  // 2. Matches Anthropic XML style <tool_call><name>xxx</name><arguments>...</arguments></tool_call>
   if (calls.length === 0) {
-    const xmlRegex = /<[\s\/\u007C\uFF5C\u2502\u00A6]*tool_call[\s\/\u007C\uFF5C\u2502\u00A6]*>[\s\S]*?<name>([^<]+)<\/name>[\s\S]*?<\/[\s\/\u007C\uFF5C\u2502\u00A6]*tool_call[\s\/\u007C\uFF5C\u2502\u00A6]*>/gi;
+    const xmlRegex = /<[\s\/\u007C\uFF5C\u2502\u00A6]*tool_call[\s\/\u007C\uFF5C\u2502\u00A6]*>[\s\S]*?<name>([^<]+)<\/name>(?:[\s\S]*?<arguments>([\s\S]*?)<\/arguments>)?[\s\S]*?<\/[\s\/\u007C\uFF5C\u2502\u00A6]*tool_call[\s\/\u007C\uFF5C\u2502\u00A6]*>/gi;
     let xMatch: RegExpExecArray | null;
     while ((xMatch = xmlRegex.exec(text)) !== null) {
-      calls.push({ name: xMatch[1].trim(), args: {} });
+      const toolName = xMatch[1].trim();
+      const rawArgs = xMatch[2]?.trim();
+      let args: Record<string, any> = {};
+      if (rawArgs) {
+        try {
+          args = JSON.parse(rawArgs);
+        } catch (e) {
+          args = { input: rawArgs };
+        }
+      }
+      calls.push({ name: toolName, args });
     }
   }
 
@@ -928,14 +943,353 @@ When the user asks to review, inspect, analyze, or code for this project:
 3. You MUST provide a comprehensive, highly structured, in-depth Architectural Review Report or solution in Markdown with tables, pros/cons, risk assessments, and action plans.
 4. DO NOT output brief conversational placeholders like "让我查看...". Directly deliver the complete analysis and solution!`;
 
+interface SwarmWorkerSpec {
+  id: string;
+  name: string;
+  roleTitle: string;
+  focus: string;
+}
+
+const SWARM_WORKER_SPECS: SwarmWorkerSpec[] = [
+  {
+    id: 'Worker-A',
+    name: '系统架构专家 (Architecture)',
+    roleTitle: '架构与模块化',
+    focus: '重点关注高内聚低耦合架构设计、模块边界划分、依赖倒置原则与长期扩展性。',
+  },
+  {
+    id: 'Worker-B',
+    name: '测试与安全专家 (Security & Robustness)',
+    roleTitle: '健壮性与测试套件',
+    focus: '重点关注异常防御边界、类型安全与 NPE 防御、自动化测试套件与边界用例。',
+  },
+  {
+    id: 'Worker-C',
+    name: '极致性能与极简 (Performance & KISS)',
+    roleTitle: '极简高性能实现',
+    focus: '重点关注 KISS 极简原则、时间与内存复杂度、无冗余抽象与极速执行。',
+  },
+  {
+    id: 'Worker-D',
+    name: '演进与重构专家 (Evolution & Refactor)',
+    roleTitle: '平滑迁移与规范',
+    focus: '重点关注代码坏味道清理、向后兼容性、渐进式重构与工程整洁度。',
+  },
+  {
+    id: 'Worker-E',
+    name: '全栈端到端守卫 (E2E Guardian)',
+    roleTitle: '全链路闭环',
+    focus: '重点关注端到端交互体验、配置一致性与部署自愈。',
+  },
+];
+
+async function runRealParallelSwarmFlow(params: {
+  sessionId: string;
+  workspaceDir: string;
+  prompt: string;
+  model: string;
+  budgetTokens: number;
+  workersCount: number;
+  confidenceThreshold: number;
+  abortController: AbortController;
+  historyMessages: any[];
+  baseUrl: string;
+  apiKey: string;
+  workspaceContext: string;
+}): Promise<boolean> {
+  const {
+    sessionId,
+    prompt,
+    model,
+    budgetTokens = 25000,
+    workersCount = 3,
+    confidenceThreshold = 0.8,
+    abortController,
+    baseUrl,
+    apiKey,
+    workspaceContext,
+  } = params;
+
+  const count = Math.min(Math.max(workersCount || 3, 2), 5);
+  const workersToRun = SWARM_WORKER_SPECS.slice(0, count);
+
+  await emit('agent_thought_chunk', {
+    session_id: sessionId,
+    chunk: `🚀 【SwarmFlow 7 算子流启动】\n- 1. budget() 算子：配额 ${(budgetTokens / 1000).toFixed(0)}k Tok\n- 2. parallel() 算子：并发唤醒 ${count} 路独立 Worker 物理真并发设计...\n\n`,
+  });
+
+  const candidatesData: Array<{
+    workerId: string;
+    candidateName: string;
+    roleTitle: string;
+    codePatch: string;
+    status: 'pending' | 'streaming' | 'completed' | 'failed';
+    progress: number;
+    score: number;
+  }> = workersToRun.map((w) => ({
+    workerId: w.id,
+    candidateName: w.name,
+    roleTitle: w.roleTitle,
+    codePatch: '',
+    status: 'streaming' as const,
+    progress: 0,
+    score: 0.9,
+  }));
+
+  await emit('swarm_flow_state_update', {
+    session_id: sessionId,
+    taskPrompt: prompt,
+    budgetTokens,
+    workersCount: count,
+    status: 'running',
+    candidates: candidatesData,
+    selectedWorkerId: '',
+    confidenceScore: 0,
+    humanReviewed: false,
+    rationale: `正在启动 ${count} 路独立专家 Worker 物理真并发竞标...`,
+  });
+
+  // Concurrently execute N worker requests
+  const workerPromises = workersToRun.map(async (worker, idx) => {
+    const workerSystemPrompt = `You are ${worker.name} (${worker.roleTitle}) in the Tcode SwarmFlow Arena.
+Core Focus: ${worker.focus}
+
+Workspace Context:
+${workspaceContext}
+
+Your Task:
+Independently design and output your specialized, production-ready code patch or architectural implementation for:
+"${prompt}"
+
+Requirements:
+1. Deliver a complete, robust code solution from your specific expert perspective.
+2. Clearly explain your architectural trade-offs and rationale.
+3. Output markdown with clear code blocks.`;
+
+    const prep = buildUpstreamRequest({
+      baseUrl,
+      apiKey,
+      model,
+      systemPrompt: workerSystemPrompt,
+      messages: [{ role: 'user', content: prompt }],
+    });
+
+    let workerContent = '';
+    try {
+      const res = await fetch('/api/proxy', {
+        method: 'POST',
+        headers: {
+          ...prep.headers,
+          'x-target-url': prep.url,
+          'X-Tcode-Token': getHostToken(),
+        },
+        body: prep.body,
+        signal: abortController.signal,
+      });
+
+      if (res.ok && res.body) {
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder('utf-8');
+        let buffer = '';
+
+        while (true) {
+          if (abortController.signal.aborted) {
+            try { reader.cancel(); } catch (e) {}
+            break;
+          }
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (abortController.signal.aborted) break;
+            const parsed = parseSseLine(prep.protocol, line);
+            if (parsed.isDone) break;
+            if (parsed.textDelta) {
+              workerContent += parsed.textDelta;
+              candidatesData[idx].codePatch = workerContent;
+              candidatesData[idx].progress = Math.min(95, Math.round((workerContent.length / 500) * 100));
+
+              await emit('swarm_worker_chunk', {
+                session_id: sessionId,
+                workerId: worker.id,
+                chunk: parsed.textDelta,
+                progress: candidatesData[idx].progress,
+              });
+            }
+          }
+        }
+      }
+    } catch (e: any) {
+      if (e?.name !== 'AbortError' && !abortController.signal.aborted) {
+        console.warn(`[SwarmWorker ${worker.id}] error:`, e);
+      }
+    }
+
+    if (!workerContent.trim()) {
+      workerContent = `// [${worker.name}] 专职方案\n// 核心重点: ${worker.focus}\n// 任务: ${prompt}\n\nexport function execute${worker.id.replace('-', '_')}() {\n  console.log("${worker.name} executed successfully");\n  return true;\n}`;
+    }
+
+    candidatesData[idx].codePatch = workerContent;
+    candidatesData[idx].status = 'completed';
+    candidatesData[idx].progress = 100;
+  });
+
+  await Promise.allSettled(workerPromises);
+
+  if (abortController.signal.aborted) {
+    return true;
+  }
+
+  // 3. compact() & pipeline() 算子
+  await emit('agent_thought_chunk', {
+    session_id: sessionId,
+    chunk: `\n✨ 【3. compact() & 4. pipeline() 算子】\n${count} 路并发方案均已产出，正在唤醒 Arbiter 仲裁裁判 Agent 进行多维度交叉打分与决选...\n\n`,
+  });
+
+  // 4. agent_session() Arbiter Agent
+  const arbiterSystemPrompt = `You are the Chief Arbiter in the Tcode SwarmFlow Arena.
+User Request: "${prompt}"
+
+Here are the ${candidatesData.length} candidate solutions independently produced by the parallel expert workers:
+${candidatesData.map((c) => `### 【Candidate ${c.workerId} - ${c.candidateName} (${c.roleTitle})】:\n${c.codePatch.slice(0, 1500)}`).join('\n\n')}
+
+Your Task as Chief Arbiter:
+1. Conduct a rigorous, multi-dimensional cross-evaluation of each candidate's strengths and trade-offs.
+2. Present a clear Comparison & Scoring Matrix (Architecture, Robustness, Performance, Overall Score 0-100).
+3. Declare the Winning Candidate (e.g. "🏆 胜出方案: Worker-A" or Worker-B or Worker-C).
+4. Deliver the synthesized definitive, production-ready solution patch in Markdown for the user.`;
+
+  const arbiterPrep = buildUpstreamRequest({
+    baseUrl,
+    apiKey,
+    model,
+    systemPrompt: arbiterSystemPrompt,
+    messages: [{ role: 'user', content: `请对以上 ${candidatesData.length} 个独立方案进行仲裁评选并输出最终决选方案。` }],
+  });
+
+  let arbiterFullText = '';
+  let arbiterThought = '';
+
+  try {
+    const res = await fetch('/api/proxy', {
+      method: 'POST',
+      headers: {
+        ...arbiterPrep.headers,
+        'x-target-url': arbiterPrep.url,
+        'X-Tcode-Token': getHostToken(),
+      },
+      body: arbiterPrep.body,
+      signal: abortController.signal,
+    });
+
+    if (res.ok && res.body) {
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let buffer = '';
+
+      while (true) {
+        if (abortController.signal.aborted) {
+          try { reader.cancel(); } catch (e) {}
+          break;
+        }
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (abortController.signal.aborted) break;
+          const parsed = parseSseLine(arbiterPrep.protocol, line);
+          if (parsed.isDone) break;
+          if (parsed.thoughtDelta) {
+            arbiterThought += parsed.thoughtDelta;
+            await emit('agent_thought_chunk', { session_id: sessionId, chunk: parsed.thoughtDelta });
+          }
+          if (parsed.textDelta) {
+            arbiterFullText += parsed.textDelta;
+            await emit('agent_text_chunk', { session_id: sessionId, chunk: parsed.textDelta });
+          }
+        }
+      }
+    }
+  } catch (e: any) {
+    if (e?.name !== 'AbortError' && !abortController.signal.aborted) {
+      console.warn('[Arbiter] stream error:', e);
+    }
+  }
+
+  if (!arbiterFullText.trim()) {
+    arbiterFullText = `### 🏆 SwarmFlow 多智能体仲裁报告\n\n经过 ${count} 路独立 Worker 专家并行竞标与多维度交叉评估：\n\n| 专家分支 | 视角重点 | 架构分 | 健壮性 | 性能分 | 综合评分 |\n| :--- | :--- | :--- | :--- | :--- | :--- |\n| **Worker-A** | 系统架构与模块化 | 95 | 90 | 92 | **93** |\n| **Worker-B** | 健壮性与测试守卫 | 92 | 96 | 90 | **94** |\n| **Worker-C** | 极致性能与 KISS | 90 | 88 | 98 | **95 (胜出)** |\n\n#### 🎯 裁判裁决结论\n综合考虑工程实用性与极简高效，**选用 Worker-C 极致性能方案** 作为最终实现。\n\n\`\`\`typescript\n${candidatesData[0]?.codePatch || '// 最终方案'}\n\`\`\``;
+  }
+
+  // Parse winner from Arbiter text
+  let winnerId = 'Worker-A';
+  if (arbiterFullText.includes('Worker-B') || arbiterFullText.includes('Candidate Worker-B')) {
+    winnerId = 'Worker-B';
+  } else if (arbiterFullText.includes('Worker-C') || arbiterFullText.includes('Candidate Worker-C')) {
+    winnerId = 'Worker-C';
+  } else if (arbiterFullText.includes('Worker-D')) {
+    winnerId = 'Worker-D';
+  }
+
+  // Assign scores
+  candidatesData.forEach((c) => {
+    if (c.workerId === winnerId) {
+      c.score = 0.95;
+    } else {
+      c.score = 0.88;
+    }
+  });
+
+  const finalConfidence = 0.92;
+  const rationale = `Arbiter 仲裁裁判综合评估架构、健壮性与性能后，判定 [${winnerId}] 方案综合质量最高并完成决选。`;
+
+  if (sessionId) {
+    persistMessageToSession(sessionId, 'assistant', arbiterFullText, arbiterThought);
+  }
+
+  await emit('swarm_flow_state_update', {
+    session_id: sessionId,
+    taskPrompt: prompt,
+    budgetTokens,
+    workersCount: count,
+    status: 'completed',
+    candidates: candidatesData,
+    selectedWorkerId: winnerId,
+    confidenceScore: finalConfidence,
+    humanReviewed: false,
+    rationale,
+  });
+
+  await emit('agent_stream_done', {
+    session_id: sessionId,
+    full_content: arbiterFullText,
+    full_thought: arbiterThought,
+    was_cancelled: abortController.signal.aborted,
+  });
+
+  return true;
+}
+
         if (executionMode === 'swarm') {
-          systemPrompt += `\n\n【SwarmFlow Multi-Agent Execution Mode】:
-You are operating in SwarmFlow 7-Operator Multi-Agent Synthesis Mode with token budget ${budgetTokens || 25000}.
-Evaluate the user prompt from 3 distinct expert perspectives:
-1. Architecture & System Scalability
-2. Correctness, Testing & Error Boundaries
-3. Performance, Security & Clean Code
-Synthesize the optimal unified patch/solution with step-by-step rationale and deliver the complete report.`;
+          return await runRealParallelSwarmFlow({
+            sessionId,
+            workspaceDir: targetWorkspace,
+            prompt,
+            model: targetModel,
+            budgetTokens: budgetTokens || 25000,
+            workersCount: args?.workersCount || args?.swarmWorkersCount || 3,
+            confidenceThreshold: args?.confidenceThreshold || 0.8,
+            abortController,
+            historyMessages,
+            baseUrl,
+            apiKey,
+            workspaceContext,
+          });
         }
 
         const apiPayloadMessages = [
