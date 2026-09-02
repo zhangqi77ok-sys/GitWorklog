@@ -1,6 +1,7 @@
 import { mockIPC } from '@tauri-apps/api/mocks';
 import { emit } from '@tauri-apps/api/event';
 import { PluginMetadata, ToolSchema } from '../types';
+import { buildUpstreamRequest, inferUpstreamProtocol, parseSseLine } from './upstreamAdapters';
 
 export interface BridgeSessionRecord {
   id: string;
@@ -882,22 +883,22 @@ When the user asks to review, inspect, analyze, or code for this project:
           let streamedSuccessfully = false;
 
           try {
-            const chatUrl = baseUrl.endsWith('/v1') ? `${baseUrl}/chat/completions` : `${baseUrl}/v1/chat/completions`;
-            const payload = {
+            const prep = buildUpstreamRequest({
+              baseUrl,
+              apiKey,
               model: targetModel,
+              systemPrompt,
               messages: apiPayloadMessages,
-              stream: true,
-            };
+            });
 
             const res = await fetch('/api/proxy', {
               method: 'POST',
               headers: {
-                'Content-Type': 'application/json',
-                'x-target-url': chatUrl,
-                'Authorization': `Bearer ${apiKey}`,
+                ...prep.headers,
+                'x-target-url': prep.url,
                 'X-Tcode-Token': getHostToken(),
               },
-              body: JSON.stringify(payload),
+              body: prep.body,
             });
 
             if (res.ok && res.body) {
@@ -914,32 +915,25 @@ When the user asks to review, inspect, analyze, or code for this project:
                 buffer = lines.pop() || '';
 
                 for (const line of lines) {
-                  const trimmed = line.trim();
-                  if (!trimmed || trimmed.startsWith(':')) continue;
-                  if (trimmed === 'data: [DONE]') break;
-                  if (trimmed.startsWith('data: ')) {
-                    try {
-                      const parsed = JSON.parse(trimmed.slice(6));
-                      const delta = parsed.choices?.[0]?.delta;
-                      if (delta?.reasoning_content) {
-                        turnThought += delta.reasoning_content;
-                        accumulatedThought += delta.reasoning_content;
-                        await emit('agent_thought_chunk', {
-                          session_id: sessionId,
-                          chunk: delta.reasoning_content,
-                        });
-                      }
-                      if (delta?.content) {
-                        turnContent += delta.content;
-                        const cleanChunk = sanitizeTextContent(delta.content);
-                        if (cleanChunk) {
-                          await emit('agent_text_chunk', {
-                            session_id: sessionId,
-                            chunk: cleanChunk,
-                          });
-                        }
-                      }
-                    } catch (e) {}
+                  const parsed = parseSseLine(prep.protocol, line);
+                  if (parsed.isDone) {
+                    break;
+                  }
+                  if (parsed.thoughtDelta) {
+                    turnThought += parsed.thoughtDelta;
+                    accumulatedThought += parsed.thoughtDelta;
+                    await emit('agent_thought_chunk', {
+                      session_id: sessionId,
+                      chunk: parsed.thoughtDelta,
+                    });
+                  }
+                  if (parsed.textDelta) {
+                    turnContent += parsed.textDelta;
+                    // Directly emit text chunk without stripping spaces or newlines
+                    await emit('agent_text_chunk', {
+                      session_id: sessionId,
+                      chunk: parsed.textDelta,
+                    });
                   }
                 }
               }

@@ -18,6 +18,7 @@
 | **08** | **系统日志诊断追踪系统与 7 天自动清理定时任务设计** | 系统运维 / 7天日志留存 / 故障排查 | `toUpperCase` 空指针拦截修补、全量前端/后端日志收集体系、24小时守护定时任务与 7 天滑动保留算法 | [08-system-logger-and-7-day-auto-cleanup-daemon.md](./08-system-logger-and-7-day-auto-cleanup-daemon.md) |
 | **09** | **会话消息持久化存盘与时间戳防御性渲染** | 数据持久化 / 对话状态追踪 / 消息防丢失 | 对话消息自动异步落盘存盘、`updated_at` 时间戳实时刷新与 `NaN:NaN` 防御性格式化 | [09-session-message-persistence-and-timestamp-formatting.md](./09-session-message-persistence-and-timestamp-formatting.md) |
 | **10** | **自主 Agent 多轮工具闭环 (Multi-Turn Loop) 与 DSML 工具调用解析** | Agent 认知架构 / 自动工具执行 | DSML XML 工具指令正则提取、本地 `Lookup`/`read_file` 执行网桥与多轮 Agent 自动协作闭环 | [10-autonomous-agent-multi-turn-loop-and-dsml-tool-calling.md](./10-autonomous-agent-multi-turn-loop-and-dsml-tool-calling.md) |
+| **11** | **OpenAI 双上游协议、Claude 独立协议适配、流式防中断与 Markdown 渲染引擎设计** | 模型网关 / 多协议适配 / UI富文本渲染 | OpenAI Chat vs Responses 协议、Anthropic Messages 顶层 system 约束、流式 chunk 零裁剪与专有 Markdown 渲染器 | [11-upstream-protocols-and-markdown-rendering.md](./11-upstream-protocols-and-markdown-rendering.md) |
 
 ---
 

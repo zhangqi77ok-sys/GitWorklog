@@ -23,6 +23,7 @@ import { SubtaskProgressCard } from './SubtaskProgressCard';
 import { SwarmFlowVisualizer, SwarmFlowState } from './SwarmFlowVisualizer';
 import { ExecutionModeCapsule } from './ExecutionModeCapsule';
 import { ToolCallCard } from './ToolCallCard';
+import { MarkdownRenderer } from './MarkdownRenderer';
 import { toast } from '../common/Toast';
 import type { Subtask, ExecutionMode } from '../../types';
 
@@ -477,7 +478,11 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ onOpenSettings }) => {
                         : 'bg-white border border-[#E6DFD5] text-[#1E1C1A] rounded-tl-xs shadow-xs'
                     }`}
                   >
-                    <div className="whitespace-pre-wrap">{cleanText}</div>
+                    {msg.role === 'user' ? (
+                      <div className="whitespace-pre-wrap">{cleanText}</div>
+                    ) : (
+                      <MarkdownRenderer content={cleanText} />
+                    )}
 
                     {/* Diff Viewer Button for Agent Code Patches */}
                     {msg.role === 'assistant' && msg.content.includes('```') && (
@@ -534,7 +539,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ onOpenSettings }) => {
 
               return (
                 <div className="max-w-[85%] bg-white border border-[#E6DFD5] text-[#1E1C1A] rounded-2xl rounded-tl-xs p-3.5 text-xs leading-relaxed shadow-xs">
-                  <div className="whitespace-pre-wrap">{cleanStreaming}</div>
+                  <MarkdownRenderer content={cleanStreaming} />
                 </div>
               );
             })()}
