@@ -31,6 +31,7 @@ import { SwarmFlowVisualizer, SwarmFlowState } from './SwarmFlowVisualizer';
 import { ExecutionModeCapsule } from './ExecutionModeCapsule';
 import { ToolCallCard } from './ToolCallCard';
 import { MarkdownRenderer } from './MarkdownRenderer';
+import { ResizableMessageBubble } from './ResizableMessageBubble';
 import { sanitizeTextContent } from '../../services/tauriBridge';
 import { toast } from '../common/Toast';
 import type { Subtask, ExecutionMode } from '../../types';
@@ -674,57 +675,15 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                 }
 
                 return (
-                  <div
-                    className={`relative max-w-[85%] rounded-2xl p-3.5 text-xs leading-relaxed select-text ${
-                      msg.role === 'user'
-                        ? 'bg-[#D96B27] text-white rounded-tr-xs shadow-xs'
-                        : 'bg-white border border-[#E6DFD5] text-[#1E1C1A] rounded-tl-xs shadow-xs'
-                    }`}
-                  >
-                    {/* 1-Click Copy Button on Bubble Hover */}
-                    <div className="absolute top-2 right-2 opacity-0 group-hover/msg:opacity-100 transition-opacity select-none flex items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={() => handleCopyMessage(msg.id, cleanText)}
-                        title="复制对话内容"
-                        className={`p-1 rounded-md transition-all shadow-2xs cursor-pointer ${
-                          msg.role === 'user'
-                            ? 'bg-[#B8551B] text-white hover:bg-[#9E4514]'
-                            : 'bg-[#FAF8F5] text-[#8A847C] hover:text-[#1E1C1A] hover:bg-white border border-[#E6DFD5]'
-                        }`}
-                      >
-                        {copiedMessageId === msg.id ? (
-                          <Check className="w-3 h-3 text-green-500" />
-                        ) : (
-                          <Copy className="w-3 h-3" />
-                        )}
-                      </button>
-                    </div>
-
-                    {msg.role === 'user' ? (
-                      <div className="whitespace-pre-wrap select-text pr-6">{cleanText}</div>
-                    ) : (
-                      <div className="select-text pr-6">
-                        <MarkdownRenderer content={cleanText} />
-                      </div>
-                    )}
-
-                    {/* Diff Viewer Button for Agent Code Patches */}
-                    {msg.role === 'assistant' && msg.content.includes('```') && (
-                      <div className="mt-3 pt-2.5 border-t border-[#E6DFD5] flex items-center justify-between select-none">
-                        <span className="text-[10px] text-[#8A847C] font-mono">
-                          包含代码补丁变更
-                        </span>
-                        <button
-                          onClick={() => handleOpenDiffFromCode(msg.content)}
-                          className="flex items-center gap-1 px-2.5 py-1 bg-[#FAF8F5] border border-[#E6DFD5] hover:border-[#D96B27] text-[#D96B27] rounded-lg text-[11px] font-bold transition-all shadow-2xs cursor-pointer"
-                        >
-                          <SplitSquareVertical className="w-3 h-3" />
-                          <span>在编辑器中审查 Diff</span>
-                        </button>
-                      </div>
-                    )}
-                  </div>
+                  <ResizableMessageBubble
+                    msgId={msg.id}
+                    role={msg.role}
+                    cleanText={cleanText}
+                    rawContent={msg.content || ''}
+                    onCopy={() => handleCopyMessage(msg.id, cleanText)}
+                    isCopied={copiedMessageId === msg.id}
+                    onOpenDiff={() => handleOpenDiffFromCode(msg.content)}
+                  />
                 );
               })()}
             </div>
@@ -757,9 +716,15 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
               if (!cleanStreaming) return null;
 
               return (
-                <div className="max-w-[85%] bg-white border border-[#E6DFD5] text-[#1E1C1A] rounded-2xl rounded-tl-xs p-3.5 text-xs leading-relaxed shadow-xs">
-                  <MarkdownRenderer content={cleanStreaming} />
-                </div>
+                <ResizableMessageBubble
+                  msgId="streaming-partial"
+                  role="assistant"
+                  cleanText={cleanStreaming}
+                  rawContent={streamingContent || ''}
+                  onCopy={() => handleCopyMessage('streaming-partial', cleanStreaming)}
+                  isCopied={copiedMessageId === 'streaming-partial'}
+                  onOpenDiff={() => handleOpenDiffFromCode(streamingContent)}
+                />
               );
             })()}
           </div>
