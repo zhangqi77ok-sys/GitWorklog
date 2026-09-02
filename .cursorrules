@@ -5,6 +5,12 @@ You must strictly abide by all rules defined in `AGENTS.md` and this document at
 
 ## 🚨 核心强制铁律 (Mandatory Iron Rules)
 
+0. **优先通读对齐三大技能 (Iron Rule 0.8)**:
+   - 每次处理任务前，**必须优先调阅并严格对齐三大专业 Skill 规约**：
+     - `ui-ux` (`.agents/skills/ui-ux/SKILL.md`)：暖色极简调色盘（`#FAF8F5`/`#D96B27`）、16:9 人机工程学布局、弹窗居中与 Esc 退出、图标 Tooltip；
+     - `react-web` (`.agents/skills/react-web/SKILL.md`)：React 19 积木式拆解、Zustand 单一数据源与精准订阅、TypeScript 100% 严格类型守卫、零 Crash 崩溃；
+     - `rust` (`.agents/skills/rust/SKILL.md`)：Safe Rust、生产代码无 `unwrap()`、外部进程强制 `CREATE_NO_WINDOW`、Tauri v2 强类型 IPC 与沙箱保护。
+
 1. **知识点与解决方案强制沉淀 (Iron Rule 6)**:
    - 每一个遇到的核心知识点、架构决策、环境依赖与高频编译/打包/运行报错，**必须在 `docs/knowledge/` 目录下放置对应的知识内容、底层原理和完整解决方案**。
    - 采用标准四段论：① 背景与问题 -> ② 核心原理与知识内容 -> ③ 标准解决方案与实操步骤 -> ④ 避坑指南与最佳实践。

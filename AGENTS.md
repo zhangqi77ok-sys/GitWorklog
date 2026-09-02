@@ -28,6 +28,17 @@
 
 ---
 
+### 【铁律 0.8: UI/UX、React Web 与 Rust 技能前置必审铁律 (Mandatory Prior Skill Consultation)】
+1. **强制先验查阅**：
+   - 每次处理任何需求、界面调整、组件开发、状态改造、后端接口或底层架构时，**在动手设计或编写任何代码前，必须无条件优先调阅并严格遵循以下三大专业 Skill 规范**：
+     - **`ui-ux` (`.agents/skills/ui-ux/SKILL.md`)**：暖色极简调色盘（`#FAF8F5`/`#F4EFEA`/`#D96B27`）、16:9 人机工程学布局、弹窗严格水平垂直居中、无多余拟物阴影、全部图标鼠标悬停 Tooltip 提示、对话思考卡片与工具卡片精致折叠；
+     - **`react-web` (`.agents/skills/react-web/SKILL.md`)**：React 19 积木式组件拆分、Zustand 单一数据源与精准选择器订阅、TypeScript 100% 严格类型守卫、局部刷新避免雪崩式卡顿、空值守卫杜绝运行时崩溃；
+     - **`rust` (`.agents/skills/rust/SKILL.md`)**：Safe Rust 内存安全、生产代码严禁 `unwrap()/expect()`、外部进程调用强制注入 `CREATE_NO_WINDOW`（`0x08000000`）、Tauri v2 强类型 IPC、路径沙箱防穿越、修改前影子快照秒级回退；
+2. **审查违规打回制**：
+   - 严禁绕过三大技能规范直接写逻辑；任何不符合三大技能准则的代码或方案，一律打回重构。
+
+---
+
 ### 【铁律 1.5: 每次开发完成必须打包安装 + 真实桌面端调用测试（强制闭环）】
 - **触发条件**：任何代码修改 / 功能开发 / Bug 修复完成后，**无条件执行以下闭环，严禁只写代码不验证**：
   1. **增量打包**：调用 `npm run build:installer`（或 `python build_installer.py`），生成 `dist/Tcode-Setup.exe` 与 `release/Tcode-Setup-v2.0.0.exe`；
