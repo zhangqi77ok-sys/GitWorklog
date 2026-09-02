@@ -7,6 +7,7 @@ import { ChatPanel } from './components/chat/ChatPanel';
 import { MonacoEditorWorkspace } from './components/editor/MonacoEditorWorkspace';
 import { TerminalDrawer } from './components/terminal/TerminalDrawer';
 import { SettingsModal, SettingsTab } from './components/settings/SettingsModal';
+import { SnippetManagerModal } from './components/snippets/SnippetManagerModal';
 import { ToastContainer } from './components/common/Toast';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { useProjectSessionStore } from './store/useProjectSessionStore';
@@ -44,6 +45,7 @@ export function App() {
   });
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isSnippetsOpen, setIsSnippetsOpen] = useState(false);
   const [settingsInitialTab, setSettingsInitialTab] = useState<SettingsTab>('gateway');
 
   const [isTerminalOpen, setIsTerminalOpen] = useState<boolean>(() => {
@@ -122,6 +124,8 @@ export function App() {
       // Keep conversation in view
     } else if (tab === 'files') {
       toggleEditor();
+    } else if (tab === 'snippets') {
+      setIsSnippetsOpen(true);
     } else if (tab === 'plugins') {
       setSettingsInitialTab('skills');
       setIsSettingsOpen(true);
@@ -323,6 +327,12 @@ export function App() {
           theme={theme}
           onToggleTheme={toggleTheme}
           initialTab={settingsInitialTab}
+        />
+
+        {/* Snippet Manager & Knowledge Vault Modal */}
+        <SnippetManagerModal
+          isOpen={isSnippetsOpen}
+          onClose={() => setIsSnippetsOpen(false)}
         />
 
         {/* Global Toast Notification System */}

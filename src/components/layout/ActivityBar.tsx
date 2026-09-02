@@ -1,7 +1,7 @@
 import React from 'react';
-import { MessageSquare, FolderTree, Cpu, Settings, Terminal, Shield } from 'lucide-react';
+import { MessageSquare, FolderTree, Cpu, Settings, Terminal, Shield, Code2 } from 'lucide-react';
 
-export type ActiveTab = 'chat' | 'files' | 'plugins' | 'settings' | 'terminal';
+export type ActiveTab = 'chat' | 'files' | 'plugins' | 'snippets' | 'terminal' | 'settings';
 
 interface ActivityBarProps {
   activeTab: ActiveTab;
@@ -12,6 +12,7 @@ export const ActivityBar: React.FC<ActivityBarProps> = ({ activeTab, onSelectTab
   const items: { id: ActiveTab; icon: React.ReactNode; label: string }[] = [
     { id: 'chat', icon: <MessageSquare size={18} />, label: '智能会话' },
     { id: 'files', icon: <FolderTree size={18} />, label: '工作区' },
+    { id: 'snippets', icon: <Code2 size={18} />, label: '代码片段与知识沉淀' },
     { id: 'plugins', icon: <Cpu size={18} />, label: '能力插件' },
     { id: 'terminal', icon: <Terminal size={18} />, label: '终端' },
     { id: 'settings', icon: <Settings size={18} />, label: '设置' },
