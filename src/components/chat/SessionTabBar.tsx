@@ -23,7 +23,6 @@ export const SessionTabBar: React.FC<SessionTabBarProps> = ({
     activeSessionId,
     openSessionIds,
     setActiveSession,
-    openSessionTab,
     closeSessionTab,
     closeOtherSessionTabs,
     closeAllSessionTabs,
@@ -59,19 +58,17 @@ export const SessionTabBar: React.FC<SessionTabBarProps> = ({
     }
   }
 
-  const openSessions = openSessionIds
+  let openSessions = openSessionIds
     .map((id) => ({ id, item: allSessionsMap.get(id) }))
     .filter((entry): entry is { id: string; item: { session: SessionRecord; projectName: string } } => !!entry.item);
 
-  // Auto-recover session tab if empty
-  useEffect(() => {
-    if (openSessions.length === 0) {
-      const fallbackSessId = activeSessionId || projects?.[0]?.sessions?.[0]?.id;
-      if (fallbackSessId) {
-        openSessionTab(fallbackSessId);
-      }
+  // Fallback: If no open sessions match openSessionIds, fall back to active session or first session directly
+  if (openSessions.length === 0) {
+    const fallbackId = activeSessionId || projects?.[0]?.sessions?.[0]?.id;
+    if (fallbackId && allSessionsMap.has(fallbackId)) {
+      openSessions = [{ id: fallbackId, item: allSessionsMap.get(fallbackId)! }];
     }
-  }, [openSessions.length, activeSessionId, projects, openSessionTab]);
+  }
 
   const handleContextMenu = (e: React.MouseEvent, sessionId: string, index: number) => {
     e.preventDefault();

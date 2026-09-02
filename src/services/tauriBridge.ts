@@ -67,6 +67,21 @@ function loadProjectsDb(): BridgeProjectsDatabase {
       let needsSave = false;
       if (Array.isArray(db.projects) && db.projects.length > 0) {
         for (const proj of db.projects) {
+          if (!Array.isArray(proj.sessions) || proj.sessions.length === 0) {
+            proj.sessions = [
+              {
+                id: `sess_${proj.id}_default`,
+                title: `${proj.name} (主开发分支)`,
+                tags: ['#开发'],
+                model_id: 'deepseek-v4-flash',
+                created_at: Date.now(),
+                updated_at: Date.now(),
+                is_pinned: true,
+                messages: [],
+              },
+            ];
+            needsSave = true;
+          }
           if (Array.isArray(proj.sessions)) {
             for (const sess of proj.sessions) {
               if (Array.isArray(sess.messages)) {
@@ -459,6 +474,7 @@ export function initTauriBridge(): void {
                 tags: ['#开发'],
                 model_id: 'deepseek-v4-flash',
                 created_at: Date.now(),
+                updated_at: Date.now(),
                 is_pinned: true,
                 messages: [],
               },
@@ -474,6 +490,7 @@ export function initTauriBridge(): void {
           name: derivedName,
           path: path.replace(/\\/g, '/'),
           created_at: Date.now(),
+          updated_at: Date.now(),
           sessions: [
             {
               id: `sess_${Date.now()}`,
@@ -481,6 +498,7 @@ export function initTauriBridge(): void {
               tags: ['#开发'],
               model_id: 'deepseek-v4-flash',
               created_at: Date.now(),
+              updated_at: Date.now(),
               is_pinned: true,
               messages: [],
             },

@@ -117,6 +117,9 @@ def copy_image_to_clipboard(path: Path) -> bool:
 def get_dist_path():
     if hasattr(sys, '_MEIPASS'):
         return Path(sys._MEIPASS) / 'dist'
+    direct_dist = Path(__file__).resolve().parent.parent / 'dist'
+    if direct_dist.is_dir():
+        return direct_dist
     return Path(__file__).resolve().parent.parent / 'prototype' / 'dist'
 
 def scan_directory(root_path, max_depth=2, current_depth=0):

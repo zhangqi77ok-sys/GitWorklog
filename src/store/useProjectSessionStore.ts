@@ -85,7 +85,55 @@ export const useProjectSessionStore = create<ProjectSessionState>((set, get) => 
     set({ isLoading: true, error: null });
     try {
       const db = await invoke<ProjectsDatabase>('list_projects_and_sessions');
-      const projects = db.projects || [];
+      let rawProjects = (db && Array.isArray(db.projects)) ? db.projects : [];
+
+      // If empty, ensure default project exists
+      if (rawProjects.length === 0) {
+        rawProjects = [
+          {
+            id: 'proj_default',
+            name: 'agent-learning',
+            path: 'E:/pro/agent-learning',
+            is_active: true,
+            created_at: 1788190290530,
+            updated_at: 1788190290530,
+            sessions: [
+              {
+                id: 'sess_default',
+                project_id: 'proj_default',
+                title: '架构重构与执行流设计',
+                tags: ['#核心', '#开发'],
+                is_pinned: true,
+                model_id: 'deepseek-v4-flash',
+                created_at: 1788190290531,
+                updated_at: 1788190290531,
+                messages: [],
+              },
+            ],
+          },
+        ];
+      }
+
+      // Ensure every project has valid sessions array
+      const projects: ProjectRecord[] = rawProjects.map((p) => ({
+        ...p,
+        sessions: Array.isArray(p.sessions) && p.sessions.length > 0
+          ? p.sessions
+          : [
+              {
+                id: `sess_${p.id}_default`,
+                project_id: p.id,
+                title: `${p.name} (主开发会话)`,
+                tags: ['#开发'],
+                is_pinned: true,
+                model_id: 'deepseek-v4-flash',
+                created_at: Date.now(),
+                updated_at: Date.now(),
+                messages: [],
+              },
+            ],
+      }));
+
       const allSessions = projects.flatMap((p) => p.sessions || []);
       const savedProj = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_ACTIVE_PROJ_KEY) : null;
       const savedSess = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_ACTIVE_SESS_KEY) : null;
@@ -103,12 +151,12 @@ export const useProjectSessionStore = create<ProjectSessionState>((set, get) => 
 
       const activeProjId = (savedProj && projects.some((p) => p.id === savedProj))
         ? savedProj
-        : (db.active_project_id || projects[0]?.id || null);
+        : (projects[0]?.id || null);
 
-      const curProj = projects.find((p) => p.id === activeProjId);
+      const curProj = projects.find((p) => p.id === activeProjId) || projects[0];
       let activeSessId = (savedSess && (curProj?.sessions || []).some((s) => s.id === savedSess))
         ? savedSess
-        : (db.active_session_id || curProj?.sessions?.[0]?.id || null);
+        : (curProj?.sessions?.[0]?.id || null);
 
       if (openIds.length === 0 && activeSessId) {
         openIds = [activeSessId];
@@ -122,6 +170,8 @@ export const useProjectSessionStore = create<ProjectSessionState>((set, get) => 
 
       if (typeof window !== 'undefined') {
         localStorage.setItem(STORAGE_OPEN_SESSIONS_KEY, JSON.stringify(openIds));
+        if (activeProjId) localStorage.setItem(STORAGE_ACTIVE_PROJ_KEY, activeProjId);
+        if (activeSessId) localStorage.setItem(STORAGE_ACTIVE_SESS_KEY, activeSessId);
       }
 
       set({
@@ -132,6 +182,7 @@ export const useProjectSessionStore = create<ProjectSessionState>((set, get) => 
         isLoading: false,
       });
     } catch (err: any) {
+      console.warn('[useProjectSessionStore] loadInitialData failed:', err);
       set({ error: String(err), isLoading: false });
     }
   },

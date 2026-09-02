@@ -38,8 +38,9 @@ export const ProjectTreeItem: React.FC<ProjectTreeItemProps> = ({
   onDeleteSession,
   onDeleteProject,
 }) => {
-  // Filter sessions by search & tags
-  const filteredSessions = project.sessions.filter((s) => {
+  // Filter sessions by search & tags safely
+  const sessions = Array.isArray(project.sessions) ? project.sessions : [];
+  const filteredSessions = sessions.filter((s) => {
     const matchesSearch =
       !searchQuery ||
       (s.title || '').toLowerCase().includes((searchQuery || '').toLowerCase()) ||
@@ -51,7 +52,9 @@ export const ProjectTreeItem: React.FC<ProjectTreeItemProps> = ({
   // Sort: pinned first, then updated_at desc
   const sortedSessions = [...filteredSessions].sort((a, b) => {
     if (a.is_pinned === b.is_pinned) {
-      return b.updated_at - a.updated_at;
+      const timeA = a.updated_at || a.created_at || 0;
+      const timeB = b.updated_at || b.created_at || 0;
+      return timeB - timeA;
     }
     return a.is_pinned ? -1 : 1;
   });
@@ -97,7 +100,7 @@ export const ProjectTreeItem: React.FC<ProjectTreeItemProps> = ({
           </span>
           {isCollapsed && (
             <span className="text-[10px] text-[#71717A] bg-black/[0.04] px-1.5 py-0.2 rounded-full font-mono">
-              {project.sessions.length}
+              {sessions.length}
             </span>
           )}
         </div>

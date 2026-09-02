@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { FolderPlus, Search, MessageSquare, FolderTree, RefreshCw, FolderOpen } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
-import { useProjectSessionStore, SessionRecord } from '../../store/useProjectSessionStore';
+import { useProjectSessionStore, SessionRecord, ProjectRecord } from '../../store/useProjectSessionStore';
 import { useWorkspaceStore } from '../../store/useWorkspaceStore';
 import { WorkspaceTreeView } from '../workspace/WorkspaceTreeView';
 import { TagFilterBar } from './TagFilterBar';
@@ -33,12 +33,6 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ onFileSelected }) => {
   } = useProjectSessionStore();
 
   const { currentRoot, loadTree } = useWorkspaceStore();
-
-  useEffect(() => {
-    if (!projects || projects.length === 0) {
-      loadInitialData();
-    }
-  }, [projects, loadInitialData]);
 
   const [collapsedProjects, setCollapsedProjects] = useState<Record<string, boolean>>(() => {
     try {
@@ -79,19 +73,41 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ onFileSelected }) => {
     onConfirm: () => {},
   });
 
-  const safeProjects = Array.isArray(projects) ? projects : [];
+  const fallbackProject: ProjectRecord = {
+    id: 'proj_default',
+    name: 'agent-learning',
+    path: 'E:/pro/agent-learning',
+    is_active: true,
+    created_at: 1788190290530,
+    updated_at: 1788190290530,
+    sessions: [
+      {
+        id: 'sess_default',
+        project_id: 'proj_default',
+        title: '架构重构与执行流设计',
+        tags: ['#核心', '#开发'],
+        is_pinned: true,
+        model_id: 'deepseek-v4-flash',
+        created_at: 1788190290531,
+        updated_at: 1788190290531,
+        messages: [],
+      },
+    ],
+  };
+
+  const safeProjects = Array.isArray(projects) && projects.length > 0 ? projects : [fallbackProject];
   const activeProject = safeProjects.find((p) => p.id === activeProjectId) || safeProjects[0];
 
   // Extract all unique tags & compute tag counts safely
   const allTags = Array.from(
-    new Set(safeProjects.flatMap((p) => (p.sessions || []).flatMap((s) => s.tags || [])))
+    new Set(safeProjects.flatMap((p) => (p.sessions || []).flatMap((s: SessionRecord) => s.tags || [])))
   );
   const tagCounts: Record<string, number> = {
     all: safeProjects.reduce((acc, p) => acc + (p.sessions || []).length, 0),
   };
   allTags.forEach((t) => {
     tagCounts[t] = safeProjects.reduce(
-      (acc, p) => acc + (p.sessions || []).filter((s) => s.tags?.includes(t)).length,
+      (acc, p) => acc + (p.sessions || []).filter((s: SessionRecord) => s.tags?.includes(t)).length,
       0
     );
   });
@@ -140,15 +156,19 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ onFileSelected }) => {
 
     try {
       const proj = await addProjectFolder(selectedPath.trim());
-      if (proj) {
-        setActiveProject(proj.id);
-        if (proj.sessions?.[0]?.id) {
-          setActiveSession(proj.sessions[0].id);
+      const currentProjects = useProjectSessionStore.getState().projects;
+      const targetProj = proj || currentProjects.find(
+        (p) => (p.path || '').replace(/\\/g, '/').toLowerCase() === selectedPath.replace(/\\/g, '/').toLowerCase()
+      ) || currentProjects[0];
+
+      if (targetProj) {
+        setActiveProject(targetProj.id);
+        if (targetProj.sessions?.[0]?.id) {
+          setActiveSession(targetProj.sessions[0].id);
         }
-        await loadTree(proj.path);
-        toast.success(`成功挂载项目: ${proj.name}`);
+        await loadTree(targetProj.path);
+        toast.success(`成功挂载项目: ${targetProj.name}`);
       } else {
-        await loadInitialData();
         toast.info(`项目已激活: ${selectedPath}`);
       }
     } catch (err: any) {
