@@ -56,44 +56,53 @@ export const Titlebar: React.FC = () => {
     <header
       onDoubleClick={handleMaximize}
       data-tauri-drag-region
-      className="h-9 bg-[#FAF8F5] border-b border-[#E6DFD5] flex items-center justify-between px-3 select-none z-20 pywebview-drag-region cursor-default"
+      className="h-9.5 bg-[#FAF9F6] border-b border-[#E8E5DF] flex items-center justify-between px-3 select-none z-20 pywebview-drag-region cursor-default"
     >
-      {/* Left: Brand Logo + Project Name + Discrete Gateway Indicator */}
-      <div className="flex items-center gap-2.5">
-        <div className="w-4.5 h-4.5 rounded bg-[#D96B27] flex items-center justify-center text-white font-extrabold text-[11px] shadow-xs">
-          T
-        </div>
-        <span className="font-bold text-xs text-[#1E1C1A] tracking-tight flex items-center gap-1.5">
-          Tcode Studio
-          <span className="text-[11px] text-[#8A847C] font-normal">
-            — {activeProject?.name || 'agent-learning'}
+      {/* Left: Brand Logo + Project Breadcrumb Pill + Discrete Gateway Indicator */}
+      <div className="flex items-center gap-2.5" data-tauri-no-drag>
+        <div className="flex items-center gap-2">
+          <div className="w-5 h-5 rounded-md bg-[#18181B] flex items-center justify-center text-white font-bold text-[11px] shadow-2xs">
+            T
+          </div>
+          <span className="font-semibold text-xs text-[#18181B] tracking-tight">
+            Tcode Studio
           </span>
-        </span>
-        <div className="hidden sm:flex items-center gap-1.5 px-2 py-0.5 bg-[#E8F5E9] border border-[#A5D6A7] rounded-full text-[10px] font-medium text-[#2E7D32]">
-          <span className="w-1.5 h-1.5 rounded-full bg-[#2E7D32] animate-pulse" />
-          <span>{activeChannel?.name?.split(' ')[0] || 'DeepSeek'} 就绪</span>
+        </div>
+
+        {/* Project Breadcrumb Pill */}
+        <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-black/[0.03] border border-black/[0.05] text-[11px] text-[#52525B] font-mono">
+          <span className="opacity-50 text-[10px]">/</span>
+          <span className="font-medium truncate max-w-[160px]">
+            {activeProject?.name || 'agent-learning'}
+          </span>
+        </div>
+
+        {/* Discrete Live Gateway Indicator */}
+        <div className="hidden sm:flex items-center gap-1.5 px-2 py-0.5 bg-[#10A37F]/10 border border-[#10A37F]/20 rounded-full text-[10px] font-medium text-[#10A37F]">
+          <span className="w-1.5 h-1.5 rounded-full bg-[#10A37F] animate-pulse" />
+          <span>{activeChannel?.name?.split(' ')[0] || 'DeepSeek'} · 就绪</span>
         </div>
       </div>
 
       {/* Right: Clean Window Controls Only */}
-      <div className="flex items-center gap-0.5 text-[#8A847C]">
+      <div className="flex items-center gap-0.5" data-tauri-no-drag>
         <button
           onClick={handleMinimize}
-          className="w-7 h-7 flex items-center justify-center hover:bg-[#EAE4DC] active:bg-[#D5CCC0] rounded text-xs transition-colors cursor-pointer"
+          className="w-7 h-7 flex items-center justify-center hover:bg-black/[0.06] active:bg-black/[0.1] rounded text-[#71717A] hover:text-[#18181B] transition-colors cursor-pointer"
           title="最小化"
         >
           <Minus className="w-3.5 h-3.5" />
         </button>
         <button
           onClick={handleMaximize}
-          className="w-7 h-7 flex items-center justify-center hover:bg-[#EAE4DC] active:bg-[#D5CCC0] rounded text-xs transition-colors cursor-pointer"
+          className="w-7 h-7 flex items-center justify-center hover:bg-black/[0.06] active:bg-black/[0.1] rounded text-[#71717A] hover:text-[#18181B] transition-colors cursor-pointer"
           title="最大化 / 还原"
         >
           <Square className="w-2.5 h-2.5" />
         </button>
         <button
           onClick={handleClose}
-          className="w-7 h-7 flex items-center justify-center hover:bg-[#FFEBEE] hover:text-[#C62828] active:bg-[#FFCDD2] rounded text-xs transition-colors cursor-pointer"
+          className="w-7 h-7 flex items-center justify-center hover:bg-[#EF4444] hover:text-white active:bg-[#DC2626] rounded text-[#71717A] transition-colors cursor-pointer"
           title="关闭"
         >
           <X className="w-3.5 h-3.5" />

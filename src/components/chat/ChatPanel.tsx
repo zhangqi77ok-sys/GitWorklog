@@ -18,6 +18,9 @@ import {
   Plus,
   Square,
   Cpu,
+  Layers,
+  CheckCircle2,
+  FileCode,
 } from 'lucide-react';
 import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
@@ -558,12 +561,19 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
 
   const handleCreateNewSession = async () => {
     if (activeProjectId) {
-      await createSession(activeProjectId);
+      return await createSession(activeProjectId);
     }
   };
 
+  const handleQuickAction = async (promptText: string) => {
+    if (!activeSession && activeProjectId) {
+      await createSession(activeProjectId);
+    }
+    setInputPrompt(promptText);
+  };
+
   return (
-    <div className="flex-1 h-full bg-[#FAF8F5] flex flex-col overflow-hidden">
+    <div className="flex-1 h-full bg-[#FAF9F6] flex flex-col overflow-hidden">
       {/* 1. Multi-Session Tab Bar Header */}
       <SessionTabBar
         isEditorOpen={isEditorOpen}
@@ -571,40 +581,95 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       />
 
       {/* 2. Messages Stream List */}
-      <div className="flex-1 overflow-y-auto px-6 py-6 space-y-12">
-        {!activeSession ? (
-          <div className="h-full flex flex-col items-center justify-center text-center p-6 select-none">
-            <div className="w-12 h-12 rounded-2xl bg-[#D96B27]/10 flex items-center justify-center text-[#D96B27] mb-3">
-              <Sparkles className="w-6 h-6" />
+      <div className="flex-1 overflow-y-auto px-6 py-6 space-y-10">
+        {!activeSession || (activeSession.messages.length === 0 && !isStreaming) ? (
+          <div className="h-full flex flex-col items-center justify-center text-center px-4 max-w-2xl mx-auto select-none animate-in fade-in duration-300">
+            {/* OpenAI / Studio Minimal Emblem */}
+            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-[#18181B] to-[#3F3F46] text-white flex items-center justify-center font-bold text-lg shadow-sm mb-3">
+              T
             </div>
-            <h3 className="text-sm font-semibold text-[#1E1C1A] mb-1">
-              暂无打开的会话分支
-            </h3>
-            <p className="text-xs text-[#8A847C] max-w-sm mb-4">
-              可从左侧项目列表点击打开已有会话分支，或点击下方按钮在当前项目中新建分支
+
+            <h2 className="text-base font-semibold text-[#18181B] tracking-tight mb-1">
+              Tcode Studio
+            </h2>
+            <p className="text-xs text-[#71717A] max-w-sm mb-6 leading-relaxed">
+              基于 Rust 双环轨道的自主式编程工作台。选择下方快捷能力或在底栏输入指令：
             </p>
-            {activeProjectId && (
+
+            {/* 4 Interactive Quick-Action Suggestion Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 w-full text-left">
               <button
                 type="button"
-                onClick={handleCreateNewSession}
-                className="flex items-center gap-1.5 px-4 py-2 bg-[#D96B27] hover:bg-[#B8551B] text-white rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer"
+                onClick={() => handleQuickAction("请审查当前项目的目录结构与整体技术架构，分析分层职责并给出系统性架构演进建议。")}
+                className="group flex flex-col p-3 rounded-xl bg-white hover:bg-black/[0.02] border border-black/[0.08] hover:border-[#D96B27]/40 shadow-2xs hover:shadow-xs transition-all cursor-pointer"
               >
-                <Plus className="w-4 h-4" />
-                <span>新建会话分支</span>
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="w-6 h-6 rounded-md bg-[#D96B27]/10 flex items-center justify-center text-[#D96B27]">
+                    <Layers className="w-3.5 h-3.5" />
+                  </div>
+                  <span className="font-semibold text-xs text-[#18181B] group-hover:text-[#D96B27] transition-colors">
+                    审查项目架构
+                  </span>
+                </div>
+                <p className="text-[11px] text-[#71717A] leading-relaxed">
+                  全景扫描技术栈、分层结构与架构演进建议
+                </p>
               </button>
-            )}
-          </div>
-        ) : activeSession.messages.length === 0 && !isStreaming ? (
-          <div className="h-full flex flex-col items-center justify-center text-center p-6 select-none">
-            <div className="w-10 h-10 rounded-full bg-[#D96B27]/10 flex items-center justify-center text-[#D96B27] mb-3">
-              <Sparkles className="w-5 h-5" />
+
+              <button
+                type="button"
+                onClick={() => handleQuickAction("请针对当前项目运行并检查所有测试用例，扫描代码质量与边界异常处理，给出改进报告。")}
+                className="group flex flex-col p-3 rounded-xl bg-white hover:bg-black/[0.02] border border-black/[0.08] hover:border-[#10A37F]/40 shadow-2xs hover:shadow-xs transition-all cursor-pointer"
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="w-6 h-6 rounded-md bg-[#10A37F]/10 flex items-center justify-center text-[#10A37F]">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                  </div>
+                  <span className="font-semibold text-xs text-[#18181B] group-hover:text-[#10A37F] transition-colors">
+                    单测与缺陷诊断
+                  </span>
+                </div>
+                <p className="text-[11px] text-[#71717A] leading-relaxed">
+                  检测单元测试覆盖率并排查潜在异常隐患
+                </p>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleQuickAction("请对活跃代码进行审查与重构，应用现代 React 19 最佳实践并确保代码整洁。")}
+                className="group flex flex-col p-3 rounded-xl bg-white hover:bg-black/[0.02] border border-black/[0.08] hover:border-[#F59E0B]/40 shadow-2xs hover:shadow-xs transition-all cursor-pointer"
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="w-6 h-6 rounded-md bg-[#F59E0B]/10 flex items-center justify-center text-[#F59E0B]">
+                    <Zap className="w-3.5 h-3.5" />
+                  </div>
+                  <span className="font-semibold text-xs text-[#18181B] group-hover:text-[#F59E0B] transition-colors">
+                    极速双环重构
+                  </span>
+                </div>
+                <p className="text-[11px] text-[#71717A] leading-relaxed">
+                  基于现代前端规范与 Clean Code 清理坏味道
+                </p>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleQuickAction("请生成当前工程的核心文件导览索引，说明主要入口、状态层与服务层调用关系。")}
+                className="group flex flex-col p-3 rounded-xl bg-white hover:bg-black/[0.02] border border-black/[0.08] hover:border-[#3B82F6]/40 shadow-2xs hover:shadow-xs transition-all cursor-pointer"
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="w-6 h-6 rounded-md bg-[#3B82F6]/10 flex items-center justify-center text-[#3B82F6]">
+                    <FileCode className="w-3.5 h-3.5" />
+                  </div>
+                  <span className="font-semibold text-xs text-[#18181B] group-hover:text-[#3B82F6] transition-colors">
+                    工程文件导览
+                  </span>
+                </div>
+                <p className="text-[11px] text-[#71717A] leading-relaxed">
+                  梳理项目关键配置、数据流与模块依赖关系
+                </p>
+              </button>
             </div>
-            <h3 className="text-sm font-semibold text-[#1E1C1A] mb-1">
-              {activeSession.title || '新对话分支'}
-            </h3>
-            <p className="text-xs text-[#8A847C] max-w-sm">
-              基于 Rust Tokio Core 稳定双环轨道与全插件化能力生态。输入任何编程需求或任务指令即可启动。
-            </p>
           </div>
         ) : (
           activeSession.messages.map((msg) => (
@@ -612,24 +677,26 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
               key={msg.id}
               className={`group/msg flex flex-col ${
                 msg.role === 'user'
-                  ? 'items-end self-end max-w-[62%]'
+                  ? 'items-end self-end max-w-[65%]'
                   : 'items-start self-start w-full'
               } space-y-2`}
             >
               {/* Role label */}
-              <div className="flex items-center gap-1.5 text-[10px] text-[#8A847C] px-0.5 select-none">
+              <div className="flex items-center gap-1.5 text-[11px] text-[#71717A] px-0.5 select-none">
                 {msg.role === 'user' ? (
                   <>
-                    <span className="font-medium text-[#5C564E]">You</span>
-                    <span className="opacity-60">
+                    <span className="font-medium text-[#18181B]">You</span>
+                    <span className="opacity-60 text-[10px]">
                       {new Date(msg.timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </>
                 ) : (
                   <>
-                    <Bot className="w-3 h-3 text-[#D96B27]" />
-                    <span className="font-semibold text-[#D96B27]">Tcode Agent</span>
-                    <span className="opacity-60">
+                    <div className="w-3.5 h-3.5 rounded bg-[#18181B] flex items-center justify-center text-white text-[8px] font-bold">
+                      T
+                    </div>
+                    <span className="font-semibold text-[#18181B] text-xs">Tcode Agent</span>
+                    <span className="opacity-60 text-[10px]">
                       {new Date(msg.timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </>
@@ -739,20 +806,23 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       {/* ──────────────────────────────────────────────────────────── */}
       {/* 对话区上下拖拽分割条 (Draggable Vertical Splitter for Chat)   */}
       {/* ──────────────────────────────────────────────────────────── */}
+      {/* ──────────────────────────────────────────────────────────── */}
+      {/* 对话区上下拖拽分割条 (Draggable Vertical Splitter for Chat)   */}
+      {/* ──────────────────────────────────────────────────────────── */}
       <div
         onMouseDown={handleInputResizeStart}
-        className={`h-1.5 w-full cursor-row-resize z-30 flex items-center justify-center select-none transition-colors border-t border-[#E6DFD5] flex-shrink-0 group ${
-          isDraggingInput ? 'bg-[#D96B27]' : 'bg-[#F4EFEA] hover:bg-[#D96B27]/40'
+        className={`h-1.5 w-full cursor-row-resize z-30 flex items-center justify-center select-none transition-colors border-t border-[#E8E5DF] flex-shrink-0 group ${
+          isDraggingInput ? 'bg-[#D96B27]' : 'bg-[#F4F2EE] hover:bg-[#D96B27]/40'
         }`}
         title="上下拖动调节对话区与输入框高度"
       >
-        <div className="w-10 h-0.5 rounded-full bg-[#8A847C]/40 group-hover:bg-[#D96B27] transition-colors" />
+        <div className="w-10 h-0.5 rounded-full bg-[#71717A]/40 group-hover:bg-[#D96B27] transition-colors" />
       </div>
 
       {/* 3. Chat Input Box & Prompt Queue Container */}
       <div
         style={{ height: `${inputHeight}px` }}
-        className="bg-[#F4EFEA] flex flex-col flex-shrink-0 relative transition-[height] duration-75 z-20"
+        className="bg-[#F4F2EE] flex flex-col flex-shrink-0 relative transition-[height] duration-75 z-20"
       >
         <div className="p-1.5 px-2 flex-1 flex flex-col space-y-1 relative">
           {/* Reorderable & Preemptible Prompt Queue Bar */}
@@ -767,12 +837,12 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
             isStreaming={isStreaming}
           />
 
-          <div className="bg-white border border-[#E2D8CC] focus-within:border-[#D96B27] focus-within:ring-1 focus-within:ring-[#D96B27]/10 rounded-xl p-2 px-2.5 shadow-2xs transition-all flex-1 flex flex-col justify-between relative">
+          <div className="bg-white border border-black/[0.08] focus-within:border-[#D96B27] focus-within:ring-1 focus-within:ring-[#D96B27]/10 rounded-xl p-2 px-2.5 shadow-2xs transition-all flex-1 flex flex-col justify-between relative">
             {activeFileName && (
-              <div className="flex items-center gap-1 text-[9px] text-[#6B665F] bg-[#FAF8F5] px-1.5 py-0.5 rounded border border-[#E6DFD5] w-fit select-none mb-0.5">
+              <div className="flex items-center gap-1 text-[9px] text-[#52525B] bg-black/[0.03] px-1.5 py-0.5 rounded border border-black/[0.06] w-fit select-none mb-0.5">
                 <Paperclip className="w-2.5 h-2.5 text-[#D96B27]" />
                 <span>已引用:</span>
-                <span className="font-mono font-medium text-[#1E1C1A]">{activeFileName}</span>
+                <span className="font-mono font-medium text-[#18181B]">{activeFileName}</span>
               </div>
             )}
 
@@ -795,10 +865,10 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                   ? "输入复杂任务指令，将通过 SwarmFlow 7 算子流推进 (Alt+2)..."
                   : "输入日常编程需求或任务指令 (Enter 发送, Alt+1 切换极速双环)..."
               }
-              className="w-full flex-1 resize-none outline-none text-xs text-[#1E1C1A] placeholder-[#8A847C] leading-normal bg-transparent select-text overflow-y-auto min-h-[28px]"
+              className="w-full flex-1 resize-none outline-none text-xs text-[#18181B] placeholder-[#71717A] leading-normal bg-transparent select-text overflow-y-auto min-h-[28px]"
             />
 
-            <div className="flex items-center justify-between pt-1.5 border-t border-[#F4EFEA] relative z-30">
+            <div className="flex items-center justify-between pt-1.5 border-t border-black/[0.05] relative z-30">
               {/* Left group: mode capsule + model selector */}
               <div className="flex items-center gap-2 select-none">
                 <ExecutionModeCapsule
@@ -813,24 +883,24 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                 />
 
                 {/* Divider */}
-                <div className="w-px h-3.5 bg-[#DDD6CE] flex-shrink-0" />
+                <div className="w-px h-3.5 bg-black/[0.08] flex-shrink-0" />
 
                 {/* Bottom Model Selector Button & Upward Popover */}
                 <div className="relative" ref={bottomDropdownRef}>
                   <button
                     type="button"
                     onClick={() => setIsBottomDropdownOpen(!isBottomDropdownOpen)}
-                    className="flex items-center gap-1 px-1.5 py-0.5 bg-transparent hover:bg-[#F4EFEA] rounded-md text-[11px] text-[#5C564E] hover:text-[#1E1C1A] cursor-pointer"
+                    className="flex items-center gap-1 px-1.5 py-0.5 bg-transparent hover:bg-black/[0.04] rounded-md text-[11px] text-[#52525B] hover:text-[#18181B] cursor-pointer"
                   >
                     <Cpu className="w-2.5 h-2.5 text-[#D96B27]" />
                     <span className="font-mono font-medium max-w-[110px] truncate">{activeModelId}</span>
-                    <ChevronDown className="w-2.5 h-2.5 text-[#8A847C]" />
+                    <ChevronDown className="w-2.5 h-2.5 text-[#71717A]" />
                   </button>
 
                   {/* Upward Model Selector Popover */}
                   {isBottomDropdownOpen && (
-                    <div className="absolute bottom-full left-0 mb-2 w-60 bg-white border border-[#E6DFD5] rounded-xl shadow-lg p-1.5 z-50 select-none animate-in fade-in slide-in-from-bottom-2 duration-150">
-                      <div className="px-2 py-1.5 text-[10px] font-bold text-[#8A847C] uppercase tracking-wider border-b border-[#F4EFEA] mb-1">
+                    <div className="absolute bottom-full left-0 mb-2 w-60 bg-white border border-black/[0.08] rounded-xl shadow-lg p-1.5 z-50 select-none animate-in fade-in slide-in-from-bottom-2 duration-150">
+                      <div className="px-2 py-1.5 text-[10px] font-bold text-[#71717A] uppercase tracking-wider border-b border-black/[0.04] mb-1">
                         选择模型
                       </div>
                       <div className="max-h-52 overflow-y-auto space-y-0.5">
@@ -841,8 +911,8 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                             onClick={() => handleSelectModel(m)}
                             className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs cursor-pointer text-left ${
                               activeModelId === m
-                                ? 'bg-[#FAF8F5] text-[#D96B27] font-semibold'
-                                : 'text-[#1E1C1A] hover:bg-[#FAF8F5]'
+                                ? 'bg-black/[0.03] text-[#D96B27] font-semibold'
+                                : 'text-[#18181B] hover:bg-black/[0.02]'
                             }`}
                           >
                             <span className="font-mono truncate">{m}</span>
@@ -871,7 +941,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                   type="button"
                   onClick={handleSend}
                   disabled={!inputPrompt.trim() || !activeSessionId}
-                  className="flex items-center gap-1 px-3.5 py-1 bg-[#D96B27] hover:bg-[#B8551B] disabled:bg-[#EAE4DC] text-white disabled:text-[#8A847C] rounded-lg text-xs font-semibold shadow-2xs disabled:shadow-none cursor-pointer disabled:cursor-not-allowed"
+                  className="flex items-center gap-1 px-3.5 py-1 bg-[#D96B27] hover:bg-[#B8551B] disabled:bg-[#EAE4DC] text-white disabled:text-[#71717A] rounded-lg text-xs font-semibold shadow-2xs disabled:shadow-none cursor-pointer disabled:cursor-not-allowed"
                   title="发送指令 (Enter)"
                 >
                   <Send className="w-3 h-3" />

@@ -73,21 +73,21 @@ export const SessionTreeItem: React.FC<SessionTreeItemProps> = ({
   return (
     <div
       onClick={onSelect}
-      className={`group relative flex flex-col gap-1 p-2.5 rounded-xl cursor-pointer transition-all border ${
+      className={`group relative flex flex-col gap-1 p-2 rounded-lg cursor-pointer transition-all border ${
         isActive
-          ? 'bg-white border-[#E0D6C8] shadow-xs relative before:absolute before:left-0 before:top-2.5 before:bottom-2.5 before:w-1 before:bg-[#D96B27] before:rounded-r'
-          : 'bg-white/40 hover:bg-white border-transparent hover:border-[#E8E2D8]'
+          ? 'bg-white border-black/[0.08] shadow-2xs'
+          : 'border-transparent hover:bg-black/[0.03]'
       }`}
     >
       {/* Title & Actions Row */}
       <div className="flex items-center justify-between gap-1.5 min-w-0">
-        <div className="flex items-center gap-1.5 min-w-0 flex-1 pl-1">
+        <div className="flex items-center gap-1.5 min-w-0 flex-1 pl-0.5">
           {session.is_pinned ? (
             <Pin className="w-3.5 h-3.5 text-[#D96B27] flex-shrink-0 fill-[#D96B27]" />
           ) : (
             <MessageSquare
               className={`w-3.5 h-3.5 flex-shrink-0 ${
-                isActive ? 'text-[#D96B27]' : 'text-[#8A847C]'
+                isActive ? 'text-[#D96B27]' : 'text-[#71717A]'
               }`}
             />
           )}
@@ -126,8 +126,8 @@ export const SessionTreeItem: React.FC<SessionTreeItemProps> = ({
                 e.stopPropagation();
                 setIsEditing(true);
               }}
-              className={`text-xs font-semibold truncate ${
-                isActive ? 'text-[#1E1C1A]' : 'text-[#5C564E] group-hover:text-[#1E1C1A]'
+              className={`text-xs font-medium truncate ${
+                isActive ? 'text-[#18181B]' : 'text-[#52525B] group-hover:text-[#18181B]'
               }`}
               title={`${session.title} (双击重命名)`}
             >
@@ -140,8 +140,8 @@ export const SessionTreeItem: React.FC<SessionTreeItemProps> = ({
         <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
           <button
             onClick={onTogglePin}
-            className={`p-1 rounded hover:bg-[#F4EFEA] transition-colors cursor-pointer ${
-              session.is_pinned ? 'text-[#D96B27]' : 'text-[#8A847C] hover:text-[#1E1C1A]'
+            className={`p-1 rounded hover:bg-black/[0.05] transition-colors cursor-pointer ${
+              session.is_pinned ? 'text-[#D96B27]' : 'text-[#71717A] hover:text-[#18181B]'
             }`}
             title={session.is_pinned ? '取消置顶' : '置顶此会话'}
           >
@@ -152,14 +152,14 @@ export const SessionTreeItem: React.FC<SessionTreeItemProps> = ({
               e.stopPropagation();
               setIsEditing(true);
             }}
-            className="p-1 rounded text-[#8A847C] hover:text-[#1E1C1A] hover:bg-[#F4EFEA] transition-colors cursor-pointer"
+            className="p-1 rounded text-[#71717A] hover:text-[#18181B] hover:bg-black/[0.05] transition-colors cursor-pointer"
             title="重命名会话"
           >
             <Edit2 className="w-3 h-3" />
           </button>
           <button
             onClick={onDelete}
-            className="p-1 rounded text-[#8A847C] hover:text-[#C62828] hover:bg-[#FFEBEE] transition-colors cursor-pointer"
+            className="p-1 rounded text-[#71717A] hover:text-[#EF4444] hover:bg-[#EF4444]/10 transition-colors cursor-pointer"
             title="删除会话"
           >
             <Trash2 className="w-3 h-3" />
@@ -168,20 +168,20 @@ export const SessionTreeItem: React.FC<SessionTreeItemProps> = ({
       </div>
 
       {/* Metadata Row: Model + Message Count + Time */}
-      <div className="flex items-center justify-between text-[10px] text-[#8A847C] pl-6 pr-1 font-mono">
+      <div className="flex items-center justify-between text-[10px] text-[#71717A] pl-5 pr-1 font-mono">
         <span className="truncate max-w-[120px]">
-          {session.model_id || 'deepseek-v3'} · {session.messages?.length || 0} 轮
+          {session.model_id || 'deepseek'} · {session.messages?.length || 0} 轮
         </span>
         <span>{formatTimestamp(session.updated_at)}</span>
       </div>
 
       {/* Tags Row */}
       {session.tags && session.tags.length > 0 && (
-        <div className="flex items-center gap-1 pl-6 overflow-x-auto pt-0.5">
+        <div className="flex items-center gap-1 pl-5 overflow-x-auto pt-0.5">
           {session.tags.map((tag) => (
             <span
               key={tag}
-              className="text-[9px] font-medium px-1.5 py-0.2 rounded-md bg-[#FAF8F5] text-[#8A847C] border border-[#E8E2D8] flex items-center gap-1"
+              className="text-[9px] font-medium px-1.5 py-0.2 rounded-md bg-black/[0.03] text-[#71717A] border border-black/[0.06] flex items-center gap-1"
             >
               <span>#{tag}</span>
               {isTagEditing && (

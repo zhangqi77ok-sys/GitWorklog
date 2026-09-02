@@ -60,14 +60,14 @@ export const ProjectTreeItem: React.FC<ProjectTreeItemProps> = ({
     <div
       className={`rounded-lg border transition-all ${
         isActiveProject
-          ? 'border-[#D96B27]/40 bg-white/70 shadow-xs'
-          : 'border-[#E6DFD5] bg-white/30'
+          ? 'border-black/[0.08] bg-white/80 shadow-2xs'
+          : 'border-black/[0.04] bg-transparent'
       }`}
     >
       {/* Project Header */}
       <div
         onClick={() => onSelectProject(project.id)}
-        className="flex items-center justify-between p-2 cursor-pointer hover:bg-[#EAE4DC]/50 rounded-t-lg transition-colors group"
+        className="flex items-center justify-between p-1.5 px-2 cursor-pointer hover:bg-black/[0.03] rounded-t-lg transition-colors group"
       >
         <div className="flex items-center gap-1.5 min-w-0">
           <button
@@ -75,7 +75,7 @@ export const ProjectTreeItem: React.FC<ProjectTreeItemProps> = ({
               e.stopPropagation();
               onToggleCollapse(project.id);
             }}
-            className="text-[#8A847C] hover:text-[#1E1C1A] p-0.5 rounded cursor-pointer"
+            className="text-[#71717A] hover:text-[#18181B] p-0.5 rounded cursor-pointer"
           >
             {isCollapsed ? (
               <ChevronRight className="w-3.5 h-3.5" />
@@ -85,18 +85,18 @@ export const ProjectTreeItem: React.FC<ProjectTreeItemProps> = ({
           </button>
           <Folder
             className={`w-3.5 h-3.5 flex-shrink-0 ${
-              isActiveProject ? 'text-[#D96B27]' : 'text-[#8A847C]'
+              isActiveProject ? 'text-[#D96B27]' : 'text-[#71717A]'
             }`}
           />
           <span
-            className={`text-xs font-semibold truncate ${
-              isActiveProject ? 'text-[#1E1C1A]' : 'text-[#6B665F]'
+            className={`text-xs font-medium truncate ${
+              isActiveProject ? 'text-[#18181B]' : 'text-[#52525B]'
             }`}
           >
             {project.name}
           </span>
           {isCollapsed && (
-            <span className="text-[10px] text-[#8A847C] bg-[#EAE4DC] px-1.5 py-0.2 rounded-full">
+            <span className="text-[10px] text-[#71717A] bg-black/[0.04] px-1.5 py-0.2 rounded-full font-mono">
               {project.sessions.length}
             </span>
           )}
@@ -107,17 +107,17 @@ export const ProjectTreeItem: React.FC<ProjectTreeItemProps> = ({
           <button
             onClick={(e) => onCreateSession(project.id, e)}
             title="为该项目新建会话"
-            className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium text-[#D96B27] hover:bg-[#FAF8F5] border border-transparent hover:border-[#D96B27]/30 transition-all opacity-90 group-hover:opacity-100 cursor-pointer"
+            className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium text-[#18181B] bg-white hover:bg-black/[0.04] border border-black/[0.08] transition-all opacity-0 group-hover:opacity-100 shadow-2xs cursor-pointer"
           >
-            <Plus className="w-3 h-3" />
-            <span className="text-[10px]">新建会话</span>
+            <Plus className="w-2.5 h-2.5 text-[#D96B27]" />
+            <span>新会话</span>
           </button>
 
           {onDeleteProject && (
             <button
               onClick={(e) => onDeleteProject(project.id, e)}
               title="从工作台移除该项目"
-              className="p-1 rounded text-[#8A847C] hover:text-[#C62828] hover:bg-[#FFEBEE] transition-all opacity-0 group-hover:opacity-100 cursor-pointer"
+              className="p-1 rounded text-[#71717A] hover:text-[#EF4444] hover:bg-[#EF4444]/10 transition-all opacity-0 group-hover:opacity-100 cursor-pointer"
             >
               <Trash2 className="w-3 h-3" />
             </button>
@@ -127,9 +127,9 @@ export const ProjectTreeItem: React.FC<ProjectTreeItemProps> = ({
 
       {/* Project Sessions Nested List (when expanded) */}
       {!isCollapsed && (
-        <div className="p-1.5 pt-0 space-y-1 pl-4 border-l-2 border-[#E6DFD5]/60 ml-3 mb-1">
+        <div className="p-1 pt-0 space-y-1 pl-3 border-l border-black/[0.08] ml-2.5 mb-1">
           {sortedSessions.length === 0 ? (
-            <div className="py-2 text-center text-[11px] text-[#8A847C]">
+            <div className="py-2 text-center text-[11px] text-[#71717A]">
               {searchQuery || selectedTag ? '未匹配到会话' : '暂无会话，点击新建'}
             </div>
           ) : (

@@ -8,32 +8,32 @@
 :root,
 [data-theme="cream"],
 [data-theme="warm"] {
-  /* 经典纸质暖橙 (Paper Warm) */
-  --bg-base: #FAF8F5;
-  --bg-surface: #F4EFEA;
-  --bg-surface-elevated: #EDE6DD;
+  /* OpenAI 级极简暖调 (OpenAI Warm Minimalist) */
+  --bg-base: #FAF9F6;
+  --bg-surface: #F4F2EE;
+  --bg-surface-elevated: #ECE8E1;
 
-  --chat-bg: #FAF8F5;
-  --chat-user-bg: #F4EFEA;
-  --chat-system-bg: #F4EFEA;
-  --chat-code-bg: #1E1C1A;
-  --chat-input-bg: #FAF8F5;
+  --chat-bg: #FAF9F6;
+  --chat-user-bg: #F0EEE8;
+  --chat-system-bg: #F4F2EE;
+  --chat-code-bg: #18181B;
+  --chat-input-bg: #FFFFFF;
 
-  --border-subtle: #E8E2D9;
-  --border-strong: #D5CCC0;
-  --text-primary: #1E1C1A;
-  --text-secondary: #6B665F;
-  --text-muted: #8A847C;
+  --border-subtle: #E8E5DF;
+  --border-strong: #D8D4CC;
+  --text-primary: #18181B;
+  --text-secondary: #52525B;
+  --text-muted: #71717A;
 
   --accent: #D96B27;
   --accent-hover: #BF5A1B;
-  --accent-subtle: rgba(217, 107, 39, 0.1);
-  --bg-code: #1E1C1A;
-  --code-lime: #A3E635;
-  --status-safe: #2E7D32;
-  --status-warning: #E65100;
-  --status-danger: #C62828;
-  --font-sans: "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "WenQuanYi Micro Hei", system-ui, -apple-system, sans-serif;
+  --accent-subtle: rgba(217, 107, 39, 0.08);
+  --bg-code: #18181B;
+  --code-lime: #10A37F;
+  --status-safe: #10A37F;
+  --status-warning: #F59E0B;
+  --status-danger: #EF4444;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
   --font-mono: "JetBrains Mono", "Cascadia Code", "Fira Code", Consolas, Menlo, Monaco, monospace;
 }
 

@@ -65,7 +65,7 @@ export const ResizableMessageBubble: React.FC<ResizableMessageBubbleProps> = ({
   if (role === 'user') {
     return (
       <div className="relative group/bubble max-w-full">
-        <div className="bg-[#EDE7DE] text-[#241E1A] rounded-2xl rounded-br-md px-4 py-2.5 text-[13px] leading-relaxed whitespace-pre-wrap select-text font-normal pr-10">
+        <div className="bg-[#F0EEE8] text-[#18181B] rounded-2xl rounded-br-sm px-4 py-2.5 text-[13px] leading-relaxed whitespace-pre-wrap select-text font-normal pr-10 border border-black/[0.04] shadow-2xs">
           {cleanText}
         </div>
         {/* copy button appears on hover */}
@@ -73,9 +73,9 @@ export const ResizableMessageBubble: React.FC<ResizableMessageBubbleProps> = ({
           type="button"
           onClick={onCopy}
           title="复制"
-          className="absolute top-2 right-2 opacity-0 group-hover/bubble:opacity-100 p-1 rounded-md text-[#8A847C] hover:text-[#1E1C1A] hover:bg-white/70 transition-all cursor-pointer"
+          className="absolute top-2 right-2 opacity-0 group-hover/bubble:opacity-100 p-1 rounded-md text-[#71717A] hover:text-[#18181B] hover:bg-white/70 transition-all cursor-pointer"
         >
-          {isCopied ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+          {isCopied ? <Check className="w-3 h-3 text-[#10A37F]" /> : <Copy className="w-3 h-3" />}
         </button>
       </div>
     );
@@ -91,7 +91,7 @@ export const ResizableMessageBubble: React.FC<ResizableMessageBubbleProps> = ({
             type="button"
             onClick={toggleFullExpand}
             title={isExpandedFull ? '限制高度' : '展开全文'}
-            className="p-1 rounded-md bg-white text-[#8A847C] hover:text-[#1E1C1A] border border-[#E6DFD5] shadow-2xs transition-all cursor-pointer"
+            className="p-1 rounded-md bg-white text-[#71717A] hover:text-[#18181B] border border-black/[0.08] shadow-2xs transition-all cursor-pointer"
           >
             {isExpandedFull ? <Minimize2 className="w-3 h-3" /> : <Maximize2 className="w-3 h-3" />}
           </button>
@@ -100,9 +100,9 @@ export const ResizableMessageBubble: React.FC<ResizableMessageBubbleProps> = ({
           type="button"
           onClick={onCopy}
           title="复制回复"
-          className="p-1 rounded-md bg-white text-[#8A847C] hover:text-[#1E1C1A] border border-[#E6DFD5] shadow-2xs transition-all cursor-pointer"
+          className="p-1 rounded-md bg-white text-[#71717A] hover:text-[#18181B] border border-black/[0.08] shadow-2xs transition-all cursor-pointer"
         >
-          {isCopied ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+          {isCopied ? <Check className="w-3 h-3 text-[#10A37F]" /> : <Copy className="w-3 h-3" />}
         </button>
       </div>
 
@@ -118,15 +118,15 @@ export const ResizableMessageBubble: React.FC<ResizableMessageBubbleProps> = ({
 
       {/* Diff button — shown when there are code patches */}
       {rawContent.includes('```') && onOpenDiff && (
-        <div className="mt-4 flex items-center gap-2 select-none">
-          <span className="flex items-center gap-1.5 text-[11px] text-[#8A847C]">
+        <div className="mt-3 flex items-center gap-2 select-none">
+          <span className="flex items-center gap-1.5 text-[11px] text-[#71717A]">
             <span className="w-1.5 h-1.5 rounded-full bg-[#D96B27] inline-block" />
             包含代码补丁变更
           </span>
           <button
             type="button"
             onClick={onOpenDiff}
-            className="flex items-center gap-1.5 px-2.5 py-1 bg-[#FAF8F5] hover:bg-[#F4EFEA] border border-[#E6DFD5] hover:border-[#D96B27]/40 text-[#D96B27] rounded-lg text-[11px] font-semibold transition-all cursor-pointer"
+            className="flex items-center gap-1.5 px-2.5 py-1 bg-white hover:bg-black/[0.02] border border-black/[0.08] hover:border-[#D96B27]/40 text-[#D96B27] rounded-md text-[11px] font-medium shadow-2xs transition-all cursor-pointer"
           >
             <SplitSquareVertical className="w-3 h-3" />
             在右侧编辑器中审查 Diff
@@ -139,12 +139,12 @@ export const ResizableMessageBubble: React.FC<ResizableMessageBubbleProps> = ({
         <div
           onMouseDown={handleResizeStart}
           onDoubleClick={toggleFullExpand}
-          className={`mt-3 h-3 w-full cursor-row-resize flex items-center justify-center rounded transition-colors select-none group/rz ${
-            isDragging ? 'bg-[#D96B27]/10' : 'hover:bg-[#F4EFEA]'
+          className={`mt-3 h-2.5 w-full cursor-row-resize flex items-center justify-center rounded transition-colors select-none group/rz ${
+            isDragging ? 'bg-[#D96B27]/10' : 'hover:bg-black/[0.03]'
           }`}
           title="拖拽调整高度，双击全展/收起"
         >
-          <div className="w-10 h-0.5 bg-[#C8C0B4] group-hover/rz:bg-[#D96B27] rounded-full transition-colors" />
+          <div className="w-8 h-0.5 bg-[#71717A]/30 group-hover/rz:bg-[#D96B27] rounded-full transition-colors" />
         </div>
       )}
     </div>

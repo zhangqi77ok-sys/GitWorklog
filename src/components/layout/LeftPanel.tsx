@@ -214,44 +214,44 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ onFileSelected }) => {
   return (
     <aside
       ref={containerRef}
-      className="w-full h-full bg-[#FAF8F5] flex flex-col select-none overflow-hidden"
+      className="w-full h-full bg-[#FAF9F6] flex flex-col select-none overflow-hidden"
     >
       {/* ──────────────────────────────────────────────────────────── */}
       {/* 栏 1 (上半部)：项目与会话管理 (Projects & Sessions)             */}
       {/* ──────────────────────────────────────────────────────────── */}
       <div
         style={{ height: `${splitRatio}%` }}
-        className="flex flex-col border-b border-[#E6DFD5] bg-[#F4EFEA] overflow-hidden"
+        className="flex flex-col border-b border-[#E8E5DF] bg-[#F4F2EE] overflow-hidden"
       >
         {/* 1.1 Header with Open Project */}
-        <div className="p-2.5 px-3 border-b border-[#E6DFD5] flex items-center justify-between bg-[#F4EFEA]">
+        <div className="p-2 px-3 border-b border-[#E8E5DF] flex items-center justify-between bg-[#F4F2EE]">
           <div className="flex items-center gap-1.5 min-w-0">
-            <MessageSquare className="w-4 h-4 text-[#D96B27] flex-shrink-0" />
-            <span className="font-bold text-xs text-[#1E1C1A] tracking-tight truncate">
-              项目与会话
+            <MessageSquare className="w-3.5 h-3.5 text-[#D96B27] flex-shrink-0" />
+            <span className="font-semibold text-xs text-[#18181B] tracking-tight truncate">
+              会话分支
             </span>
           </div>
           <button
             onClick={handleOpenFolder}
-            className="flex items-center gap-1 px-2.5 py-1 bg-white hover:bg-[#FAF8F5] border border-[#E6DFD5] hover:border-[#D96B27]/60 rounded-lg text-xs font-semibold text-[#3D3A36] hover:text-[#D96B27] transition-all shadow-2xs cursor-pointer"
+            className="flex items-center gap-1 px-2 py-0.5 bg-white hover:bg-black/[0.03] border border-black/[0.08] rounded-md text-[11px] font-medium text-[#18181B] transition-all shadow-2xs cursor-pointer"
             title="打开本地项目文件夹"
           >
-            <FolderPlus className="w-3.5 h-3.5 text-[#D96B27]" />
+            <FolderPlus className="w-3 h-3 text-[#D96B27]" />
             <span>打开项目</span>
           </button>
         </div>
 
         {/* 1.2 Search & Tag Filter Bar */}
         {safeProjects.length > 0 && (
-          <div className="p-2 border-b border-[#E6DFD5] space-y-1.5 bg-[#FAF8F5]/60">
+          <div className="p-2 border-b border-[#E8E5DF] space-y-1.5 bg-[#FAF9F6]/80">
             <div className="relative">
-              <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-[#8A847C]" />
+              <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-[#71717A]" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="搜索项目、会话或标签..."
-                className="w-full pl-8 pr-2.5 py-1.5 bg-white border border-[#E6DFD5] focus:border-[#D96B27] rounded-lg text-xs text-[#1E1C1A] placeholder-[#8A847C] outline-none transition-colors"
+                className="w-full pl-8 pr-2.5 py-1.5 bg-white border border-[#E8E5DF] focus:border-[#D96B27] focus:ring-1 focus:ring-[#D96B27]/10 rounded-lg text-xs text-[#18181B] placeholder-[#71717A] outline-none transition-colors"
               />
             </div>
 
@@ -265,20 +265,22 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ onFileSelected }) => {
         )}
 
         {/* 1.3 Multi-Project & Nested Sessions List (独立滚动) */}
-        <div className="flex-1 overflow-y-auto p-2 space-y-2">
+        <div className="flex-1 overflow-y-auto p-1.5 space-y-1.5">
           {safeProjects.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center p-6 text-center text-xs text-[#8A847C] select-none">
-              <FolderOpen className="w-10 h-10 mb-2 text-[#D96B27]/40" />
-              <p className="font-semibold text-[#1E1C1A] mb-1">未打开任何项目</p>
-              <p className="text-[11px] text-[#8A847C] mb-3">
-                点击下方按钮选择本地代码文件夹开启工作区
+            <div className="h-full flex flex-col items-center justify-center p-6 text-center text-xs text-[#71717A] select-none">
+              <div className="w-10 h-10 rounded-full bg-black/[0.03] border border-black/[0.05] flex items-center justify-center text-[#71717A] mb-3">
+                <FolderOpen className="w-5 h-5" />
+              </div>
+              <p className="font-semibold text-[#18181B] mb-1">未打开任何项目</p>
+              <p className="text-[11px] text-[#71717A] max-w-[200px] mb-3 leading-relaxed">
+                挂载本地代码工程以开启智能开发工作区
               </p>
               <button
                 onClick={handleOpenFolder}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-[#D96B27] hover:bg-[#B8551B] text-white rounded-lg text-xs font-bold shadow-xs transition-colors cursor-pointer"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-[#18181B] hover:bg-black text-white rounded-lg text-xs font-medium shadow-2xs transition-colors cursor-pointer"
               >
-                <FolderPlus className="w-3.5 h-3.5" />
-                <span>打开本地项目文件夹</span>
+                <FolderPlus className="w-3.5 h-3.5 text-[#FAF9F6]" />
+                <span>打开项目文件夹</span>
               </button>
             </div>
           ) : (
@@ -318,13 +320,13 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ onFileSelected }) => {
       <div
         onMouseDown={handleVerticalMouseDown}
         title="上下拖动调节项目会话与文件管理区域高度比例"
-        className={`h-2.5 w-full cursor-row-resize flex items-center justify-center select-none transition-colors border-y border-[#E6DFD5] flex-shrink-0 group ${
+        className={`h-1.5 w-full cursor-row-resize flex items-center justify-center select-none transition-colors border-y border-[#E8E5DF] flex-shrink-0 group ${
           isDraggingVertical
             ? 'bg-[#D96B27]'
-            : 'bg-[#F4EFEA] hover:bg-[#D96B27]/40'
+            : 'bg-[#F4F2EE] hover:bg-[#D96B27]/40'
         }`}
       >
-        <div className="w-12 h-1 bg-[#8A847C]/40 group-hover:bg-[#D96B27] rounded-full transition-colors" />
+        <div className="w-8 h-0.5 bg-[#71717A]/40 group-hover:bg-[#D96B27] rounded-full transition-colors" />
       </div>
 
       {/* ──────────────────────────────────────────────────────────── */}
@@ -332,23 +334,23 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ onFileSelected }) => {
       {/* ──────────────────────────────────────────────────────────── */}
       <div
         style={{ height: `${100 - splitRatio}%` }}
-        className="flex flex-col bg-[#FAF8F5] overflow-hidden"
+        className="flex flex-col bg-[#FAF9F6] overflow-hidden"
       >
         {/* 2.1 Workspace Header */}
-        <div className="p-2 px-3 border-b border-[#E6DFD5] flex items-center justify-between bg-[#F4EFEA]">
+        <div className="p-2 px-3 border-b border-[#E8E5DF] flex items-center justify-between bg-[#F4F2EE]">
           <div className="flex items-center gap-1.5 min-w-0">
             <FolderTree className="w-3.5 h-3.5 text-[#D96B27] flex-shrink-0" />
-            <span className="font-semibold text-xs text-[#1E1C1A] tracking-wider uppercase truncate">
-              文件资源管理 {activeProject ? `(${activeProject.name})` : ''}
+            <span className="font-semibold text-[11px] text-[#18181B] tracking-wide uppercase truncate">
+              文件资源 {activeProject ? `· ${activeProject.name}` : ''}
             </span>
           </div>
           {activeProject && (
             <button
               onClick={() => activeProject.path && loadTree(activeProject.path)}
-              className="p-1 hover:bg-white rounded text-[#8A847C] hover:text-[#1E1C1A] transition-colors cursor-pointer"
+              className="p-1 hover:bg-black/[0.04] rounded text-[#71717A] hover:text-[#18181B] transition-colors cursor-pointer"
               title="刷新文件树"
             >
-              <RefreshCw className="w-3.5 h-3.5" />
+              <RefreshCw className="w-3 h-3" />
             </button>
           )}
         </div>
@@ -358,7 +360,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ onFileSelected }) => {
           {currentRoot ? (
             <WorkspaceTreeView rootNode={currentRoot} />
           ) : (
-            <div className="p-4 text-center text-xs text-[#8A847C]">
+            <div className="p-4 text-center text-xs text-[#71717A]">
               {activeProject ? '正在加载文件系统树...' : '请先选择一个活跃项目'}
             </div>
           )}
