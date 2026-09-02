@@ -57,6 +57,8 @@ function getApiHeaders(): Record<string, string> {
   return headers;
 }
 
+const activeStreamControllers = new Map<string, AbortController>();
+
 function loadProjectsDb(): BridgeProjectsDatabase {
   try {
     const raw = localStorage.getItem(STORAGE_PROJECTS_KEY);
@@ -254,36 +256,46 @@ async function executeToolCall(toolName: string, args: Record<string, any>, work
   const normName = toolName.trim().toLowerCase();
   
   if (normName === 'lookup' || normName === 'list_dir' || normName === 'read_workspace_tree') {
-    const targetPath = args.path || workspacePath || '.';
+    const rawPath = args.path || '.';
+    const targetPath = (rawPath === '.' || rawPath === './' || !rawPath) ? (workspacePath || '.') : rawPath;
     try {
       const targetUrl = `/api/fs/tree?path=${encodeURIComponent(targetPath)}`;
       const res = await fetch(targetUrl, { headers: getApiHeaders() });
       if (res.ok) {
         const data = await res.json();
         const tree = data.tree || [];
-        const items = tree.map((t: any) => `${t.is_dir ? '📁' : '📄'} ${t.name}`).join('\n');
-        return `[目录结构 ${targetPath}]:\n${items || '📄 package.json\n📁 src/\n📁 public/'}`;
+        if (tree.length > 0) {
+          const items = tree.map((t: any) => `${t.is_dir ? '📁' : '📄'} ${t.name}`).join('\n');
+          return `[目录结构 ${targetPath}]:\n${items}`;
+        }
+        return `[目录结构 ${targetPath}]:\n(目录为空)`;
       }
     } catch (e) {}
-    return `[目录结构 ${targetPath}]:\n📄 package.json\n📁 src/\n  📄 App.tsx\n  📄 main.tsx\n📁 public/\n📄 tsconfig.json\n📄 vite.config.ts`;
+    return `[目录结构 ${targetPath}]:\n(无法读取该目录或目录不存在)`;
   }
 
   if (normName === 'read_file' || normName === 'read_file_content') {
-    const filePath = args.path || args.file || 'package.json';
+    const filePath = args.path || args.file || '';
+    if (!filePath) {
+      return '[错误: 未指定文件路径 path]';
+    }
     try {
-      const res = await fetch(`/api/fs/read?path=${encodeURIComponent(filePath)}`, {
+      const res = await fetch(`/api/fs/read?path=${encodeURIComponent(filePath)}&cwd=${encodeURIComponent(workspacePath || '')}`, {
         headers: getApiHeaders(),
       });
       if (res.ok) {
         const data = await res.json();
-        return `[文件内容 ${filePath}]:\n${data.content || ''}`;
+        return `[文件内容 ${filePath}]:\n${data.content ?? ''}`;
       }
     } catch (e) {}
-    return `[文件内容 ${filePath}]:\n{\n  "name": "tcode",\n  "version": "2.0.0",\n  "type": "module"\n}`;
+    return `[错误: 文件无法读取或不存在: ${filePath}]`;
   }
 
   if (normName === 'execute_command' || normName === 'run_command' || normName === 'exec') {
-    const command = args.command || args.cmd || 'git status';
+    const command = args.command || args.cmd || '';
+    if (!command) {
+      return '[错误: 未指定要执行的命令 command]';
+    }
     try {
       const res = await fetch('/api/terminal/run', {
         method: 'POST',
@@ -292,13 +304,13 @@ async function executeToolCall(toolName: string, args: Record<string, any>, work
       });
       if (res.ok) {
         const data = await res.json();
-        return `[命令 ${command} 执行结果]:\n${data.stdout || data.output || '命令执行完成'}`;
+        return `[命令 \`${command}\` 执行输出]:\n${data.stdout || data.output || data.stderr || '命令执行完成'}`;
       }
     } catch (e) {}
-    return `[命令 ${command} 执行结果]:\nCommand executed cleanly.`;
+    return `[命令 \`${command}\` 执行失败]`;
   }
 
-  return `[工具 ${toolName} 执行完成]`;
+  return `[工具 \`${toolName}\` 执行完成]`;
 }
 
 function saveProjectsDb(db: BridgeProjectsDatabase): void {
@@ -841,9 +853,35 @@ export function initTauriBridge(): void {
         return JSON.stringify({ status: 'ok', output: `Tool [${toolName}] executed successfully` });
       }
 
-      // 6. Chat Streaming & Swarm Flow
+      // 6. Chat Streaming, Cancellation & Swarm Flow
+      case 'cancel_chat_prompt': {
+        const { sessionId, session_id } = args || {};
+        const targetId = sessionId || session_id;
+        if (targetId && activeStreamControllers.has(targetId)) {
+          const ctrl = activeStreamControllers.get(targetId);
+          if (ctrl) {
+            try { ctrl.abort(); } catch (e) {}
+          }
+          activeStreamControllers.delete(targetId);
+        } else {
+          for (const [id, ctrl] of activeStreamControllers.entries()) {
+            try { ctrl.abort(); } catch (e) {}
+          }
+          activeStreamControllers.clear();
+        }
+        return true;
+      }
+
       case 'stream_chat_prompt': {
         const { sessionId, workspaceDir, prompt, model, executionMode, budgetTokens } = args || {};
+        const abortController = new AbortController();
+        const streamKey = sessionId || 'global';
+        const prevCtrl = activeStreamControllers.get(streamKey);
+        if (prevCtrl) {
+          try { prevCtrl.abort(); } catch (e) {}
+        }
+        activeStreamControllers.set(streamKey, abortController);
+
         const channelsDb = loadChannelsDb();
         const activeCh = channelsDb.channels.find((c: any) => c.id === channelsDb.active_channel_id) || channelsDb.channels[0];
         const targetModel = model || activeCh?.models?.[0] || 'deepseek-v4-flash';
@@ -935,6 +973,7 @@ Synthesize the optimal unified patch/solution with step-by-step rationale and de
                 'X-Tcode-Token': getHostToken(),
               },
               body: prep.body,
+              signal: abortController.signal,
             });
 
             if (res.ok && res.body) {
@@ -944,6 +983,10 @@ Synthesize the optimal unified patch/solution with step-by-step rationale and de
               let buffer = '';
 
               while (true) {
+                if (abortController.signal.aborted) {
+                  try { reader.cancel(); } catch (e) {}
+                  break;
+                }
                 const { done, value } = await reader.read();
                 if (done) break;
                 buffer += decoder.decode(value, { stream: true });
@@ -951,6 +994,7 @@ Synthesize the optimal unified patch/solution with step-by-step rationale and de
                 buffer = lines.pop() || '';
 
                 for (const line of lines) {
+                  if (abortController.signal.aborted) break;
                   const parsed = parseSseLine(prep.protocol, line);
                   if (parsed.isDone) {
                     break;
@@ -974,8 +1018,18 @@ Synthesize the optimal unified patch/solution with step-by-step rationale and de
                 }
               }
             }
-          } catch (e) {
+          } catch (e: any) {
+            if (e?.name === 'AbortError' || abortController.signal.aborted) {
+              console.log('[TauriBridge] Stream aborted by user');
+              shouldContinueLoop = false;
+              break;
+            }
             console.warn('[TauriBridge] Proxy streaming not available, using simulated stream:', e);
+          }
+
+          if (abortController.signal.aborted) {
+            shouldContinueLoop = false;
+            break;
           }
 
           if (!streamedSuccessfully && turn === 1) {
@@ -990,11 +1044,12 @@ Synthesize the optimal unified patch/solution with step-by-step rationale and de
           // Parse tool calls (e.g. DSML <|DSML|invoke name="Lookup">)
           const toolCalls = parseToolCallsFromText(turnContent);
 
-          if (toolCalls.length > 0 && turn < MAX_TURNS) {
+          if (toolCalls.length > 0 && turn < MAX_TURNS && !abortController.signal.aborted) {
             apiPayloadMessages.push({ role: 'assistant', content: turnContent });
             const toolOutputParts: string[] = [];
 
             for (const call of toolCalls) {
+              if (abortController.signal.aborted) break;
               const toolResult = await executeToolCall(call.name, call.args, workspaceDir || 'E:\\pro\\agent-learning');
               accumulatedToolCalls.push({
                 name: call.name,
@@ -1025,7 +1080,7 @@ Synthesize the optimal unified patch/solution with step-by-step rationale and de
             if (
               cleanText.length < 80 &&
               (cleanText.includes('查看') || cleanText.includes('让我') || cleanText.includes('稍等') || cleanText.includes('可以') || cleanText.includes('好的')) &&
-              turn < MAX_TURNS
+              turn < MAX_TURNS && !abortController.signal.aborted
             ) {
               apiPayloadMessages.push({ role: 'assistant', content: turnContent });
               apiPayloadMessages.push({
@@ -1040,8 +1095,14 @@ Synthesize the optimal unified patch/solution with step-by-step rationale and de
           }
         }
 
+        activeStreamControllers.delete(streamKey);
+
         if (!finalReportText && accumulatedToolCalls.length > 0) {
           finalReportText = '已为您完成所有工作区文件扫描与工具调用。';
+        }
+
+        if (abortController.signal.aborted) {
+          finalReportText = finalReportText ? `${finalReportText}\n\n*(对话已由用户中断)*` : '*(对话已由用户中断)*';
         }
 
         if (sessionId) {
@@ -1058,6 +1119,7 @@ Synthesize the optimal unified patch/solution with step-by-step rationale and de
           session_id: sessionId,
           full_content: finalReportText,
           full_thought: accumulatedThought,
+          was_cancelled: abortController.signal.aborted,
         });
 
         return true;

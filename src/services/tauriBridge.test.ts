@@ -147,4 +147,15 @@ describe('tauriBridge Universal IPC Adapter', () => {
     const dbAfterProjDel: any = await invoke('list_projects_and_sessions');
     expect(dbAfterProjDel.projects.find((p: any) => p.id === newProj.id)).toBeUndefined();
   });
+
+  it('handles cancel_chat_prompt without errors', async () => {
+    const cancelRes = await invoke('cancel_chat_prompt', { sessionId: 'sess_test_cancel' });
+    expect(cancelRes).toBe(true);
+  });
+
+  it('cleans up orphaned or unclosed DSML tags properly', () => {
+    const brokenText = `工具输出疑似有误。我用终端命令来验证真实情况。\n</|DSML|invoke>\n</|DSML|invoke>`;
+    const cleaned = sanitizeTextContent(brokenText);
+    expect(cleaned).toBe('工具输出疑似有误。我用终端命令来验证真实情况。');
+  });
 });

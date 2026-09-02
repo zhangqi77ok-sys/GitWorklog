@@ -16,6 +16,7 @@ import {
   Code2,
   Copy,
   Plus,
+  Square,
 } from 'lucide-react';
 import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
@@ -23,6 +24,7 @@ import { useProjectSessionStore } from '../../store/useProjectSessionStore';
 import { useWorkspaceStore } from '../../store/useWorkspaceStore';
 import { useGatewayStore } from '../../store/useGatewayStore';
 import { SessionTabBar } from './SessionTabBar';
+import { PromptQueueBar, QueuedPrompt } from './PromptQueueBar';
 import { SubtaskProgressCard } from './SubtaskProgressCard';
 import { SwarmFlowVisualizer, SwarmFlowState } from './SwarmFlowVisualizer';
 import { ExecutionModeCapsule } from './ExecutionModeCapsule';
@@ -60,6 +62,26 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   const [streamingThought, setStreamingThought] = useState('');
   const [streamingContent, setStreamingContent] = useState('');
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
+
+  // Prompt Queue State (Auto-drained, Reorderable, Editable, Preemptible)
+  const [promptQueue, setPromptQueue] = useState<QueuedPrompt[]>(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        const saved = localStorage.getItem('tcode_prompt_queue');
+        return saved ? JSON.parse(saved) : [];
+      }
+    } catch (e) {}
+    return [];
+  });
+
+  const promptQueueRef = useRef<QueuedPrompt[]>(promptQueue);
+  useEffect(() => {
+    promptQueueRef.current = promptQueue;
+    try {
+      localStorage.setItem('tcode_prompt_queue', JSON.stringify(promptQueue));
+    } catch (e) {}
+  }, [promptQueue]);
+
   const [collapsedThoughts, setCollapsedThoughts] = useState<Record<string, boolean>>(() => {
     try {
       if (typeof window !== 'undefined') {
@@ -138,10 +160,14 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   const activeProject = projects.find((p) => p.id === activeProjectId);
   const activeSession = activeProject?.sessions?.find((s) => s.id === activeSessionId);
   const activeChannel = channels.find((c) => c.id === activeChannelId) || channels[0];
-  const availableModels =
+  const availableModels: string[] =
     activeChannel?.models && activeChannel.models.length > 0
       ? activeChannel.models
-      : ['deepseek-v4-flash', 'gpt-5.6-sol', 'claude-opus-5', 'claude-opus-4-8', 'glm-5.3'];
+      : ['deepseek-v4-flash', 'claude-3-7-sonnet', 'gpt-4o'];
+
+  const activeFileName = activeTabPath
+    ? activeTabPath.split(/[/\\]/).pop() || activeTabPath
+    : null;
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -165,8 +191,6 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     toast.success(`已切换生效模型: ${model}`);
   };
 
-  const activeFileName = activeTabPath ? activeTabPath.split(/[/\\]/).pop() : null;
-
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
@@ -174,6 +198,67 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   useEffect(() => {
     scrollToBottom();
   }, [activeSession?.messages, streamingContent, streamingThought]);
+
+  const handleStopGeneration = async () => {
+    try {
+      await invoke('cancel_chat_prompt', { sessionId: activeSessionId });
+      setIsStreaming(false);
+      setStreamingThought('');
+      setStreamingContent('');
+      toast.info('已中断当前生成');
+      await loadInitialData();
+    } catch (e) {
+      console.error('Stop stream error:', e);
+    }
+  };
+
+  const executePromptNow = async (
+    promptText: string,
+    modelOverride?: string,
+    modeOverride?: ExecutionMode,
+    budgetOverride?: number
+  ) => {
+    if (!promptText.trim() || !activeSessionId) return;
+
+    setIsStreaming(true);
+    setStreamingThought('');
+    setStreamingContent('');
+
+    const workspaceDir = activeProject?.path || 'E:\\pro\\agent-learning';
+    const execMode = modeOverride || executionMode;
+    const budget = budgetOverride || swarmBudgetTokens;
+    const targetModel = modelOverride || activeModelId;
+
+    if (execMode === 'swarm') {
+      setSwarmFlowData({
+        taskPrompt: promptText,
+        budgetTokens: budget,
+        workersCount: 3,
+        status: 'running',
+        candidates: [],
+        selectedWorkerId: '',
+        confidenceScore: 0,
+        humanReviewed: false,
+        rationale: '正在启动 SwarmFlow 7 算子流并行多视角分析与仲裁...',
+      });
+    } else {
+      setSwarmFlowData(null);
+    }
+
+    try {
+      await invoke('stream_chat_prompt', {
+        sessionId: activeSessionId,
+        workspaceDir,
+        prompt: promptText,
+        model: targetModel,
+        executionMode: execMode,
+        budgetTokens: budget,
+      });
+    } catch (err: any) {
+      setIsStreaming(false);
+      toast.error(`发送失败: ${err}`);
+    }
+  };
 
   // Listen to Tauri streaming events
   useEffect(() => {
@@ -201,6 +286,15 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
           setStreamingThought('');
           setStreamingContent('');
           await loadInitialData();
+
+          // Auto-drain next queue item if available!
+          if (promptQueueRef.current.length > 0) {
+            const next = promptQueueRef.current[0];
+            setPromptQueue((prev) => prev.slice(1));
+            setTimeout(() => {
+              executePromptNow(next.text, next.modelId, next.executionMode, next.budgetTokens);
+            }, 300);
+          }
         }
       });
 
@@ -223,45 +317,86 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   }, [activeSessionId, loadInitialData]);
 
   const handleSend = async () => {
-    if (!inputPrompt.trim() || isStreaming || !activeSessionId) return;
-
+    if (!inputPrompt.trim() || !activeSessionId) return;
     const promptText = inputPrompt.trim();
-    setInputPrompt('');
-    setIsStreaming(true);
-    setStreamingThought('');
-    setStreamingContent('');
 
-    const workspaceDir = activeProject?.path || 'E:\\pro\\agent-learning';
-
-    if (executionMode === 'swarm') {
-      setSwarmFlowData({
-        taskPrompt: promptText,
-        budgetTokens: swarmBudgetTokens,
-        workersCount: 3,
-        status: 'running',
-        candidates: [],
-        selectedWorkerId: '',
-        confidenceScore: 0,
-        humanReviewed: false,
-        rationale: '正在启动 SwarmFlow 7 算子流并行多视角分析与仲裁...',
-      });
-    } else {
-      setSwarmFlowData(null);
-    }
-
-    try {
-      await invoke('stream_chat_prompt', {
-        sessionId: activeSessionId,
-        workspaceDir,
-        prompt: promptText,
-        model: activeModelId,
+    if (isStreaming) {
+      // If currently generating, queue the message!
+      const newItem: QueuedPrompt = {
+        id: `queue_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        text: promptText,
+        createdAt: Date.now(),
+        modelId: activeModelId,
         executionMode,
         budgetTokens: swarmBudgetTokens,
-      });
-    } catch (err: any) {
-      setIsStreaming(false);
-      toast.error(`发送失败: ${err}`);
+      };
+      setPromptQueue((prev) => [...prev, newItem]);
+      setInputPrompt('');
+      toast.info(`已加入待发送队列 (第 ${promptQueue.length + 1} 位)`);
+      return;
     }
+
+    setInputPrompt('');
+    await executePromptNow(promptText);
+  };
+
+  const handleDeleteQueueItem = (id: string) => {
+    setPromptQueue((prev) => prev.filter((item) => item.id !== id));
+    toast.success('已从队列中移除');
+  };
+
+  const handleEditQueueItem = (id: string, newText: string) => {
+    setPromptQueue((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, text: newText } : item))
+    );
+    toast.success('队列内容已修改');
+  };
+
+  const handleMoveUpQueueItem = (index: number) => {
+    if (index <= 0) return;
+    setPromptQueue((prev) => {
+      const next = [...prev];
+      const temp = next[index];
+      next[index] = next[index - 1];
+      next[index - 1] = temp;
+      return next;
+    });
+  };
+
+  const handleMoveDownQueueItem = (index: number) => {
+    setPromptQueue((prev) => {
+      if (index >= prev.length - 1) return prev;
+      const next = [...prev];
+      const temp = next[index];
+      next[index] = next[index + 1];
+      next[index + 1] = temp;
+      return next;
+    });
+  };
+
+  const handlePreemptSend = async (id: string) => {
+    const item = promptQueue.find((q) => q.id === id);
+    if (!item) return;
+
+    // 1. Remove from queue
+    setPromptQueue((prev) => prev.filter((q) => q.id !== id));
+
+    // 2. Interrupt current stream
+    if (isStreaming) {
+      await handleStopGeneration();
+    }
+
+    // 3. Execute immediately
+    setTimeout(() => {
+      executePromptNow(item.text, item.modelId, item.executionMode, item.budgetTokens);
+    }, 200);
+
+    toast.success('已插队并立即启动执行');
+  };
+
+  const handleClearAllQueue = () => {
+    setPromptQueue([]);
+    toast.info('已清空待发送队列');
   };
 
   const toggleThoughtCollapse = (msgId: string) => {
@@ -529,11 +664,23 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
         <div ref={messagesEndRef} />
       </div>
 
-      {/* 3. Chat Input Box */}
+      {/* 3. Chat Input Box & Prompt Queue */}
       <div className="p-3 bg-[#F4EFEA] border-t border-[#E6DFD5]">
+        {/* Reorderable & Preemptible Prompt Queue Bar */}
+        <PromptQueueBar
+          queue={promptQueue}
+          onDelete={handleDeleteQueueItem}
+          onEdit={handleEditQueueItem}
+          onMoveUp={handleMoveUpQueueItem}
+          onMoveDown={handleMoveDownQueueItem}
+          onPreemptSend={handlePreemptSend}
+          onClearAll={handleClearAllQueue}
+          isStreaming={isStreaming}
+        />
+
         <div className="bg-white border border-[#E6DFD5] focus-within:border-[#D96B27] rounded-xl p-2.5 shadow-xs transition-colors space-y-2">
           {activeFileName && (
-            <div className="flex items-center gap-1.5 text-[11px] text-[#6B665F] bg-[#FAF8F5] px-2 py-0.5 rounded border border-[#E6DFD5] w-fit">
+            <div className="flex items-center gap-1.5 text-[11px] text-[#6B665F] bg-[#FAF8F5] px-2 py-0.5 rounded border border-[#E6DFD5] w-fit select-none">
               <Paperclip className="w-3 h-3 text-[#D96B27]" />
               <span>已引用当前文件:</span>
               <span className="font-mono font-medium text-[#1E1C1A]">{activeFileName}</span>
@@ -544,22 +691,27 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
             value={inputPrompt}
             onChange={(e) => setInputPrompt(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
+              if (e.key === 'Escape' && isStreaming) {
+                e.preventDefault();
+                handleStopGeneration();
+              } else if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 handleSend();
               }
             }}
             placeholder={
-              executionMode === 'swarm'
+              isStreaming
+                ? "Agent 正在生成中... 输入指令按 Enter 可直接加入待发送队列（生成完毕后自动执行）"
+                : executionMode === 'swarm'
                 ? "输入复杂重构或多任务方案设计，将通过 SwarmFlow 7 算子流并行竞标与仲裁推进 (Alt+2)..."
                 : "输入日常编程需求或任务指令，由单 Agent 极速执行内外双环 (Enter 发送, Alt+1 切换)..."
             }
             rows={2}
-            className="w-full resize-none outline-none text-xs text-[#1E1C1A] placeholder-[#8A847C] leading-relaxed bg-transparent"
+            className="w-full resize-none outline-none text-xs text-[#1E1C1A] placeholder-[#8A847C] leading-relaxed bg-transparent select-text"
           />
 
           <div className="flex items-center justify-between pt-1 border-t border-[#F4EFEA]">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 select-none">
               <ExecutionModeCapsule
                 mode={executionMode}
                 onModeChange={handleModeChange}
@@ -629,14 +781,43 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
               </div>
             </div>
 
-            <button
-              onClick={handleSend}
-              disabled={!inputPrompt.trim() || isStreaming}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#D96B27] hover:bg-[#B8551B] disabled:opacity-50 text-white rounded-lg text-xs font-medium transition-colors shadow-xs"
-            >
-              <Send className="w-3.5 h-3.5" />
-              <span>{isStreaming ? '生成中...' : '发送'}</span>
-            </button>
+            {/* Action Buttons: Stop Generation, Add to Queue, or Send */}
+            <div className="flex items-center gap-2">
+              {isStreaming ? (
+                <>
+                  {inputPrompt.trim() && (
+                    <button
+                      type="button"
+                      onClick={handleSend}
+                      title="将当前输入加入待发送队列"
+                      className="flex items-center gap-1 px-3 py-1.5 bg-[#FAF8F5] hover:bg-white border border-[#D96B27] text-[#D96B27] rounded-lg text-xs font-bold transition-all shadow-2xs cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>加入队列</span>
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleStopGeneration}
+                    title="立即中断当前对话生成 (Esc)"
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-[#C62828] hover:bg-[#B71C1C] text-white rounded-lg text-xs font-semibold transition-all shadow-xs cursor-pointer animate-pulse"
+                  >
+                    <Square className="w-3 h-3 fill-current" />
+                    <span>停止生成</span>
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleSend}
+                  disabled={!inputPrompt.trim()}
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#D96B27] hover:bg-[#B8551B] disabled:opacity-50 text-white rounded-lg text-xs font-medium transition-colors shadow-xs cursor-pointer"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  <span>发送</span>
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>
