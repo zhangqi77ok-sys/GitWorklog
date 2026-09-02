@@ -479,17 +479,38 @@ export function initTauriBridge(): void {
       }
 
       case 'delete_project_session': {
-        const { projectId, sessionId } = args || {};
+        const { projectId, sessionId, session_id } = args || {};
+        const targetSessionId = sessionId || session_id;
         const db = loadProjectsDb();
-        const project = db.projects.find((p: BridgeProjectRecord) => p.id === projectId);
-        if (project) {
-          project.sessions = project.sessions.filter((s: BridgeSessionRecord) => s.id !== sessionId);
-          if (db.active_session_id === sessionId) {
-            db.active_session_id = project.sessions[0]?.id || null;
+        for (const project of db.projects) {
+          const initLen = project.sessions.length;
+          project.sessions = project.sessions.filter((s: BridgeSessionRecord) => s.id !== targetSessionId);
+          if (project.sessions.length !== initLen) {
+            if (db.active_session_id === targetSessionId) {
+              db.active_session_id = project.sessions[0]?.id || null;
+            }
+            saveProjectsDb(db);
+            return true;
+          }
+        }
+        return false;
+      }
+
+      case 'delete_project_folder': {
+        const { projectId, project_id } = args || {};
+        const targetProjectId = projectId || project_id;
+        const db = loadProjectsDb();
+        const initLen = db.projects.length;
+        db.projects = db.projects.filter((p: BridgeProjectRecord) => p.id !== targetProjectId);
+        if (db.projects.length !== initLen) {
+          if (db.active_project_id === targetProjectId) {
+            db.active_project_id = db.projects[0]?.id || null;
+            db.active_session_id = db.projects[0]?.sessions?.[0]?.id || null;
           }
           saveProjectsDb(db);
+          return true;
         }
-        return true;
+        return false;
       }
 
       case 'switch_active_project_or_session': {

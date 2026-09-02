@@ -190,7 +190,7 @@ export const useProjectSessionStore = create<ProjectSessionState>((set, get) => 
 
   deleteSession: async (sessionId: string) => {
     try {
-      await invoke('delete_project_session', { sessionId });
+      await invoke('delete_project_session', { sessionId, session_id: sessionId });
       await get().loadInitialData();
     } catch (err: any) {
       set({ error: String(err) });
@@ -199,7 +199,7 @@ export const useProjectSessionStore = create<ProjectSessionState>((set, get) => 
 
   deleteProject: async (projectId: string) => {
     try {
-      await invoke('delete_project_folder', { projectId });
+      await invoke('delete_project_folder', { projectId, project_id: projectId });
       await get().loadInitialData();
     } catch (err: any) {
       set({ error: String(err) });

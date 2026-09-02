@@ -121,4 +121,30 @@ describe('tauriBridge Universal IPC Adapter', () => {
     const clean = sanitizeTextContent(rawText);
     expect(clean).toBe('我来继续扫描项目的关键目录和配置文件。');
   });
+
+  it('handles delete_project_session and delete_project_folder correctly', async () => {
+    const newProj: any = await invoke('add_project_folder', {
+      path: 'D:/workspace/to-delete',
+      name: 'to-delete',
+    });
+    const newSess: any = await invoke('create_project_session', {
+      projectId: newProj.id,
+      title: '即将删除的会话',
+    });
+
+    // 1. Delete session
+    const delSessRes: any = await invoke('delete_project_session', { sessionId: newSess.id });
+    expect(delSessRes).toBe(true);
+
+    const dbAfterSessionDel: any = await invoke('list_projects_and_sessions');
+    const projFound = dbAfterSessionDel.projects.find((p: any) => p.id === newProj.id);
+    expect(projFound.sessions.find((s: any) => s.id === newSess.id)).toBeUndefined();
+
+    // 2. Delete project
+    const delProjRes: any = await invoke('delete_project_folder', { projectId: newProj.id });
+    expect(delProjRes).toBe(true);
+
+    const dbAfterProjDel: any = await invoke('list_projects_and_sessions');
+    expect(dbAfterProjDel.projects.find((p: any) => p.id === newProj.id)).toBeUndefined();
+  });
 });
