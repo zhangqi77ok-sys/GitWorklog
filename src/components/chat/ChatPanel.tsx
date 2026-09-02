@@ -14,12 +14,15 @@ import {
   Check,
   Settings,
   Code2,
+  Copy,
+  Plus,
 } from 'lucide-react';
 import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 import { useProjectSessionStore } from '../../store/useProjectSessionStore';
 import { useWorkspaceStore } from '../../store/useWorkspaceStore';
 import { useGatewayStore } from '../../store/useGatewayStore';
+import { SessionTabBar } from './SessionTabBar';
 import { SubtaskProgressCard } from './SubtaskProgressCard';
 import { SwarmFlowVisualizer, SwarmFlowState } from './SwarmFlowVisualizer';
 import { ExecutionModeCapsule } from './ExecutionModeCapsule';
@@ -43,8 +46,10 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     projects,
     activeProjectId,
     activeSessionId,
+    openSessionIds,
     loadInitialData,
     updateSession,
+    createSession,
   } = useProjectSessionStore();
 
   const { openDiffTab, activeTabPath } = useWorkspaceStore();
@@ -54,6 +59,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingThought, setStreamingThought] = useState('');
   const [streamingContent, setStreamingContent] = useState('');
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [collapsedThoughts, setCollapsedThoughts] = useState<Record<string, boolean>>(() => {
     try {
       if (typeof window !== 'undefined') {
@@ -63,6 +69,19 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     } catch (e) {}
     return {};
   });
+
+  const handleCopyMessage = (id: string, text: string) => {
+    try {
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(text);
+        setCopiedMessageId(id);
+        toast.success('已复制对话内容');
+        setTimeout(() => setCopiedMessageId(null), 2000);
+      }
+    } catch (e) {
+      toast.error('复制失败');
+    }
+  };
 
   const [executionMode, setExecutionMode] = useState<ExecutionMode>(() => {
     if (typeof window !== 'undefined') {
@@ -272,48 +291,51 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
     }
   };
 
-  return (
-    <div className="flex-1 h-full bg-[#FAF8F5] flex flex-col overflow-hidden select-none">
-      {/* 1. Chat Header (Clean & Minimalist, no redundant model dropdown) */}
-      <div className="h-10 px-3 border-b border-[#E6DFD5] flex items-center justify-between bg-[#F4EFEA]">
-        <div className="flex items-center gap-2">
-          <Sparkles className="w-4 h-4 text-[#D96B27]" />
-          <span className="font-semibold text-xs text-[#1E1C1A]">
-            {activeSession?.title || '新对话'}
-          </span>
-          <span className="text-[10px] text-[#8A847C] font-mono">
-            ({activeProject?.name || '未知项目'})
-          </span>
-        </div>
+  const handleCreateNewSession = async () => {
+    if (activeProjectId) {
+      await createSession(activeProjectId);
+    }
+  };
 
-        <div className="flex items-center gap-2">
-          {onToggleEditor && (
-            <button
-              type="button"
-              onClick={onToggleEditor}
-              title={isEditorOpen ? '收起右侧代码工作区 (Alt+E)' : '弹出右侧代码工作区与 Diff 审查 (Alt+E)'}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer border ${
-                isEditorOpen
-                  ? 'bg-white text-[#D96B27] border-[#D96B27]/40 shadow-xs'
-                  : 'bg-white/80 text-[#6B665F] hover:text-[#1E1C1A] hover:bg-white border-[#E6DFD5]'
-              }`}
-            >
-              <Code2 className={`w-3.5 h-3.5 ${isEditorOpen ? 'text-[#D96B27]' : 'text-[#8A847C]'}`} />
-              <span>{isEditorOpen ? '收起代码区' : '代码工作区'}</span>
-            </button>
-          )}
-        </div>
-      </div>
+  return (
+    <div className="flex-1 h-full bg-[#FAF8F5] flex flex-col overflow-hidden">
+      {/* 1. Multi-Session Tab Bar Header */}
+      <SessionTabBar
+        isEditorOpen={isEditorOpen}
+        onToggleEditor={onToggleEditor}
+      />
 
       {/* 2. Messages Stream List */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {!activeSession || (activeSession.messages.length === 0 && !isStreaming) ? (
+        {!activeSession ? (
+          <div className="h-full flex flex-col items-center justify-center text-center p-6 select-none">
+            <div className="w-12 h-12 rounded-2xl bg-[#D96B27]/10 flex items-center justify-center text-[#D96B27] mb-3">
+              <Sparkles className="w-6 h-6" />
+            </div>
+            <h3 className="text-sm font-semibold text-[#1E1C1A] mb-1">
+              暂无打开的会话分支
+            </h3>
+            <p className="text-xs text-[#8A847C] max-w-sm mb-4">
+              可从左侧项目列表点击打开已有会话分支，或点击下方按钮在当前项目中新建分支
+            </p>
+            {activeProjectId && (
+              <button
+                type="button"
+                onClick={handleCreateNewSession}
+                className="flex items-center gap-1.5 px-4 py-2 bg-[#D96B27] hover:bg-[#B8551B] text-white rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>新建会话分支</span>
+              </button>
+            )}
+          </div>
+        ) : activeSession.messages.length === 0 && !isStreaming ? (
           <div className="h-full flex flex-col items-center justify-center text-center p-6 select-none">
             <div className="w-10 h-10 rounded-full bg-[#D96B27]/10 flex items-center justify-center text-[#D96B27] mb-3">
               <Sparkles className="w-5 h-5" />
             </div>
             <h3 className="text-sm font-semibold text-[#1E1C1A] mb-1">
-              Tcode Next-Gen Agentic Studio
+              {activeSession.title || '新对话分支'}
             </h3>
             <p className="text-xs text-[#8A847C] max-w-sm">
               基于 Rust Tokio Core 稳定双环轨道与全插件化能力生态。输入任何编程需求或任务指令即可启动。
@@ -323,11 +345,11 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
           activeSession.messages.map((msg) => (
             <div
               key={msg.id}
-              className={`flex flex-col ${
+              className={`group/msg flex flex-col ${
                 msg.role === 'user' ? 'items-end' : 'items-start'
               } space-y-1`}
             >
-              <div className="flex items-center gap-1.5 text-[10px] text-[#8A847C] px-1">
+              <div className="flex items-center gap-1.5 text-[10px] text-[#8A847C] px-1 select-none">
                 {msg.role === 'user' ? (
                   <>
                     <User className="w-3 h-3 text-[#1E1C1A]" />
@@ -352,7 +374,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                 <div className="max-w-[85%] w-full my-1 bg-[#F4EFEA] border border-[#E6DFD5] rounded-xl overflow-hidden text-xs">
                   <div
                     onClick={() => toggleThoughtCollapse(msg.id)}
-                    className="flex items-center justify-between p-2 px-3 bg-[#EAE4DC]/60 cursor-pointer hover:bg-[#EAE4DC] transition-colors"
+                    className="flex items-center justify-between p-2 px-3 bg-[#EAE4DC]/60 cursor-pointer hover:bg-[#EAE4DC] transition-colors select-none"
                   >
                     <div className="flex items-center gap-1.5 text-[#6B665F] font-mono text-[11px]">
                       <BrainCircuit className="w-3.5 h-3.5 text-[#D96B27]" />
@@ -365,7 +387,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                     )}
                   </div>
                   {!collapsedThoughts[msg.id] && (
-                    <div className="p-3 font-mono text-[11px] text-[#6B665F] whitespace-pre-wrap leading-relaxed border-t border-[#E6DFD5]/50 bg-[#FAF8F5]">
+                    <div className="p-3 font-mono text-[11px] text-[#6B665F] whitespace-pre-wrap leading-relaxed border-t border-[#E6DFD5]/50 bg-[#FAF8F5] select-text">
                       {msg.thought}
                     </div>
                   )}
@@ -401,21 +423,43 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
 
                 return (
                   <div
-                    className={`max-w-[85%] rounded-2xl p-3.5 text-xs leading-relaxed ${
+                    className={`relative max-w-[85%] rounded-2xl p-3.5 text-xs leading-relaxed select-text ${
                       msg.role === 'user'
                         ? 'bg-[#D96B27] text-white rounded-tr-xs shadow-xs'
                         : 'bg-white border border-[#E6DFD5] text-[#1E1C1A] rounded-tl-xs shadow-xs'
                     }`}
                   >
+                    {/* 1-Click Copy Button on Bubble Hover */}
+                    <div className="absolute top-2 right-2 opacity-0 group-hover/msg:opacity-100 transition-opacity select-none flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => handleCopyMessage(msg.id, cleanText)}
+                        title="复制对话内容"
+                        className={`p-1 rounded-md transition-all shadow-2xs cursor-pointer ${
+                          msg.role === 'user'
+                            ? 'bg-[#B8551B] text-white hover:bg-[#9E4514]'
+                            : 'bg-[#FAF8F5] text-[#8A847C] hover:text-[#1E1C1A] hover:bg-white border border-[#E6DFD5]'
+                        }`}
+                      >
+                        {copiedMessageId === msg.id ? (
+                          <Check className="w-3 h-3 text-green-500" />
+                        ) : (
+                          <Copy className="w-3 h-3" />
+                        )}
+                      </button>
+                    </div>
+
                     {msg.role === 'user' ? (
-                      <div className="whitespace-pre-wrap">{cleanText}</div>
+                      <div className="whitespace-pre-wrap select-text pr-6">{cleanText}</div>
                     ) : (
-                      <MarkdownRenderer content={cleanText} />
+                      <div className="select-text pr-6">
+                        <MarkdownRenderer content={cleanText} />
+                      </div>
                     )}
 
                     {/* Diff Viewer Button for Agent Code Patches */}
                     {msg.role === 'assistant' && msg.content.includes('```') && (
-                      <div className="mt-3 pt-2.5 border-t border-[#E6DFD5] flex items-center justify-between">
+                      <div className="mt-3 pt-2.5 border-t border-[#E6DFD5] flex items-center justify-between select-none">
                         <span className="text-[10px] text-[#8A847C] font-mono">
                           包含代码补丁变更
                         </span>

@@ -44,6 +44,7 @@ interface ProjectSessionState {
   projects: ProjectRecord[];
   activeProjectId: string | null;
   activeSessionId: string | null;
+  openSessionIds: string[];
   searchQuery: string;
   selectedTag: string | null;
   isLoading: boolean;
@@ -52,6 +53,11 @@ interface ProjectSessionState {
   loadInitialData: () => Promise<void>;
   setActiveSession: (sessionId: string) => void;
   setActiveProject: (projectId: string) => void;
+  openSessionTab: (sessionId: string) => void;
+  closeSessionTab: (sessionId: string) => void;
+  closeOtherSessionTabs: (sessionId: string) => void;
+  closeAllSessionTabs: () => void;
+  reorderSessionTabs: (fromIndex: number, toIndex: number) => void;
   addProjectFolder: (path: string, name?: string) => Promise<ProjectRecord | null>;
   createSession: (projectId: string, title?: string, tags?: string[], modelId?: string) => Promise<SessionRecord | null>;
   updateSession: (sessionId: string, title?: string, tags?: string[], isPinned?: boolean, modelId?: string) => Promise<void>;
@@ -63,11 +69,13 @@ interface ProjectSessionState {
 
 const STORAGE_ACTIVE_PROJ_KEY = 'tcode_active_project_id_v2';
 const STORAGE_ACTIVE_SESS_KEY = 'tcode_active_session_id_v2';
+const STORAGE_OPEN_SESSIONS_KEY = 'tcode_open_session_ids_v2';
 
 export const useProjectSessionStore = create<ProjectSessionState>((set, get) => ({
   projects: [],
   activeProjectId: null,
   activeSessionId: null,
+  openSessionIds: [],
   searchQuery: '',
   selectedTag: null,
   isLoading: false,
@@ -78,22 +86,49 @@ export const useProjectSessionStore = create<ProjectSessionState>((set, get) => 
     try {
       const db = await invoke<ProjectsDatabase>('list_projects_and_sessions');
       const projects = db.projects || [];
+      const allSessions = projects.flatMap((p) => p.sessions || []);
       const savedProj = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_ACTIVE_PROJ_KEY) : null;
       const savedSess = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_ACTIVE_SESS_KEY) : null;
+      const savedOpenRaw = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_OPEN_SESSIONS_KEY) : null;
+
+      let openIds: string[] = [];
+      if (savedOpenRaw) {
+        try {
+          const parsed = JSON.parse(savedOpenRaw);
+          if (Array.isArray(parsed)) {
+            openIds = parsed.filter((id) => allSessions.some((s) => s.id === id));
+          }
+        } catch (e) {}
+      }
 
       const activeProjId = (savedProj && projects.some((p) => p.id === savedProj))
         ? savedProj
         : (db.active_project_id || projects[0]?.id || null);
 
       const curProj = projects.find((p) => p.id === activeProjId);
-      const activeSessId = (savedSess && (curProj?.sessions || []).some((s) => s.id === savedSess))
+      let activeSessId = (savedSess && (curProj?.sessions || []).some((s) => s.id === savedSess))
         ? savedSess
         : (db.active_session_id || curProj?.sessions?.[0]?.id || null);
+
+      if (openIds.length === 0 && activeSessId) {
+        openIds = [activeSessId];
+      } else if (activeSessId && !openIds.includes(activeSessId)) {
+        openIds.push(activeSessId);
+      }
+
+      if (openIds.length > 0 && (!activeSessId || !openIds.includes(activeSessId))) {
+        activeSessId = openIds[0];
+      }
+
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(STORAGE_OPEN_SESSIONS_KEY, JSON.stringify(openIds));
+      }
 
       set({
         projects,
         activeProjectId: activeProjId,
         activeSessionId: activeSessId,
+        openSessionIds: openIds,
         isLoading: false,
       });
     } catch (err: any) {
@@ -102,7 +137,7 @@ export const useProjectSessionStore = create<ProjectSessionState>((set, get) => 
   },
 
   setActiveSession: (sessionId: string) => {
-    const { projects } = get();
+    const { projects, openSessionIds } = get();
     let foundProjectId: string | null = null;
     for (const p of projects) {
       if ((p.sessions || []).some((s) => s.id === sessionId)) {
@@ -111,28 +146,110 @@ export const useProjectSessionStore = create<ProjectSessionState>((set, get) => 
       }
     }
     const finalProjId = foundProjectId || get().activeProjectId;
+    const nextOpen = openSessionIds.includes(sessionId) ? openSessionIds : [...openSessionIds, sessionId];
+
     if (typeof window !== 'undefined') {
       localStorage.setItem(STORAGE_ACTIVE_SESS_KEY, sessionId);
       if (finalProjId) localStorage.setItem(STORAGE_ACTIVE_PROJ_KEY, finalProjId);
+      localStorage.setItem(STORAGE_OPEN_SESSIONS_KEY, JSON.stringify(nextOpen));
     }
     set({
       activeSessionId: sessionId,
       activeProjectId: finalProjId,
+      openSessionIds: nextOpen,
     });
   },
 
   setActiveProject: (projectId: string) => {
-    const { projects } = get();
+    const { projects, openSessionIds } = get();
     const proj = projects.find((p) => p.id === projectId);
     const firstSessionId = proj?.sessions?.[0]?.id || null;
+    let nextOpen = openSessionIds;
+    if (firstSessionId && !openSessionIds.includes(firstSessionId)) {
+      nextOpen = [...openSessionIds, firstSessionId];
+    }
+
     if (typeof window !== 'undefined') {
       localStorage.setItem(STORAGE_ACTIVE_PROJ_KEY, projectId);
       if (firstSessionId) localStorage.setItem(STORAGE_ACTIVE_SESS_KEY, firstSessionId);
+      localStorage.setItem(STORAGE_OPEN_SESSIONS_KEY, JSON.stringify(nextOpen));
     }
     set({
       activeProjectId: projectId,
       activeSessionId: firstSessionId,
+      openSessionIds: nextOpen,
     });
+  },
+
+  openSessionTab: (sessionId: string) => {
+    get().setActiveSession(sessionId);
+  },
+
+  closeSessionTab: (sessionId: string) => {
+    const { openSessionIds, activeSessionId } = get();
+    const nextOpen = openSessionIds.filter((id) => id !== sessionId);
+    let nextActive = activeSessionId;
+
+    if (activeSessionId === sessionId) {
+      const closedIndex = openSessionIds.indexOf(sessionId);
+      if (nextOpen.length === 0) {
+        nextActive = null;
+      } else if (closedIndex >= nextOpen.length) {
+        nextActive = nextOpen[nextOpen.length - 1];
+      } else {
+        nextActive = nextOpen[closedIndex];
+      }
+    }
+
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(STORAGE_OPEN_SESSIONS_KEY, JSON.stringify(nextOpen));
+      if (nextActive) {
+        localStorage.setItem(STORAGE_ACTIVE_SESS_KEY, nextActive);
+      } else {
+        localStorage.removeItem(STORAGE_ACTIVE_SESS_KEY);
+      }
+    }
+
+    set({
+      openSessionIds: nextOpen,
+      activeSessionId: nextActive,
+    });
+  },
+
+  closeOtherSessionTabs: (sessionId: string) => {
+    const nextOpen = [sessionId];
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(STORAGE_OPEN_SESSIONS_KEY, JSON.stringify(nextOpen));
+      localStorage.setItem(STORAGE_ACTIVE_SESS_KEY, sessionId);
+    }
+    set({
+      openSessionIds: nextOpen,
+      activeSessionId: sessionId,
+    });
+  },
+
+  closeAllSessionTabs: () => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(STORAGE_OPEN_SESSIONS_KEY, JSON.stringify([]));
+      localStorage.removeItem(STORAGE_ACTIVE_SESS_KEY);
+    }
+    set({
+      openSessionIds: [],
+      activeSessionId: null,
+    });
+  },
+
+  reorderSessionTabs: (fromIndex: number, toIndex: number) => {
+    const { openSessionIds } = get();
+    if (fromIndex < 0 || fromIndex >= openSessionIds.length || toIndex < 0 || toIndex >= openSessionIds.length) return;
+    const nextOpen = [...openSessionIds];
+    const [moved] = nextOpen.splice(fromIndex, 1);
+    nextOpen.splice(toIndex, 0, moved);
+
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(STORAGE_OPEN_SESSIONS_KEY, JSON.stringify(nextOpen));
+    }
+    set({ openSessionIds: nextOpen });
   },
 
   addProjectFolder: async (path: string, name?: string) => {
@@ -165,7 +282,12 @@ export const useProjectSessionStore = create<ProjectSessionState>((set, get) => 
         localStorage.setItem(STORAGE_ACTIVE_SESS_KEY, session.id);
       }
       await get().loadInitialData();
-      set({ activeSessionId: session?.id || null, activeProjectId: projectId });
+      const currentOpen = get().openSessionIds;
+      const nextOpen = session?.id && !currentOpen.includes(session.id) ? [...currentOpen, session.id] : currentOpen;
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(STORAGE_OPEN_SESSIONS_KEY, JSON.stringify(nextOpen));
+      }
+      set({ activeSessionId: session?.id || null, activeProjectId: projectId, openSessionIds: nextOpen });
       return session;
     } catch (err: any) {
       set({ error: String(err) });
@@ -177,10 +299,13 @@ export const useProjectSessionStore = create<ProjectSessionState>((set, get) => 
     try {
       await invoke('update_project_session', {
         sessionId,
+        session_id: sessionId,
         title,
         tags,
         isPinned,
+        is_pinned: isPinned,
         modelId,
+        model_id: modelId,
       });
       await get().loadInitialData();
     } catch (err: any) {
@@ -191,6 +316,7 @@ export const useProjectSessionStore = create<ProjectSessionState>((set, get) => 
   deleteSession: async (sessionId: string) => {
     try {
       await invoke('delete_project_session', { sessionId, session_id: sessionId });
+      get().closeSessionTab(sessionId);
       await get().loadInitialData();
     } catch (err: any) {
       set({ error: String(err) });

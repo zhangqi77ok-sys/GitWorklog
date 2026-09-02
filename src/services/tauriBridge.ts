@@ -541,14 +541,30 @@ export function initTauriBridge(): void {
         return false;
       }
 
+      case 'update_project_session':
       case 'save_session_metadata': {
-        const { sessionId, title, tags } = args || {};
+        const {
+          sessionId,
+          session_id,
+          title,
+          tags,
+          isPinned,
+          is_pinned,
+          modelId,
+          model_id,
+        } = args || {};
+        const targetSessionId = sessionId || session_id;
         const db = loadProjectsDb();
         for (const proj of db.projects) {
-          const sess = proj.sessions.find((s: BridgeSessionRecord) => s.id === sessionId);
+          const sess = proj.sessions.find((s: BridgeSessionRecord) => s.id === targetSessionId);
           if (sess) {
             if (title !== undefined) sess.title = title;
             if (tags !== undefined) sess.tags = tags;
+            if (isPinned !== undefined) sess.is_pinned = isPinned;
+            if (is_pinned !== undefined) sess.is_pinned = is_pinned;
+            if (modelId !== undefined) sess.model_id = modelId;
+            if (model_id !== undefined) sess.model_id = model_id;
+            sess.updated_at = Date.now();
             saveProjectsDb(db);
             return true;
           }
@@ -557,12 +573,14 @@ export function initTauriBridge(): void {
       }
 
       case 'toggle_pin_session': {
-        const { sessionId } = args || {};
+        const { sessionId, session_id } = args || {};
+        const targetSessionId = sessionId || session_id;
         const db = loadProjectsDb();
         for (const proj of db.projects) {
-          const sess = proj.sessions.find((s: BridgeSessionRecord) => s.id === sessionId);
+          const sess = proj.sessions.find((s: BridgeSessionRecord) => s.id === targetSessionId);
           if (sess) {
             sess.is_pinned = !sess.is_pinned;
+            sess.updated_at = Date.now();
             saveProjectsDb(db);
             return sess.is_pinned;
           }

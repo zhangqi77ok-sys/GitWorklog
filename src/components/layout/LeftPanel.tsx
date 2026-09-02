@@ -125,6 +125,10 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ onFileSelected }) => {
     await updateSession(sessionId, title);
   };
 
+  const handleUpdateSessionTags = async (sessionId: string, tags: string[]) => {
+    await updateSession(sessionId, undefined, tags);
+  };
+
   const handleTogglePinSession = async (session: SessionRecord, e: React.MouseEvent) => {
     e.stopPropagation();
     await updateSession(session.id, undefined, undefined, !session.is_pinned);
@@ -298,6 +302,7 @@ export const LeftPanel: React.FC<LeftPanelProps> = ({ onFileSelected }) => {
                 onCreateSession={handleCreateSession}
                 onSelectSession={handleSelectSession}
                 onUpdateSessionTitle={handleUpdateSessionTitle}
+                onUpdateSessionTags={handleUpdateSessionTags}
                 onTogglePinSession={handleTogglePinSession}
                 onDeleteSession={handleDeleteSession}
                 onDeleteProject={handleDeleteProject}

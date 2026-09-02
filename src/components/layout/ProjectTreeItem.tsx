@@ -15,6 +15,7 @@ interface ProjectTreeItemProps {
   onCreateSession: (projectId: string, e: React.MouseEvent) => void;
   onSelectSession: (projectId: string, session: SessionRecord) => void;
   onUpdateSessionTitle: (sessionId: string, title: string) => Promise<void>;
+  onUpdateSessionTags?: (sessionId: string, tags: string[]) => Promise<void>;
   onTogglePinSession: (session: SessionRecord, e: React.MouseEvent) => Promise<void>;
   onDeleteSession: (sessionId: string, e: React.MouseEvent) => void | Promise<void>;
   onDeleteProject?: (projectId: string, e: React.MouseEvent) => void;
@@ -32,6 +33,7 @@ export const ProjectTreeItem: React.FC<ProjectTreeItemProps> = ({
   onCreateSession,
   onSelectSession,
   onUpdateSessionTitle,
+  onUpdateSessionTags,
   onTogglePinSession,
   onDeleteSession,
   onDeleteProject,
@@ -138,6 +140,9 @@ export const ProjectTreeItem: React.FC<ProjectTreeItemProps> = ({
                 isActive={activeSessionId === session.id}
                 onSelect={() => onSelectSession(project.id, session)}
                 onUpdateTitle={(newTitle) => onUpdateSessionTitle(session.id, newTitle)}
+                onUpdateTags={async (newTags) => {
+                  if (onUpdateSessionTags) await onUpdateSessionTags(session.id, newTags);
+                }}
                 onTogglePin={(e) => onTogglePinSession(session, e)}
                 onDelete={(e) => onDeleteSession(session.id, e)}
               />

@@ -9,7 +9,7 @@ interface SessionTreeItemProps {
   onUpdateTitle: (newTitle: string) => Promise<void>;
   onTogglePin: (e: React.MouseEvent) => Promise<void>;
   onDelete: (e: React.MouseEvent) => void | Promise<void>;
-  onAddTag?: (tag: string) => Promise<void>;
+  onUpdateTags?: (newTags: string[]) => Promise<void>;
 }
 
 export const SessionTreeItem: React.FC<SessionTreeItemProps> = ({
@@ -19,9 +19,13 @@ export const SessionTreeItem: React.FC<SessionTreeItemProps> = ({
   onUpdateTitle,
   onTogglePin,
   onDelete,
+  onUpdateTags,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [titleInput, setTitleInput] = useState(session.title);
+
+  const [isTagEditing, setIsTagEditing] = useState(false);
+  const [newTagInput, setNewTagInput] = useState('');
 
   const handleSaveTitle = async (e: React.MouseEvent | React.KeyboardEvent) => {
     e.stopPropagation();
@@ -35,6 +39,25 @@ export const SessionTreeItem: React.FC<SessionTreeItemProps> = ({
     e.stopPropagation();
     setTitleInput(session.title);
     setIsEditing(false);
+  };
+
+  const handleAddTag = async (e: React.MouseEvent | React.KeyboardEvent) => {
+    e.stopPropagation();
+    const tag = newTagInput.trim().replace(/^#/, '');
+    if (!tag) return;
+    const currentTags = session.tags || [];
+    if (!currentTags.includes(tag)) {
+      const updated = [...currentTags, tag];
+      if (onUpdateTags) await onUpdateTags(updated);
+    }
+    setNewTagInput('');
+  };
+
+  const handleRemoveTag = async (tagToRemove: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const currentTags = session.tags || [];
+    const updated = currentTags.filter((t) => t !== tagToRemove);
+    if (onUpdateTags) await onUpdateTags(updated);
   };
 
   const formatTimestamp = (ts?: number) => {
@@ -144,6 +167,20 @@ export const SessionTreeItem: React.FC<SessionTreeItemProps> = ({
             <button
               onClick={(e) => {
                 e.stopPropagation();
+                setIsTagEditing((prev) => !prev);
+              }}
+              title="添加/管理标签"
+              className={`p-1 rounded transition-colors ${
+                isTagEditing
+                  ? 'text-[#D96B27] bg-[#FAF8F5]'
+                  : 'text-[#8A847C] hover:text-[#D96B27] hover:bg-[#FAF8F5]'
+              }`}
+            >
+              <Tag className="w-3 h-3" />
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
                 setIsEditing(true);
               }}
               title="重命名"
@@ -162,17 +199,60 @@ export const SessionTreeItem: React.FC<SessionTreeItemProps> = ({
         )}
       </div>
 
-      {/* Tags Row (if any) */}
-      {session.tags && session.tags.length > 0 && (
-        <div className="flex flex-wrap gap-1 items-center pl-5">
-          {session.tags.map((tag) => (
+      {/* Tags Row & Tag Editor */}
+      {((session.tags && session.tags.length > 0) || isTagEditing) && (
+        <div className="flex flex-wrap gap-1 items-center pl-5 pt-0.5" onClick={(e) => e.stopPropagation()}>
+          {(session.tags || []).map((tag) => (
             <span
               key={tag}
-              className={`px-1.5 py-0.2 rounded text-[9px] font-medium ${getTagBadgeClass(tag)}`}
+              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-medium ${getTagBadgeClass(tag)}`}
             >
-              #{tag}
+              <span>#{tag}</span>
+              {isTagEditing && (
+                <button
+                  type="button"
+                  onClick={(e) => handleRemoveTag(tag, e)}
+                  title="删除标签"
+                  className="hover:text-red-600 rounded-full cursor-pointer"
+                >
+                  <X className="w-2.5 h-2.5" />
+                </button>
+              )}
             </span>
           ))}
+
+          {isTagEditing && (
+            <div className="flex items-center gap-1">
+              <input
+                type="text"
+                value={newTagInput}
+                onChange={(e) => setNewTagInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleAddTag(e);
+                  if (e.key === 'Escape') setIsTagEditing(false);
+                }}
+                placeholder="新标签(回车)..."
+                autoFocus
+                className="w-20 px-1 py-0.2 text-[10px] bg-white border border-[#D96B27] rounded outline-none text-[#1E1C1A]"
+              />
+              <button
+                type="button"
+                onClick={handleAddTag}
+                title="添加标签"
+                className="p-0.5 bg-[#D96B27] text-white rounded hover:bg-[#B8551B]"
+              >
+                <Check className="w-2.5 h-2.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsTagEditing(false)}
+                title="完成"
+                className="p-0.5 text-[#8A847C] hover:text-[#1E1C1A]"
+              >
+                <X className="w-2.5 h-2.5" />
+              </button>
+            </div>
+          )}
         </div>
       )}
 

@@ -225,7 +225,7 @@ export function App() {
         <Titlebar />
 
         {/* 2. Main Workbench Layout (ActivityBar + Column 1 + Resizer 1 + Column 2 + Resizer 2 + Column 3) */}
-        <div ref={workbenchRef} className="flex flex-1 overflow-hidden relative select-none">
+        <div ref={workbenchRef} className="flex flex-1 overflow-hidden relative">
           <ActivityBar activeTab={activeTab} onSelectTab={handleSelectTab} />
 
           {/* Column 1: Multi-Project & Session Tree + Files Explorer */}
