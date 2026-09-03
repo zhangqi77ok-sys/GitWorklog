@@ -1,0 +1,15 @@
+{
+  "name": "tcode-desktop",
+  "version": "2.0.0",
+  "description": "Tcode - Autonomous AI Coding Assistant & Engineer Cockpit",
+  "main": "backend/daemon.js",
+  "scripts": {
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:backend": "node backend/daemon.js",
+    "build:frontend": "cd frontend && npm run build",
+    "build:installer": "python build_installer.py"
+  },
+  "keywords": ["ai", "agent", "react", "monaco", "coding"],
+  "author": "Tcode Team",
+  "license": "Apache-2.0"
+}

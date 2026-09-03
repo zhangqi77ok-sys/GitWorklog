@@ -247,9 +247,13 @@ Tcode 打破了单体硬编码调度逻辑，将 Agent 的执行循环、能力�
 * **MCP 工具协议服务导入模态窗 (`MCPImportModal.tsx`)**：
   * 支持三种录入路径：Claude Desktop / Cursor 标准 `mcpServers` JSON 一键粘贴（带语法校验与一键示例填入）、手动表单配置（支持 `stdio` 标准进程管道与 `sse` HTTP 管道）、以及社区官方精选服务（PostgreSQL 只读分析、GitHub API 自动化）一键安装；
   * 左侧 MCP 抽屉点击 `[ ➕ 添加 / 导入 MCP 协议服务 ]` 瞬间居中弹出，支持 Esc 与遮罩点击关闭。
-* **Agent 技能库导入与定制中心 (`SkillImportModal.tsx`)**：
-  * 支持三大技能扩展管道：本地 `SKILL.md` 规范文件/目录拖拽与解析预览、自定义表单录入（技能标识符、领域分类、触发场景与 Markdown 工作流规约，内置经典 TDD 红-绿循环模板一键填入）、以及官方核心专家库（`rust-core-engineer`、`ui-ux-pro-max`）一键激活；
-  * 对话输入舱输入 `@` 弹出引用浮窗时，支持一键点击 `[ 🛠️ 添加 / 导入自定义技能 ]` 快速唤起定制向导。
+### 20. Windows 独立桌面端安装包与自动化闭环发布 (`build-windows-installer`)
+* **自动化增量编译流水线 (`build_installer.py`)**：
+  * 联动前端 Vite 打包 (`npm run build`)，编译并生成高内聚桌面端微内核宿主 `Tcode.exe`（嵌入前端静态产物与 API 代理）；
+  * 自动将微内核与运行时资源打包为自解压载荷，编译生成单文件安装向导 `dist/Tcode-Setup.exe` 并同步输出至 `release/Tcode-Setup-v2.0.0.exe` 与 `release/Tcode-Setup-v2.0.0-windows-x64.zip`；
+* **严格落实【铁律 1.5】真实安装与探活验证闭环**：
+  * **静默安装验证**：执行 `Tcode-Setup.exe --silent-install-dir <dir>`，确保无阻塞解压与目录权限合规；
+  * **桌面端真实调用测试**：自动唤起沙箱目录中安装的 `Tcode.exe`，对物理端口发起 `GET /api/health` 探活与 `GET /` 完整 HTML 挂载验证，测试全绿通过后自动清理临时沙箱，杜绝死进程残留与假成功。
 
 ---
 
