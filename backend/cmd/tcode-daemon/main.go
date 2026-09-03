@@ -30,7 +30,7 @@ const (
 )
 
 func main() {
-	fmt.Println(Banner)
+	fmt.Print(Banner)
 	fmt.Printf("[Tcode] Starting Micro-Kernel Daemon v%s...\n", Version)
 
 	workspaceRoot, _ := os.Getwd()

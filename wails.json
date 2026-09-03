@@ -1,0 +1,19 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "tcode",
+  "outputfilename": "tcode",
+  "frontend:install": "npm install",
+  "frontend:build": "npm run build",
+  "frontend:dev:watcher": "npm run dev",
+  "frontend:dev:serverUrl": "auto",
+  "author": {
+    "name": "Tcode Studio",
+    "email": "dev@tcode.local"
+  },
+  "info": {
+    "companyName": "Tcode Studio",
+    "productName": "Tcode Agentic Studio",
+    "productVersion": "2.0.0",
+    "copyright": "Copyright 2026 Tcode Studio"
+  }
+}
