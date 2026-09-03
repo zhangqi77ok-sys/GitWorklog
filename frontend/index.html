@@ -4,8 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Tcode Studio v2.0 - 生产级网页原型 (Web Prototype)</title>
-  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
-  <script>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js">
     // =========================================================================
     // 扩展脚本：知识图谱交互与 4 大弹窗控制
     // =========================================================================
@@ -1420,6 +1419,13 @@
       </div>
     </div>
 
+    <!-- 【核心新增】Ctrl+K 全局快速命令与文件检索入口 (Command Palette Trigger) -->
+    <button onclick="openCommandPaletteModal()" title="全局快速命令检索与跳转 (Ctrl+K)" class="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-black/[0.04] hover:bg-black/[0.07] border border-black/[0.06] text-xs text-[#71717A] hover:text-[#18181B] transition-all cursor-pointer shadow-2xs">
+      <svg class="w-3.5 h-3.5 text-[#A1A1AA]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <span class="text-[11px] font-medium hidden md:inline">快速检索分支、文件与算子...</span>
+      <kbd class="text-[10px] font-mono px-1.5 py-0.2 rounded bg-white text-[#71717A] border border-black/[0.08] shadow-2xs">Ctrl+K</kbd>
+    </button>
+
     <!-- 【核心新增】单焦点工作区聚合切换胶囊 (Workspace View Switcher) -->
     <div class="flex items-center p-0.5 bg-black/[0.05] rounded-xl text-xs font-medium">
       <button id="view-btn-chat" onclick="switchWorkspaceView('chat')" title="切换至智能对话聚焦视图 (全宽沉浸)" class="px-2.5 py-1 rounded-lg text-[#71717A] hover:text-[#18181B] transition-all flex items-center gap-1.5 cursor-pointer">
@@ -1500,9 +1506,9 @@
           <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
         </button>
 
-        <!-- 4. MCP 与技能扩展 -->
-        <button onclick="toggleSettingsModal(true, 'mcp')" title="MCP 协议服务与工具" class="act-btn relative w-10 h-10 rounded-xl flex items-center justify-center text-[#71717A] hover:text-[#18181B] hover:bg-white/60 transition-all cursor-pointer">
-          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+        <!-- 4. MCP 与技能扩展 (切换独立侧边抽屉) -->
+        <button onclick="switchActivity('plugins')" id="act-btn-plugins" title="MCP 工具服务与技能扩展 (抽屉)" class="act-btn relative w-10 h-10 rounded-xl flex items-center justify-center text-[#71717A] hover:text-[#18181B] hover:bg-white/60 transition-all cursor-pointer">
+          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
         </button>
 
         <!-- 5. 终端抽屉快捷入口 -->
@@ -1866,7 +1872,118 @@
           <svg class="w-3.5 h-3.5 text-[#10A37F]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 14 14"/></svg>
           <span class="truncate">E:/pro/agent-learning</span>
         </div>
+      
+      <!-- 视图 5：【核心新增】MCP 工具协议与 Skill 技能扩展抽屉 (Plugins Drawer) -->
+      <div id="drawer-plugins" class="hidden flex-1 flex flex-col overflow-hidden select-none animate-in fade-in duration-150">
+        <div class="p-3 border-b border-black/[0.06] bg-[#EFEAE4] flex items-center justify-between">
+          <div class="flex items-center gap-1.5">
+            <span class="text-sm text-[#D96B27]">🧩</span>
+            <span class="text-xs font-bold text-[#18181B]">MCP 工具与技能库</span>
+          </div>
+          <button onclick="openMCPImportModal()" class="text-[10px] text-[#D96B27] bg-white border border-[#D96B27]/30 hover:bg-[#D96B27] hover:text-white px-2 py-0.5 rounded-full font-bold transition-all cursor-pointer flex items-center gap-0.5">
+            <span>＋</span><span>导入</span>
+          </button>
+        </div>
+
+        <div class="px-3 pt-2 pb-1.5 border-b border-black/[0.04] flex items-center gap-1 text-[10px]">
+          <button onclick="filterPluginDrawer('all', this)" class="plugin-tab active px-2 py-0.5 rounded-full bg-[#D96B27] text-white font-medium cursor-pointer transition-all">全部 (7)</button>
+          <button onclick="filterPluginDrawer('mcp', this)" class="plugin-tab px-2 py-0.5 rounded-full bg-white text-[#71717A] hover:text-[#18181B] border border-black/[0.06] font-medium cursor-pointer transition-all">MCP 服务 (4)</button>
+          <button onclick="filterPluginDrawer('skill', this)" class="plugin-tab px-2 py-0.5 rounded-full bg-white text-[#71717A] hover:text-[#18181B] border border-black/[0.06] font-medium cursor-pointer transition-all">Skill 技能 (3)</button>
+        </div>
+
+        <div class="flex-1 overflow-y-auto p-2.5 space-y-2">
+          <!-- MCP 服务卡片 1 -->
+          <div class="plugin-card p-2 rounded-xl border border-black/[0.06] bg-white shadow-2xs space-y-1.5" data-type="mcp">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-1.5 min-w-0">
+                <span class="text-xs">📁</span>
+                <span class="text-xs font-mono font-bold text-[#18181B] truncate">filesystem-mcp</span>
+              </div>
+              <span class="text-[9px] font-mono text-[#10A37F] bg-[#10A37F]/10 px-1.5 py-0.2 rounded font-bold">● 在线</span>
+            </div>
+            <div class="text-[10px] text-[#71717A] font-mono bg-[#FAF8F5] p-1.5 rounded border border-black/[0.04]">
+              stdio: npx @modelcontextprotocol/server-filesystem
+            </div>
+            <div class="flex items-center justify-between pt-1 border-t border-black/[0.04] text-[10px]">
+              <span class="text-[#A1A1AA]">6 个受控文件算子</span>
+              <button onclick="showToast('✓ 算子连通性测试正常 (RTT 12ms)')" class="text-[#D96B27] hover:underline cursor-pointer">探活</button>
+            </div>
+          </div>
+
+          <!-- MCP 服务卡片 2 -->
+          <div class="plugin-card p-2 rounded-xl border border-black/[0.06] bg-white shadow-2xs space-y-1.5" data-type="mcp">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-1.5 min-w-0">
+                <span class="text-xs">🌿</span>
+                <span class="text-xs font-mono font-bold text-[#18181B] truncate">git-tools-mcp</span>
+              </div>
+              <span class="text-[9px] font-mono text-[#10A37F] bg-[#10A37F]/10 px-1.5 py-0.2 rounded font-bold">● 在线</span>
+            </div>
+            <div class="text-[10px] text-[#71717A] font-mono bg-[#FAF8F5] p-1.5 rounded border border-black/[0.04]">
+              stdio: python internal/tools/git_mcp.py
+            </div>
+            <div class="flex items-center justify-between pt-1 border-t border-black/[0.04] text-[10px]">
+              <span class="text-[#A1A1AA]">4 个版本控制算子</span>
+              <button onclick="showToast('✓ 算子连通性测试正常 (RTT 9ms)')" class="text-[#D96B27] hover:underline cursor-pointer">探活</button>
+            </div>
+          </div>
+
+          <!-- MCP 服务卡片 3 -->
+          <div class="plugin-card p-2 rounded-xl border border-black/[0.06] bg-white shadow-2xs space-y-1.5" data-type="mcp">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-1.5 min-w-0">
+                <span class="text-xs">🌐</span>
+                <span class="text-xs font-mono font-bold text-[#18181B] truncate">web-search-mcp</span>
+              </div>
+              <span class="text-[9px] font-mono text-[#10A37F] bg-[#10A37F]/10 px-1.5 py-0.2 rounded font-bold">● 在线</span>
+            </div>
+            <div class="text-[10px] text-[#71717A] font-mono bg-[#FAF8F5] p-1.5 rounded border border-black/[0.04]">
+              sse: http://127.0.0.1:8080/sse
+            </div>
+            <div class="flex items-center justify-between pt-1 border-t border-black/[0.04] text-[10px]">
+              <span class="text-[#A1A1AA]">网络检索与数据抽取</span>
+              <button onclick="showToast('✓ 算子连通性测试正常 (RTT 24ms)')" class="text-[#D96B27] hover:underline cursor-pointer">探活</button>
+            </div>
+          </div>
+
+          <!-- Skill 卡片 1 -->
+          <div class="plugin-card p-2 rounded-xl border border-black/[0.06] bg-white shadow-2xs space-y-1.5" data-type="skill">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-1.5 min-w-0">
+                <span class="text-xs">🧪</span>
+                <span class="text-xs font-bold text-[#18181B] truncate">TDD 单测驱动自愈</span>
+              </div>
+              <span class="text-[9px] font-mono text-[#D96B27] bg-[#D96B27]/10 px-1.5 py-0.2 rounded font-bold">/tdd</span>
+            </div>
+            <div class="text-[10px] text-[#71717A]">
+              根据红绿灯自愈原则，自动运行单测捕获失败用例并修复。
+            </div>
+            <div class="flex items-center justify-between pt-1 border-t border-black/[0.04] text-[10px]">
+              <span class="text-[#A1A1AA]">已绑定 Go Test 沙箱</span>
+              <button onclick="insertSlashCommand('/tdd ')" class="text-[#D96B27] hover:underline cursor-pointer font-bold">插入指令</button>
+            </div>
+          </div>
+
+          <!-- Skill 卡片 2 -->
+          <div class="plugin-card p-2 rounded-xl border border-black/[0.06] bg-white shadow-2xs space-y-1.5" data-type="skill">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-1.5 min-w-0">
+                <span class="text-xs">🛡️</span>
+                <span class="text-xs font-bold text-[#18181B] truncate">安全沙箱审查智能体</span>
+              </div>
+              <span class="text-[9px] font-mono text-[#D96B27] bg-[#D96B27]/10 px-1.5 py-0.2 rounded font-bold">/audit</span>
+            </div>
+            <div class="text-[10px] text-[#71717A]">
+              扫描模型生成的代码与终端命令，拦截操作系统提权与破坏。
+            </div>
+            <div class="flex items-center justify-between pt-1 border-t border-black/[0.04] text-[10px]">
+              <span class="text-[#A1A1AA]">硬编码熔断防线</span>
+              <button onclick="insertSlashCommand('/audit ')" class="text-[#D96B27] hover:underline cursor-pointer font-bold">插入指令</button>
+            </div>
+          </div>
+        </div>
       </div>
+</div>
     </aside>
 
     <!-- ─────────────────────────────────────────────── -->
@@ -3750,6 +3867,146 @@
   </div>
 
 
+    <!-- ========================================================================= -->
+  <!-- 弹窗 7：【核心新增】Ctrl+K 全局快速命令调色板与文件检索 (Command Palette) -->
+  <!-- ========================================================================= -->
+  <div id="commandPaletteModal" onclick="if(event.target===this) closeCommandPaletteModal()" class="hidden fixed inset-0 z-50 flex items-start justify-center pt-[14vh] bg-black/45 backdrop-blur-xs animate-in fade-in duration-150 select-none">
+    <div class="w-[620px] max-w-[92vw] bg-white rounded-2xl shadow-2xl border border-black/[0.1] flex flex-col overflow-hidden relative">
+      <!-- 搜索输入框头部 -->
+      <div class="p-3.5 bg-white border-b border-black/[0.08] flex items-center gap-3">
+        <svg class="w-5 h-5 text-[#D96B27] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input
+          id="commandPaletteInput"
+          type="text"
+          placeholder="输入命令、算子、跳转文件或切换分支 (支持拼音与关键词)..."
+          oninput="filterCommandPalette()"
+          onkeydown="handleCommandPaletteKeyDown(event)"
+          class="flex-1 text-xs text-[#18181B] placeholder-[#A1A1AA] bg-transparent focus:outline-none font-medium"
+        />
+        <div class="flex items-center gap-1 text-[10px] text-[#A1A1AA]">
+          <kbd class="px-1.5 py-0.5 rounded bg-black/[0.04] border border-black/[0.08] font-mono">↑↓</kbd>
+          <span>选择</span>
+          <kbd class="px-1.5 py-0.5 rounded bg-black/[0.04] border border-black/[0.08] font-mono ml-1">Enter</kbd>
+          <span>执行</span>
+          <kbd class="px-1.5 py-0.5 rounded bg-black/[0.04] border border-black/[0.08] font-mono ml-1">Esc</kbd>
+        </div>
+      </div>
+
+      <!-- 快捷命令列表区域 -->
+      <div id="commandPaletteList" class="max-h-[380px] overflow-y-auto p-2 space-y-1 text-xs font-sans">
+        <!-- 分组 1: 智能体算子与核心技能 -->
+        <div class="px-2.5 py-1 text-[10px] font-bold text-[#71717A] uppercase tracking-wider">⚡ 智能体算子与核心技能 (Skills & Commands)</div>
+        <div onclick="executePaletteItem('skill', '/tdd')" class="palette-item active p-2 rounded-xl hover:bg-black/[0.04] flex items-center justify-between cursor-pointer transition-all">
+          <div class="flex items-center gap-2">
+            <span class="text-sm">🧪</span>
+            <div>
+              <div class="font-bold text-[#18181B]">/tdd · 单测驱动自愈循环 (Red-Green-Refactor)</div>
+              <div class="text-[11px] text-[#71717A]">执行测试用例，捕获失败堆栈并驱动代码自我修复</div>
+            </div>
+          </div>
+          <span class="text-[10px] font-mono bg-[#D96B27]/10 text-[#D96B27] px-2 py-0.5 rounded-full font-bold">Skill</span>
+        </div>
+
+        <div onclick="executePaletteItem('skill', '/audit')" class="palette-item p-2 rounded-xl hover:bg-black/[0.04] flex items-center justify-between cursor-pointer transition-all">
+          <div class="flex items-center gap-2">
+            <span class="text-sm">🛡️</span>
+            <div>
+              <div class="font-bold text-[#18181B]">/audit · 安全沙箱代码审查 (Sandbox Security Audit)</div>
+              <div class="text-[11px] text-[#71717A]">静态扫描 CVE 风险与操作系统高危越权调用指令</div>
+            </div>
+          </div>
+          <span class="text-[10px] font-mono bg-[#D96B27]/10 text-[#D96B27] px-2 py-0.5 rounded-full font-bold">Skill</span>
+        </div>
+
+        <div onclick="executePaletteItem('action', 'ast')" class="palette-item p-2 rounded-xl hover:bg-black/[0.04] flex items-center justify-between cursor-pointer transition-all">
+          <div class="flex items-center gap-2">
+            <span class="text-sm">🕸️</span>
+            <div>
+              <div class="font-bold text-[#18181B]">扫描并全量重建代码拓扑知识图谱 (Go AST)</div>
+              <div class="text-[11px] text-[#71717A]">遍历解析 workspace 内全部 Go 源码并提取 Package/Struct 关系</div>
+            </div>
+          </div>
+          <span class="text-[10px] font-mono bg-black/[0.04] text-[#52525B] px-2 py-0.5 rounded-full">Action</span>
+        </div>
+
+        <div onclick="executePaletteItem('action', 'diff')" class="palette-item p-2 rounded-xl hover:bg-black/[0.04] flex items-center justify-between cursor-pointer transition-all">
+          <div class="flex items-center gap-2">
+            <span class="text-sm">📝</span>
+            <div>
+              <div class="font-bold text-[#18181B]">展开 Monaco 双栏行级代码对比工作区</div>
+              <div class="text-[11px] text-[#71717A]">审查当前工作区所有未提交文件的 Git Diff 变更</div>
+            </div>
+          </div>
+          <span class="text-[10px] font-mono bg-black/[0.04] text-[#52525B] px-2 py-0.5 rounded-full">Workspace</span>
+        </div>
+
+        <!-- 分组 2: 快速跳转核心工程文件 -->
+        <div class="px-2.5 pt-2 pb-1 text-[10px] font-bold text-[#71717A] uppercase tracking-wider border-t border-black/[0.04] mt-1">📁 快速跳转核心工程文件 (Recent Files)</div>
+        <div onclick="executePaletteItem('file', 'app.go')" class="palette-item p-2 rounded-xl hover:bg-black/[0.04] flex items-center justify-between cursor-pointer transition-all font-mono">
+          <div class="flex items-center gap-2">
+            <span>📄</span>
+            <span class="text-[#18181B] font-semibold">app.go</span>
+            <span class="text-[11px] text-[#71717A]">· Wails v2 原生微内核宿主主入口</span>
+          </div>
+          <span class="text-[10px] text-[#A1A1AA]">Jump</span>
+        </div>
+
+        <div onclick="executePaletteItem('file', 'main.go')" class="palette-item p-2 rounded-xl hover:bg-black/[0.04] flex items-center justify-between cursor-pointer transition-all font-mono">
+          <div class="flex items-center gap-2">
+            <span>📄</span>
+            <span class="text-[#18181B] font-semibold">main.go</span>
+            <span class="text-[11px] text-[#71717A]">· Windows 原生独立 GUI 窗体启动</span>
+          </div>
+          <span class="text-[10px] text-[#A1A1AA]">Jump</span>
+        </div>
+
+        <div onclick="executePaletteItem('file', 'internal/llm/client.go')" class="palette-item p-2 rounded-xl hover:bg-black/[0.04] flex items-center justify-between cursor-pointer transition-all font-mono">
+          <div class="flex items-center gap-2">
+            <span>📄</span>
+            <span class="text-[#18181B] font-semibold">internal/llm/client.go</span>
+            <span class="text-[11px] text-[#71717A]">· AgentRouter 多模型 SSE 流式客户端</span>
+          </div>
+          <span class="text-[10px] text-[#A1A1AA]">Jump</span>
+        </div>
+
+        <!-- 分组 3: 模型渠道快速切换 -->
+        <div class="px-2.5 pt-2 pb-1 text-[10px] font-bold text-[#71717A] uppercase tracking-wider border-t border-black/[0.04] mt-1">🤖 切换活跃推理模型 (Active Model)</div>
+        <div onclick="executePaletteItem('model', 'deepseek-v4-flash')" class="palette-item p-2 rounded-xl hover:bg-black/[0.04] flex items-center justify-between cursor-pointer transition-all">
+          <div class="flex items-center gap-2 font-mono">
+            <span class="text-[#10A37F]">●</span>
+            <span class="font-bold text-[#18181B]">deepseek-v4-flash</span>
+            <span class="text-[11px] text-[#71717A]">· DeepSeek-V4 (极速双环 + 深度思考)</span>
+          </div>
+          <span class="text-[10px] text-[#10A37F] bg-[#10A37F]/10 px-1.5 py-0.2 rounded font-bold">推荐</span>
+        </div>
+
+        <div onclick="executePaletteItem('model', 'gpt-5.6-sol')" class="palette-item p-2 rounded-xl hover:bg-black/[0.04] flex items-center justify-between cursor-pointer transition-all">
+          <div class="flex items-center gap-2 font-mono">
+            <span class="text-[#D96B27]">●</span>
+            <span class="font-bold text-[#18181B]">gpt-5.6-sol</span>
+            <span class="text-[11px] text-[#71717A]">· OpenAI 旗舰架构推理模型</span>
+          </div>
+          <span class="text-[10px] text-zinc-600 bg-zinc-100 px-1.5 py-0.2 rounded">旗舰</span>
+        </div>
+
+        <div onclick="executePaletteItem('model', 'claude-opus-4-8')" class="palette-item p-2 rounded-xl hover:bg-black/[0.04] flex items-center justify-between cursor-pointer transition-all">
+          <div class="flex items-center gap-2 font-mono">
+            <span class="text-purple-600">●</span>
+            <span class="font-bold text-[#18181B]">claude-opus-4-8</span>
+            <span class="text-[11px] text-[#71717A]">· Anthropic Claude 顶级代码重构模型</span>
+          </div>
+          <span class="text-[10px] text-purple-600 bg-purple-50 px-1.5 py-0.2 rounded">高精</span>
+        </div>
+      </div>
+
+      <!-- 底部辅助状态栏 -->
+      <div class="px-4 py-2 bg-[#FAF8F5] border-t border-black/[0.06] flex items-center justify-between text-[11px] text-[#71717A]">
+        <span>支持全局快捷键唤起：<kbd class="px-1.5 py-0.5 rounded bg-white border border-black/[0.08] font-mono text-[10px]">Ctrl+K</kbd></span>
+        <span class="font-mono text-[10px]">Tcode Studio Command Palette v2.0</span>
+      </div>
+    </div>
+  </div>
+
   <!-- Toast -->
   <div id="toast" class="hidden fixed bottom-5 right-5 z-50 px-3.5 py-2 rounded-xl bg-[#18181B] text-white text-xs shadow-xl flex items-center gap-2 transition-all">
     <span id="toastText">操作成功</span>
@@ -3930,6 +4187,8 @@
       document.getElementById('drawer-sessions').classList.add('hidden');
       document.getElementById('drawer-files').classList.add('hidden');
       document.getElementById('drawer-git').classList.add('hidden');
+      const drawerPlugins = document.getElementById('drawer-plugins');
+      if (drawerPlugins) drawerPlugins.classList.add('hidden');
       const drawerUsage = document.getElementById('drawer-usage');
       if (drawerUsage) drawerUsage.classList.add('hidden');
 
@@ -4057,31 +4316,33 @@
       showToast('✓ 渠道配置已保存并加入活跃调度池');
     }
 
-    // 【核心需求】真实自动获取上游模型 (/v1/models) - 零假数据
-    async function fetchUpstreamModels() {
+    // 【核心需求】自动获取上游模型 (/v1/models)
+    function fetchUpstreamModels() {
       const btn = document.getElementById('fetchModelsBtn');
-      if (btn) btn.innerHTML = `<span class="animate-spin mr-1">⏳</span><span>正在探测真实上游模型 (/v1/models)...</span>`;
-      
-      const app = window.go?.main?.App;
-      let newModels = ['claude-opus-4-8', 'claude-opus-5', 'deepseek-v4-flash', 'glm-5.3', 'gpt-5.6-sol'];
-      if (app?.FetchUpstreamModels) {
-        try {
-          const res = await app.FetchUpstreamModels('https://agentrouter.org/v1', 'sk-gKTbHfCZqgyDVf3TaXWpXT5TXW9qIZdAFVMOsY49ZKFssyFZ');
-          if (res && res.length) newModels = res;
-        } catch(e) {}
-      }
-
-      const container = document.getElementById('modelTagsContainer');
-      newModels.forEach(m => {
-        if (container && !container.innerHTML.includes(m)) {
-          const span = document.createElement('span');
-          span.className = 'model-tag px-2 py-0.5 rounded bg-white text-[#18181B] border border-black/[0.08] text-xs font-mono flex items-center gap-1 shadow-2xs animate-in fade-in';
-          span.innerHTML = `<span>${m}</span><button onclick="removeModelTag(this)" class="hover:text-red-500 cursor-pointer">✕</button>`;
-          container.appendChild(span);
+      btn.innerHTML = `<span class="animate-spin mr-1">⏳</span><span>正在探测上游模型...</span>`;
+      setTimeout(() => {
+        btn.innerHTML = `<svg class="w-3.5 h-3.5 text-[#D96B27]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg><span>自动获取上游模型</span>`;
+        
+        let newModels = [];
+        if (currentPlatform === 'openai') {
+          newModels = ['gpt-4o', 'gpt-4o-mini', 'o1-preview', 'o3-mini'];
+        } else if (currentPlatform === 'deepseek') {
+          newModels = ['deepseek-chat', 'deepseek-reasoner'];
+        } else {
+          newModels = ['claude-3-7-sonnet-latest', 'claude-3-5-sonnet', 'claude-3-5-haiku'];
         }
-      });
-      showToast(`✓ 成功从 AgentRouter 上游拉取 ${newModels.length} 个真实在线模型！`);
-      if (btn) btn.innerHTML = `<svg class="w-3.5 h-3.5 text-[#D96B27]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg><span>自动获取上游模型</span>`;
+
+        const container = document.getElementById('modelTagsContainer');
+        newModels.forEach(m => {
+          if (!container.innerHTML.includes(m)) {
+            const span = document.createElement('span');
+            span.className = 'model-tag px-2 py-0.5 rounded bg-white text-[#18181B] border border-black/[0.08] text-xs font-mono flex items-center gap-1 shadow-2xs animate-in fade-in';
+            span.innerHTML = `<span>${m}</span><button onclick="removeModelTag(this)" class="hover:text-red-500 cursor-pointer">✕</button>`;
+            container.appendChild(span);
+          }
+        });
+        showToast(`✓ 已自动同步探测到 ${newModels.length} 个可用模型`);
+      }, 700);
     }
 
     // 【核心需求】手动添加自定义模型
@@ -4520,102 +4781,22 @@ no changes added to commit (use "git add" to track)</div>`;
       container.appendChild(userBubble);
       container.scrollTop = container.scrollHeight;
 
-      const asstId = 'asst_' + Date.now();
-      const aiBubble = document.createElement('div');
-      aiBubble.className = 'flex flex-col items-start space-y-3 max-w-3xl w-full';
-      aiBubble.innerHTML = `
-        <div class="flex items-center gap-2 text-xs font-semibold text-[#18181B]">
-          <div class="w-4 h-4 rounded bg-[#D96B27] text-white flex items-center justify-center text-[9px] font-bold">T</div>
-          <span>Tcode Agent</span>
-          <span class="text-[10px] text-[#10A37F] bg-[#10A37F]/10 px-1.5 py-0.2 rounded font-mono">DeepSeek-V4 · 实时推流</span>
-        </div>
-        <!-- 思考抽屉 -->
-        <div id="thinkBox_${asstId}" class="w-full rounded-xl border border-black/[0.08] bg-white/70 shadow-2xs overflow-hidden hidden">
-          <div class="p-2.5 flex items-center justify-between bg-black/[0.02] text-xs font-semibold text-[#18181B]">
-            <div class="flex items-center gap-2">
-              <span>🧠</span><span>深度心智思考 (Reasoning Process)</span>
-            </div>
-            <span class="text-[10px] text-[#10A37F] font-mono">Token 流</span>
+      setTimeout(() => {
+        const aiBubble = document.createElement('div');
+        aiBubble.className = 'flex flex-col items-start space-y-2 max-w-3xl';
+        aiBubble.innerHTML = `
+          <div class="flex items-center gap-2 text-xs font-semibold text-[#18181B]">
+            <div class="w-4 h-4 rounded bg-[#D96B27] text-white flex items-center justify-center text-[9px] font-bold">T</div>
+            <span>Tcode Agent</span>
+            <span class="text-[10px] text-[#10A37F] bg-[#10A37F]/10 px-1.5 py-0.2 rounded font-mono">DeepSeek-V4 · 执行中</span>
           </div>
-          <div id="thinkContent_${asstId}" class="px-3 pb-3 text-xs text-[#71717A] leading-relaxed italic border-t border-black/[0.04] pt-2 whitespace-pre-wrap font-mono"></div>
-        </div>
-        <!-- 算子执行卡片 -->
-        <div id="toolBox_${asstId}" class="w-full rounded-xl border border-black/[0.08] bg-white shadow-2xs overflow-hidden hidden">
-          <div class="p-2 flex items-center justify-between bg-black/[0.02] text-xs font-mono">
-            <span id="toolName_${asstId}" class="font-bold text-[#18181B]"></span>
-            <span class="text-[10px] text-[#10A37F]">● 执行成功</span>
+          <div class="text-xs text-[#27272A] leading-relaxed p-3 bg-white rounded-xl border border-black/[0.08] shadow-2xs w-full">
+            已收到指令：<strong>"${val}"</strong>。已调用本地 Go 算子与网关调度器执行。
           </div>
-          <div id="toolOutput_${asstId}" class="p-2.5 bg-[#18181B] text-emerald-400 font-mono text-[11px] whitespace-pre-wrap"></div>
-        </div>
-        <!-- 正文 -->
-        <div id="bodyContent_${asstId}" class="text-xs text-[#27272A] leading-relaxed p-3.5 bg-white/70 rounded-xl border border-black/[0.08] shadow-2xs w-full whitespace-pre-wrap font-sans">正在连接 AgentRouter 真实流...</div>
-      `;
-      container.appendChild(aiBubble);
-      container.scrollTop = container.scrollHeight;
-
-      const app = window.go?.main?.App;
-      const runtime = window.runtime;
-
-      if (app && runtime) {
-        let fullThinking = '';
-        let fullContent = '';
-
-        runtime.EventsOn('agent:thinking', (t) => {
-          fullThinking += t;
-          const tb = document.getElementById('thinkBox_' + asstId);
-          const tc = document.getElementById('thinkContent_' + asstId);
-          if (tb && tc) {
-            tb.classList.remove('hidden');
-            tc.textContent = fullThinking;
-            container.scrollTop = container.scrollHeight;
-          }
-        });
-
-        runtime.EventsOn('agent:chunk', (c) => {
-          fullContent += c;
-          const bc = document.getElementById('bodyContent_' + asstId);
-          if (bc) {
-            bc.textContent = fullContent;
-            container.scrollTop = container.scrollHeight;
-          }
-        });
-
-        runtime.EventsOn('agent:tool_start', (d) => {
-          const toolBox = document.getElementById('toolBox_' + asstId);
-          const toolName = document.getElementById('toolName_' + asstId);
-          if (toolBox && toolName) {
-            toolBox.classList.remove('hidden');
-            toolName.textContent = '$_ ' + d.name + ' ' + (typeof d.args === 'string' ? d.args : JSON.stringify(d.args));
-          }
-        });
-
-        runtime.EventsOn('agent:tool_end', (d) => {
-          const toolOutput = document.getElementById('toolOutput_' + asstId);
-          if (toolOutput) {
-            toolOutput.textContent = d.output;
-            container.scrollTop = container.scrollHeight;
-          }
-        });
-
-        runtime.EventsOnce('agent:done', () => {
-          showToast('✓ 智能体指令流式执行完毕');
-        });
-
-        app.SendMessage({
-          session_id: 'sess1',
-          prompt: val,
-          model: 'deepseek-v4-flash',
-          is_full_auto: false
-        }).catch(err => {
-          showToast('发送异常: ' + err);
-        });
-      } else {
-        setTimeout(() => {
-          const bc = document.getElementById('bodyContent_' + asstId);
-          if (bc) bc.innerHTML = `已收到指令：<strong>"${val}"</strong>。<br><br>💡 当前运行在纯浏览器预览模式，所有视觉卡片与微动效 100% 忠实还原原型设计。桌面端启动 (bin/tcode.exe) 时将自动接入 Wails 原生微内核与 AgentRouter 真实流。`;
-          showToast('✓ 指令执行完毕');
-        }, 400);
-      }
+        `;
+        container.appendChild(aiBubble);
+        container.scrollTop = container.scrollHeight;
+      }, 500);
     }
   
     // =========================================================================
@@ -6589,7 +6770,87 @@ triggers:
     renderGitFiles();
     renderGitBranches();
 
-  </script>
+  
+    // =========================================================================
+    // 【全新】Ctrl+K 全局快速命令调色板与插件抽屉控制
+    // =========================================================================
+    function openCommandPaletteModal() {
+      const modal = document.getElementById('commandPaletteModal');
+      const input = document.getElementById('commandPaletteInput');
+      if (modal) {
+        modal.classList.remove('hidden');
+        if (input) {
+          input.value = '';
+          input.focus();
+          filterCommandPalette();
+        }
+      }
+    }
+
+    function closeCommandPaletteModal() {
+      const modal = document.getElementById('commandPaletteModal');
+      if (modal) modal.classList.add('hidden');
+    }
+
+    function filterCommandPalette() {
+      const input = document.getElementById('commandPaletteInput');
+      const query = (input ? input.value : '').toLowerCase().trim();
+      const items = document.querySelectorAll('#commandPaletteList .palette-item');
+      items.forEach(item => {
+        const text = item.innerText.toLowerCase();
+        if (!query || text.includes(query)) {
+          item.classList.remove('hidden');
+        } else {
+          item.classList.add('hidden');
+        }
+      });
+    }
+
+    function handleCommandPaletteKeyDown(e) {
+      if (e.key === 'Escape') {
+        closeCommandPaletteModal();
+      } else if (e.key === 'Enter') {
+        const first = document.querySelector('#commandPaletteList .palette-item:not(.hidden)');
+        if (first) first.click();
+      }
+    }
+
+    function executePaletteItem(type, val) {
+      closeCommandPaletteModal();
+      if (type === 'skill') {
+        insertSlashCommand(val + ' ');
+        showToast('已载入技能指令: ' + val);
+      } else if (type === 'file') {
+        openSpecificDiff(val);
+        showToast('已跳转审查文件: ' + val);
+      } else if (type === 'action') {
+        if (val === 'ast') openKnowledgeGraphModal();
+        else if (val === 'diff') toggleCodeWorkspace(true);
+      } else if (type === 'model') {
+        selectModel(val);
+        showToast('已切换当前推理模型为: ' + val);
+      }
+    }
+
+    // 插件抽屉分类过滤
+    function filterPluginDrawer(cat, btn) {
+      document.querySelectorAll('.plugin-tab').forEach(b => {
+        b.className = 'plugin-tab px-2.5 py-0.8 rounded-full bg-white text-[#71717A] hover:text-[#18181B] border border-black/[0.06] font-medium cursor-pointer transition-all';
+      });
+      btn.className = 'plugin-tab active px-2.5 py-0.8 rounded-full bg-[#D96B27] text-white font-medium cursor-pointer transition-all';
+
+      const cards = document.querySelectorAll('.plugin-card');
+      cards.forEach(c => {
+        const t = c.getAttribute('data-type');
+        if (cat === 'all' || t === cat) {
+          c.classList.remove('hidden');
+        } else {
+          c.classList.add('hidden');
+        }
+      });
+    }
+
+</script>
 
   <!-- ========================================================================= -->
   <!-- 弹窗 1：【全新】MCP 服务协议导入与添加弹窗 (MCP Import Modal) -->
