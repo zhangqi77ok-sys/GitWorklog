@@ -8,9 +8,12 @@ import (
 	"syscall"
 	"time"
 
+	"tcode/internal/core/sandbox"
 	"tcode/internal/host"
 	transporthttp "tcode/internal/transport/http"
 	"tcode/plugins/provider/openai"
+	fstool "tcode/plugins/tool/fs"
+	gittool "tcode/plugins/tool/git"
 )
 
 const (
@@ -29,17 +32,32 @@ func main() {
 	fmt.Println(Banner)
 	fmt.Printf("[Tcode] Starting Micro-Kernel Daemon v%s...\n", Version)
 
-	// 1. 初始化插件宿主引擎与注册核心 Provider
+	workspaceRoot, _ := os.Getwd()
+
+	// 1. 初始化文件物理沙箱与 Git Plumbing 管道快照管理器
+	sb, err := sandbox.NewSandbox(workspaceRoot)
+	if err != nil {
+		fmt.Printf("[Tcode] Sandbox init error: %v\n", err)
+	}
+	sm := sandbox.NewSnapshotManager(workspaceRoot)
+
+	// 2. 初始化插件宿主引擎与注册核心 Provider & Tool 算子
 	reg := host.NewRegistry()
 	openaiProv := openai.NewProvider()
-	if err := reg.Register(openaiProv); err != nil {
-		fmt.Printf("[Tcode] Failed to register openai provider: %v\n", err)
-	} else {
-		fmt.Printf("[Tcode] Registered plugin: [%s] (%s v%s)\n", openaiProv.ID(), openaiProv.Name(), openaiProv.Version())
-	}
+	_ = reg.Register(openaiProv)
 
-	// 2. 启动本地环回 HTTP/SSE 服务 (127.0.0.1:8765)
-	srv := transporthttp.NewServer("127.0.0.1:8765", reg)
+	fsT := fstool.NewTool(sb, sm)
+	_ = reg.Register(fsT)
+
+	gitT := gittool.NewTool(workspaceRoot)
+	_ = reg.Register(gitT)
+
+	fmt.Printf("[Tcode] Registered plugin: [%s] (%s)\n", openaiProv.ID(), openaiProv.Name())
+	fmt.Printf("[Tcode] Registered plugin: [%s] (%s)\n", fsT.ID(), fsT.Name())
+	fmt.Printf("[Tcode] Registered plugin: [%s] (%s)\n", gitT.ID(), gitT.Name())
+
+	// 3. 启动本地环回 HTTP/SSE 服务 (127.0.0.1:8765)
+	srv := transporthttp.NewServer("127.0.0.1:8765", reg, gitT, sm)
 	go func() {
 		fmt.Println("[Tcode] HTTP/SSE Server listening on http://127.0.0.1:8765")
 		if err := srv.Start(); err != nil && err.Error() != "http: Server closed" {

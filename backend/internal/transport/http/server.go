@@ -7,30 +7,42 @@ import (
 	"net/http"
 	"time"
 
+	"tcode/internal/core/sandbox"
 	"tcode/internal/host"
+	gitTool "tcode/plugins/tool/git"
 	v1 "tcode/pkg/plugin/v1"
 )
 
-// Server 本地微内核 HTTP/SSE 传输服务
+// Server 本地开发网关服务端
 type Server struct {
-	addr     string
-	registry *host.Registry
-	httpSrv  *http.Server
+	addr        string
+	registry    *host.Registry
+	httpSrv     *http.Server
+	gitTool     *gitTool.Tool
+	snapshotMgr *sandbox.SnapshotManager
 }
 
 // NewServer 构造本地服务端
-func NewServer(addr string, reg *host.Registry) *Server {
+func NewServer(addr string, reg *host.Registry, gt *gitTool.Tool, sm *sandbox.SnapshotManager) *Server {
 	if addr == "" {
 		addr = "127.0.0.1:8765"
 	}
 	s := &Server{
-		addr:     addr,
-		registry: reg,
+		addr:        addr,
+		registry:    reg,
+		gitTool:     gt,
+		snapshotMgr: sm,
 	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/health", s.handleHealth)
 	mux.HandleFunc("/api/chat/stream", s.handleChatStream)
+	mux.HandleFunc("/api/git/status", s.handleGitStatus)
+	mux.HandleFunc("/api/git/stage", s.handleGitStage)
+	mux.HandleFunc("/api/git/unstage", s.handleGitUnstage)
+	mux.HandleFunc("/api/git/restore", s.handleGitRestore)
+	mux.HandleFunc("/api/snapshots", s.handleListSnapshots)
+	mux.HandleFunc("/api/snapshots/rollback", s.handleRollbackSnapshot)
 
 	s.httpSrv = &http.Server{
 		Addr:         addr,
@@ -158,4 +170,135 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 	// 优雅发送完成标桩
 	fmt.Fprintf(w, "event: done\ndata: [DONE]\n\n")
 	flusher.Flush()
+}
+
+// handleGitStatus 获取物理 Git 状态
+func (s *Server) handleGitStatus(w http.ResponseWriter, r *http.Request) {
+	if s.gitTool == nil {
+		http.Error(w, `{"error":"git tool not configured"}`, http.StatusInternalServerError)
+		return
+	}
+
+	report, err := s.gitTool.GetStatus()
+	if err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":"%v"}`, err), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(report)
+}
+
+// handleGitStage 暂存文件
+func (s *Server) handleGitStage(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Path string `json:"path"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Path == "" {
+		http.Error(w, `{"error":"path required"}`, http.StatusBadRequest)
+		return
+	}
+
+	if err := s.gitTool.StageFile(req.Path); err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":"%v"}`, err), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Write([]byte(`{"success":true}`))
+}
+
+// handleGitUnstage 取消暂存
+func (s *Server) handleGitUnstage(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Path string `json:"path"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Path == "" {
+		http.Error(w, `{"error":"path required"}`, http.StatusBadRequest)
+		return
+	}
+
+	if err := s.gitTool.UnstageFile(req.Path); err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":"%v"}`, err), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Write([]byte(`{"success":true}`))
+}
+
+// handleGitRestore 放弃修改
+func (s *Server) handleGitRestore(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Path string `json:"path"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Path == "" {
+		http.Error(w, `{"error":"path required"}`, http.StatusBadRequest)
+		return
+	}
+
+	if err := s.gitTool.RestoreFile(req.Path); err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":"%v"}`, err), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Write([]byte(`{"success":true}`))
+}
+
+// handleListSnapshots 获取历史快照
+func (s *Server) handleListSnapshots(w http.ResponseWriter, r *http.Request) {
+	if s.snapshotMgr == nil {
+		http.Error(w, `{"error":"snapshot manager not configured"}`, http.StatusInternalServerError)
+		return
+	}
+
+	snapshots, err := s.snapshotMgr.ListSnapshots()
+	if err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":"%v"}`, err), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(snapshots)
+}
+
+// handleRollbackSnapshot 回退快照
+func (s *Server) handleRollbackSnapshot(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		CommitSHA string `json:"commit_sha"`
+		Path      string `json:"path"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.CommitSHA == "" || req.Path == "" {
+		http.Error(w, `{"error":"commit_sha and path required"}`, http.StatusBadRequest)
+		return
+	}
+
+	if err := s.snapshotMgr.RollbackFile(req.CommitSHA, req.Path); err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":"%v"}`, err), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Write([]byte(`{"success":true}`))
 }

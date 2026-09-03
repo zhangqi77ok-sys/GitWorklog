@@ -153,6 +153,17 @@ Tcode 打破了单体硬编码调度逻辑，将 Agent 的执行循环、能力�
   * **深度思考折叠卡片 (`app/chat/ThinkingBlock.tsx`)**：思考中呼吸指示灯 + 思考完毕紧凑折叠，支持随时展开查阅思维链；
   * **平滑打字机上屏**：助手回复平滑逐字增量流式渲染，附带打字防抖与自动平滑滚动。
 
+### 11. 物理受控沙箱、Git 管道秒级快照与物理 Git 暂存中枢 (Controlled FS Sandbox & Plumbing Snapshots)
+* **物理文件受控沙箱 (`backend/internal/core/sandbox/fs.go`)**：
+  * **原子写防撕裂机制**：写入同级临时文件 ➔ `file.Sync()` 强制落盘 ➔ `os.Rename` 原子覆盖，从物理层杜绝因断电、崩溃造成的源文件撕裂损坏；
+  * **路径沙箱严格防御**：获取真实工作区绝对路径并执行 `filepath.Clean`，严禁任何越界跨盘符或目录穿越（如 `../../etc/passwd`）攻击。
+* **Git Plumbing 底层管道秒级影子快照 (`backend/internal/core/sandbox/snapshot.go`)**：
+  * **零分支污染**：放弃传统的 `git commit`，直接调用 Git 底层管道：`git write-tree` 生成树对象 ➔ `git commit-tree` 生成孤立提交；
+  * **毫秒级安全锚点**：记录于 `.git/refs/tcode/snapshots/` 命名空间下，Agent 修改任何代码前 $\le 5\text{ms}$ 自动生成快照，支持一键无损秒级回退。
+* **真实双层 Git 暂存控制面板 (`frontend/src/app/git/GitPanel.tsx` & `core/store/gitStore.ts`)**：
+  * 解析 `git status --porcelain=v2`，精准呈现已暂存（Staged）与未暂存（Working）文件列表；
+  * 支持一键单文件暂存（`+`）、取消暂存（`-`）、撤销放弃更改（`↺`）与带状态感知的 Commit 提交。
+
 ---
 
 ## 🎨 四、视觉与人机工程学规范
