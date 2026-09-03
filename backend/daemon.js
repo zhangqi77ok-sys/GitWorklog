@@ -47,6 +47,146 @@ function execGit(args) {
   }
 }
 
+// 真实物理工具执行器
+async function executeTool(name, args = {}) {
+  const start = Date.now();
+  if (name === "run_command") {
+    const { command } = args;
+    if (!command) return { output: "Missing command parameter", duration_ms: 0, is_error: true };
+    const isWin = process.platform === "win32";
+    const shell = isWin ? "cmd.exe" : "/bin/sh";
+    const shellArgs = isWin ? ["/d", "/s", "/c", command] : ["-c", command];
+    return new Promise((resolve) => {
+      let out = "";
+      const child = spawn(shell, shellArgs, {
+        cwd: WORKSPACE_ROOT,
+        windowsHide: true,
+      });
+      child.stdout.on("data", (c) => (out += c));
+      child.stderr.on("data", (c) => (out += c));
+      child.on("close", (code) => {
+        resolve({
+          output: out.trim() || `[Exited with code ${code}]`,
+          duration_ms: Date.now() - start,
+          is_error: code !== 0,
+        });
+      });
+      child.on("error", (err) => {
+        resolve({
+          output: `Execution error: ${err.message}`,
+          duration_ms: Date.now() - start,
+          is_error: true,
+        });
+      });
+    });
+  }
+
+  if (name === "read_file") {
+    try {
+      const full = validatePath(args.path);
+      const content = fs.readFileSync(full, "utf8");
+      return {
+        output: content.length > 3000 ? content.slice(0, 3000) + "\n...[truncated]" : content,
+        duration_ms: Date.now() - start,
+        is_error: false,
+      };
+    } catch (e) {
+      return { output: e.message, duration_ms: Date.now() - start, is_error: true };
+    }
+  }
+
+  if (name === "write_file") {
+    try {
+      const full = validatePath(args.path);
+      const dir = path.dirname(full);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(full, args.content, "utf8");
+      return {
+        output: `Successfully wrote ${args.content ? args.content.length : 0} bytes to ${args.path}`,
+        duration_ms: Date.now() - start,
+        is_error: false,
+      };
+    } catch (e) {
+      return { output: e.message, duration_ms: Date.now() - start, is_error: true };
+    }
+  }
+
+  if (name === "git_status") {
+    const raw = execGit("status -s");
+    return { output: raw || "Working directory clean", duration_ms: Date.now() - start, is_error: false };
+  }
+
+  return { output: `Unknown tool: ${name}`, duration_ms: Date.now() - start, is_error: true };
+}
+
+// 向上游大模型发送流式推理
+function callUpstreamChatStream({ baseUrl, apiKey, model, messages, onChunk }) {
+  return new Promise((resolve, reject) => {
+    const urlObj = new URL("/v1/chat/completions", baseUrl);
+    const headers = {
+      "Content-Type": "application/json",
+      "Authorization": apiKey ? "Bearer " + apiKey : "",
+    };
+    if (baseUrl.includes("agentrouter.org")) {
+      Object.assign(headers, AGENTROUTER_HEADERS);
+    }
+    const payload = JSON.stringify({
+      model: model || "deepseek-v4-flash",
+      messages,
+      stream: true,
+      max_tokens: 4096,
+    });
+
+    const client = urlObj.protocol === "https:" ? https : http;
+    const req = client.request(
+      urlObj,
+      {
+        method: "POST",
+        headers,
+        timeout: 60000,
+      },
+      (res) => {
+        if (res.statusCode !== 200) {
+          let errBody = "";
+          res.on("data", (c) => (errBody += c));
+          res.on("end", () => reject(new Error(`Upstream HTTP ${res.statusCode}: ${errBody}`)));
+          return;
+        }
+
+        let buffer = "";
+        res.on("data", (chunk) => {
+          buffer += chunk.toString();
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith("data: ")) continue;
+            const data = trimmed.slice(6);
+            if (data === "[DONE]") {
+              onChunk({ done: true });
+              continue;
+            }
+            try {
+              const parsed = JSON.parse(data);
+              const choice = parsed.choices && parsed.choices[0];
+              if (choice && choice.delta) {
+                onChunk({
+                  reasoning: choice.delta.reasoning_content || "",
+                  content: choice.delta.content || "",
+                });
+              }
+            } catch (e) {}
+          }
+        });
+        res.on("end", resolve);
+      }
+    );
+    req.on("error", reject);
+    req.write(payload);
+    req.end();
+  });
+}
+
 // HTTP 本地网关服务
 const server = http.createServer(async (req, res) => {
   setCors(res);
@@ -331,12 +471,27 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // 8. ReAct 多阶段 SSE 流式推理
+  // 8. ReAct 多阶段 SSE 流式推理 (真实大模型与自主工具调用闭环)
   if (pathname === "/api/chat/stream" && req.method === "POST") {
     let body = "";
     req.on("data", (c) => (body += c));
     req.on("end", async () => {
-      const { model = "deepseek-v4-flash", prompt = "" } = JSON.parse(body || "{}");
+      let parsed = {};
+      try {
+        parsed = JSON.parse(body || "{}");
+      } catch (e) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Invalid JSON body: " + e.message }));
+        return;
+      }
+
+      const {
+        model = "deepseek-v4-flash",
+        prompt = "",
+        messages: history = [],
+        apiKey: clientKey,
+        baseUrl: clientBase,
+      } = parsed;
 
       res.writeHead(200, {
         "Content-Type": "text/event-stream",
@@ -344,38 +499,109 @@ const server = http.createServer(async (req, res) => {
         "Connection": "keep-alive",
       });
 
-      // 自动调度真实 AgentRouter 或本地模型
-      const apiKey = process.env.OPENAI_API_KEY || "sk-gKTbHfCZqgyDVf3TaXWpXT5TXW9qIZdAFVMOsY49ZKFssyFZ";
-      const targetBase = process.env.OPENAI_BASE_URL || "https://agentrouter.org";
+      const apiKey = clientKey || process.env.OPENAI_API_KEY;
+      const baseUrl = clientBase || process.env.OPENAI_BASE_URL || "https://agentrouter.org";
 
-      // 若用户提到了读取文件或查看 git，模拟 ReAct 调度算子
-      if (prompt.includes("文件") || prompt.includes("README") || prompt.includes("git") || prompt.includes("代码")) {
-        const toolId = "call_" + Date.now();
-        res.write(`event: tool_start\ndata: ${JSON.stringify({ id: toolId, name: "fs_control", args: { action: "read", path: "README.md" } })}\n\n`);
-        
-        await new Promise(r => setTimeout(r, 600));
-        
-        res.write(`event: tool_end\ndata: ${JSON.stringify({ id: toolId, name: "fs_control", output: "已成功读取 README.md，共计 211 行，包含 13 大核心工程矩阵。", is_error: false })}\n\n`);
+      if (!apiKey) {
+        res.write(`event: error\ndata: "未配置 API Key 凭据，请在右上角「模型与设置」中配置凭据后重试。"\n\n`);
+        res.end();
+        return;
       }
 
-      // 发送真实模型推理流或智能流
-      res.write(`event: chunk\ndata: ${JSON.stringify({ thinking: "正在分析用户提问并结合本地沙箱与 Git 工作区状态进行综合推理..." })}\n\n`);
-      await new Promise(r => setTimeout(r, 500));
+      const systemPrompt = `你是由 DeepMind 设计的高级自主编程架构师 Tcode Agent。
+当前运行于本地工程仓库：${WORKSPACE_ROOT}
 
-      const replyText = `您好！Tcode 核心工作台现已全链路就绪：
-1. **Monaco 代码编辑区**：已完美加载，支持切换多 Tab 与代码高亮；
-2. **双栏 Diff 审查视图**：点击 TabBar 右侧的「Diff 审查」，即可实时将本地改动与 Git HEAD 进行红绿双栏虚拟化对比；
-3. **文件资源树**：左侧树形结构已实时映射当前工作区目录；
-4. **Git 控制中心**：点击左侧活动栏的 Git 图标，可查看当前分支的真实已暂存与未暂存变更，并执行一键暂存与撤销。`;
+你可以通过在回答中显式输出以下标签来自主调用本地工程工具（系统会在后台执行并将输出结果反馈给你）：
+1. 运行命令：<<<TOOL_CALL: run_command {"command": "git status -s"}>>>
+2. 读取文件：<<<TOOL_CALL: read_file {"path": "README.md"}>>>
+3. 写入文件：<<<TOOL_CALL: write_file {"path": "path/to/file", "content": "..."}>>>
+4. 查询 Git：<<<TOOL_CALL: git_status {}>>>
 
-      for (let i = 0; i < replyText.length; i += 6) {
-        const slice = replyText.slice(i, i + 6);
-        res.write(`event: chunk\ndata: ${JSON.stringify({ delta: slice })}\n\n`);
-        await new Promise(r => setTimeout(r, 30));
+行为准则：
+- 默认使用简体中文回复，语气专业、克制、严谨。
+- 当用户提出查看代码、审查变更、执行测试、修复 Bug 时，优先使用上述标签调用工具获取真实上下文。
+- 解释修改原因与架构设计思路。`;
+
+      let conversation = [
+        { role: "system", content: systemPrompt },
+        ...history,
+        { role: "user", content: prompt },
+      ];
+
+      try {
+        let maxLoops = 4;
+        let loopCount = 0;
+
+        while (loopCount < maxLoops) {
+          loopCount++;
+          let accumulatedContent = "";
+          let accumulatedReasoning = "";
+
+          await callUpstreamChatStream({
+            baseUrl,
+            apiKey,
+            model,
+            messages: conversation,
+            onChunk: ({ reasoning, content, done }) => {
+              if (reasoning) {
+                accumulatedReasoning += reasoning;
+                res.write(`event: chunk\ndata: ${JSON.stringify({ thinking: reasoning })}\n\n`);
+              }
+              if (content) {
+                accumulatedContent += content;
+                res.write(`event: chunk\ndata: ${JSON.stringify({ delta_content: content })}\n\n`);
+              }
+            },
+          });
+
+          // 检查大模型是否输出了工具调用
+          const toolRegex = /<<<TOOL_CALL:\s*([a-zA-Z0-9_]+)\s*(\{.*?\})>>>/s;
+          const match = accumulatedContent.match(toolRegex);
+
+          if (!match) {
+            // 没有触发工具调用，回答自然收敛完成
+            break;
+          }
+
+          const toolName = match[1];
+          let toolArgs = {};
+          try {
+            toolArgs = JSON.parse(match[2]);
+          } catch (e) {
+            toolArgs = {};
+          }
+
+          const toolId = `call_${Date.now()}_${loopCount}`;
+          res.write(
+            `event: tool_start\ndata: ${JSON.stringify({ id: toolId, name: toolName, args: toolArgs })}\n\n`
+          );
+
+          // 真实物理执行
+          const toolResult = await executeTool(toolName, toolArgs);
+
+          res.write(
+            `event: tool_end\ndata: ${JSON.stringify({
+              id: toolId,
+              name: toolName,
+              output: toolResult.output,
+              is_error: toolResult.is_error,
+            })}\n\n`
+          );
+
+          // 将工具执行结果作为 Tool 消息追加进对话，继续进入下一轮推理
+          conversation.push({ role: "assistant", content: accumulatedContent });
+          conversation.push({
+            role: "user",
+            content: `[工具 ${toolName} 执行结果 (耗时 ${toolResult.duration_ms}ms)]:\n${toolResult.output}\n\n请根据上述工具执行输出，继续给出后续动作或总结结论。`,
+          });
+        }
+
+        res.write("event: done\ndata: [DONE]\n\n");
+        res.end();
+      } catch (err) {
+        res.write(`event: error\ndata: ${JSON.stringify(err.message)}\n\n`);
+        res.end();
       }
-
-      res.write("event: done\ndata: [DONE]\n\n");
-      res.end();
     });
     return;
   }

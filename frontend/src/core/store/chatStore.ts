@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { streamChatApi } from '../transport/sseClient'
+import { useSettingsStore } from './settingsStore'
 import type { ToolCallItem } from '../../app/chat/ToolCard'
 
 export interface ChatMessage {
@@ -70,9 +71,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
       isStreaming: true,
     }))
 
+    const { config } = useSettingsStore.getState()
+
     await streamChatApi({
       model: currentModel,
       prompt: text,
+      apiKey: config.apiKey,
+      baseUrl: config.baseUrl,
       onChunk: (chunk) => {
         set((state) => ({
           messages: state.messages.map((m) => {

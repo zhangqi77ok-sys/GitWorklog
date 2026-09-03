@@ -318,22 +318,97 @@ export const ChatCockpit: React.FC = () => {
         </div>
 
         {/* 动态追加的新增消息 */}
-        {messages.map((m) => (
-          <div
-            key={m.id}
-            className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}
-          >
-            <div
-              className={`max-w-[80%] px-4 py-3 rounded-2xl text-xs leading-relaxed shadow-2xs ${
-                m.role === 'user'
-                  ? 'bg-[#F4EFEA] text-[#18181B] border border-black/[0.06] rounded-tr-sm'
-                  : 'bg-white text-[#18181B] border border-black/[0.08] rounded-tl-sm'
-              }`}
-            >
-              {m.content}
+        {messages.map((m) => {
+          if (m.role === 'user') {
+            return (
+              <div key={m.id} className="flex justify-end">
+                <div className="max-w-[80%] bg-[#F4EFEA] text-[#18181B] px-4 py-3 rounded-2xl rounded-tr-sm border border-black/[0.06] shadow-2xs text-xs leading-relaxed">
+                  {m.content}
+                </div>
+              </div>
+            )
+          }
+
+          return (
+            <div key={m.id} className="flex flex-col items-start space-y-3 max-w-3xl">
+              {/* 头部身份 */}
+              <div className="flex items-center gap-2 text-xs font-semibold text-[#18181B]">
+                <div className="w-4 h-4 rounded bg-[#D96B27] text-white flex items-center justify-center text-[9px] font-bold">
+                  T
+                </div>
+                <span>Tcode Agent</span>
+                <span className="text-[10px] text-[#10A37F] bg-[#10A37F]/10 px-1.5 py-0.2 rounded font-mono">
+                  {m.model || currentModel} · Act 模式
+                </span>
+              </div>
+
+              {/* 深度思考流 (若有) */}
+              {m.thinking && (
+                <div className="w-full rounded-xl border border-black/[0.08] bg-white/60 shadow-2xs overflow-hidden">
+                  <div className="p-2.5 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm">🧠</span>
+                      <span className="text-xs font-semibold text-[#18181B]">深度心智思考</span>
+                      <span className="text-[10px] text-[#10A37F] bg-[#10A37F]/10 px-1.5 py-0.2 rounded font-mono">
+                        流式生成中
+                      </span>
+                    </div>
+                  </div>
+                  <div className="px-3 pb-3 text-xs text-[#71717A] leading-relaxed italic border-t border-black/[0.04] bg-[#FAF8F5] pt-2 whitespace-pre-wrap">
+                    {m.thinking}
+                  </div>
+                </div>
+              )}
+
+              {/* 算子执行卡片组 (若有) */}
+              {m.toolCalls && m.toolCalls.length > 0 && (
+                <div className="w-full space-y-2">
+                  {m.toolCalls.map((tc) => (
+                    <div
+                      key={tc.id}
+                      className="rounded-xl border border-black/[0.08] bg-white shadow-2xs overflow-hidden text-xs"
+                    >
+                      <div className="p-2.5 flex items-center justify-between">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="w-5 h-5 rounded-md bg-[#18181B] text-white flex items-center justify-center font-mono text-[10px] font-bold">
+                            $_
+                          </span>
+                          <span className="font-mono font-bold text-[#18181B]">{tc.name}</span>
+                          <span className="text-[11px] font-mono text-[#71717A] truncate max-w-sm">
+                            {JSON.stringify(tc.args)}
+                          </span>
+                        </div>
+                        <span
+                          className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full ${
+                            tc.status === 'running'
+                              ? 'bg-amber-100 text-amber-800'
+                              : tc.status === 'error'
+                              ? 'bg-red-100 text-red-700'
+                              : 'bg-emerald-100 text-emerald-800'
+                          }`}
+                        >
+                          {tc.status === 'running' ? '● 正在执行' : tc.status === 'error' ? '✕ 执行失败' : '✓ 执行成功'}
+                        </span>
+                      </div>
+                      {tc.output && (
+                        <div className="border-t border-black/[0.06] bg-[#1E1C1A] text-white p-3 font-mono text-[11px] leading-relaxed whitespace-pre-wrap max-h-48 overflow-y-auto">
+                          {tc.output}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* 正文回复内容 */}
+              {m.content && (
+                <div className="w-full bg-white text-[#18181B] px-4 py-3 rounded-2xl rounded-tl-sm border border-black/[0.08] shadow-2xs text-xs leading-relaxed whitespace-pre-wrap">
+                  {m.content}
+                </div>
+              )}
             </div>
-          </div>
-        ))}
+          )
+        })}
         <div ref={messagesEndRef} />
       </div>
 

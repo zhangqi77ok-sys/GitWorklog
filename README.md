@@ -224,9 +224,15 @@ Tcode 打破了单体硬编码调度逻辑，将 Agent 的执行循环、能力�
   * **改动文件卡片组**：展示改动文件列表（`~M` / `+A`）与增删行数统计，点击 `查看 Diff` 立即在右侧 Monaco 打开行级双栏对比；
   * 底部高级输入舱挂载 `@` 引用弹窗（会话与技能）、`/` 快捷指令弹窗、`Act 极速双环` 标识与 `需人工审核` 切换开关；
   * 右侧暖炭黑（`#1E1C1A`）代码审查台配备 `✕ 放弃` 与 `✓ 一键采纳`。
-* **模型使用量全景大盘与知识图谱弹窗 (`UsageCockpit.tsx` & `KnowledgeGraphModal.tsx`)**：
-  * 4 大核心 KPI 指标卡片（Tokens 吞吐、计费支出、TTFT、Prompt Cache 节省率）与多厂商调用明细；
-  * 知识图谱实体拓扑、架构决策 (ADR) 审查与核心代码文件约束呈现。
+### 17. 真实大模型流式推理与 ReAct 自主算子执行端到端闭环 (Autonomous ReAct Loop & Streaming E2E)
+* **动态多模型网关与 WAF 穿透路由**：
+  * 支持上游大模型官方端点与自定义 BaseURL（如 AgentRouter / SiliconFlow / 本地 Ollama），注入 `claude-cli` 客户端指纹穿透 WAF；
+  * 严格 Fail-Closed 凭据纪律：未配置 API Key 时明确阻断提示，严禁内置后门或硬编码凭据，保障数据安全。
+* **原生深度心智思考流实时推送 (`Thinking Stream`)**：
+  * 自动解析并提取上游大模型原生输出的 `reasoning_content`（如 DeepSeek-V4、Claude 3.7 Thinking），通过 SSE 多阶段协议毫秒级流式推送至前端深度心智思考折叠卡片。
+* **ReAct 自主物理算子调度闭环**：
+  * 模型具备自主工具发现与执行能力：`run_command`（Windows 静默 Shell 命令）、`read_file`（受控安全读取）、`write_file`（原子安全写）、`git_status`（工作区状态感知）；
+  * 后端捕获工具调用后在物理沙箱安全执行，向前端推送 `event: tool_start` 与 `event: tool_end`，并将执行结果反馈模型进入下一轮推理，实现多轮自愈。
 
 ---
 

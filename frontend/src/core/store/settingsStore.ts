@@ -29,7 +29,7 @@ interface SettingsState {
 
 const DEFAULT_CONFIG: AppConfig = {
   baseUrl: 'https://agentrouter.org',
-  apiKey: 'sk-gKTbHfCZqgyDVf3TaXWpXT5TXW9qIZdAFVMOsY49ZKFssyFZ',
+  apiKey: '',
   defaultModel: 'deepseek-v4-flash',
   enableThinking: true,
   thinkingBudget: 4096,

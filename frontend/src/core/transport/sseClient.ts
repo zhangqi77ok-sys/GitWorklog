@@ -26,6 +26,8 @@ export interface StreamChatOptions {
   model: string
   prompt: string
   messages?: Array<{ role: string; content: string }>
+  apiKey?: string
+  baseUrl?: string
   onChunk: (chunk: ChatChunkPayload) => void
   onToolStart?: (payload: ToolStartPayload) => void
   onToolEnd?: (payload: ToolEndPayload) => void
@@ -38,7 +40,7 @@ export interface StreamChatOptions {
  * 发起流式推理并逐帧解码 SSE 事件流
  */
 export async function streamChatApi(options: StreamChatOptions): Promise<void> {
-  const { model, prompt, messages, onChunk, onToolStart, onToolEnd, onError, onDone, signal } = options
+  const { model, prompt, messages, apiKey, baseUrl, onChunk, onToolStart, onToolEnd, onError, onDone, signal } = options
 
   try {
     const response = await fetch('/api/chat/stream', {
@@ -50,6 +52,8 @@ export async function streamChatApi(options: StreamChatOptions): Promise<void> {
         model,
         prompt,
         messages,
+        apiKey,
+        baseUrl,
       }),
       signal,
     })
