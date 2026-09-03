@@ -1,4 +1,4 @@
-﻿# Tcode 工业级 Go 插件式微内核工程落地任务计划 (Production-Grade WBS)
+# Tcode 工业级 Go 插件式微内核工程落地任务计划 (Production-Grade WBS)
 
 > **版本**：v2.0.0-PROD  
 > **负责人**：Tcode 首席 Go 基础架构师  
@@ -46,9 +46,15 @@ agent-learning/
 │   │   ├── tool.go                # 算子契约 (OpenAPI Schema 校验)
 │   │   ├── rail.go                # 生命周期执行拦截器
 │   │   └── types.go               # 统一 DTO 与状态枚举
+│   ├── protocol/                  # 上游大模型双向协议适配与序列化
+│   │   ├── canonical.go           # 微内核统一中立消息/工具契约 (Canonical IR)
+│   │   ├── openai_adapter.go      # OpenAI Chat Completions 双向映射转换器
+│   │   └── claude_adapter.go      # Anthropic Messages API 双向映射转换器
 │   └── errors/                    # 结构化错误体系与错误码
 └── plugins/                       # 官方核心插件集
-    ├── provider/                  # 模型适配器 (DeepSeek/Anthropic/Ollama)
+    ├── provider/                  # 模型适配器
+    │   ├── openai/                # OpenAI 官方协议驱动 (原生支持 GPT-4o / DeepSeek / SiliconFlow / vLLM / Ollama)
+    │   └── claude/                # Anthropic Claude 官方协议驱动 (原生支持 Claude 3.7 / Extended Thinking / Prompt Caching)
     ├── tool/                      # 核心算子 (受控文件、Git暂存、终端交互)
     └── rail/                      # 治理拦截 (高危阻断、TDD自愈、成本审计)
 ```
@@ -138,6 +144,52 @@ agent-learning/
   - 提供本地与远程分支扫描 (`git branch -a --format="%(refname:short)|%(objectname:short)|%(subject)"`)。
 - **质量验收标准**：
   - 支持文件名含空格、特殊字符、中文路径的转义与安全执行。
+
+#### 2.4 OpenAI 官方 Chat Completions 协议原生驱动 (`plugins/provider/openai/`)
+- **上游规范标准**：标准对齐 `POST /v1/chat/completions` (OpenAI 官方、DeepSeek、SiliconFlow、Ollama、vLLM、One-API 协议族)；
+- **核心实现细节**：
+  1. **请求体编码**：规范化映射 `model`, `messages`（`system`, `user`, `assistant`, `tool` 角色结构），`tools` 数组（`type: "function"` 嵌套函数契约），以及 `stream_options: { include_usage: true }`；
+  2. **SSE 帧解码器与终止符**：监听 `data: {"choices":[{"delta":...}]}\n\n` 并以 `data: [DONE]\n\n` 为可靠退出标桩；
+  3. **流式 Tool Calling 分片拼装器 (Chunk Reassembler)**：
+     大模型在流式输出工具调用时，`arguments` 会被拆分为数十个极细字符片（`{"index": 0, "function": {"arguments": "{\"file"}}`），驱动内部维护索引哈希表（`map[int]*ToolCallAccumulator`），按 `index` 流式累加字符串，直至该 Block 闭合再交由 JSON 反序列化，彻底杜绝半截 JSON 导致的语法解析 Panic；
+  4. **429 速率熔断与智能退避**：读取响应头 `Retry-After` 与 `x-ratelimit-reset-requests`，自动执行带有 Jitter 的指数退避重试（最多重试 3 次）。
+- **质量验收标准**：
+  - 构造包含 3 个并发 Function Call 的分片流，能够 100% 准确拼装为完整的入参 JSON；
+  - 接入官方 OpenAI API 与 DeepSeek-V4 实测通过。
+
+#### 2.5 Anthropic Claude 官方 Messages API 协议原生驱动 (`plugins/provider/claude/`)
+- **上游规范标准**：标准对齐 `POST /v1/messages` (Claude 3.5 Sonnet, Claude 3.7 Sonnet Extended Thinking 官方原生协议)；
+- **核心实现细节**：
+  1. **严格协议头注入**：
+     - `x-api-key: <token>`
+     - `anthropic-version: 2023-06-01`
+     - `anthropic-beta: prompt-caching-2024-07-31,max-tokens-3-5-sonnet-2024-07-15`
+  2. **结构体无损重构适配**：
+     - **顶级 `system` 提取**：Anthropic 协议禁止在 `messages` 数组中出现 `system` 角色，适配器自动将所有系统指令聚合并提升为顶层 `system` 字段；
+     - **消息交替与工具块转换**：Anthropic 严格要求 `user` 与 `assistant` 角色交替。前序工具调用在 `assistant` 消息中呈现为 `{ "type": "tool_use", "id": "...", "name": "...", "input": {...} }`，工具产出结果在 `user` 消息中呈现为 `{ "type": "tool_result", "tool_use_id": "...", "content": "..." }`；
+     - **工具清单映射**：转换为 Anthropic 标准 `{ "name": "...", "description": "...", "input_schema": {...} }`；
+  3. **基于状态机的多事件 SSE 解码器 (Event-Stream FSM)**：
+     Anthropic 采用独特的多事件帧协议，解码器维护以下有限状态转移：
+     - `event: message_start` ➔ 初始化消息 ID，记录 `message.usage.input_tokens`；
+     - `event: content_block_start` ➔ 开启新的内容块（判断 `type: "text"`、`type: "thinking"` 还是 `type: "tool_use"`）；
+     - `event: content_block_delta` ➔ 流式派发：
+       - `text_delta` ➔ 文本正文通道；
+       - `thinking_delta` ➔ **Claude 3.7 专享深度思考通道**（无损暴露给前端思考折叠卡片）；
+       - `input_json_delta` ➔ 工具调用参数缓冲拼接器；
+     - `event: content_block_stop` ➔ 封口当前 Block；
+     - `event: message_delta` ➔ 捕获 `delta.stop_reason`（如 `tool_use`、`end_turn`）并累加 `output_tokens`；
+     - `event: message_stop` ➔ 优雅关闭当前通道；
+  4. **Prompt Caching 提示词缓存与用量核算**：
+     - 向超长系统提示词与工程 RepoMap 自动打标 `cache_control: { "type": "ephemeral" }`；
+     - 从 `message.usage` 中精确提取 `cache_creation_input_tokens` 与 `cache_read_input_tokens`，计算缓存节省率并推送至 Token 监控看板。
+- **质量验收标准**：
+  - 构造官方包含 Thinking 与 Tool Use 的 Anthropic 混合事件流，状态机无漏帧，思考过程与工具调用精准分离上屏。
+
+#### 2.6 中立规范数据抽象层 (`pkg/protocol/canonical.go`)
+- **设计目标**：在微内核引擎与具体模型协议间建立隔离防线。无论底层接入的是 OpenAI 还是 Claude，微内核内部一律处理中立的 `CanonicalMessage` 与 `CanonicalToolCall`；
+- **热插拔收益**：用户在会话进行中若从 Claude 3.7 切换至 DeepSeek，协议适配层自动在毫秒级将历史上下文无损互转，零记忆丢失，零语法冲突。
+- **质量验收标准**：
+  - 双向往返转换单元测试（`OpenAI ➔ Canonical ➔ Claude ➔ Canonical ➔ OpenAI`），数据内容与工具 ID 100% 幂等无损。
 
 ---
 

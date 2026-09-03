@@ -1,4 +1,4 @@
-﻿# Tcode Go 插件式微内核架构设计规约 (ARCHITECTURE_GO_PLUGIN_CORE.md)
+# Tcode Go 插件式微内核架构设计规约 (ARCHITECTURE_GO_PLUGIN_CORE.md)
 
 > **版本**：v2.0.0 (Go Edition)  
 > **设计角色**：Tcode 首席架构师 (Go Infrastructure Architect)  
@@ -119,10 +119,46 @@ type ProviderPlugin interface {
 // StreamChunk 流式输出结构体
 type StreamChunk struct {
 	DeltaContent string     `json:"delta_content"` // 增量文本
-	Thinking     string     `json:"thinking"`      // 思考过程内容 (如 R1 / Claude Thinking)
+	Thinking     string     `json:"thinking"`      // 思考过程内容 (如 Claude 3.7 Thinking / R1)
+	ToolCalls    []ToolCallChunk `json:"tool_calls,omitempty"` // 工具调用增量分片
 	Usage        *TokenUsage `json:"usage,omitempty"`
 	Error        error      `json:"-"`
 }
+```
+
+#### 3.2.1 OpenAI 官方规范与 Anthropic Claude Messages 原生双轨适配架构
+
+Tcode 拒绝仅支持单一协议或使用粗糙的黑盒代理，在微内核原生内置对 **OpenAI** 与 **Anthropic** 两大行业事实标准的 100% 协议还原：
+
+```text
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│              Tcode 微内核规范抽象层 (Canonical Intermediate Representation)             │
+│            CanonicalMessage (Role, ContentParts: Text/Thinking/ToolUse/ToolResult)     │
+└───────────────────────────┬────────────────────────────────┬───────────────────────────┘
+                            │                                │
+        ┌───────────────────┴───────────────┐    ┌───────────┴───────────────────────┐
+        ▼                                   ▼    ▼                                   ▼
+┌──────────────────────────────────────────────┐ ┌──────────────────────────────────────────────┐
+│  OpenAI 驱动 (plugins/provider/openai)       │ │  Claude 驱动 (plugins/provider/claude)       │
+│  • 适用: GPT-4o / DeepSeek / vLLM / Ollama   │ │  • 适用: Claude 3.5 Sonnet / 3.7 Thinking    │
+├──────────────────────────────────────────────┤ ├──────────────────────────────────────────────┤
+│  [ 请求协议 ]                                │ │  [ 请求协议 ]                                │
+│  • POST /v1/chat/completions                 │ │  • POST /v1/messages                         │
+│  • messages 数组含 system/user/assistant/tool│ │  • 顶层独立 system 字段 (严格提取分离)       │
+│  • tools: [{ type: "function", function }]   │ │  • messages 仅允许 user/assistant 严格交替   │
+│  • stream_options: { include_usage: true }   │ │  • tools: [{ name, description, input_schema}]│
+│                                              │ │  • beta: prompt-caching, max-tokens-3-5...   │
+├──────────────────────────────────────────────┤ ├──────────────────────────────────────────────┤
+│  [ 流式 SSE 协议帧 ]                         │ │  [ 流式 SSE 协议帧 (有限状态机解码) ]        │
+│  • data: {"choices":[{"delta":{...}}]}       │ │  • event: message_start (输入 Token 统计)    │
+│  • data: [DONE] 显式退出标桩                 │ │  • event: content_block_start (text/thinking)│
+│  • 内部流式工具碎片拼装器 (Tool Reassembler) │ │  • event: content_block_delta (思考流解包)   │
+│                                              │ │  • event: content_block_stop / message_delta │
+├──────────────────────────────────────────────┤ ├──────────────────────────────────────────────┤
+│  [ 高级工程特性 ]                            │ │  [ 高级工程特性 ]                            │
+│  • 429 Retry-After 自动抖动退避重试          │ │  • Claude 3.7 Extended Thinking 独立解包     │
+│  • 统一兼容 One-API / New-API 聚合端点       │ │  • Prompt Caching 命中 Tokens 精准成本核算   │
+└──────────────────────────────────────────────┘ └──────────────────────────────────────────────┘
 ```
 
 ---
@@ -276,10 +312,9 @@ agent-learning/
 │   │   └── types.go               # 通用 DTO / Chunk / Action 数据契约
 │   └── protocol/                  # 序列化、JSON-RPC 2.0 与 MCP 协议解码
 ├── plugins/                       # 开箱即用官方插件库
-│   ├── provider/                  # 模型网关实现
-│   │   ├── deepseek/              # DeepSeek-V4 直连插件
-│   │   ├── anthropic/             # Claude 3.7 直连与思考流插件
-│   │   └── ollama/                # 本地 Ollama 私有离线插件
+│   ├── provider/                  # 模型网关实现 (双轨上游协议原生驱动)
+│   │   ├── openai/                # OpenAI 官方协议族驱动 (GPT-4o, DeepSeek, SiliconFlow, vLLM, Ollama)
+│   │   └── claude/                # Anthropic 官方协议族驱动 (Claude 3.5, Claude 3.7 Thinking, Prompt Caching)
 │   ├── tool/                      # 基础算子实现
 │   │   ├── fs/                    # 影子受控文件读写
 │   │   ├── git/                   # 高级 Git 暂存与分支算子

@@ -1667,3 +1667,25 @@ Tcode 必须区分“环境中发现了工作流工具”和“用户选择并�
    - **时间切片与导出功能**：
      - 支持「今日 (24h)」、「近 7 天」、「本月」三档动态切片，支持一键导出 CSV 审计流水报表，并支持按 `Escape` 秒级退出返回对话工作台。
 
+### 4.48.18 OpenAI 与 Anthropic Claude 原生双轨上游协议规范规约 (Dual-Track Upstream Protocols)
+
+1. **上游协议双轨对齐原则**：
+   - 彻底打破市面上大多数套壳工具仅支持单一规范导致的“协议截断”与“功能残缺”；
+   - Tcode 微内核在协议层将 **OpenAI 官方规范** 与 **Anthropic Claude 官方规范** 均视为一等公民（First-Class Citizens），提供原汁原味的原生驱动。
+2. **OpenAI 协议族原生标准规范 (`plugins/provider/openai`)**：
+   - **覆盖范围**：GPT-4o、o3-mini、DeepSeek-V4、SiliconFlow、Moonshot、Ollama、vLLM、One-API 等全体兼容端点；
+   - **请求契约**：`POST /v1/chat/completions`，支持 `model`, `messages`, `tools` (function 嵌套), `stream: true`, `stream_options: { include_usage: true }`；
+   - **流式分片累加**：内部维护流式 Tool Calling 分片拼装器（按 `index` 流式累加分片 `arguments`），杜绝半截 JSON 报错；
+   - **速率自愈**：严格响应 429 状态码的 `Retry-After` 头部，实施带抖动指数退避。
+3. **Anthropic Claude Messages 原生标准规范 (`plugins/provider/claude`)**：
+   - **覆盖范围**：Claude 3.5 Sonnet、Claude 3.7 Sonnet (Extended Thinking) 原生官方 API；
+   - **请求契约**：`POST /v1/messages`，必须携带版本与功能 Beta 头（`anthropic-version`, `prompt-caching`, `max-tokens`）；
+   - **结构映射**：强制将 `system` 指令提升为顶层字段；`messages` 严格保持 `user`/`assistant` 轮换；历史工具调用包装为 `tool_use`，工具执行结果包装为 `tool_result`；
+   - **状态机事件流解码**：精准解码 `message_start`、`content_block_start/delta/stop`、`message_delta`、`message_stop`；
+   - **Claude 3.7 深度思考流 (Thinking)**：原生解包 `thinking_delta` 并分流至专属思考通道；
+   - **Prompt Caching 成本审计**：自动打标 `cache_control: { type: "ephemeral" }`，实时统计 `cache_read_input_tokens` 并计算 80%+ 的成本节约率。
+4. **中立规范表示层 (Canonical Intermediate Representation)**：
+   - 微内核核心循环（Inner Loop）只面向中立的 `CanonicalMessage` 和 `CanonicalToolCall`；
+   - 当用户在会话中从 Claude 热切至 DeepSeek 时，协议层自动在毫秒级无损完成上下文双向对齐，零记忆丢失，零语法冲突。
+
+
