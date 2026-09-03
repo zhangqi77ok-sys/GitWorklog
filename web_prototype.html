@@ -173,19 +173,14 @@
     }
 
     // 弹窗控制：Skill Import Modal
-    function openSkillImportModal() { document.getElementById('skillImportModal').classList.remove('hidden'); }
-    function closeSkillImportModal() { document.getElementById('skillImportModal').classList.add('hidden'); }
-    function loadSkillTemplate() {
-      document.getElementById('skillIdInput').value = 'tdd-self-healing-flow';
-      document.getElementById('skillContentInput').value = `## TDD 自愈工作流规约 (SKILL.md)
-1. 自动化运行本地测试: \`go test -v ./...\`
-2. 捕获失败断言堆栈，提取受损函数签名
-3. 生成局部补丁并执行行级验证，直至覆盖率达标且所有单测全部转绿`;
-      showToast('已载入经典 TDD 自愈规范模板');
+    function openSkillImportModal(tab) { 
+      const modal = document.getElementById('skillImportModal');
+      if (modal) modal.classList.remove('hidden'); 
+      if (typeof switchSkillTab === 'function') switchSkillTab(tab || 'import');
     }
-    function saveSkillModal() {
-      closeSkillImportModal();
-      showToast('✓ 自定义 Skill 技能已固化至工作流引擎');
+    function closeSkillImportModal() { 
+      const modal = document.getElementById('skillImportModal');
+      if (modal) modal.classList.add('hidden'); 
     }
 
     // 弹窗控制：Rule Add Modal
@@ -1424,12 +1419,28 @@
       </div>
     </div>
 
-    <div class="hidden md:flex items-center gap-2 text-[11px] text-[#A1A1AA]">
-      <span>按 <kbd class="px-1.5 py-0.5 rounded bg-black/[0.04] border border-black/[0.08] font-mono text-[10px] text-[#52525B]">Ctrl+K</kbd> 快速检索分支、文件与算子</span>
+    <!-- 【核心新增】单焦点工作区聚合切换胶囊 (Workspace View Switcher) -->
+    <div class="flex items-center p-0.5 bg-black/[0.05] rounded-xl text-xs font-medium">
+      <button id="view-btn-chat" onclick="switchWorkspaceView('chat')" title="切换至智能对话聚焦视图 (全宽沉浸)" class="px-2.5 py-1 rounded-lg text-[#71717A] hover:text-[#18181B] transition-all flex items-center gap-1.5 cursor-pointer">
+        <span>💬</span><span class="hidden sm:inline">智能对话</span>
+      </button>
+      <button id="view-btn-split" onclick="switchWorkspaceView('split')" title="切换至双栏协同视图 (对话 + 代码Diff比对)" class="px-2.5 py-1 rounded-lg bg-white text-[#D96B27] shadow-2xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer">
+        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/></svg>
+        <span class="hidden sm:inline">双栏协同</span>
+      </button>
+      <button id="view-btn-editor" onclick="switchWorkspaceView('editor')" title="切换至代码工作区全屏视图 (Monaco沉浸编辑)" class="px-2.5 py-1 rounded-lg text-[#71717A] hover:text-[#18181B] transition-all flex items-center gap-1.5 cursor-pointer">
+        <span>📝</span><span class="hidden sm:inline">代码工作区</span>
+      </button>
     </div>
 
     <div class="flex items-center gap-2">
-      <button onclick="toggleSettingsModal(true)" class="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium text-[#18181B] bg-white border border-black/[0.08] shadow-2xs hover:bg-black/[0.03] transition-all cursor-pointer">
+      <!-- 终端抽屉开关按钮 -->
+      <button onclick="toggleTerminalDrawer()" id="headerTerminalToggleBtn" title="唤起/收起集成终端抽屉 (Ctrl+`)" class="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium text-[#52525B] bg-white border border-black/[0.08] shadow-2xs hover:bg-black/[0.03] transition-all cursor-pointer">
+        <span class="font-mono text-xs font-bold text-[#18181B]">$_</span>
+        <span class="hidden sm:inline">终端抽屉</span>
+      </button>
+
+      <button onclick="toggleSettingsModal(true)" title="打开系统设置中枢 (Esc可关闭)" class="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium text-[#18181B] bg-white border border-black/[0.08] shadow-2xs hover:bg-black/[0.03] transition-all cursor-pointer">
         <svg class="w-3.5 h-3.5 text-[#D96B27]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
         <span>模型与设置</span>
       </button>
@@ -1437,14 +1448,14 @@
       <div class="h-3 w-[1px] bg-black/[0.08]"></div>
 
       <div class="flex items-center gap-1">
-        <button onclick="showToast('已模拟最小化')" class="w-6 h-6 rounded flex items-center justify-center text-[#71717A] hover:bg-black/[0.05] transition-all cursor-pointer">
-          <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        <button onclick="showToast('已模拟最小化')" title="最小化窗口" class="w-6 h-6 rounded flex items-center justify-center text-[#71717A] hover:bg-black/[0.05] transition-all cursor-pointer">
+          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/></svg>
         </button>
-        <button onclick="showToast('已模拟最大化')" class="w-6 h-6 rounded flex items-center justify-center text-[#71717A] hover:bg-black/[0.05] transition-all cursor-pointer">
-          <svg class="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/></svg>
+        <button onclick="showToast('已模拟最大化')" title="最大化窗口" class="w-6 h-6 rounded flex items-center justify-center text-[#71717A] hover:bg-black/[0.05] transition-all cursor-pointer">
+          <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/></svg>
         </button>
-        <button onclick="showToast('已模拟退出应用')" class="w-6 h-6 rounded flex items-center justify-center text-[#71717A] hover:bg-red-500 hover:text-white transition-all cursor-pointer">
-          <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        <button onclick="showToast('已模拟退出应用')" title="关闭程序" class="w-6 h-6 rounded flex items-center justify-center text-[#71717A] hover:bg-red-500 hover:text-white transition-all cursor-pointer">
+          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
       </div>
     </div>
@@ -1478,6 +1489,11 @@
           <span class="absolute top-2 right-2 w-2 h-2 rounded-full bg-[#10A37F]"></span>
         </button>
 
+        <!-- 【核心新增】模型使用情况与 Token 消耗监控大盘 -->
+        <button onclick="switchActivity('usage')" id="act-btn-usage" title="模型使用情况与 Token 消耗大盘" class="act-btn relative w-10 h-10 rounded-xl flex items-center justify-center text-[#71717A] hover:text-[#18181B] hover:bg-white/60 transition-all cursor-pointer">
+          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        </button>
+
         <!-- 【全新】项目知识图谱与记忆 -->
         <button onclick="openKnowledgeGraphModal()" id="act-btn-kg" title="点击弹出项目知识图谱与架构决策 (ADR)" class="act-btn relative w-10 h-10 rounded-xl flex items-center justify-center text-[#71717A] hover:text-[#18181B] hover:bg-white/60 transition-all cursor-pointer">
           <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
@@ -1486,6 +1502,11 @@
         <!-- 4. MCP 与技能扩展 -->
         <button onclick="toggleSettingsModal(true, 'mcp')" title="MCP 协议服务与工具" class="act-btn relative w-10 h-10 rounded-xl flex items-center justify-center text-[#71717A] hover:text-[#18181B] hover:bg-white/60 transition-all cursor-pointer">
           <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+        </button>
+
+        <!-- 5. 终端抽屉快捷入口 -->
+        <button onclick="toggleTerminalDrawer()" id="act-btn-terminal" title="唤起/收起集成终端抽屉 (Ctrl+`)" class="act-btn relative w-10 h-10 rounded-xl flex items-center justify-center text-[#71717A] hover:text-[#18181B] hover:bg-white/60 transition-all cursor-pointer font-mono font-bold text-xs">
+          <span>$_</span>
         </button>
       </div>
 
@@ -1657,21 +1678,183 @@
         </div>
       </div>
 
-      <!-- 视图 3：Git 变更列表 -->
-      <div id="drawer-git" class="hidden flex-1 flex flex-col overflow-hidden">
-        <div class="p-3 border-b border-black/[0.06] flex items-center justify-between">
-          <span class="text-xs font-bold text-[#18181B]">Git 源代码管理</span>
-          <span class="text-[10px] text-[#D96B27] bg-[#D96B27]/10 px-1.5 py-0.2 rounded font-mono font-medium">2 个未暂存</span>
-        </div>
-        <div class="flex-1 overflow-y-auto p-2 text-xs space-y-2">
-          <div class="text-[10px] font-bold text-[#71717A] px-1">工作区更改 (CHANGES)</div>
-          <div onclick="openDiffView()" class="p-2 rounded-lg bg-white border border-black/[0.06] shadow-2xs hover:border-[#D96B27]/40 cursor-pointer flex items-center justify-between">
-            <span class="font-mono text-xs text-[#18181B]">main.go</span>
-            <span class="text-[10px] text-amber-600 font-mono font-bold">M (修改)</span>
+      <!-- 视图 3：【全新全功能】Git 源代码管理与高级工程工作台 -->
+      <div id="drawer-git" class="hidden flex-1 flex flex-col overflow-hidden select-none">
+        <!-- Git 抽屉顶栏：标题 + 当前分支 + 快捷操作 -->
+        <div class="p-2.5 border-b border-black/[0.06] bg-[#EFEAE4] space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold text-[#18181B] flex items-center gap-1.5">
+              <span>🌿</span><span>Git 源代码管理</span>
+            </span>
+            <div class="flex items-center gap-1">
+              <button onclick="gitPullSync()" title="从远端拉取并同步代码 (git pull --rebase)" class="p-1 rounded text-[#71717A] hover:text-[#18181B] hover:bg-black/[0.05] transition-all cursor-pointer">
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+              </button>
+              <button onclick="gitStashWorkspace()" title="储藏当前未提交改动 (git stash)" class="p-1 rounded text-[#71717A] hover:text-[#18181B] hover:bg-black/[0.05] transition-all cursor-pointer">
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="10" y1="14" x2="14" y2="14"/></svg>
+              </button>
+              <button onclick="openGitStashSnapshotModal()" title="查看影子 Git 快照与储藏栈" class="p-1 rounded text-[#71717A] hover:text-[#D96B27] hover:bg-black/[0.05] transition-all cursor-pointer">
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+              </button>
+            </div>
           </div>
-          <div class="p-2 rounded-lg bg-white border border-black/[0.06] shadow-2xs hover:border-[#D96B27]/40 cursor-pointer flex items-center justify-between">
-            <span class="font-mono text-xs text-[#18181B]">app.go</span>
-            <span class="text-[10px] text-green-600 font-mono font-bold">U (新增)</span>
+
+          <!-- 当前分支胶囊按钮 -->
+          <button onclick="openGitBranchModal()" title="点击切换或新建 Git 分支" class="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-white border border-black/[0.08] shadow-2xs hover:border-[#D96B27]/50 transition-all cursor-pointer text-xs">
+            <div class="flex items-center gap-1.5 truncate">
+              <span class="text-[#D96B27]">🌿</span>
+              <span id="gitCurrentBranchLabel" class="font-mono font-semibold text-[#18181B] truncate">main</span>
+              <span class="text-[10px] text-[#10A37F] bg-[#10A37F]/10 px-1 py-0.2 rounded font-sans">已跟踪</span>
+            </div>
+            <svg class="w-3.5 h-3.5 text-[#71717A]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+        </div>
+
+        <!-- 提交面板区：输入框 + AI 辅助生成 + 提交按钮 -->
+        <div class="p-2.5 border-b border-black/[0.06] bg-[#FAF8F5] space-y-2">
+          <div class="relative">
+            <textarea id="gitCommitInput" rows="2" placeholder="提交信息 (Ctrl+Enter 提交)..." class="w-full p-2 text-xs text-[#18181B] placeholder:text-[#A1A1AA] bg-white rounded-lg border border-black/[0.08] focus:outline-none focus:border-[#D96B27] resize-none leading-relaxed font-mono"></textarea>
+            
+            <!-- AI 魔法棒自动生成提交信息 -->
+            <button onclick="generateAiCommitMessage()" title="AI 深度分析代码 Diff 并生成规范提交说明" class="absolute right-2 bottom-2 px-1.5 py-0.5 rounded text-[10px] font-medium bg-[#FAF8F5] hover:bg-[#D96B27]/10 text-[#71717A] hover:text-[#D96B27] border border-black/[0.06] flex items-center gap-1 transition-all cursor-pointer">
+              <span>🪄</span><span class="text-[9px]">AI 提炼</span>
+            </button>
+          </div>
+
+          <!-- 提交主按钮组 -->
+          <div class="flex items-center gap-1">
+            <button onclick="gitCommitAction('commit')" class="flex-1 py-1.5 rounded-lg bg-[#18181B] hover:bg-[#D96B27] text-white text-xs font-medium flex items-center justify-center gap-1.5 shadow-2xs transition-colors cursor-pointer">
+              <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+              <span>✓ 提交更改</span>
+            </button>
+            <button onclick="gitCommitAction('push')" title="提交并立即推送至远端 (Commit & Push)" class="px-2 py-1.5 rounded-lg bg-[#18181B] hover:bg-[#D96B27] text-white text-xs font-medium flex items-center justify-center shadow-2xs transition-colors cursor-pointer">
+              <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- 文件变动列表区：已暂存 (Staged) vs 工作区未暂存 (Changes) -->
+        <div class="flex-1 overflow-y-auto p-2 text-xs space-y-3">
+          
+          <!-- 区域 1：已暂存更改 (STAGED CHANGES) -->
+          <div class="space-y-1">
+            <div class="flex items-center justify-between px-1 text-[11px] text-[#71717A] font-semibold">
+              <div class="flex items-center gap-1.5">
+                <span class="text-[10px]">▼</span>
+                <span>已暂存更改</span>
+                <span id="gitStagedCountBadge" class="text-[10px] font-mono px-1 rounded-full bg-black/[0.05] text-[#52525B]">0</span>
+              </div>
+              <button onclick="gitUnstageAll()" title="全部取消暂存" class="hover:text-[#18181B] p-0.5 rounded cursor-pointer">
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              </button>
+            </div>
+
+            <!-- 已暂存文件容器 -->
+            <div id="gitStagedContainer" class="space-y-1">
+              <div class="text-[11px] text-[#A1A1AA] italic p-1.5 text-center">暂无暂存文件</div>
+            </div>
+          </div>
+
+          <!-- 区域 2：工作区更改 (CHANGES) -->
+          <div class="space-y-1">
+            <div class="flex items-center justify-between px-1 text-[11px] text-[#71717A] font-semibold">
+              <div class="flex items-center gap-1.5">
+                <span class="text-[10px]">▼</span>
+                <span>工作区更改</span>
+                <span id="gitChangesCountBadge" class="text-[10px] font-mono px-1 rounded-full bg-[#D96B27]/10 text-[#D96B27]">2</span>
+              </div>
+              <div class="flex items-center gap-1">
+                <button onclick="gitDiscardAll()" title="放弃所有工作区更改 (git restore .)" class="hover:text-[#DC2626] p-0.5 rounded cursor-pointer">
+                  <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                </button>
+                <button onclick="gitStageAll()" title="全部暂存 (git add .)" class="hover:text-[#18181B] p-0.5 rounded cursor-pointer">
+                  <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                </button>
+              </div>
+            </div>
+
+            <!-- 工作区文件容器 -->
+            <div id="gitChangesContainer" class="space-y-1">
+              <!-- 文件项将通过 JS 动态维护 -->
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- 视图 4：【核心新增】模型使用量与消耗快捷抽屉 -->
+      <div id="drawer-usage" class="hidden flex-1 flex flex-col overflow-hidden select-none">
+        <div class="p-3 border-b border-black/[0.06] bg-[#EFEAE4] flex items-center justify-between">
+          <div class="flex items-center gap-1.5 font-bold text-xs text-[#18181B]">
+            <span>📊</span><span>模型使用监控</span>
+          </div>
+          <span class="text-[10px] text-[#10A37F] bg-[#10A37F]/10 px-1.5 py-0.2 rounded font-mono font-medium">实时监听中</span>
+        </div>
+
+        <div class="flex-1 overflow-y-auto p-2 text-xs space-y-3">
+          <!-- 快捷统计卡片 -->
+          <div class="p-3 rounded-xl bg-white border border-black/[0.06] shadow-2xs space-y-2">
+            <div class="text-[11px] text-[#71717A] font-semibold">今日 Tokens 总消耗</div>
+            <div class="text-xl font-bold font-mono text-[#18181B] tracking-tight">342,850 <span class="text-[10px] text-[#A1A1AA] font-normal">Tokens</span></div>
+            <div class="flex items-center justify-between text-[10px] text-[#71717A] pt-1 border-t border-black/[0.04]">
+              <span>预估累计花费:</span>
+              <span class="font-bold text-[#D96B27] font-mono">¥ 4.28</span>
+            </div>
+          </div>
+
+          <!-- 模型排行速览 -->
+          <div class="space-y-1.5">
+            <div class="text-[11px] font-bold text-[#71717A] px-1">模型调用配额占比</div>
+            
+            <div class="p-2 rounded-lg bg-white border border-black/[0.06] space-y-1 shadow-2xs">
+              <div class="flex items-center justify-between text-[11px]">
+                <span class="font-mono font-bold text-[#18181B]">DeepSeek-V4</span>
+                <span class="text-[#D96B27] font-bold font-mono">68%</span>
+              </div>
+              <div class="w-full h-1.5 rounded-full bg-black/[0.04] overflow-hidden">
+                <div class="h-full bg-[#D96B27] rounded-full" style="width: 68%;"></div>
+              </div>
+              <div class="flex items-center justify-between text-[10px] text-[#A1A1AA] font-mono pt-0.5">
+                <span>234k tokens</span>
+                <span>420ms TTFT</span>
+              </div>
+            </div>
+
+            <div class="p-2 rounded-lg bg-white border border-black/[0.06] space-y-1 shadow-2xs">
+              <div class="flex items-center justify-between text-[11px]">
+                <span class="font-mono font-bold text-[#18181B]">Claude-3.7</span>
+                <span class="text-purple-600 font-bold font-mono">22%</span>
+              </div>
+              <div class="w-full h-1.5 rounded-full bg-black/[0.04] overflow-hidden">
+                <div class="h-full bg-purple-500 rounded-full" style="width: 22%;"></div>
+              </div>
+              <div class="flex items-center justify-between text-[10px] text-[#A1A1AA] font-mono pt-0.5">
+                <span>75k tokens</span>
+                <span>1,150ms TTFT</span>
+              </div>
+            </div>
+
+            <div class="p-2 rounded-lg bg-white border border-black/[0.06] space-y-1 shadow-2xs">
+              <div class="flex items-center justify-between text-[11px]">
+                <span class="font-mono font-bold text-[#18181B]">GPT-4o</span>
+                <span class="text-blue-600 font-bold font-mono">10%</span>
+              </div>
+              <div class="w-full h-1.5 rounded-full bg-black/[0.04] overflow-hidden">
+                <div class="h-full bg-blue-500 rounded-full" style="width: 10%;"></div>
+              </div>
+              <div class="flex items-center justify-between text-[10px] text-[#A1A1AA] font-mono pt-0.5">
+                <span>33.8k tokens</span>
+                <span>680ms TTFT</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 快速动作 -->
+          <div class="pt-2">
+            <button onclick="exportUsageReport()" class="w-full py-1.5 rounded-lg bg-white border border-black/[0.08] shadow-2xs hover:border-[#D96B27] text-xs font-medium text-[#18181B] flex items-center justify-center gap-1.5 transition-all cursor-pointer">
+              <svg class="w-3.5 h-3.5 text-[#71717A]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              <span>导出 Token 审计报表</span>
+            </button>
           </div>
         </div>
       </div>
@@ -1686,9 +1869,13 @@
     </aside>
 
     <!-- ─────────────────────────────────────────────── -->
-    <!-- 中栏：AI Agent 对话工作台 -->
+    <!-- 右侧主体：主工作台 + 底部终端抽屉垂直分栏容器 -->
     <!-- ─────────────────────────────────────────────── -->
-    <main class="flex-1 flex flex-col bg-[#FAF8F5] overflow-hidden relative">
+    <div id="workspaceCentralWrapper" class="flex-1 flex flex-col overflow-hidden relative">
+      
+      <!-- 上方分栏区：智能对话工作台 + 代码工作区 -->
+      <div id="workspaceSplitArea" class="flex-1 flex overflow-hidden relative">
+        <main id="mainChatCockpit" class="flex-1 flex flex-col bg-[#FAF8F5] overflow-hidden relative">
       <nav class="h-9 min-h-[36px] bg-[#FAF8F5] border-b border-black/[0.08] flex items-center justify-between px-2 select-none">
                 <div id="cockpitTabsContainer" class="flex items-center gap-1 overflow-x-auto no-scrollbar flex-1 py-1">
           <div onclick="selectSession('sess1')" id="tab-sess1" class="cockpit-tab active flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-white text-[#18181B] shadow-2xs border border-black/[0.08] cursor-pointer">
@@ -2270,8 +2457,8 @@
     </main>
 
     <!-- 右栏：代码工作区 -->
-    <section id="codeWorkspace" class="w-[420px] min-w-[320px] max-w-[650px] bg-[#1E1C1A] text-white flex flex-col border-l border-black/[0.12] transition-all duration-200">
-      <div class="h-9 bg-[#161412] border-b border-white/[0.08] flex items-center justify-between px-3">
+    <section id="codeWorkspace" class="w-[450px] min-w-[320px] max-w-[650px] bg-[#1E1C1A] text-white flex flex-col border-l border-black/[0.12] transition-all duration-200">
+      <div class="h-9 bg-[#161412] border-b border-white/[0.08] flex items-center justify-between px-3 shrink-0 select-none">
         <div class="flex items-center gap-1.5 text-xs font-mono">
           <span class="text-[#D96B27]">📄</span>
           <span class="font-medium text-white/90">main.go</span>
@@ -2282,7 +2469,17 @@
           <button onclick="rejectDiff()" class="px-2 py-0.5 rounded text-[10px] font-medium text-white/70 hover:text-white hover:bg-white/10 transition-all cursor-pointer">✕ 放弃</button>
           <button onclick="acceptDiff()" class="px-2 py-0.5 rounded text-[10px] font-medium text-white bg-[#10A37F] hover:bg-[#0E906F] transition-all cursor-pointer flex items-center gap-1 shadow-xs">
             <svg class="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
-            <span>一键采纳变更</span>
+            <span>一键采纳</span>
+          </button>
+          
+          <div class="h-3 w-[1px] bg-white/15 mx-1"></div>
+
+          <!-- 全屏/分屏/收起切换按钮 -->
+          <button onclick="toggleCodeMaximize()" id="btnMaximizeCode" title="代码工作区全屏/分屏切换" class="p-1 rounded text-white/60 hover:text-white hover:bg-white/10 transition-all cursor-pointer">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+          </button>
+          <button onclick="switchWorkspaceView('chat')" title="收起代码区，回到智能对话全宽" class="p-1 rounded text-white/60 hover:text-white hover:bg-white/10 transition-all cursor-pointer">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
         </div>
       </div>
@@ -2316,19 +2513,406 @@
         <div class="text-white/60">11  }</div>
       </div>
 
-      <div class="h-6 bg-[#161412] border-t border-white/[0.08] px-3 flex items-center justify-between text-[10px] text-white/50 font-mono">
+      <div class="h-6 bg-[#161412] border-t border-white/[0.08] px-3 flex items-center justify-between text-[10px] text-white/50 font-mono shrink-0">
         <span>Go · UTF-8</span>
         <span>2 行删除 · 4 行新增</span>
       </div>
     </section>
+
+      </div>
+      <!-- 上方分栏区结束 -->
+
+      <!-- 【核心新增】模型使用情况与 Token 消耗全景大盘工作舱 (Usage Analytics Cockpit) -->
+      <div id="usageCockpitView" class="hidden flex-1 overflow-y-auto bg-[#FAF8F5] p-6 space-y-6 select-none">
+        
+        <!-- 大盘顶栏：标题 + 时间维度切换 + 导出与返回 -->
+        <div class="flex items-center justify-between">
+          <div class="space-y-0.5">
+            <h2 class="text-base font-bold text-[#18181B] flex items-center gap-2">
+              <span>📊</span><span>模型使用情况与 Token 效能监控大盘</span>
+              <span class="text-[10px] text-[#10A37F] bg-[#10A37F]/10 px-2 py-0.5 rounded-full font-mono font-medium">● 生产网关已联机</span>
+            </h2>
+            <p class="text-xs text-[#71717A]">实时多模型吞吐计费、首字延迟 (TTFT)、Prompt 缓存节省率与调度日志流水</p>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <!-- 时间维度切片 -->
+            <div class="flex items-center p-0.5 bg-black/[0.05] rounded-xl text-xs font-medium">
+              <button onclick="switchUsageTimeframe('today')" id="btnTimeframeToday" class="px-3 py-1 rounded-lg bg-white text-[#D96B27] shadow-2xs font-semibold transition-all cursor-pointer">今日</button>
+              <button onclick="switchUsageTimeframe('7d')" id="btnTimeframe7d" class="px-3 py-1 rounded-lg text-[#71717A] hover:text-[#18181B] transition-all cursor-pointer">近 7 天</button>
+              <button onclick="switchUsageTimeframe('30d')" id="btnTimeframe30d" class="px-3 py-1 rounded-lg text-[#71717A] hover:text-[#18181B] transition-all cursor-pointer">本月</button>
+            </div>
+
+            <!-- 导出审计报表 -->
+            <button onclick="exportUsageReport()" title="导出 CSV / JSON 审计流水报表" class="px-3 py-1.5 rounded-lg bg-white border border-black/[0.08] shadow-2xs text-xs font-medium text-[#18181B] hover:border-[#D96B27] flex items-center gap-1.5 transition-all cursor-pointer">
+              <svg class="w-3.5 h-3.5 text-[#71717A]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              <span>导出报表</span>
+            </button>
+
+            <!-- 返回对话工作台 -->
+            <button onclick="switchActivity('chat')" title="返回智能对话工作台" class="px-3 py-1.5 rounded-lg bg-[#18181B] hover:bg-[#D96B27] text-white text-xs font-medium flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer">
+              <span>✕ 关闭大盘</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 4 大核心 KPI 指标卡片 -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <!-- KPI 1: 今日 Token 总吞吐 -->
+          <div class="p-4 rounded-2xl bg-white border border-black/[0.08] shadow-2xs space-y-2">
+            <div class="flex items-center justify-between text-xs text-[#71717A]">
+              <span class="font-medium">今日 Tokens 吞吐</span>
+              <span class="text-[10px] text-[#10A37F] font-bold bg-[#10A37F]/10 px-1.5 py-0.5 rounded">↑ 18.4%</span>
+            </div>
+            <div class="text-2xl font-bold font-mono text-[#18181B] tracking-tight">342,850</div>
+            <div class="flex items-center justify-between text-[11px] text-[#A1A1AA] pt-1 border-t border-black/[0.04]">
+              <span>输入: 215.4k</span>
+              <span>输出: 127.4k</span>
+            </div>
+          </div>
+
+          <!-- KPI 2: 预估累计费用 -->
+          <div class="p-4 rounded-2xl bg-white border border-black/[0.08] shadow-2xs space-y-2">
+            <div class="flex items-center justify-between text-xs text-[#71717A]">
+              <span class="font-medium">预估计费支出</span>
+              <span class="text-[10px] text-[#D96B27] font-bold bg-[#D96B27]/10 px-1.5 py-0.5 rounded">配额正常</span>
+            </div>
+            <div class="text-2xl font-bold font-mono text-[#D96B27] tracking-tight">¥ 4.28 <span class="text-xs text-[#A1A1AA] font-normal">($0.61)</span></div>
+            <div class="flex items-center justify-between text-[11px] text-[#A1A1AA] pt-1 border-t border-black/[0.04]">
+              <span>单日预算上限: ¥50.00</span>
+              <span class="text-[#10A37F] font-medium">8.5% 使用率</span>
+            </div>
+          </div>
+
+          <!-- KPI 3: 平均首字延迟 TTFT -->
+          <div class="p-4 rounded-2xl bg-white border border-black/[0.08] shadow-2xs space-y-2">
+            <div class="flex items-center justify-between text-xs text-[#71717A]">
+              <span class="font-medium">平均首字延迟 (TTFT)</span>
+              <span class="text-[10px] text-[#10A37F] font-bold bg-[#10A37F]/10 px-1.5 py-0.5 rounded">极速</span>
+            </div>
+            <div class="text-2xl font-bold font-mono text-[#18181B] tracking-tight">480 <span class="text-xs text-[#A1A1AA] font-normal">ms</span></div>
+            <div class="flex items-center justify-between text-[11px] text-[#A1A1AA] pt-1 border-t border-black/[0.04]">
+              <span>DeepSeek: 420ms</span>
+              <span>Claude: 1,150ms</span>
+            </div>
+          </div>
+
+          <!-- KPI 4: Prompt Cache 缓存节省率 -->
+          <div class="p-4 rounded-2xl bg-white border border-black/[0.08] shadow-2xs space-y-2">
+            <div class="flex items-center justify-between text-xs text-[#71717A]">
+              <span class="font-medium">Prompt Cache 节省率</span>
+              <span class="text-[10px] text-purple-700 font-bold bg-purple-100 px-1.5 py-0.5 rounded">深度优化</span>
+            </div>
+            <div class="text-2xl font-bold font-mono text-purple-700 tracking-tight">82.4%</div>
+            <div class="flex items-center justify-between text-[11px] text-[#A1A1AA] pt-1 border-t border-black/[0.04]">
+              <span>今日省下 182k Tokens</span>
+              <span class="text-purple-600 font-medium">节约 ¥2.36</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 详细维度大网格：左侧各模型明细与24h波形，右侧最近调用审计流水 -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          
+          <!-- 左侧：各模型调用量对比与24小时趋势 (占 7 列) -->
+          <div class="lg:col-span-7 space-y-6">
+            <!-- 模块 1: 各模型细分指标 -->
+            <div class="p-5 rounded-2xl bg-white border border-black/[0.08] shadow-2xs space-y-4">
+              <div class="flex items-center justify-between">
+                <h3 class="text-sm font-bold text-[#18181B] flex items-center gap-1.5">
+                  <span>🤖</span><span>各厂商大模型调用明细对比</span>
+                </h3>
+                <span class="text-xs text-[#A1A1AA]">按 Tokens 消耗排序</span>
+              </div>
+
+              <!-- 模型 1: DeepSeek-V4 -->
+              <div class="p-3 rounded-xl bg-[#FAF8F5] border border-black/[0.06] space-y-2">
+                <div class="flex items-center justify-between text-xs">
+                  <div class="flex items-center gap-2">
+                    <span class="font-mono font-bold text-[#18181B]">DeepSeek-V4-Flash</span>
+                    <span class="text-[10px] text-[#10A37F] bg-[#10A37F]/10 px-1.5 py-0.2 rounded font-mono">主力日常</span>
+                  </div>
+                  <div class="font-mono text-xs">
+                    <span class="font-bold text-[#D96B27]">234,100</span> <span class="text-[#A1A1AA] text-[10px]">Tokens (68.3%)</span>
+                  </div>
+                </div>
+                <div class="w-full h-2 rounded-full bg-black/[0.06] overflow-hidden">
+                  <div class="h-full bg-[#D96B27] rounded-full" style="width: 68.3%;"></div>
+                </div>
+                <div class="flex items-center justify-between text-[11px] text-[#71717A] pt-1">
+                  <span>调用 142 次 · 平均耗时 420ms</span>
+                  <span>预估费用: <strong class="text-[#18181B] font-mono">¥ 1.17</strong></span>
+                </div>
+              </div>
+
+              <!-- 模型 2: Claude-3.7-Sonnet -->
+              <div class="p-3 rounded-xl bg-[#FAF8F5] border border-black/[0.06] space-y-2">
+                <div class="flex items-center justify-between text-xs">
+                  <div class="flex items-center gap-2">
+                    <span class="font-mono font-bold text-[#18181B]">Claude-3.7-Sonnet (Thinking)</span>
+                    <span class="text-[10px] text-purple-700 bg-purple-100 px-1.5 py-0.2 rounded font-mono">深度架构</span>
+                  </div>
+                  <div class="font-mono text-xs">
+                    <span class="font-bold text-purple-700">75,000</span> <span class="text-[#A1A1AA] text-[10px]">Tokens (21.9%)</span>
+                  </div>
+                </div>
+                <div class="w-full h-2 rounded-full bg-black/[0.06] overflow-hidden">
+                  <div class="h-full bg-purple-600 rounded-full" style="width: 21.9%;"></div>
+                </div>
+                <div class="flex items-center justify-between text-[11px] text-[#71717A] pt-1">
+                  <span>调用 18 次 · 平均耗时 1,150ms</span>
+                  <span>预估费用: <strong class="text-[#18181B] font-mono">¥ 2.65</strong></span>
+                </div>
+              </div>
+
+              <!-- 模型 3: GPT-4o -->
+              <div class="p-3 rounded-xl bg-[#FAF8F5] border border-black/[0.06] space-y-2">
+                <div class="flex items-center justify-between text-xs">
+                  <div class="flex items-center gap-2">
+                    <span class="font-mono font-bold text-[#18181B]">GPT-4o</span>
+                    <span class="text-[10px] text-blue-700 bg-blue-100 px-1.5 py-0.2 rounded font-mono">备用高可用</span>
+                  </div>
+                  <div class="font-mono text-xs">
+                    <span class="font-bold text-blue-700">33,750</span> <span class="text-[#A1A1AA] text-[10px]">Tokens (9.8%)</span>
+                  </div>
+                </div>
+                <div class="w-full h-2 rounded-full bg-black/[0.06] overflow-hidden">
+                  <div class="h-full bg-blue-600 rounded-full" style="width: 9.8%;"></div>
+                </div>
+                <div class="flex items-center justify-between text-[11px] text-[#71717A] pt-1">
+                  <span>调用 11 次 · 平均耗时 680ms</span>
+                  <span>预估费用: <strong class="text-[#18181B] font-mono">¥ 0.46</strong></span>
+                </div>
+              </div>
+
+              <!-- 模型 4: 本地 Ollama -->
+              <div class="p-3 rounded-xl bg-[#FAF8F5] border border-black/[0.06] flex items-center justify-between text-xs">
+                <div class="flex items-center gap-2">
+                  <span class="font-mono font-bold text-[#18181B]">本地 Ollama (Qwen 2.5 Coder 7B)</span>
+                  <span class="text-[10px] text-[#52525B] bg-black/[0.05] px-1.5 py-0.2 rounded font-mono">私有脱敏</span>
+                </div>
+                <div class="text-[11px] text-[#10A37F] font-medium font-mono">0 Tokens · 本地离线就绪 (¥0.00)</div>
+              </div>
+            </div>
+
+            <!-- 模块 2: 24小时吞吐趋势柱状图 -->
+            <div class="p-5 rounded-2xl bg-white border border-black/[0.08] shadow-2xs space-y-3">
+              <div class="flex items-center justify-between">
+                <h3 class="text-sm font-bold text-[#18181B] flex items-center gap-1.5">
+                  <span>📈</span><span>过去 24 小时每小时 Token 吞吐波形</span>
+                </h3>
+                <span class="text-xs text-[#A1A1AA] font-mono">峰值: 38.5k tokens/h</span>
+              </div>
+
+              <!-- 柱状图模拟 -->
+              <div class="h-32 flex items-end justify-between gap-1 pt-4 pb-2 border-b border-black/[0.06]">
+                <div class="flex-1 bg-[#D96B27]/20 hover:bg-[#D96B27] rounded-t transition-all h-[15%]" title="00:00 - 3.2k tokens"></div>
+                <div class="flex-1 bg-[#D96B27]/20 hover:bg-[#D96B27] rounded-t transition-all h-[8%]" title="02:00 - 1.8k tokens"></div>
+                <div class="flex-1 bg-[#D96B27]/20 hover:bg-[#D96B27] rounded-t transition-all h-[5%]" title="04:00 - 0.9k tokens"></div>
+                <div class="flex-1 bg-[#D96B27]/20 hover:bg-[#D96B27] rounded-t transition-all h-[12%]" title="06:00 - 2.5k tokens"></div>
+                <div class="flex-1 bg-[#D96B27]/35 hover:bg-[#D96B27] rounded-t transition-all h-[35%]" title="08:00 - 12.4k tokens"></div>
+                <div class="flex-1 bg-[#D96B27]/70 hover:bg-[#D96B27] rounded-t transition-all h-[75%]" title="10:00 - 28.6k tokens"></div>
+                <div class="flex-1 bg-[#D96B27] rounded-t transition-all h-[95%]" title="11:00 - 38.5k tokens (峰值)"></div>
+                <div class="flex-1 bg-[#D96B27]/80 hover:bg-[#D96B27] rounded-t transition-all h-[82%]" title="12:00 - 32.1k tokens"></div>
+                <div class="flex-1 bg-[#D96B27]/90 hover:bg-[#D96B27] rounded-t transition-all h-[88%]" title="13:00 - 35.8k tokens (当前)"></div>
+              </div>
+              <div class="flex items-center justify-between text-[10px] text-[#A1A1AA] font-mono">
+                <span>00:00</span>
+                <span>06:00</span>
+                <span>12:00</span>
+                <span>当前 (13:00)</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 右侧：实时调用审计流水 (占 5 列) -->
+          <div class="lg:col-span-5 space-y-4">
+            <div class="p-5 rounded-2xl bg-white border border-black/[0.08] shadow-2xs space-y-3">
+              <div class="flex items-center justify-between">
+                <h3 class="text-sm font-bold text-[#18181B] flex items-center gap-1.5">
+                  <span>⚡</span><span>微内核实时调用流水 (Live Stream)</span>
+                </h3>
+                <span class="w-2 h-2 rounded-full bg-[#10A37F] animate-pulse" title="实时监听调度中"></span>
+              </div>
+
+              <!-- 审计流条目 -->
+              <div class="space-y-2 font-mono text-xs">
+                
+                <!-- 条目 1 -->
+                <div class="p-2.5 rounded-xl bg-[#FAF8F5] border border-black/[0.06] space-y-1 hover:border-[#D96B27]/40 transition-all">
+                  <div class="flex items-center justify-between text-[11px]">
+                    <span class="font-bold text-[#18181B]">DeepSeek-V4-Flash</span>
+                    <span class="text-[10px] text-[#10A37F]">200 OK (410ms)</span>
+                  </div>
+                  <div class="text-[10px] text-[#71717A] font-sans">触发算子: run_command (go build ...)</div>
+                  <div class="flex items-center justify-between text-[10px] text-[#A1A1AA] pt-1 border-t border-black/[0.04]">
+                    <span>In: 2,410 · Out: 840</span>
+                    <span>13:08:42</span>
+                  </div>
+                </div>
+
+                <!-- 条目 2 -->
+                <div class="p-2.5 rounded-xl bg-[#FAF8F5] border border-black/[0.06] space-y-1 hover:border-[#D96B27]/40 transition-all">
+                  <div class="flex items-center justify-between text-[11px]">
+                    <span class="font-bold text-purple-700">Claude-3.7-Sonnet</span>
+                    <span class="text-[10px] text-[#10A37F]">200 OK (1,210ms)</span>
+                  </div>
+                  <div class="text-[10px] text-[#71717A] font-sans">架构设计与状态机深度思考 (Thinking: 640T)</div>
+                  <div class="flex items-center justify-between text-[10px] text-[#A1A1AA] pt-1 border-t border-black/[0.04]">
+                    <span>In: 8,920 · Out: 4,120</span>
+                    <span>13:06:15</span>
+                  </div>
+                </div>
+
+                <!-- 条目 3 -->
+                <div class="p-2.5 rounded-xl bg-[#FAF8F5] border border-black/[0.06] space-y-1 hover:border-[#D96B27]/40 transition-all">
+                  <div class="flex items-center justify-between text-[11px]">
+                    <span class="font-bold text-[#18181B]">DeepSeek-V4-Flash</span>
+                    <span class="text-[10px] text-[#10A37F]">200 OK (290ms)</span>
+                  </div>
+                  <div class="text-[10px] text-[#71717A] font-sans">Git Conventional Commit 语义化说明生成</div>
+                  <div class="flex items-center justify-between text-[10px] text-[#A1A1AA] pt-1 border-t border-black/[0.04]">
+                    <span>In: 1,850 · Out: 320</span>
+                    <span>12:54:10</span>
+                  </div>
+                </div>
+
+                <!-- 条目 4 -->
+                <div class="p-2.5 rounded-xl bg-[#FAF8F5] border border-black/[0.06] space-y-1 hover:border-[#D96B27]/40 transition-all">
+                  <div class="flex items-center justify-between text-[11px]">
+                    <span class="font-bold text-blue-700">GPT-4o</span>
+                    <span class="text-[10px] text-[#10A37F]">200 OK (620ms)</span>
+                  </div>
+                  <div class="text-[10px] text-[#71717A] font-sans">单元测试断言自愈与回归用例编写</div>
+                  <div class="flex items-center justify-between text-[10px] text-[#A1A1AA] pt-1 border-t border-black/[0.04]">
+                    <span>In: 3,400 · Out: 950</span>
+                    <span>12:48:02</span>
+                  </div>
+                </div>
+
+                <!-- 条目 5 -->
+                <div class="p-2.5 rounded-xl bg-[#FAF8F5] border border-black/[0.06] space-y-1 hover:border-[#D96B27]/40 transition-all">
+                  <div class="flex items-center justify-between text-[11px]">
+                    <span class="font-bold text-[#18181B]">DeepSeek-V4-Flash</span>
+                    <span class="text-[10px] text-[#10A37F]">200 OK (450ms)</span>
+                  </div>
+                  <div class="text-[10px] text-[#71717A] font-sans">文件 Diff 补丁生成与替换</div>
+                  <div class="flex items-center justify-between text-[10px] text-[#A1A1AA] pt-1 border-t border-black/[0.04]">
+                    <span>In: 4,120 · Out: 1,840</span>
+                    <span>12:42:15</span>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- 下方：【核心新增】集成式可折叠终端抽屉 (Terminal Drawer) -->
+      <div id="terminalDrawer" class="hidden h-[230px] min-h-[160px] max-h-[50vh] bg-[#161412] text-white flex flex-col border-t border-black/[0.3] shadow-2xl transition-all duration-200 z-30 shrink-0">
+        <!-- 终端顶栏 -->
+        <div class="h-8 bg-[#1E1C1A] border-b border-white/[0.08] px-3 flex items-center justify-between select-none">
+          <div class="flex items-center gap-1 text-xs">
+            <button onclick="switchTerminalTab('shell')" id="term-tab-shell" class="px-2.5 py-1 rounded bg-[#2A2724] text-white font-mono font-medium flex items-center gap-1.5 transition-all cursor-pointer">
+              <span class="text-[#D96B27]">$_</span><span>pwsh 命令行</span>
+            </button>
+            <button onclick="switchTerminalTab('logs')" id="term-tab-logs" class="px-2.5 py-1 rounded text-white/60 hover:text-white font-mono flex items-center gap-1.5 transition-all cursor-pointer">
+              <span class="w-1.5 h-1.5 rounded-full bg-[#10A37F] animate-pulse"></span><span>Agent 执行链路 (SSE)</span>
+            </button>
+            <button onclick="switchTerminalTab('daemon')" id="term-tab-daemon" class="px-2.5 py-1 rounded text-white/60 hover:text-white font-mono flex items-center gap-1.5 transition-all cursor-pointer">
+              <span>🛰️</span><span>Tokio 微内核状态</span>
+            </button>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <button onclick="clearTerminalOutput()" title="清空终端屏幕" class="p-1 rounded text-white/50 hover:text-white hover:bg-white/10 transition-all cursor-pointer">
+              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            </button>
+            <button onclick="toggleTerminalMaximize()" id="btnTermMaximize" title="最大化/还原终端" class="p-1 rounded text-white/50 hover:text-white hover:bg-white/10 transition-all cursor-pointer">
+              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+            </button>
+            <button onclick="toggleTerminalDrawer(false)" title="收起终端抽屉 (Ctrl+`)" class="p-1 rounded text-white/50 hover:text-white hover:bg-white/10 transition-all cursor-pointer">
+              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- 终端内容区 -->
+        <div class="flex-1 overflow-hidden relative font-code text-xs">
+          <!-- 视图 1: 命令行终端交互 (Shell) -->
+          <div id="term-view-shell" class="h-full flex flex-col p-3 overflow-y-auto space-y-1 select-text bg-[#161412]">
+            <div class="text-white/40 mb-1 font-mono text-[11px]">Windows PowerShell [版本 10.0.22631.4317] · 集成工作区安全沙箱已就绪</div>
+            <div class="text-white/60 font-mono">PS E:\pro\agent-learning&gt; <span class="text-white font-semibold">go version</span></div>
+            <div class="text-emerald-400 font-mono">go version go1.22.4 windows/amd64</div>
+            <div class="text-white/60 font-mono mt-1">PS E:\pro\agent-learning&gt; <span class="text-white font-semibold">go build -v -o bin/tcode.exe ./backend</span></div>
+            <div class="text-white/40 font-mono text-[11px]">[build] compiling backend/main.go ...</div>
+            <div class="text-white/40 font-mono text-[11px]">[build] compiling backend/app.go ...</div>
+            <div class="text-emerald-400 font-mono text-[11px]">[build] linking bin/tcode.exe (420ms) - Exit Code: 0</div>
+            <div id="terminalCommandOutputArea" class="space-y-1"></div>
+            
+            <!-- 命令行输入提示符 -->
+            <div class="flex items-center gap-2 pt-1">
+              <span class="text-[#D96B27] font-bold font-mono">PS&gt;</span>
+              <input id="terminalInput" type="text" onkeydown="handleTerminalCommand(event)" placeholder="输入命令回车测试 (如: go test, git status, cargo check, clear)..." class="flex-1 bg-transparent text-white font-mono text-xs focus:outline-none placeholder:text-white/20">
+            </div>
+          </div>
+
+          <!-- 视图 2: Agent 执行链路日志 (SSE Logs) -->
+          <div id="term-view-logs" class="hidden h-full p-3 overflow-y-auto space-y-1.5 select-text bg-[#12100E] font-mono text-[11px]">
+            <div class="text-white/40 pb-1 border-b border-white/[0.06]">--- Tcode Tokio Core Daemon Event Stream (SSE Active) ---</div>
+            <div class="flex items-center gap-2"><span class="text-white/30">[04:42:15.102]</span><span class="text-blue-400">[Tokio-Worker-1]</span><span class="text-[#D96B27]">[loop:inner]</span><span>Phase: OBSERVE -&gt; Workspace clean, 0 uncommitted changes.</span></div>
+            <div class="flex items-center gap-2"><span class="text-white/30">[04:42:15.340]</span><span class="text-purple-400">[Tokio-Worker-2]</span><span class="text-amber-400">[gateway:dispatch]</span><span>Dispatching stream request to DeepSeek-V4-Flash...</span></div>
+            <div class="flex items-center gap-2"><span class="text-white/30">[04:42:16.020]</span><span class="text-purple-400">[Tokio-Worker-2]</span><span class="text-emerald-400">[gateway:ttft]</span><span>First token chunk arrived in 680ms.</span></div>
+            <div class="flex items-center gap-2"><span class="text-white/30">[04:42:16.890]</span><span class="text-blue-400">[Tokio-Worker-3]</span><span class="text-[#D96B27]">[loop:act]</span><span>Executing safe operator: run_command (go build ...)</span></div>
+            <div class="flex items-center gap-2"><span class="text-white/30">[04:42:17.310]</span><span class="text-blue-400">[Tokio-Worker-3]</span><span class="text-emerald-400">[sandbox:ok]</span><span>Command completed with code 0 (420ms).</span></div>
+            <div class="flex items-center gap-2"><span class="text-white/30">[04:42:17.325]</span><span class="text-blue-400">[Tokio-Worker-1]</span><span class="text-[#10A37F]">[loop:verify]</span><span>Verification green. Dual-loop convergence achieved.</span></div>
+          </div>
+
+          <!-- 视图 3: 微内核守护进程状态 (Daemon Status) -->
+          <div id="term-view-daemon" class="hidden h-full p-4 overflow-y-auto select-text bg-[#161412] text-xs">
+            <div class="grid grid-cols-3 gap-3">
+              <div class="p-3 rounded-xl bg-white/[0.04] border border-white/[0.08] space-y-1">
+                <div class="text-white/50 text-[11px]">Tokio Async Runtime</div>
+                <div class="text-base font-bold text-emerald-400 font-mono">8 Workers Active</div>
+                <div class="text-[10px] text-white/40">Tokio Multi-Threaded Epoch 2.0</div>
+              </div>
+              <div class="p-3 rounded-xl bg-white/[0.04] border border-white/[0.08] space-y-1">
+                <div class="text-white/50 text-[11px]">Daemon Memory Footprint</div>
+                <div class="text-base font-bold text-white font-mono">42.6 MB</div>
+                <div class="text-[10px] text-white/40">Zero Leak · Pure Safe Rust</div>
+              </div>
+              <div class="p-3 rounded-xl bg-white/[0.04] border border-white/[0.08] space-y-1">
+                <div class="text-white/50 text-[11px]">IPC Transport Status</div>
+                <div class="text-base font-bold text-[#D96B27] font-mono">Zero-Copy IPC</div>
+                <div class="text-[10px] text-white/40">Tauri v2 Typed Stream Channel</div>
+              </div>
+            </div>
+            <div class="mt-3 p-3 rounded-xl bg-white/[0.02] border border-white/[0.06] flex items-center justify-between text-[11px] text-white/60">
+              <span>🛡️ 影子 Git 快照保护已开启：每次文件改动均在 <code>.git/refs/shadow-snapshots</code> 秒级暂存。</span>
+              <span class="text-[#10A37F] font-mono font-semibold">● 保护中</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- 下方终端抽屉结束 -->
+
+    </div>
+    <!-- 右侧主体垂直容器结束 -->
   </div>
 
   <!-- ========================================================================= -->
   <!-- 3. 【全新全功能】系统设置中枢模态窗 (Settings Modal) -->
   <!-- ========================================================================= -->
-  <div id="settingsModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/45 backdrop-blur-xs animate-in fade-in duration-150">
+  <div id="settingsModal" onclick="if(event.target===this) toggleSettingsModal(false)" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/45 backdrop-blur-xs animate-in fade-in duration-150">
     <div class="w-[900px] h-[640px] max-h-[92vh] bg-white rounded-2xl shadow-2xl border border-black/[0.1] flex overflow-hidden relative">
       
+      <!-- 显式右上角关闭按钮 [X] -->
+      <button onclick="toggleSettingsModal(false)" title="关闭设置 (Esc)" class="absolute top-3.5 right-3.5 z-50 p-1.5 rounded-lg text-[#71717A] hover:text-[#18181B] hover:bg-black/[0.05] transition-all cursor-pointer">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+
       <!-- 侧边导航栏 (200px) -->
       <nav class="w-[200px] bg-[#F4EFEA] border-r border-black/[0.08] p-3 flex flex-col justify-between shrink-0">
         <div class="space-y-1">
@@ -2396,7 +2980,7 @@
               <p class="text-[11px] text-[#71717A] mt-0.5">支持按优先级故障转移与配额分发，点击设为主活跃渠道</p>
             </div>
             
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-2 mr-8">
               <button onclick="testAllChannels()" id="testAllBtn" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white border border-black/[0.08] hover:bg-black/[0.03] text-xs font-medium text-[#18181B] shadow-2xs transition-all cursor-pointer">
                 <svg class="w-3 h-3 text-[#D96B27]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
                 <span>批量测速探活</span>
@@ -2532,7 +3116,7 @@
               </h3>
               <p class="text-[11px] text-[#71717A]">赋予大模型调用本地文件、Chrome 调试器与系统算子的标准标准化管道</p>
             </div>
-            <button onclick="openMCPImportModal()" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#D96B27] hover:bg-[#B8551B] text-white text-xs font-semibold shadow-xs transition-all cursor-pointer">
+            <button onclick="openMCPImportModal()" title="添加或导入 MCP 协议服务 (Esc)" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#D96B27] hover:bg-[#B8551B] text-white text-xs font-semibold shadow-xs transition-all cursor-pointer mr-8">
               <span>+ 添加 MCP 服务</span>
             </button>
           </div>
@@ -2596,16 +3180,21 @@
             <div>
               <h3 class="text-sm font-bold text-[#18181B] flex items-center gap-1.5">
                 <span>🛠️ Agent Skill 自主技能库</span>
-                <span class="text-[10px] text-[#D96B27] bg-[#D96B27]/10 px-1.5 py-0.2 rounded font-mono">4 个已加载</span>
+                <span id="skillCountBadge" class="text-[10px] text-[#D96B27] bg-[#D96B27]/10 px-1.5 py-0.2 rounded font-mono">4 个已加载</span>
               </h3>
               <p class="text-[11px] text-[#71717A]">基于领域最佳实践的结构化专家工作流（SKILL.md 规范）</p>
             </div>
-            <button onclick="openSkillImportModal()" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-black/[0.08] hover:bg-black/[0.03] text-xs font-medium text-[#18181B] shadow-2xs transition-all cursor-pointer">
-              <span>+ 创建自定义 Skill</span>
-            </button>
+            <div class="flex items-center gap-2 mr-8">
+              <button onclick="openSkillImportModal('import')" title="导入本地 SKILL.md 文件、目录或规范" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#D96B27] hover:bg-[#B8551B] text-white text-xs font-semibold shadow-xs transition-all cursor-pointer">
+                <span>📥 导入 Skill</span>
+              </button>
+              <button onclick="openSkillImportModal('create')" title="在线可视化创建新的自定义 Skill" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-black/[0.08] hover:bg-black/[0.03] text-xs font-medium text-[#18181B] shadow-2xs transition-all cursor-pointer">
+                <span>+ 创建自定义 Skill</span>
+              </button>
+            </div>
           </div>
 
-          <div class="grid grid-cols-2 gap-3 overflow-y-auto pr-1">
+          <div id="skillCardGrid" class="grid grid-cols-2 gap-3 overflow-y-auto pr-1">
             <div class="p-3.5 rounded-xl bg-white border border-black/[0.08] shadow-2xs space-y-2">
               <div class="flex items-center justify-between">
                 <div class="flex items-center gap-2 font-bold text-xs text-[#18181B]">
@@ -2829,6 +3418,9 @@
             </button>
             <button onclick="closeConfigModal()" class="px-3 py-1.5 rounded-lg text-xs font-medium text-[#71717A] hover:bg-black/[0.04] transition-all cursor-pointer">取消</button>
             <button onclick="saveChannelFromModal()" class="px-4 py-1.5 rounded-lg bg-[#D96B27] hover:bg-[#B8551B] text-white text-xs font-semibold shadow-xs transition-all cursor-pointer">保存渠道配置</button>
+            <button onclick="closeConfigModal()" title="关闭渠道配置 (Esc)" class="p-1.5 rounded-lg text-[#71717A] hover:text-[#18181B] hover:bg-black/[0.05] transition-all cursor-pointer ml-1">
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
           </div>
         </div>
 
@@ -2954,7 +3546,7 @@
   <!-- ========================================================================= -->
   <!-- 【核心联动】项目知识图谱与变更演进全景工作舱弹窗 (Knowledge Graph Modal) -->
   <!-- ========================================================================= -->
-  <div id="knowledgeGraphModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs animate-in fade-in duration-150">
+  <div id="knowledgeGraphModal" onclick="if(event.target===this) closeKnowledgeGraphModal()" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs animate-in fade-in duration-150">
     <div class="w-[95vw] max-w-[1360px] h-[88vh] bg-white rounded-2xl shadow-2xl border border-black/[0.1] flex flex-col overflow-hidden relative">
       
       <!-- 弹窗顶栏 -->
@@ -2995,7 +3587,7 @@
             <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
             <span>注入当前对话</span>
           </button>
-          <button onclick="closeKnowledgeGraphModal()" class="p-1.5 rounded-lg text-[#71717A] hover:bg-black/[0.05] hover:text-[#18181B] transition-all cursor-pointer">
+          <button onclick="closeKnowledgeGraphModal()" title="关闭 (Esc)" class="p-1.5 rounded-lg text-[#71717A] hover:bg-black/[0.05] hover:text-[#18181B] transition-all cursor-pointer">
             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
         </div>
@@ -3337,20 +3929,34 @@
       document.getElementById('drawer-sessions').classList.add('hidden');
       document.getElementById('drawer-files').classList.add('hidden');
       document.getElementById('drawer-git').classList.add('hidden');
+      const drawerUsage = document.getElementById('drawer-usage');
+      if (drawerUsage) drawerUsage.classList.add('hidden');
 
-      // 切换中央工作台视图 (Chat Cockpit vs Knowledge Graph)
+      // 切换中央工作台视图 (Chat Cockpit vs Knowledge Graph vs Model Usage Analytics)
       const chatView = document.getElementById('chatCockpitView');
       const kgView = document.getElementById('kgCockpitView');
+      const splitArea = document.getElementById('workspaceSplitArea');
+      const usageView = document.getElementById('usageCockpitView');
 
       if (act === 'kg') {
-        chatView.classList.add('hidden');
-        kgView.classList.remove('hidden');
+        if (chatView) chatView.classList.add('hidden');
+        if (kgView) kgView.classList.remove('hidden');
+        if (usageView) usageView.classList.add('hidden');
+        if (splitArea) splitArea.classList.remove('hidden');
         document.getElementById('drawer-sessions').classList.remove('hidden');
         showToast('已打开项目知识图谱全景工作舱');
+        return;
+      } else if (act === 'usage') {
+        if (splitArea) splitArea.classList.add('hidden');
+        if (usageView) usageView.classList.remove('hidden');
+        if (drawerUsage) drawerUsage.classList.remove('hidden');
+        showToast('已切换至模型使用情况与 Token 效能监控大盘');
         return;
       } else {
         if (chatView) chatView.classList.remove('hidden');
         if (kgView) kgView.classList.add('hidden');
+        if (usageView) usageView.classList.add('hidden');
+        if (splitArea) splitArea.classList.remove('hidden');
       }
 
       if (act === 'chat') {
@@ -3361,8 +3967,36 @@
         showToast('已切换至工程文件资源管理器');
       } else if (act === 'git') {
         document.getElementById('drawer-git').classList.remove('hidden');
-        showToast('已切换至 Git 变更列表');
+        renderGitFiles();
+        showToast('已切换至 Git 源代码管理中枢');
       }
+    }
+
+    // 模型使用统计周期切换
+    function switchUsageTimeframe(tf) {
+      const bToday = document.getElementById('btnTimeframeToday');
+      const b7d = document.getElementById('btnTimeframe7d');
+      const b30d = document.getElementById('btnTimeframe30d');
+      [bToday, b7d, b30d].forEach(b => {
+        if (b) {
+          b.className = "px-3 py-1 rounded-lg text-[#71717A] hover:text-[#18181B] transition-all cursor-pointer";
+        }
+      });
+      if (tf === 'today' && bToday) {
+        bToday.className = "px-3 py-1 rounded-lg bg-white text-[#D96B27] shadow-2xs font-semibold transition-all cursor-pointer";
+        showToast('已切换统计周期: 今日 (Today 24h)');
+      } else if (tf === '7d' && b7d) {
+        b7d.className = "px-3 py-1 rounded-lg bg-white text-[#D96B27] shadow-2xs font-semibold transition-all cursor-pointer";
+        showToast('已切换统计周期: 最近 7 天 (7 Days Trend)');
+      } else if (tf === '30d' && b30d) {
+        b30d.className = "px-3 py-1 rounded-lg bg-white text-[#D96B27] shadow-2xs font-semibold transition-all cursor-pointer";
+        showToast('已切换统计周期: 本月累计 (Monthly Aggregate)');
+      }
+    }
+
+    // 导出使用统计报表
+    function exportUsageReport() {
+      showToast('✓ 已成功生成并导出 Token 审计报表: tcode-token-usage-audit.csv');
     }
 
     // 切换设置主菜单 Tab (7 个全量模块)
@@ -3620,22 +4254,78 @@
       }
     }
 
-    function toggleCodeWorkspace() {
+    // =========================================================================
+    // 【核心新增】单焦点工作区聚合切换与代码区控制 (Single-Focus Primary Workspace)
+    // =========================================================================
+    let currentWorkspaceView = 'split'; // 'chat' | 'split' | 'editor'
+
+    function switchWorkspaceView(mode) {
+      currentWorkspaceView = mode;
+      const mainChat = document.getElementById('mainChatCockpit');
       const code = document.getElementById('codeWorkspace');
-      const btnText = document.getElementById('codeToggleText');
-      if (code.classList.contains('hidden')) {
-        code.classList.remove('hidden');
-        btnText.innerText = '收起代码';
+      const btnChat = document.getElementById('view-btn-chat');
+      const btnSplit = document.getElementById('view-btn-split');
+      const btnEditor = document.getElementById('view-btn-editor');
+
+      // 重置 3 个顶栏切换按钮外观
+      [btnChat, btnSplit, btnEditor].forEach(b => {
+        if (b) {
+          b.className = "px-2.5 py-1 rounded-lg text-[#71717A] hover:text-[#18181B] transition-all flex items-center gap-1.5 cursor-pointer";
+        }
+      });
+
+      if (mode === 'chat') {
+        if (btnChat) btnChat.className = "px-2.5 py-1 rounded-lg bg-white text-[#D96B27] shadow-2xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer";
+        if (mainChat) {
+          mainChat.classList.remove('hidden');
+          mainChat.className = "flex-1 flex flex-col bg-[#FAF8F5] overflow-hidden relative";
+        }
+        if (code) code.classList.add('hidden');
+        const codeToggle = document.getElementById('codeToggleText');
+        if (codeToggle) codeToggle.innerText = '展开代码';
+        showToast('已切换至「💬 智能对话」全宽聚焦模式');
+      } else if (mode === 'split') {
+        if (btnSplit) btnSplit.className = "px-2.5 py-1 rounded-lg bg-white text-[#D96B27] shadow-2xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer";
+        if (mainChat) {
+          mainChat.classList.remove('hidden');
+          mainChat.className = "flex-1 flex flex-col bg-[#FAF8F5] overflow-hidden relative";
+        }
+        if (code) {
+          code.classList.remove('hidden');
+          code.className = "w-[450px] min-w-[320px] max-w-[650px] bg-[#1E1C1A] text-white flex flex-col border-l border-black/[0.12] transition-all duration-200";
+        }
+        const codeToggle = document.getElementById('codeToggleText');
+        if (codeToggle) codeToggle.innerText = '收起代码';
+        showToast('已切换至「◫ 双栏协同」分屏模式');
+      } else if (mode === 'editor') {
+        if (btnEditor) btnEditor.className = "px-2.5 py-1 rounded-lg bg-white text-[#D96B27] shadow-2xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer";
+        if (mainChat) mainChat.classList.add('hidden');
+        if (code) {
+          code.classList.remove('hidden');
+          code.className = "flex-1 w-full bg-[#1E1C1A] text-white flex flex-col border-l border-black/[0.12] transition-all duration-200";
+        }
+        showToast('已切换至「📝 代码工作区」全屏沉浸模式');
+      }
+    }
+
+    function toggleCodeMaximize() {
+      if (currentWorkspaceView === 'editor') {
+        switchWorkspaceView('split');
       } else {
-        code.classList.add('hidden');
-        btnText.innerText = '展开代码';
+        switchWorkspaceView('editor');
+      }
+    }
+
+    function toggleCodeWorkspace() {
+      if (currentWorkspaceView === 'chat') {
+        switchWorkspaceView('split');
+      } else {
+        switchWorkspaceView('chat');
       }
     }
 
     function openDiffView() {
-      const code = document.getElementById('codeWorkspace');
-      code.classList.remove('hidden');
-      document.getElementById('codeToggleText').innerText = '收起代码';
+      switchWorkspaceView('split');
       showToast('已在右侧定位 main.go Diff 审查视窗');
     }
 
@@ -3645,6 +4335,112 @@
 
     function rejectDiff() {
       showToast('已撤销待审查补丁');
+    }
+
+    // =========================================================================
+    // 【核心新增】底部可折叠终端抽屉控制 (Terminal Drawer)
+    // =========================================================================
+    let isTerminalMaximized = false;
+
+    function toggleTerminalDrawer(forceState) {
+      const drawer = document.getElementById('terminalDrawer');
+      if (!drawer) return;
+      const shouldOpen = (forceState !== undefined) ? forceState : drawer.classList.contains('hidden');
+      if (shouldOpen) {
+        drawer.classList.remove('hidden');
+        const input = document.getElementById('terminalInput');
+        if (input) setTimeout(() => input.focus(), 50);
+        showToast('已唤起底部终端抽屉 (快捷键: Ctrl+`)');
+      } else {
+        drawer.classList.add('hidden');
+        showToast('已收起底部终端抽屉');
+      }
+    }
+
+    function switchTerminalTab(tab) {
+      ['shell', 'logs', 'daemon'].forEach(t => {
+        const btn = document.getElementById('term-tab-' + t);
+        const view = document.getElementById('term-view-' + t);
+        if (btn) {
+          if (t === tab) {
+            btn.className = "px-2.5 py-1 rounded bg-[#2A2724] text-white font-mono font-medium flex items-center gap-1.5 transition-all cursor-pointer";
+          } else {
+            btn.className = "px-2.5 py-1 rounded text-white/60 hover:text-white font-mono flex items-center gap-1.5 transition-all cursor-pointer";
+          }
+        }
+        if (view) {
+          if (t === tab) view.classList.remove('hidden');
+          else view.classList.add('hidden');
+        }
+      });
+    }
+
+    function clearTerminalOutput() {
+      const area = document.getElementById('terminalCommandOutputArea');
+      if (area) area.innerHTML = '';
+      showToast('终端屏幕已清空');
+    }
+
+    function toggleTerminalMaximize() {
+      const drawer = document.getElementById('terminalDrawer');
+      if (!drawer) return;
+      isTerminalMaximized = !isTerminalMaximized;
+      if (isTerminalMaximized) {
+        drawer.style.height = '48vh';
+        showToast('终端已最大化拉伸');
+      } else {
+        drawer.style.height = '230px';
+        showToast('终端已恢复默认高度');
+      }
+    }
+
+    function handleTerminalCommand(e) {
+      if (e.key === 'Enter') {
+        const input = document.getElementById('terminalInput');
+        if (!input) return;
+        const cmd = input.value.trim();
+        if (!cmd) return;
+        input.value = '';
+
+        const area = document.getElementById('terminalCommandOutputArea');
+        if (!area) return;
+
+        let outputHtml = '';
+        if (cmd === 'clear' || cmd === 'cls') {
+          clearTerminalOutput();
+          return;
+        } else if (cmd === 'help') {
+          outputHtml = `<div class="text-white/40">支持常用测试命令: go test, git status, cargo check, go build, clear, help</div>`;
+        } else if (cmd.includes('go test')) {
+          outputHtml = `<div class="text-emerald-400">=== RUN   TestDualLoopConvergence
+--- PASS: TestDualLoopConvergence (0.12s)
+=== RUN   TestShadowSnapshotRollback
+--- PASS: TestShadowSnapshotRollback (0.04s)
+PASS
+ok      tcode/core/engine      0.182s</div>`;
+        } else if (cmd.includes('git status')) {
+          outputHtml = `<div class="text-white/70">On branch feature/warm-workspace-terminal
+Changes not staged for commit:
+  modified:   backend/main.go
+  modified:   web_prototype.html
+no changes added to commit (use "git add" to track)</div>`;
+        } else if (cmd.includes('cargo check')) {
+          outputHtml = `<div class="text-emerald-400">    Checking tcode-core v2.0.0 (D:\\weihu\\agent-learning)
+    Finished \`dev\` profile [unoptimized + debuginfo] in 0.38s (0 warnings)</div>`;
+        } else {
+          outputHtml = `<div class="text-white/70">PS&gt; 执行完成: ${escapeHtml(cmd)} (Exit Code: 0)</div>`;
+        }
+
+        area.insertAdjacentHTML('beforeend', `
+          <div class="mt-1">
+            <div class="text-white/60 font-mono">PS E:\\pro\\agent-learning&gt; <span class="text-white font-semibold">${escapeHtml(cmd)}</span></div>
+            <div class="font-mono text-[11px] leading-relaxed">${outputHtml}</div>
+          </div>
+        `);
+
+        const shellContainer = document.getElementById('term-view-shell');
+        if (shellContainer) shellContainer.scrollTop = shellContainer.scrollHeight;
+      }
     }
 
     function toggleSettingsModal(open, defaultTab) {
@@ -3910,21 +4706,600 @@
       showToast('✓ 新 MCP 服务已成功注册并通过连接测试');
     }
 
-    // 弹窗控制：Skill Import Modal
-    function openSkillImportModal() { document.getElementById('skillImportModal').classList.remove('hidden'); }
-    function closeSkillImportModal() { document.getElementById('skillImportModal').classList.add('hidden'); }
+    // 弹窗控制：Skill Import & Management Hub
+    function openSkillImportModal(tab) {
+      const modal = document.getElementById('skillImportModal');
+      if (modal) modal.classList.remove('hidden');
+      switchSkillTab(tab || 'import');
+    }
+
+    function closeSkillImportModal() {
+      const modal = document.getElementById('skillImportModal');
+      if (modal) modal.classList.add('hidden');
+    }
+
+    function switchSkillTab(tab) {
+      ['import', 'create', 'market'].forEach(t => {
+        const btn = document.getElementById('skill-tab-' + t);
+        const view = document.getElementById('skill-view-' + t);
+        if (btn) {
+          btn.className = "flex-1 py-1 rounded-lg text-[#71717A] hover:text-[#18181B]";
+        }
+        if (view) {
+          view.classList.add('hidden');
+        }
+      });
+      const curBtn = document.getElementById('skill-tab-' + tab);
+      const curView = document.getElementById('skill-view-' + tab);
+      if (curBtn) curBtn.className = "flex-1 py-1 rounded-lg bg-white text-[#D96B27] shadow-xs font-semibold";
+      if (curView) curView.classList.remove('hidden');
+    }
+
+    function loadSkillDemoFile() {
+      const input = document.getElementById('skillFilePreview');
+      if (input) {
+        input.value = `---
+name: rust-tokio-expert
+description: 负责 Rust 高并发异步服务设计、Tokio 任务编排与内存安全性审查
+triggers:
+  - on_async_design
+  - on_memory_check
+---
+
+# Rust 异步并发与微内核工程规约 (SKILL.md)
+1. 生产环境严禁 unwrap()/expect()，错误必须统一返回强类型 Result<T, E>；
+2. Windows 外部进程调用强制注入 CREATE_NO_WINDOW (0x08000000) 杜绝黑框；
+3. 严格沙箱路径规范化，任何文件写入前自动建立轻量影子 Git 快照。`;
+      }
+      showToast('已从本地选择并成功解析 SKILL.md 规范！');
+    }
+
+    function importSkillFromMarket(id, title, desc, icon) {
+      addSkillCardToList(id, title, desc, icon, '官方专家库 · 已激活');
+      closeSkillImportModal();
+      showToast(`✓ 已从技能市场成功导入并激活: ${title}`);
+    }
+
     function loadSkillTemplate() {
-      document.getElementById('skillIdInput').value = 'tdd-self-healing-flow';
-      document.getElementById('skillContentInput').value = `## TDD 自愈工作流规约 (SKILL.md)
-1. 自动化运行本地测试: \`go test -v ./...\`
-2. 捕获失败断言堆栈，提取受损函数签名
-3. 生成局部补丁并执行行级验证，直至覆盖率达标且所有单测全部转绿`;
+      const idInput = document.getElementById('skillIdInput');
+      const contentInput = document.getElementById('skillContentInput');
+      if (idInput) idInput.value = 'tdd-self-healing-flow';
+      if (contentInput) {
+        contentInput.value = `## TDD 自愈工作流规约 (SKILL.md)
+1. 自动化运行本地测试: \`go test -v ./...\` 或 \`npm test\`
+2. 捕获失败断言堆栈，提取受损函数签名与行号
+3. 生成局部最小补丁并执行回归验证，直至所有断言转绿`;
+      }
       showToast('已载入经典 TDD 自愈规范模板');
     }
+
     function saveSkillModal() {
+      const importView = document.getElementById('skill-view-import');
+      const isImportTab = importView && !importView.classList.contains('hidden');
+      if (isImportTab) {
+        const preview = document.getElementById('skillFilePreview');
+        const content = preview ? preview.value.trim() : '';
+        if (!content) {
+          loadSkillDemoFile();
+        }
+        addSkillCardToList('imported-skill-' + Date.now().toString().slice(-4), 'rust-tokio-expert', '负责 Rust 高并发异步服务设计、Tokio 任务编排与内存安全审查', '🦀', '本地导入 · 活跃');
+        closeSkillImportModal();
+        showToast('✓ 已成功导入本地 SKILL.md 工作流！');
+        return;
+      }
+      
+      const skillId = (document.getElementById('skillIdInput') ? document.getElementById('skillIdInput').value.trim() : '') || 'custom-expert-skill';
+      const desc = (document.getElementById('skillContentInput') ? document.getElementById('skillContentInput').value.trim() : '') || '自定义结构化专家工作流规约';
+      addSkillCardToList(skillId, skillId, desc.slice(0, 50) + (desc.length > 50 ? '...' : ''), '🛠️', '自定义 · 启用');
       closeSkillImportModal();
-      showToast('✓ 自定义 Skill 技能已固化至工作流引擎');
+      showToast(`✓ 自定义技能 [${skillId}] 已注册并激活！`);
     }
+
+    function addSkillCardToList(id, title, desc, icon, status) {
+      const grid = document.getElementById('skillCardGrid');
+      if (!grid) return;
+      const card = document.createElement('div');
+      card.className = "p-3.5 rounded-xl bg-white border border-[#D96B27]/40 shadow-2xs space-y-2 animate-in fade-in duration-200";
+      card.innerHTML = `
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2 font-bold text-xs text-[#18181B]">
+            <span>${icon || '🛠️'}</span><span>${title}</span>
+          </div>
+          <span class="text-[10px] text-[#10A37F] font-mono font-medium">${status || '活跃'}</span>
+        </div>
+        <p class="text-[11px] text-[#71717A] leading-relaxed">${desc}</p>
+      `;
+      grid.appendChild(card);
+      
+      const badge = document.getElementById('skillCountBadge');
+      if (badge) {
+        const count = grid.children.length;
+        badge.innerText = `${count} 个已加载`;
+      }
+    }
+
+    // =========================================================================
+    // 【核心新增】Git 源代码管理中枢状态与高级工程交互控制器
+    // =========================================================================
+    let gitCurrentBranch = 'main';
+    let gitBranches = [
+      { name: 'main', isCurrent: true, hash: '7a8f12c', lastCommit: 'feat: implement single-focus workspace switcher' },
+      { name: 'feature/warm-terminal', isCurrent: false, hash: '3e4b901', lastCommit: 'feat: add integrated terminal drawer' },
+      { name: 'refactor/sub2api-gateway', isCurrent: false, hash: '8d2a15f', lastCommit: 'refactor: standardize provider gateway' },
+      { name: 'origin/main', isRemote: true, isCurrent: false, hash: '7a8f12c', lastCommit: 'feat: implement single-focus workspace switcher' }
+    ];
+
+    let gitStagedFiles = [];
+    let gitWorkingFiles = [
+      { name: 'main.go', path: 'backend/main.go', status: 'M', statusText: '修改', diff: '+4 / -2', color: 'text-amber-600', badgeBg: 'bg-amber-100 text-amber-700' },
+      { name: 'app.go', path: 'backend/app.go', status: 'U', statusText: '新增', diff: '+45 / 0', color: 'text-green-600', badgeBg: 'bg-green-100 text-green-700' }
+    ];
+
+    let gitSnapshots = [
+      { id: 'snap-003', time: '刚刚 (13:02:15)', file: 'backend/main.go', desc: 'Agent 触发 replace_file_content 操作前自动影子快照', hash: 'e921d4' },
+      { id: 'snap-002', time: '8分钟前', file: 'web_prototype.html', desc: '添加终端抽屉与单焦点视图前影子快照', hash: '8f12cb' },
+      { id: 'snap-001', time: '25分钟前', file: 'docs/UI_DESIGN_SPEC.md', desc: '更新 UI/UX 设计规约前影子快照', hash: '4a3301' }
+    ];
+
+    let gitStashes = [
+      { id: 'stash@{0}', time: '10分钟前', branch: 'main', desc: 'WIP: 工作区未保存调试日志与临时变量' }
+    ];
+
+    // 渲染 Git 暂存区与工作区文件
+    function renderGitFiles() {
+      const stagedBox = document.getElementById('gitStagedContainer');
+      const stagedBadge = document.getElementById('gitStagedCountBadge');
+      const changesBox = document.getElementById('gitChangesContainer');
+      const changesBadge = document.getElementById('gitChangesCountBadge');
+
+      if (!stagedBox || !changesBox) return;
+
+      // 1. 渲染已暂存列表
+      if (stagedBadge) stagedBadge.innerText = gitStagedFiles.length;
+      if (gitStagedFiles.length === 0) {
+        stagedBox.innerHTML = `<div class="text-[11px] text-[#A1A1AA] italic p-1.5 text-center">暂无暂存文件</div>`;
+      } else {
+        stagedBox.innerHTML = gitStagedFiles.map((file, idx) => `
+          <div class="group p-2 rounded-lg bg-white border border-black/[0.06] shadow-2xs hover:border-[#D96B27]/40 flex items-center justify-between transition-all">
+            <div onclick="openDiffView()" class="flex items-center gap-2 min-w-0 cursor-pointer flex-1">
+              <span class="font-mono text-xs text-[#18181B] truncate font-medium">${escapeHtml(file.name)}</span>
+              <span class="text-[10px] ${file.color} font-mono font-bold">${file.status}</span>
+              <span class="text-[10px] text-[#A1A1AA] font-mono">${file.diff}</span>
+            </div>
+            <div class="flex items-center gap-1 shrink-0">
+              <button onclick="openDiffView()" title="查看行级 Diff 比对" class="p-1 rounded text-[#71717A] hover:text-[#18181B] hover:bg-black/[0.05] transition-all cursor-pointer">
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              </button>
+              <button onclick="gitUnstageFile(${idx})" title="取消暂存 (git restore --staged)" class="p-1 rounded text-[#71717A] hover:text-[#18181B] hover:bg-black/[0.05] transition-all cursor-pointer">
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              </button>
+            </div>
+          </div>
+        `).join('');
+      }
+
+      // 2. 渲染工作区更改列表
+      if (changesBadge) changesBadge.innerText = gitWorkingFiles.length;
+      if (gitWorkingFiles.length === 0) {
+        changesBox.innerHTML = `<div class="text-[11px] text-[#A1A1AA] italic p-1.5 text-center">工作区树干净 (Working Tree Clean)</div>`;
+      } else {
+        changesBox.innerHTML = gitWorkingFiles.map((file, idx) => `
+          <div class="group p-2 rounded-lg bg-white border border-black/[0.06] shadow-2xs hover:border-[#D96B27]/40 flex items-center justify-between transition-all">
+            <div onclick="openDiffView()" class="flex items-center gap-2 min-w-0 cursor-pointer flex-1">
+              <span class="font-mono text-xs text-[#18181B] truncate font-medium">${escapeHtml(file.name)}</span>
+              <span class="text-[10px] ${file.color} font-mono font-bold">${file.status} (${file.statusText})</span>
+              <span class="text-[10px] text-[#A1A1AA] font-mono">${file.diff}</span>
+            </div>
+            <div class="flex items-center gap-1 shrink-0">
+              <button onclick="openDiffView()" title="查看行级 Diff 比对" class="p-1 rounded text-[#71717A] hover:text-[#18181B] hover:bg-black/[0.05] transition-all cursor-pointer">
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              </button>
+              <button onclick="gitDiscardFile(${idx})" title="放弃该文件修改 (git restore)" class="p-1 rounded text-[#71717A] hover:text-[#DC2626] hover:bg-black/[0.05] transition-all cursor-pointer">
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+              </button>
+              <button onclick="gitStageFile(${idx})" title="暂存该文件 (git add)" class="p-1 rounded text-[#71717A] hover:text-[#10A37F] hover:bg-black/[0.05] transition-all cursor-pointer">
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              </button>
+            </div>
+          </div>
+        `).join('');
+      }
+    }
+
+    // 暂存单个文件
+    function gitStageFile(idx) {
+      if (idx >= 0 && idx < gitWorkingFiles.length) {
+        const item = gitWorkingFiles.splice(idx, 1)[0];
+        gitStagedFiles.push(item);
+        renderGitFiles();
+        showToast(`已暂存: ${item.name} (git add)`);
+      }
+    }
+
+    // 取消暂存单个文件
+    function gitUnstageFile(idx) {
+      if (idx >= 0 && idx < gitStagedFiles.length) {
+        const item = gitStagedFiles.splice(idx, 1)[0];
+        gitWorkingFiles.push(item);
+        renderGitFiles();
+        showToast(`已取消暂存: ${item.name}`);
+      }
+    }
+
+    // 全部暂存
+    function gitStageAll() {
+      if (gitWorkingFiles.length === 0) return;
+      gitStagedFiles.push(...gitWorkingFiles);
+      gitWorkingFiles = [];
+      renderGitFiles();
+      showToast('✓ 已将所有工作区更改暂存 (git add .)');
+    }
+
+    // 全部取消暂存
+    function gitUnstageAll() {
+      if (gitStagedFiles.length === 0) return;
+      gitWorkingFiles.push(...gitStagedFiles);
+      gitStagedFiles = [];
+      renderGitFiles();
+      showToast('已取消全部暂存更改');
+    }
+
+    // 放弃单个文件修改
+    function gitDiscardFile(idx) {
+      if (idx >= 0 && idx < gitWorkingFiles.length) {
+        const item = gitWorkingFiles.splice(idx, 1)[0];
+        renderGitFiles();
+        showToast(`已放弃文件修改: ${item.name}`);
+      }
+    }
+
+    // 放弃所有更改
+    function gitDiscardAll() {
+      if (gitWorkingFiles.length === 0) return;
+      gitWorkingFiles = [];
+      renderGitFiles();
+      showToast('已放弃所有工作区更改 (git restore .)');
+    }
+
+    // AI 辅助提炼生成 Commit 规范说明
+    function generateAiCommitMessage() {
+      const input = document.getElementById('gitCommitInput');
+      if (!input) return;
+      input.value = '正在分析当前代码变更 Diff 与架构影响...';
+      setTimeout(() => {
+        input.value = 'feat(workspace): implement single-focus views, terminal drawer, and advanced git control center';
+        showToast('🪄 AI 已根据代码 Diff 自动生成 Conventional Commit 提交说明');
+      }, 400);
+    }
+
+    // 执行提交 (Commit 或 Commit & Push)
+    function gitCommitAction(type) {
+      const input = document.getElementById('gitCommitInput');
+      const msg = input ? input.value.trim() : '';
+      if (!msg) {
+        showToast('⚠️ 请输入提交信息 (Commit Message)');
+        if (input) input.focus();
+        return;
+      }
+
+      // 如果未暂存且暂存区为空，自动提示并全量暂存
+      if (gitStagedFiles.length === 0) {
+        if (gitWorkingFiles.length > 0) {
+          gitStageAll();
+          showToast('已自动暂存所有更改并提交...');
+        } else {
+          showToast('⚠️ 当前没有可提交的代码更改');
+          return;
+        }
+      }
+
+      const count = gitStagedFiles.length;
+      gitStagedFiles = [];
+      if (input) input.value = '';
+      renderGitFiles();
+
+      if (type === 'push') {
+        showToast(`✓ 已成功提交并推送至 origin/${gitCurrentBranch}: "${msg}" (${count} 个文件)`);
+      } else {
+        showToast(`✓ 提交成功 [${gitCurrentBranch} 7a8f12c]: "${msg}" (${count} 个文件)`);
+      }
+    }
+
+    // 从远端同步
+    function gitPullSync() {
+      showToast('正在从 origin/' + gitCurrentBranch + ' 拉取并变基 (git pull --rebase)...');
+      setTimeout(() => {
+        showToast('✓ 代码已是最新状态 (Already up to date)');
+      }, 600);
+    }
+
+    // 储藏工作区
+    function gitStashWorkspace() {
+      if (gitWorkingFiles.length === 0 && gitStagedFiles.length === 0) {
+        showToast('当前工作区无任何未提交更改，无需储藏');
+        return;
+      }
+      const desc = `WIP on ${gitCurrentBranch}: ${new Date().toLocaleTimeString()} 临时储藏未完工代码`;
+      gitStashes.unshift({
+        id: `stash@{${gitStashes.length}}`,
+        time: '刚刚',
+        branch: gitCurrentBranch,
+        desc: desc
+      });
+      gitWorkingFiles = [];
+      gitStagedFiles = [];
+      renderGitFiles();
+      renderGitStashes();
+      showToast('✓ 已将当前工作区安全储藏至 Stash 栈 (git stash)');
+    }
+
+    // 分支弹窗控制
+    function openGitBranchModal() {
+      const modal = document.getElementById('gitBranchModal');
+      if (modal) {
+        modal.classList.remove('hidden');
+        renderGitBranches();
+      }
+    }
+
+    function closeGitBranchModal() {
+      const modal = document.getElementById('gitBranchModal');
+      if (modal) modal.classList.add('hidden');
+    }
+
+    function renderGitBranches(filterQuery = '') {
+      const box = document.getElementById('gitBranchListContainer');
+      const badge = document.getElementById('gitModalCurrentBranchBadge');
+      if (badge) badge.innerText = gitCurrentBranch;
+      if (!box) return;
+
+      const q = filterQuery.toLowerCase().trim();
+      const list = gitBranches.filter(b => b.name.toLowerCase().includes(q));
+
+      if (list.length === 0) {
+        box.innerHTML = `<div class="p-3 text-center text-[#A1A1AA] italic">未匹配到任何分支</div>`;
+        return;
+      }
+
+      box.innerHTML = list.map(b => {
+        const isCur = b.name === gitCurrentBranch;
+        return `
+          <div onclick="gitCheckoutBranch('${b.name}')" class="p-2 rounded-xl bg-white border ${isCur ? 'border-[#D96B27] bg-[#D96B27]/5 font-semibold' : 'border-black/[0.06] hover:border-black/[0.15]'} flex items-center justify-between cursor-pointer transition-all">
+            <div class="flex items-center gap-2 min-w-0">
+              <span class="${isCur ? 'text-[#D96B27]' : 'text-[#71717A]'}">${b.isRemote ? '🌐' : '🌿'}</span>
+              <div class="truncate">
+                <div class="font-mono text-xs text-[#18181B] truncate flex items-center gap-1.5">
+                  <span>${b.name}</span>
+                  ${isCur ? '<span class="text-[9px] text-[#10A37F] bg-[#10A37F]/15 px-1 py-0.2 rounded font-sans font-bold">当前</span>' : ''}
+                </div>
+                <div class="text-[10px] text-[#A1A1AA] truncate font-mono">${b.hash} · ${escapeHtml(b.lastCommit)}</div>
+              </div>
+            </div>
+            ${!isCur ? '<button class="text-[10px] text-[#71717A] hover:text-[#18181B] bg-black/[0.04] px-2 py-0.5 rounded cursor-pointer">切换</button>' : ''}
+          </div>
+        `;
+      }).join('');
+    }
+
+    function filterGitBranches(val) {
+      renderGitBranches(val);
+    }
+
+    function gitCheckoutBranch(branchName) {
+      if (branchName === gitCurrentBranch) return;
+      gitCurrentBranch = branchName;
+      const label = document.getElementById('gitCurrentBranchLabel');
+      if (label) label.innerText = branchName;
+      renderGitBranches();
+      closeGitBranchModal();
+      showToast(`✓ 已成功切换至分支: ${branchName} (git checkout)`);
+    }
+
+    function gitCreateBranch() {
+      const input = document.getElementById('newBranchNameInput');
+      if (!input) return;
+      const name = input.value.trim();
+      if (!name) {
+        showToast('⚠️ 请输入新分支名称');
+        return;
+      }
+      if (gitBranches.some(b => b.name === name)) {
+        showToast('⚠️ 该分支名已存在');
+        return;
+      }
+      gitBranches.unshift({
+        name: name,
+        isCurrent: true,
+        hash: '7a8f12c',
+        lastCommit: 'WIP: branched off ' + gitCurrentBranch
+      });
+      input.value = '';
+      gitCheckoutBranch(name);
+      showToast(`✓ 已创建并检出新分支: ${name} (git checkout -b)`);
+    }
+
+    // 影子快照与 Stash 储藏栈弹窗
+    function openGitStashSnapshotModal() {
+      const modal = document.getElementById('gitStashSnapshotModal');
+      if (modal) {
+        modal.classList.remove('hidden');
+        renderGitSnapshots();
+        renderGitStashes();
+      }
+    }
+
+    function closeGitStashSnapshotModal() {
+      const modal = document.getElementById('gitStashSnapshotModal');
+      if (modal) modal.classList.add('hidden');
+    }
+
+    function switchStashTab(tab) {
+      const btnSnap = document.getElementById('tab-btn-snapshot');
+      const btnStash = document.getElementById('tab-btn-stash');
+      const viewSnap = document.getElementById('view-stash-snapshot');
+      const viewStash = document.getElementById('view-stash-stash');
+
+      if (tab === 'snapshot') {
+        if (btnSnap) btnSnap.className = 'px-3 py-1.5 border-b-2 border-[#D96B27] font-semibold text-[#D96B27] flex items-center gap-1.5 cursor-pointer';
+        if (btnStash) btnStash.className = 'px-3 py-1.5 border-b-2 border-transparent text-[#71717A] hover:text-[#18181B] font-medium flex items-center gap-1.5 cursor-pointer';
+        if (viewSnap) viewSnap.classList.remove('hidden');
+        if (viewStash) viewStash.classList.add('hidden');
+      } else {
+        if (btnStash) btnStash.className = 'px-3 py-1.5 border-b-2 border-[#D96B27] font-semibold text-[#D96B27] flex items-center gap-1.5 cursor-pointer';
+        if (btnSnap) btnSnap.className = 'px-3 py-1.5 border-b-2 border-transparent text-[#71717A] hover:text-[#18181B] font-medium flex items-center gap-1.5 cursor-pointer';
+        if (viewStash) viewStash.classList.remove('hidden');
+        if (viewSnap) viewSnap.classList.add('hidden');
+      }
+    }
+
+    function renderGitSnapshots() {
+      const box = document.getElementById('gitSnapshotListContainer');
+      if (!box) return;
+      box.innerHTML = gitSnapshots.map(snap => `
+        <div class="p-2.5 rounded-xl bg-white border border-black/[0.06] shadow-2xs flex items-center justify-between">
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-2">
+              <span class="font-mono font-bold text-[#18181B]">${snap.id}</span>
+              <span class="text-[10px] text-[#A1A1AA]">${snap.time}</span>
+              <span class="font-mono text-[10px] bg-black/[0.05] px-1.5 rounded text-[#52525B]">${snap.file}</span>
+            </div>
+            <div class="text-[11px] text-[#71717A] mt-0.5">${escapeHtml(snap.desc)}</div>
+          </div>
+          <div class="flex items-center gap-1 shrink-0 ml-2">
+            <button onclick="openDiffView()" class="px-2 py-1 rounded text-[10px] text-[#71717A] hover:text-[#18181B] bg-black/[0.04] cursor-pointer">Diff 比对</button>
+            <button onclick="rollbackSnapshot('${snap.id}')" class="px-2 py-1 rounded text-[10px] text-white bg-[#D96B27] hover:bg-[#B8551B] font-medium shadow-xs cursor-pointer">一键秒级恢复</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function rollbackSnapshot(id) {
+      showToast(`✓ 已从影子快照 [${id}] 秒级无损恢复工作区！`);
+      closeGitStashSnapshotModal();
+    }
+
+    function renderGitStashes() {
+      const box = document.getElementById('gitStashListContainer');
+      if (!box) return;
+      if (gitStashes.length === 0) {
+        box.innerHTML = `<div class="p-4 text-center text-[#A1A1AA] italic">当前 Stash 栈为空</div>`;
+        return;
+      }
+      box.innerHTML = gitStashes.map((stash, idx) => `
+        <div class="p-2.5 rounded-xl bg-white border border-black/[0.06] shadow-2xs flex items-center justify-between">
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-2 font-mono">
+              <span class="font-bold text-[#18181B]">${stash.id}</span>
+              <span class="text-[10px] text-[#10A37F]">分支: ${stash.branch}</span>
+              <span class="text-[10px] text-[#A1A1AA]">${stash.time}</span>
+            </div>
+            <div class="text-[11px] text-[#71717A] mt-0.5">${escapeHtml(stash.desc)}</div>
+          </div>
+          <div class="flex items-center gap-1 shrink-0 ml-2">
+            <button onclick="popStash(${idx})" class="px-2.5 py-1 rounded text-[10px] text-white bg-[#18181B] hover:bg-[#D96B27] font-medium cursor-pointer">Pop 恢复</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function popStash(idx) {
+      if (idx >= 0 && idx < gitStashes.length) {
+        const item = gitStashes.splice(idx, 1)[0];
+        gitWorkingFiles.push({
+          name: 'main.go',
+          path: 'backend/main.go',
+          status: 'M',
+          statusText: '修改',
+          diff: '+4 / -2',
+          color: 'text-amber-600',
+          badgeBg: 'bg-amber-100 text-amber-700'
+        });
+        renderGitFiles();
+        renderGitStashes();
+        closeGitStashSnapshotModal();
+        showToast(`✓ 已从 ${item.id} 恢复工作区更改 (git stash pop)`);
+      }
+    }
+
+    // 全局快捷键统一监听 (ESC 层级退出与 Ctrl+` 终端唤起)
+    window.addEventListener('keydown', function(e) {
+      // 0. Ctrl + ` 一键唤起/收起集成终端抽屉
+      if ((e.ctrlKey || e.metaKey) && (e.key === '`' || e.code === 'Backquote')) {
+        e.preventDefault();
+        toggleTerminalDrawer();
+        return;
+      }
+
+      if (e.key === 'Escape') {
+        // 1. 优先关闭输入框辅助浮层 (@ 与 /)
+        const atPopup = document.getElementById('atMentionPopup');
+        if (atPopup && !atPopup.classList.contains('hidden')) {
+          toggleAtPopup(false);
+          return;
+        }
+        const slashPopup = document.getElementById('slashCommandPopup');
+        if (slashPopup && !slashPopup.classList.contains('hidden')) {
+          toggleSlashPopup(false);
+          return;
+        }
+
+        // 2. 优先关闭次级子浮层 (配置渠道、Skill导入、MCP导入、添加规则、知识图谱节点、Git分支弹窗、Git快照弹窗)
+        const branchModal = document.getElementById('gitBranchModal');
+        if (branchModal && !branchModal.classList.contains('hidden')) {
+          closeGitBranchModal();
+          return;
+        }
+        const stashModal = document.getElementById('gitStashSnapshotModal');
+        if (stashModal && !stashModal.classList.contains('hidden')) {
+          closeGitStashSnapshotModal();
+          return;
+        }
+        const channelModal = document.getElementById('channelConfigModal');
+        if (channelModal && !channelModal.classList.contains('hidden')) {
+          closeConfigModal();
+          return;
+        }
+        const skillModal = document.getElementById('skillImportModal');
+        if (skillModal && !skillModal.classList.contains('hidden')) {
+          closeSkillImportModal();
+          return;
+        }
+        const mcpModal = document.getElementById('mcpImportModal');
+        if (mcpModal && !mcpModal.classList.contains('hidden')) {
+          closeMCPImportModal();
+          return;
+        }
+        const ruleModal = document.getElementById('ruleAddModal');
+        if (ruleModal && !ruleModal.classList.contains('hidden')) {
+          closeRuleAddModal();
+          return;
+        }
+        const kgNodeModal = document.getElementById('kgNodeModal');
+        if (kgNodeModal && !kgNodeModal.classList.contains('hidden')) {
+          closeAddKGNodeModal();
+          return;
+        }
+
+        // 3. 关闭主全屏/大模态窗 (知识图谱工作舱、系统设置中枢)
+        const kgModal = document.getElementById('knowledgeGraphModal');
+        if (kgModal && !kgModal.classList.contains('hidden')) {
+          closeKnowledgeGraphModal();
+          return;
+        }
+        const settingsModal = document.getElementById('settingsModal');
+        if (settingsModal && !settingsModal.classList.contains('hidden')) {
+          toggleSettingsModal(false);
+          return;
+        }
+
+        // 4. 若当前处于模型使用监控大盘模式，按 Escape 自动切回智能对话
+        const usageView = document.getElementById('usageCockpitView');
+        if (usageView && !usageView.classList.contains('hidden')) {
+          switchActivity('chat');
+          return;
+        }
+      }
+    });
 
     // 弹窗控制：Rule Add Modal
     function openRuleAddModal() { document.getElementById('ruleAddModal').classList.remove('hidden'); }
@@ -5131,12 +6506,16 @@
       showToast('已采用推荐方案 1 继续执行！');
     }
 
+    // 初始化 Git 源代码管理状态
+    renderGitFiles();
+    renderGitBranches();
+
   </script>
 
   <!-- ========================================================================= -->
   <!-- 弹窗 1：【全新】MCP 服务协议导入与添加弹窗 (MCP Import Modal) -->
   <!-- ========================================================================= -->
-  <div id="mcpImportModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/45 backdrop-blur-xs animate-in fade-in duration-150">
+  <div id="mcpImportModal" onclick="if(event.target===this) closeMCPImportModal()" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/45 backdrop-blur-xs animate-in fade-in duration-150">
     <div class="w-[620px] bg-white rounded-2xl shadow-2xl border border-black/[0.1] flex flex-col overflow-hidden">
       <div class="p-4 bg-white border-b border-black/[0.08] flex items-center justify-between">
         <div class="flex items-center gap-2">
@@ -5146,7 +6525,7 @@
             <p class="text-[11px] text-[#71717A]">支持 Claude/Cursor 标准 JSON 导入、手动表单配置或一键预装</p>
           </div>
         </div>
-        <button onclick="closeMCPImportModal()" class="p-1 rounded-lg text-[#71717A] hover:bg-black/[0.05] cursor-pointer"><svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+        <button onclick="closeMCPImportModal()" title="关闭 (Esc)" class="p-1 rounded-lg text-[#71717A] hover:bg-black/[0.05] cursor-pointer"><svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
       </div>
 
       <div class="p-4 bg-[#FAF8F5] space-y-3">
@@ -5228,57 +6607,159 @@
   <!-- ========================================================================= -->
   <!-- 弹窗 2：【全新】Skill 技能库导入与创建向导 (Skill Import Modal) -->
   <!-- ========================================================================= -->
-  <div id="skillImportModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/45 backdrop-blur-xs animate-in fade-in duration-150">
-    <div class="w-[620px] bg-white rounded-2xl shadow-2xl border border-black/[0.1] flex flex-col overflow-hidden">
+  <div id="skillImportModal" onclick="if(event.target===this) closeSkillImportModal()" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/45 backdrop-blur-xs animate-in fade-in duration-150">
+    <div class="w-[660px] max-h-[90vh] bg-white rounded-2xl shadow-2xl border border-black/[0.1] flex flex-col overflow-hidden">
+      <!-- 弹窗顶栏 -->
       <div class="p-4 bg-white border-b border-black/[0.08] flex items-center justify-between">
         <div class="flex items-center gap-2">
           <span class="text-base">🛠️</span>
           <div>
-            <h4 class="text-sm font-bold text-[#18181B]">创建或导入 Agent 自主技能 (Skill)</h4>
-            <p class="text-[11px] text-[#71717A]">支持导入规范的 SKILL.md 工作流，或在线可视化定义</p>
+            <h4 class="text-sm font-bold text-[#18181B]">Agent 技能库导入与定制中心 (Skill Hub)</h4>
+            <p class="text-[11px] text-[#71717A]">支持导入本地 SKILL.md 规范文件/目录、可视化定义或一键载入专家技能</p>
           </div>
         </div>
-        <button onclick="closeSkillImportModal()" class="p-1 rounded-lg text-[#71717A] hover:bg-black/[0.05] cursor-pointer"><svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+        <button onclick="closeSkillImportModal()" title="关闭 (Esc)" class="p-1 rounded-lg text-[#71717A] hover:bg-black/[0.05] cursor-pointer">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
       </div>
 
-      <div class="p-4 bg-[#FAF8F5] space-y-3">
-        <div class="grid grid-cols-2 gap-2 text-xs">
-          <div>
-            <label class="font-semibold text-[#18181B]">技能标识符 (Skill ID)</label>
-            <input id="skillIdInput" type="text" placeholder="例如: code-reviewer-pro" class="w-full h-7 mt-1 px-2.5 rounded-lg bg-white border border-black/[0.08] font-mono">
+      <!-- Tab 切换器 -->
+      <div class="p-4 bg-[#FAF8F5] space-y-3 overflow-y-auto">
+        <div class="flex items-center gap-1 p-1 bg-black/[0.04] rounded-xl text-xs font-medium">
+          <button onclick="switchSkillTab('import')" id="skill-tab-import" class="flex-1 py-1 rounded-lg bg-white text-[#D96B27] shadow-xs font-semibold">📥 导入 SKILL.md / 目录</button>
+          <button onclick="switchSkillTab('create')" id="skill-tab-create" class="flex-1 py-1 rounded-lg text-[#71717A] hover:text-[#18181B]">✍️ 自定义表单录入</button>
+          <button onclick="switchSkillTab('market')" id="skill-tab-market" class="flex-1 py-1 rounded-lg text-[#71717A] hover:text-[#18181B]">🌐 官方推荐专家库</button>
+        </div>
+
+        <!-- 视图 1: 导入本地文件 / 目录 / 规范 -->
+        <div id="skill-view-import" class="space-y-2.5">
+          <div class="border-2 border-dashed border-black/[0.12] hover:border-[#D96B27]/60 rounded-xl p-4 bg-white text-center transition-all">
+            <div class="text-2xl mb-1.5">📂</div>
+            <div class="text-xs font-semibold text-[#18181B]">拖拽 SKILL.md 或 Skill 规范目录到此处</div>
+            <div class="text-[11px] text-[#71717A] mt-0.5">支持标准的 YAML Frontmatter 格式 SKILL.md 文件</div>
+            <div class="mt-3 flex items-center justify-center gap-2">
+              <button onclick="loadSkillDemoFile()" class="px-3 py-1.5 rounded-lg bg-[#FAF8F5] hover:bg-black/[0.04] border border-black/[0.08] text-xs font-medium text-[#18181B] transition-all cursor-pointer">
+                <span>📁 模拟选取本地文件</span>
+              </button>
+              <button onclick="loadSkillDemoFile()" class="px-3 py-1.5 rounded-lg bg-white hover:bg-black/[0.03] border border-[#D96B27] text-xs font-medium text-[#D96B27] transition-all cursor-pointer">
+                <span>⚡ 填入标准示例规约</span>
+              </button>
+            </div>
           </div>
-          <div>
-            <label class="font-semibold text-[#18181B]">所属领域/分类</label>
-            <select class="w-full h-7 mt-1 px-2 rounded-lg bg-white border border-black/[0.08]">
-              <option>质量保证 (QA & Testing)</option>
-              <option>代码重构 (Refactoring)</option>
-              <option>安全审查 (Security Audit)</option>
-              <option>DevOps & CI/CD</option>
-            </select>
+
+          <div class="space-y-1">
+            <div class="flex items-center justify-between text-[11px] text-[#71717A]">
+              <span>解析规约内容预览 (Markdown / Frontmatter):</span>
+              <span class="text-[10px] text-[#10A37F] font-mono">YAML 语法合法</span>
+            </div>
+            <textarea id="skillFilePreview" rows="6" class="w-full p-2.5 rounded-xl bg-white border border-black/[0.08] text-xs font-mono text-[#27272A] leading-relaxed focus:outline-none focus:border-[#D96B27]" placeholder="---
+name: your-skill-name
+description: 描述该专业技能的职责与自动化行为
+---
+# 详细工作流规约..."></textarea>
           </div>
         </div>
 
-        <div>
-          <label class="text-xs font-semibold text-[#18181B]">触发场景与适用条件 (When to trigger)</label>
-          <input type="text" placeholder="例如: 当用户要求运行测试、修复单测失败或执行 TDD 流程时激活" class="w-full h-7 mt-1 px-2.5 rounded-lg bg-white border border-black/[0.08] text-xs">
-        </div>
-
-        <div>
-          <div class="flex items-center justify-between text-xs font-semibold text-[#18181B]">
-            <span>执行工作流规约 (Markdown 格式):</span>
-            <button onclick="loadSkillTemplate()" class="text-[#D96B27] text-[11px] font-medium hover:underline cursor-pointer">载入经典 TDD 规约模板</button>
+        <!-- 视图 2: 手动表单录入 -->
+        <div id="skill-view-create" class="hidden space-y-3">
+          <div class="grid grid-cols-2 gap-2 text-xs">
+            <div>
+              <label class="font-semibold text-[#18181B]">技能标识符 (Skill ID)</label>
+              <input id="skillIdInput" type="text" placeholder="例如: code-reviewer-pro" class="w-full h-7 mt-1 px-2.5 rounded-lg bg-white border border-black/[0.08] font-mono">
+            </div>
+            <div>
+              <label class="font-semibold text-[#18181B]">所属领域/分类</label>
+              <select class="w-full h-7 mt-1 px-2 rounded-lg bg-white border border-black/[0.08]">
+                <option>质量保证 (QA & Testing)</option>
+                <option>代码重构 (Refactoring)</option>
+                <option>安全审查 (Security Audit)</option>
+                <option>DevOps & CI/CD</option>
+              </select>
+            </div>
           </div>
-          <textarea id="skillContentInput" rows="6" class="w-full mt-1 p-2.5 rounded-xl bg-white border border-black/[0.08] text-xs font-mono text-[#27272A] leading-relaxed focus:outline-none focus:border-[#D96B27]" placeholder="## Workflow Steps:
+
+          <div>
+            <label class="text-xs font-semibold text-[#18181B]">触发场景与适用条件 (When to trigger)</label>
+            <input type="text" placeholder="例如: 当用户要求运行测试、修复单测失败或执行 TDD 流程时激活" class="w-full h-7 mt-1 px-2.5 rounded-lg bg-white border border-black/[0.08] text-xs">
+          </div>
+
+          <div>
+            <div class="flex items-center justify-between text-xs font-semibold text-[#18181B]">
+              <span>执行工作流规约 (Markdown 格式):</span>
+              <button onclick="loadSkillTemplate()" class="text-[#D96B27] text-[11px] font-medium hover:underline cursor-pointer">载入经典 TDD 规约模板</button>
+            </div>
+            <textarea id="skillContentInput" rows="5" class="w-full mt-1 p-2.5 rounded-xl bg-white border border-black/[0.08] text-xs font-mono text-[#27272A] leading-relaxed focus:outline-none focus:border-[#D96B27]" placeholder="## Workflow Steps:
 1. 分析错误日志堆栈
 2. 定位受影响代码行
 3. 生成局部补丁并运行验证
 4. 修复直至所有断言通过"></textarea>
+          </div>
+        </div>
+
+        <!-- 视图 3: 官方推荐专家库 -->
+        <div id="skill-view-market" class="hidden space-y-2.5 text-xs">
+          <!-- 技能 1 -->
+          <div class="p-3 rounded-xl bg-white border border-black/[0.08] flex items-center justify-between hover:border-[#D96B27]/40 transition-all">
+            <div class="space-y-0.5 max-w-[420px]">
+              <div class="flex items-center gap-1.5 font-bold text-[#18181B]">
+                <span>🦀</span><span>rust-core-engineer</span>
+                <span class="text-[9px] text-[#D96B27] bg-[#D96B27]/10 px-1 py-0.2 rounded font-mono">官方核心</span>
+              </div>
+              <p class="text-[11px] text-[#71717A]">Safe Rust 内存安全、零 unwrap/expect、CREATE_NO_WINDOW 进程约束与影子快照保护。</p>
+            </div>
+            <button onclick="importSkillFromMarket('rust-core-engineer', 'rust-core-engineer', 'Safe Rust 内存安全与零 unwrap 守护', '🦀')" class="px-2.5 py-1 rounded-lg bg-[#FAF8F5] hover:bg-[#D96B27] hover:text-white text-[#D96B27] border border-[#D96B27]/30 text-xs font-semibold transition-all cursor-pointer">
+              一键载入
+            </button>
+          </div>
+
+          <!-- 技能 2 -->
+          <div class="p-3 rounded-xl bg-white border border-black/[0.08] flex items-center justify-between hover:border-[#D96B27]/40 transition-all">
+            <div class="space-y-0.5 max-w-[420px]">
+              <div class="flex items-center gap-1.5 font-bold text-[#18181B]">
+                <span>🎨</span><span>ui-ux-pro-max</span>
+                <span class="text-[9px] text-[#10A37F] bg-[#10A37F]/10 px-1 py-0.2 rounded font-mono">设计系统</span>
+              </div>
+              <p class="text-[11px] text-[#71717A]">Warm Minimalist 极简暖色调、16:9 人机工学布局、弹窗严格居中与 6 态全覆盖设计先行。</p>
+            </div>
+            <button onclick="importSkillFromMarket('ui-ux-pro-max', 'ui-ux-pro-max', 'Warm Minimalist 暖色极简设计系统先行规范', '🎨')" class="px-2.5 py-1 rounded-lg bg-[#FAF8F5] hover:bg-[#D96B27] hover:text-white text-[#D96B27] border border-[#D96B27]/30 text-xs font-semibold transition-all cursor-pointer">
+              一键载入
+            </button>
+          </div>
+
+          <!-- 技能 3 -->
+          <div class="p-3 rounded-xl bg-white border border-black/[0.08] flex items-center justify-between hover:border-[#D96B27]/40 transition-all">
+            <div class="space-y-0.5 max-w-[420px]">
+              <div class="flex items-center gap-1.5 font-bold text-[#18181B]">
+                <span>🧪</span><span>test-automation-mock-governance</span>
+                <span class="text-[9px] text-blue-600 bg-blue-50 px-1 py-0.2 rounded font-mono">测试工程</span>
+              </div>
+              <p class="text-[11px] text-[#71717A]">Red-Green-Refactor 红绿重构循环、外部依赖边界隔离与 AssertJ 精准断言。</p>
+            </div>
+            <button onclick="importSkillFromMarket('test-automation-mock-governance', 'test-automation-mock-governance', 'TDD 自动化测试与 Mock 边界治理专家', '🧪')" class="px-2.5 py-1 rounded-lg bg-[#FAF8F5] hover:bg-[#D96B27] hover:text-white text-[#D96B27] border border-[#D96B27]/30 text-xs font-semibold transition-all cursor-pointer">
+              一键载入
+            </button>
+          </div>
+
+          <!-- 技能 4 -->
+          <div class="p-3 rounded-xl bg-white border border-black/[0.08] flex items-center justify-between hover:border-[#D96B27]/40 transition-all">
+            <div class="space-y-0.5 max-w-[420px]">
+              <div class="flex items-center gap-1.5 font-bold text-[#18181B]">
+                <span>🛡️</span><span>cloud-distributed-guard</span>
+                <span class="text-[9px] text-purple-600 bg-purple-50 px-1 py-0.2 rounded font-mono">分布式架构</span>
+              </div>
+              <p class="text-[11px] text-[#71717A]">分布式锁 Redlock 续期、Nacos 熔断降级与双写缓存最终一致性安全守卫。</p>
+            </div>
+            <button onclick="importSkillFromMarket('cloud-distributed-guard', 'cloud-distributed-guard', '分布式锁、缓存一致性与微服务安全守卫', '🛡️')" class="px-2.5 py-1 rounded-lg bg-[#FAF8F5] hover:bg-[#D96B27] hover:text-white text-[#D96B27] border border-[#D96B27]/30 text-xs font-semibold transition-all cursor-pointer">
+              一键载入
+            </button>
+          </div>
         </div>
       </div>
 
-      <div class="p-3 bg-white border-t border-black/[0.08] flex items-center justify-end gap-2">
-        <button onclick="closeSkillImportModal()" class="px-3 py-1.5 rounded-lg text-xs font-medium text-[#71717A] hover:bg-black/[0.04]">取消</button>
-        <button onclick="saveSkillModal()" class="px-4 py-1.5 rounded-lg bg-[#D96B27] hover:bg-[#B8551B] text-white text-xs font-semibold shadow-xs">注册并激活技能</button>
+      <!-- 弹窗底栏 -->
+      <div class="p-3 bg-white border-t border-black/[0.08] flex items-center justify-end gap-2 shrink-0">
+        <button onclick="closeSkillImportModal()" class="px-3 py-1.5 rounded-lg text-xs font-medium text-[#71717A] hover:bg-black/[0.04] cursor-pointer">取消</button>
+        <button onclick="saveSkillModal()" class="px-4 py-1.5 rounded-lg bg-[#D96B27] hover:bg-[#B8551B] text-white text-xs font-semibold shadow-xs transition-all cursor-pointer">确认导入 / 激活技能</button>
       </div>
     </div>
   </div>
@@ -5286,7 +6767,7 @@
   <!-- ========================================================================= -->
   <!-- 弹窗 3：【全新】手动添加规则管理弹窗 (Rule Add Modal) -->
   <!-- ========================================================================= -->
-  <div id="ruleAddModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/45 backdrop-blur-xs animate-in fade-in duration-150">
+  <div id="ruleAddModal" onclick="if(event.target===this) closeRuleAddModal()" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/45 backdrop-blur-xs animate-in fade-in duration-150">
     <div class="w-[620px] bg-white rounded-2xl shadow-2xl border border-black/[0.1] flex flex-col overflow-hidden">
       <div class="p-4 bg-white border-b border-black/[0.08] flex items-center justify-between">
         <div class="flex items-center gap-2">
@@ -5296,7 +6777,7 @@
             <p class="text-[11px] text-[#71717A]">定义专属工程规范、代码风格要求或安全阻断红线</p>
           </div>
         </div>
-        <button onclick="closeRuleAddModal()" class="p-1 rounded-lg text-[#71717A] hover:bg-black/[0.05] cursor-pointer"><svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+        <button onclick="closeRuleAddModal()" title="关闭 (Esc)" class="p-1 rounded-lg text-[#71717A] hover:bg-black/[0.05] cursor-pointer"><svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
       </div>
 
       <div class="p-4 bg-[#FAF8F5] space-y-3">
@@ -5341,7 +6822,7 @@
   <!-- ========================================================================= -->
   <!-- 弹窗 4：【全新】手动沉淀知识图谱节点弹窗 (KG Node Modal) -->
   <!-- ========================================================================= -->
-  <div id="kgNodeModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/45 backdrop-blur-xs animate-in fade-in duration-150">
+  <div id="kgNodeModal" onclick="if(event.target===this) closeAddKGNodeModal()" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/45 backdrop-blur-xs animate-in fade-in duration-150">
     <div class="w-[620px] bg-white rounded-2xl shadow-2xl border border-black/[0.1] flex flex-col overflow-hidden">
       <div class="p-4 bg-white border-b border-black/[0.08] flex items-center justify-between">
         <div class="flex items-center gap-2">
@@ -5351,7 +6832,7 @@
             <p class="text-[11px] text-[#71717A]">将工程规范、领域概念与重要设计共识固化进持久化记忆图谱</p>
           </div>
         </div>
-        <button onclick="closeAddKGNodeModal()" class="p-1 rounded-lg text-[#71717A] hover:bg-black/[0.05] cursor-pointer"><svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+        <button onclick="closeAddKGNodeModal()" title="关闭 (Esc)" class="p-1 rounded-lg text-[#71717A] hover:bg-black/[0.05] cursor-pointer"><svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
       </div>
 
       <div class="p-4 bg-[#FAF8F5] space-y-3 text-xs">
@@ -5385,6 +6866,119 @@
       <div class="p-3 bg-white border-t border-black/[0.08] flex items-center justify-end gap-2">
         <button onclick="closeAddKGNodeModal()" class="px-3 py-1.5 rounded-lg text-xs font-medium text-[#71717A] hover:bg-black/[0.04]">取消</button>
         <button onclick="saveKGNodeModal()" class="px-4 py-1.5 rounded-lg bg-[#D96B27] hover:bg-[#B8551B] text-white text-xs font-semibold shadow-xs">存入知识图谱</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- 弹窗 5：【核心新增】Git 分支管理与快速切换 (Git Branch Modal) -->
+  <!-- ========================================================================= -->
+  <div id="gitBranchModal" onclick="if(event.target===this) closeGitBranchModal()" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/45 backdrop-blur-xs animate-in fade-in duration-150 select-none">
+    <div class="w-[560px] bg-white rounded-2xl shadow-2xl border border-black/[0.1] flex flex-col overflow-hidden relative">
+      <div class="p-4 bg-white border-b border-black/[0.08] flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <span class="text-base text-[#D96B27]">🌿</span>
+          <div>
+            <h4 class="text-sm font-bold text-[#18181B]">Git 分支管理与检出切换</h4>
+            <p class="text-[11px] text-[#71717A]">当前分支: <span id="gitModalCurrentBranchBadge" class="font-mono font-bold text-[#D96B27]">main</span> · 快速切换或检出新分支</p>
+          </div>
+        </div>
+        <button onclick="closeGitBranchModal()" title="关闭 (Esc)" class="p-1.5 rounded-lg text-[#71717A] hover:text-[#18181B] hover:bg-black/[0.05] cursor-pointer transition-all">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <div class="p-4 bg-[#FAF8F5] space-y-3">
+        <!-- 快速新建分支栏 -->
+        <div class="p-2.5 rounded-xl bg-white border border-black/[0.06] shadow-2xs space-y-1.5">
+          <label class="text-[11px] font-bold text-[#18181B]">基于当前分支创建新分支 (git checkout -b):</label>
+          <div class="flex items-center gap-2">
+            <input id="newBranchNameInput" type="text" placeholder="输入新分支名 (例如: feature/payment-gateway)..." class="flex-1 h-8 px-2.5 rounded-lg bg-[#FAF8F5] border border-black/[0.08] text-xs font-mono focus:outline-none focus:border-[#D96B27]">
+            <button onclick="gitCreateBranch()" class="h-8 px-3 rounded-lg bg-[#18181B] hover:bg-[#D96B27] text-white text-xs font-medium flex items-center gap-1 transition-colors cursor-pointer shrink-0">
+              <span>+ 创建并切换</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 搜索与分支列表 -->
+        <div class="space-y-1.5">
+          <div class="flex items-center justify-between text-[11px] text-[#71717A] px-1 font-semibold">
+            <span>本地与远程分支列表:</span>
+            <input id="gitBranchSearchInput" oninput="filterGitBranches(this.value)" type="text" placeholder="过滤分支..." class="h-6 px-2 rounded-md bg-white border border-black/[0.08] text-[11px] font-mono focus:outline-none w-36">
+          </div>
+
+          <div id="gitBranchListContainer" class="max-h-[220px] overflow-y-auto space-y-1 p-1">
+            <!-- 由 JS 动态渲染分支项 -->
+          </div>
+        </div>
+      </div>
+
+      <div class="p-3 bg-white border-t border-black/[0.08] flex items-center justify-between text-[11px] text-[#71717A]">
+        <span>按 <kbd class="px-1 py-0.5 rounded bg-black/[0.05] border border-black/[0.1] font-mono">Esc</kbd> 退出</span>
+        <button onclick="closeGitBranchModal()" class="px-3 py-1.5 rounded-lg text-xs font-medium text-[#71717A] hover:bg-black/[0.04] cursor-pointer">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- 弹窗 6：【核心新增】影子 Git 快照与 Stash 储藏栈 (Shadow Snapshot & Stash Modal) -->
+  <!-- ========================================================================= -->
+  <div id="gitStashSnapshotModal" onclick="if(event.target===this) closeGitStashSnapshotModal()" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/45 backdrop-blur-xs animate-in fade-in duration-150 select-none">
+    <div class="w-[660px] max-h-[85vh] bg-white rounded-2xl shadow-2xl border border-black/[0.1] flex flex-col overflow-hidden relative">
+      <div class="p-4 bg-white border-b border-black/[0.08] flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <span class="text-base">🛡️</span>
+          <div>
+            <h4 class="text-sm font-bold text-[#18181B]">影子 Git 快照与 Stash 储藏中心</h4>
+            <p class="text-[11px] text-[#71717A]">微内核秒级影子快照防护 · 代码无损撤销与工作区储藏恢复</p>
+          </div>
+        </div>
+        <button onclick="closeGitStashSnapshotModal()" title="关闭 (Esc)" class="p-1.5 rounded-lg text-[#71717A] hover:text-[#18181B] hover:bg-black/[0.05] cursor-pointer transition-all">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <!-- Tab 切换器 -->
+      <div class="flex items-center gap-2 px-4 pt-2.5 border-b border-black/[0.06] bg-[#FAF8F5] text-xs">
+        <button onclick="switchStashTab('snapshot')" id="tab-btn-snapshot" class="px-3 py-1.5 border-b-2 border-[#D96B27] font-semibold text-[#D96B27] flex items-center gap-1.5 cursor-pointer">
+          <span>🛡️ 影子快照历史 (秒级回退)</span>
+        </button>
+        <button onclick="switchStashTab('stash')" id="tab-btn-stash" class="px-3 py-1.5 border-b-2 border-transparent text-[#71717A] hover:text-[#18181B] font-medium flex items-center gap-1.5 cursor-pointer">
+          <span>📦 Git Stash 储藏栈</span>
+        </button>
+      </div>
+
+      <div class="flex-1 overflow-y-auto p-4 bg-[#FAF8F5] text-xs">
+        <!-- 视图 1: 影子快照历史 -->
+        <div id="view-stash-snapshot" class="space-y-2">
+          <div class="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-900 flex items-start gap-2 leading-relaxed">
+            <span class="text-xs">💡</span>
+            <span><strong>微内核安全守护机制</strong>：当 Agent 在 Act 模式下调用任何文件修改或补丁写入算子前，系统会自动在本地 <code>.git/refs/shadow-snapshots</code> 生成轻量影子快照。若生成代码不符合预期，可随时一键秒级恢复。</span>
+          </div>
+
+          <div id="gitSnapshotListContainer" class="space-y-1.5 pt-1">
+            <!-- 动态生成快照列表 -->
+          </div>
+        </div>
+
+        <!-- 视图 2: Git Stash 储藏栈 -->
+        <div id="view-stash-stash" class="hidden space-y-2">
+          <div class="flex items-center justify-between pb-1">
+            <span class="text-[11px] text-[#71717A] font-semibold">当前已储藏的工作区快照栈:</span>
+            <button onclick="gitStashWorkspace()" class="px-2.5 py-1 rounded-lg bg-white border border-black/[0.08] shadow-2xs text-[#18181B] hover:border-[#D96B27] text-xs flex items-center gap-1 cursor-pointer">
+              <span>+ 储藏当前更改</span>
+            </button>
+          </div>
+
+          <div id="gitStashListContainer" class="space-y-1.5">
+            <!-- 动态生成 Stash 列表 -->
+          </div>
+        </div>
+      </div>
+
+      <div class="p-3 bg-white border-t border-black/[0.08] flex items-center justify-between text-[11px] text-[#71717A]">
+        <span>按 <kbd class="px-1 py-0.5 rounded bg-black/[0.05] border border-black/[0.1] font-mono">Esc</kbd> 退出</span>
+        <button onclick="closeGitStashSnapshotModal()" class="px-3 py-1.5 rounded-lg text-xs font-medium text-[#71717A] hover:bg-black/[0.04] cursor-pointer">关闭</button>
       </div>
     </div>
   </div>

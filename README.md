@@ -80,12 +80,20 @@ Tcode 打破了单体硬编码调度逻辑，将 Agent 的执行循环、能力�
 
 ### 1. 单焦点主工作区聚合切换 (Single-Focus Primary Workspace)
 * **告别三列挤压**：彻底解决“对话 + 编辑器同时平铺”导致的屏幕局促感，采用 Cursor / Windsurf 一线规范的聚焦视图切换；
-* **顶栏与活动栏一键切换**：
-  * `[💬 智能对话 (Chat)]`：全宽舒适阅读与任务编排；
+* **顶栏一键平滑三态流转**：
+  * `[💬 智能对话 (Chat)]`：全宽舒适阅读与任务编排，主视口宽阔；
+  * `[◫ 双栏协同 (Split)]`：左侧对话流 + 右侧代码/Diff 比对双栏对照审查，兼顾即时沟通与文件改动审查；
   * `[📝 代码工作区 (Editor)]`：全宽展示 Monaco 代码编辑器、Diff 双栏比对视窗与终端；
-* **顺滑联动**：点击左侧文件树时自动切至代码工作区；在对话中审查 Diff 时自动无缝跳转。
+* **顺滑联动**：点击左侧文件树时自动切至代码工作区；在对话中审查 Diff 时自动无缝切入「双栏协同」。
 
-### 2. 动态多平台模型网关 (对齐 sub2api 业界规范)
+### 2. 底部集成式可折叠终端抽屉 (Integrated Terminal Drawer)
+* **全局快捷唤起**：全局支持快捷键 **`Ctrl + \``**（反引号）瞬间唤起或隐藏抽屉，顶栏与活动栏均配置快捷入口；
+* **三维一体控制台**：
+  * `$_ pwsh 命令行终端`：支持用户手动键入指令（`go test`, `git status`, `cargo check` 等），与 Agent 沙箱物理环境同构；
+  * `⚡ Agent 执行链路 (SSE Trace)`：流式推送微内核 Inner Loop 状态、算子分发事件与 Token 开销；
+  * `🛰️ Tokio 微内核状态`：实时呈现协程池活跃 Worker、零泄漏内存监控与影子 Git 保护状态。
+
+### 3. 动态多平台模型网关 (对齐 sub2api 业界规范)
 * **厂商与认证强联动矩阵**：覆盖 Anthropic Claude, OpenAI, Google Gemini, DeepSeek, SiliconFlow, Kimi, Zhipu GLM 与本地 Ollama；不同厂商动态展示支持的认证类型（原生支持 API Key、Sub2 订阅池、Cap 凭据包、OAuth 2.0、代理反代等）；
 * **动态凭据输入表单**：
   * **API Key**：显隐式密钥输入 + 自定义 Header 注入；
@@ -95,17 +103,30 @@ Tcode 打破了单体硬编码调度逻辑，将 Agent 的执行循环、能力�
   * **Proxy 代理**：中转端点 + 访问令牌（本地 Ollama 可留空）+ 协议模拟转换；
 * **极速探活测速**：一键真实连通性测试，毫秒级返回 HTTP 状态码与首字延迟（TTFT）；支持自动拉取端点可用模型列表。
 
-### 3. MCP 协议深度治理中心 (Model Context Protocol)
+### 4. MCP 协议深度治理中心 (Model Context Protocol)
 * **传输协议双引擎**：完整支持 `stdio`（本地子进程：command、动态参数 args、环境变量 Key-Value 动态表）与 `sse`（远程网络端点 HTTP/SSE 连接）；
 * **服务探活与工具探测**：一键在线测试连通性，自动探测 MCP Server 暴露的工具清单（如 `read_file`, `list_tools`, `call_tool`）；
 * **生态兼容**：支持 Claude Desktop JSON 配置文件 (`claude_desktop_config.json`) 一键导入与一键挂载预设（Postgres, SQLite, GitHub, Brave Search）。
 
-### 4. Agent Skill 技能与提示词引擎 (Prompt Engine)
+### 5. 高频生产级 Git 控制中枢与微内核安全防护 (Advanced Git Control Center & Shadow Snapshots)
+* **双层暂存管理**：`Staged Changes` 与 `Working Changes` 双层清晰分离，支持单文件/全部暂存、取消暂存、放弃修改与行级 Diff 联动；
+* **AI 语义化 Commit 提炼**：一键通过 AI 深度分析当前暂存代码 Diff，自动打字提炼符合 Conventional Commits 规范的语义化说明，支持 Commit / Commit & Push；
+* **分支管理与检出**：顶栏分支徽标一键弹出分支列表，支持分支即时检索与检出新分支 (`git checkout -b`)；
+* **微内核影子快照回退**：Agent 修改任何文件前，系统自动在本地建立影子快照，支持随时一键秒级无损回退与 Git Stash 储藏恢复。
+
+### 6. 多模型使用量与 Token 效能监控大盘 (Model Usage & Analytics Cockpit)
+* **活动栏专属入口与抽屉速览**：一键切入全景监控大盘，侧边栏常驻今日消耗概览与占比条；
+* **四维核心 KPI 矩阵**：今日 Token 吞吐（输入/输出明细）、预估花费（双币种折算与限额水位）、平均首字延迟 (TTFT)、Prompt Cache 缓存节省率（展示提示词前缀缓存节约的 Tokens 与资金）；
+* **多模型明细与 24 小时吞吐波形走势**：各模型占比柱状进度条与每小时吞吐时序波形图；
+* **实时微内核调度审计流**：流式记录最近底层算子、所用模型、In/Out Tokens 明细与延迟耗时，支持导出 CSV 审计报表。
+
+### 7. Agent Skill 技能与提示词引擎 (Prompt & Skill Hub)
+* **多源导入与一键激活**：支持直接从本地文件系统拖拽/选取 `SKILL.md` 规约文件与目录，自动解析 Frontmatter 元数据；同时内置官方专家技能市场（Rust 微内核、UI/UX 规范先行、TDD 测试治理、分布式架构守卫）；
 * **指令驱动触发**：支持在对话框中以 `/` 触发词（如 `/review`, `/tdd`, `/security`, `/perf`）精准调用；
-* **多行 Markdown 系统级指令**：支持全屏舒适编辑系统提示词，规范角色契约、执行流、审查清单与输出格式；
+* **多行 Markdown 系统级指令**：支持舒适编辑系统提示词，规范角色契约、执行流、审查清单与输出格式；
 * **业界经典预设一键套用**：内置 Thermo-Nuclear 架构审查专家、TDD 红绿重构测试生成器、全维白盒安全守卫、性能与并发调优专家模版。
 
-### 5. 纯净零数据初始状态 (Zero Demo & Clean Empty State)
+### 8. 纯净零数据初始状态 (Zero Demo & Clean Empty State)
 * 严格执行无假数据铁律，初次启动呈现干净的 0 项目、0 会话状态，只有用户显式打开本地项目后才载入工作区。
 
 ---
@@ -116,7 +137,7 @@ Tcode 打破了单体硬编码调度逻辑，将 Agent 的执行循环、能力�
 * **工作台底色**：`#F4EFEA` (Workspace Muted 米灰)
 * **品牌强调色**：`#D96B27` (Terracotta Orange 陶土暖橙)
 * **代码暖黑**：`#1E1C1A` (Code Dark 暖炭黑)
-* **人机工学**：单主轴聚焦切换，16:9 原生工作台视野。
+* **人机工学与弹窗铁律**：单主轴聚焦切换，16:9 原生工作台视野；**全系统所有模态窗严格居中，统一配备右上角显式 `[X]` 关闭按钮与悬停 Tooltip，且 100% 支持全局 `Esc` 快捷键层级化阻断退出与背景遮罩点击关闭**。
 
 ---
 
