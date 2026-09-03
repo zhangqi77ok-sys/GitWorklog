@@ -1490,7 +1490,7 @@
   <!-- ========================================================================= -->
   <!-- 1. 沉浸式无边框标题栏 (Titlebar) -->
   <!-- ========================================================================= -->
-  <header class="h-[38px] min-h-[38px] bg-[#FAF8F5] border-b border-black/[0.08] flex items-center justify-between px-3 z-30 select-none">
+  <header style="--wails-draggable: drag;" class="h-[38px] min-h-[38px] bg-[#FAF8F5] border-b border-black/[0.08] flex items-center justify-between px-3 z-30 select-none">
     <div class="flex items-center gap-2">
       <div class="w-5 h-5 rounded-md bg-[#18181B] text-white flex items-center justify-center font-bold text-xs shadow-xs">T</div>
       <span class="text-xs font-semibold tracking-tight text-[#18181B]">Tcode Studio</span>
@@ -1542,13 +1542,13 @@
       <div class="h-3 w-[1px] bg-black/[0.08]"></div>
 
       <div class="flex items-center gap-1">
-        <button onclick="showToast('已模拟最小化')" title="最小化窗口" class="w-6 h-6 rounded flex items-center justify-center text-[#71717A] hover:bg-black/[0.05] transition-all cursor-pointer">
+        <button onclick="window.go?.main?.App?.MinimizeWindow ? window.go.main.App.MinimizeWindow() : (window.runtime?.WindowMinimise ? window.runtime.WindowMinimise() : showToast('已最小化'))" title="最小化窗口" class="w-6 h-6 rounded flex items-center justify-center text-[#71717A] hover:bg-black/[0.05] transition-all cursor-pointer">
           <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/></svg>
         </button>
-        <button onclick="showToast('已模拟最大化')" title="最大化窗口" class="w-6 h-6 rounded flex items-center justify-center text-[#71717A] hover:bg-black/[0.05] transition-all cursor-pointer">
+        <button onclick="window.go?.main?.App?.ToggleMaximizeWindow ? window.go.main.App.ToggleMaximizeWindow() : (window.runtime?.WindowToggleMaximise ? window.runtime.WindowToggleMaximise() : showToast('已切换最大化/还原'))" title="最大化/还原窗口" class="w-6 h-6 rounded flex items-center justify-center text-[#71717A] hover:bg-black/[0.05] transition-all cursor-pointer">
           <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/></svg>
         </button>
-        <button onclick="showToast('已模拟退出应用')" title="关闭程序" class="w-6 h-6 rounded flex items-center justify-center text-[#71717A] hover:bg-red-500 hover:text-white transition-all cursor-pointer">
+        <button onclick="window.go?.main?.App?.CloseWindow ? window.go.main.App.CloseWindow() : (window.runtime?.Quit ? window.runtime.Quit() : showToast('已关闭程序'))" title="关闭程序" class="w-6 h-6 rounded flex items-center justify-center text-[#71717A] hover:bg-red-500 hover:text-white transition-all cursor-pointer">
           <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
       </div>

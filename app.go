@@ -105,6 +105,27 @@ func (a *App) startup(ctx context.Context) {
 func (a *App) shutdown(ctx context.Context) {
 }
 
+// MinimizeWindow 最小化无边框窗口
+func (a *App) MinimizeWindow() {
+	if a.ctx != nil {
+		runtime.WindowMinimise(a.ctx)
+	}
+}
+
+// ToggleMaximizeWindow 切换无边框窗口最大化/还原
+func (a *App) ToggleMaximizeWindow() {
+	if a.ctx != nil {
+		runtime.WindowToggleMaximise(a.ctx)
+	}
+}
+
+// CloseWindow 安全关闭原生桌面程序
+func (a *App) CloseWindow() {
+	if a.ctx != nil {
+		runtime.Quit(a.ctx)
+	}
+}
+
 // OpenFileDialog 弹出真实 Windows 原生多文件选择窗口
 func (a *App) OpenFileDialog() ([]string, error) {
 	if a.ctx == nil {
