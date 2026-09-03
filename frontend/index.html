@@ -2082,37 +2082,14 @@
       <div id="workspaceSplitArea" class="flex-1 flex overflow-hidden relative">
         <main id="mainChatCockpit" class="flex-1 flex flex-col bg-[#FAF8F5] overflow-hidden relative">
       <nav class="h-9 min-h-[36px] bg-[#FAF8F5] border-b border-black/[0.08] flex items-center justify-between px-2 select-none">
-                <div id="cockpitTabsContainer" class="flex items-center gap-1 overflow-x-auto no-scrollbar flex-1 py-1">
-          <div onclick="selectSession('sess1')" id="tab-sess1" class="cockpit-tab active flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-white text-[#18181B] shadow-2xs border border-black/[0.08] cursor-pointer">
-            <span class="text-xs">📌</span>
-            <span class="truncate max-w-[140px]">架构重构与执行流设计</span>
+          <div id="cockpitTabsContainer" class="flex items-center gap-1 overflow-x-auto no-scrollbar flex-1 py-1">
+            <!-- 动态由 renderCockpitTabs() 渲染支持拖拽移动、关闭按钮与右击菜单的会话页签 -->
           </div>
-
-          <div onclick="selectSession('sess2')" id="tab-sess2" class="cockpit-tab flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium text-[#71717A] hover:bg-black/[0.03] transition-all cursor-pointer">
-            <span class="text-xs">🧪</span>
-            <span class="truncate max-w-[130px]">TDD测试自愈与防漏</span>
-          </div>
-
-          <div onclick="selectSession('sess3')" id="tab-sess3" class="cockpit-tab flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium text-[#71717A] hover:bg-black/[0.03] transition-all cursor-pointer">
-            <span class="text-xs">🌐</span>
-            <span class="truncate max-w-[130px]">Sub2API CAP与Sub2</span>
-          </div>
-
-          <div onclick="selectSession('sess4')" id="tab-sess4" class="cockpit-tab flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium text-[#71717A] hover:bg-black/[0.03] transition-all cursor-pointer">
-            <span class="text-xs">🛡️</span>
-            <span class="truncate max-w-[130px]">高危指令沙箱拦截</span>
-          </div>
-
-          <div onclick="selectSession('sess5')" id="tab-sess5" class="cockpit-tab flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium text-[#71717A] hover:bg-black/[0.03] transition-all cursor-pointer">
-            <span class="text-xs">🎨</span>
-            <span class="truncate max-w-[130px]">Monaco行级Diff</span>
-          </div>
-        </div>
-        <button onclick="toggleCodeWorkspace()" class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium text-[#18181B] bg-white hover:bg-black/[0.03] border border-black/[0.08] shadow-2xs transition-all cursor-pointer">
-          <svg class="w-3.5 h-3.5 text-[#D96B27]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
-          <span id="codeToggleText">收起代码</span>
-        </button>
-      </nav>
+          <button onclick="toggleCodeWorkspace()" class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium text-[#18181B] bg-white hover:bg-black/[0.03] border border-black/[0.08] shadow-2xs transition-all cursor-pointer shrink-0 ml-2">
+            <svg class="w-3.5 h-3.5 text-[#D96B27]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+            <span id="codeToggleText">收起代码</span>
+          </button>
+        </nav>
 
       <!-- 消息流 -->
       <div id="messagesContainer" class="flex-1 overflow-y-auto px-6 py-6 space-y-6">
@@ -4091,6 +4068,23 @@
         <span>支持全局快捷键唤起：<kbd class="px-1.5 py-0.5 rounded bg-white border border-black/[0.08] font-mono text-[10px]">Ctrl+K</kbd></span>
         <span class="font-mono text-[10px]">Tcode Studio Command Palette v2.0</span>
       </div>
+    </div>
+  </div>
+
+  
+  <!-- ========================================================================= -->
+  <!-- 顶部会话 Tab 右键上下文菜单 (Tab Context Menu) -->
+  <!-- ========================================================================= -->
+  <div id="cockpitTabContextMenu" class="hidden fixed z-50 w-44 bg-white/95 backdrop-blur-md rounded-xl shadow-xl border border-black/[0.08] py-1 text-xs font-sans select-none animate-in fade-in zoom-in-95 duration-100">
+    <div onclick="executeTabContextAction('closeCurrent')" class="px-3 py-1.5 hover:bg-black/[0.05] flex items-center justify-between cursor-pointer text-[#18181B]">
+      <div class="flex items-center gap-2"><span class="text-xs">✕</span><span>关闭当前标签</span></div>
+      <kbd class="text-[10px] text-[#A1A1AA] font-mono">Ctrl+W</kbd>
+    </div>
+    <div onclick="executeTabContextAction('closeOthers')" class="px-3 py-1.5 hover:bg-black/[0.05] flex items-center justify-between cursor-pointer text-[#18181B]">
+      <div class="flex items-center gap-2"><span class="text-xs">🚫</span><span>关闭其他标签</span></div>
+    </div>
+    <div onclick="executeTabContextAction('closeAll')" class="px-3 py-1.5 hover:bg-red-50 text-red-600 flex items-center justify-between cursor-pointer border-t border-black/[0.04] mt-1 pt-1.5">
+      <div class="flex items-center gap-2"><span class="text-xs">🗑️</span><span>关闭全部标签</span></div>
     </div>
   </div>
 
@@ -6999,6 +6993,209 @@ triggers:
       btn.innerText = originalText;
       btn.disabled = false;
     }
+
+
+    // =========================================================================
+    // 【全新】顶部会话列表拖拽排序 (Drag & Drop)、关闭按钮与右击菜单
+    // =========================================================================
+    let cockpitTabs = [
+      { id: 'sess1', title: '架构重构与执行流设计', icon: '📌' },
+      { id: 'sess2', title: 'TDD测试自愈与防漏', icon: '🧪' },
+      { id: 'sess3', title: 'Sub2API CAP与Sub2', icon: '🌐' },
+      { id: 'sess4', title: '高危指令沙箱拦截', icon: '🛡️' },
+      { id: 'sess5', title: 'Monaco行级Diff', icon: '🎨' }
+    ];
+    let activeCockpitTabId = 'sess1';
+    let contextMenuTargetTabId = null;
+    let draggedTabId = null;
+
+    function renderCockpitTabs() {
+      const container = document.getElementById('cockpitTabsContainer');
+      if (!container) return;
+
+      let html = cockpitTabs.map((tab, idx) => {
+        const isActive = tab.id === activeCockpitTabId;
+        return `
+          <div
+            id="tab-${tab.id}"
+            draggable="true"
+            ondragstart="handleTabDragStart(event, '${tab.id}')"
+            ondragover="handleTabDragOver(event, this)"
+            ondragleave="handleTabDragLeave(event, this)"
+            ondrop="handleTabDrop(event, '${tab.id}', this)"
+            oncontextmenu="openTabContextMenu(event, '${tab.id}')"
+            onclick="selectCockpitTab('${tab.id}')"
+            class="cockpit-tab group relative flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs cursor-pointer transition-all ${
+              isActive
+                ? 'active font-semibold bg-white text-[#18181B] shadow-2xs border border-black/[0.08]'
+                : 'font-medium text-[#71717A] hover:bg-black/[0.03] border border-transparent'
+            }"
+            title="${tab.title} (拖动可排序，右击弹出选项)"
+          >
+            <span class="text-xs cursor-grab">${tab.icon}</span>
+            <span class="truncate max-w-[130px] select-none">${tab.title}</span>
+            <button
+              onclick="event.stopPropagation(); closeCockpitTab('${tab.id}')"
+              title="关闭该会话标签"
+              class="tab-close-btn opacity-0 group-hover:opacity-100 p-0.5 rounded-full hover:bg-black/10 text-[#71717A] hover:text-[#18181B] transition-all ml-0.5 w-4 h-4 flex items-center justify-center text-[10px]"
+            >✕</button>
+          </div>
+        `;
+      }).join('');
+
+      // 追加一个 "+" 新增会话标签按钮
+      html += `
+        <button
+          onclick="createNewCockpitTab()"
+          title="新建空白会话标签"
+          class="p-1 rounded-lg text-[#71717A] hover:text-[#18181B] hover:bg-black/[0.04] transition-all cursor-pointer flex items-center justify-center shrink-0 ml-1"
+        >
+          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+      `;
+
+      container.innerHTML = html;
+    }
+
+    // 选中指定 Tab
+    function selectCockpitTab(id) {
+      activeCockpitTabId = id;
+      renderCockpitTabs();
+      // 同时触发原有的会话切换逻辑
+      selectSession(id);
+    }
+
+    // 拖拽开始
+    function handleTabDragStart(e, id) {
+      draggedTabId = id;
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', id);
+      setTimeout(() => {
+        const el = document.getElementById('tab-' + id);
+        if (el) el.classList.add('opacity-40');
+      }, 0);
+    }
+
+    // 拖拽经过
+    function handleTabDragOver(e, el) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      el.classList.add('border-r-2', 'border-[#D96B27]');
+    }
+
+    // 拖拽离开
+    function handleTabDragLeave(e, el) {
+      el.classList.remove('border-r-2', 'border-[#D96B27]');
+    }
+
+    // 拖拽放下并排序
+    function handleTabDrop(e, targetId, el) {
+      e.preventDefault();
+      el.classList.remove('border-r-2', 'border-[#D96B27]');
+
+      const srcId = draggedTabId || e.dataTransfer.getData('text/plain');
+      if (!srcId || srcId === targetId) return;
+
+      const srcIdx = cockpitTabs.findIndex(t => t.id === srcId);
+      const targetIdx = cockpitTabs.findIndex(t => t.id === targetId);
+
+      if (srcIdx !== -1 && targetIdx !== -1) {
+        const [moved] = cockpitTabs.splice(srcIdx, 1);
+        cockpitTabs.splice(targetIdx, 0, moved);
+        renderCockpitTabs();
+        showToast(`✓ 已将会话移动排序: ${moved.title}`);
+      }
+      draggedTabId = null;
+    }
+
+    // 关闭单个 Tab
+    function closeCockpitTab(id) {
+      const idx = cockpitTabs.findIndex(t => t.id === id);
+      if (idx === -1) return;
+
+      const [removed] = cockpitTabs.splice(idx, 1);
+
+      // 如果关闭的是当前激活项，切换至邻近 Tab
+      if (activeCockpitTabId === id) {
+        if (cockpitTabs.length > 0) {
+          const nextIdx = Math.min(idx, cockpitTabs.length - 1);
+          activeCockpitTabId = cockpitTabs[nextIdx].id;
+          selectSession(activeCockpitTabId);
+        } else {
+          // 全部关光时自动新建一个
+          createNewCockpitTab();
+          return;
+        }
+      }
+
+      renderCockpitTabs();
+      showToast(`已关闭会话: ${removed.title}`);
+    }
+
+    // 新建一个空白 Tab
+    function createNewCockpitTab() {
+      const newId = 'sess_' + Date.now();
+      const newTitle = '新建会话 #' + (cockpitTabs.length + 1);
+      cockpitTabs.push({
+        id: newId,
+        title: newTitle,
+        icon: '💬'
+      });
+      activeCockpitTabId = newId;
+      renderCockpitTabs();
+      showToast(`✓ 已新建会话: ${newTitle}`);
+    }
+
+    // 打开右击菜单
+    function openTabContextMenu(e, id) {
+      e.preventDefault();
+      contextMenuTargetTabId = id;
+
+      const menu = document.getElementById('cockpitTabContextMenu');
+      if (!menu) return;
+
+      menu.style.left = `${e.clientX}px`;
+      menu.style.top = `${e.clientY}px`;
+      menu.classList.remove('hidden');
+    }
+
+    function closeTabContextMenu() {
+      const menu = document.getElementById('cockpitTabContextMenu');
+      if (menu) menu.classList.add('hidden');
+      contextMenuTargetTabId = null;
+    }
+
+    // 右击菜单执行操作
+    function executeTabContextAction(action) {
+      const targetId = contextMenuTargetTabId;
+      closeTabContextMenu();
+
+      if (!targetId) return;
+
+      if (action === 'closeCurrent') {
+        closeCockpitTab(targetId);
+      } else if (action === 'closeOthers') {
+        cockpitTabs = cockpitTabs.filter(t => t.id === targetId);
+        activeCockpitTabId = targetId;
+        renderCockpitTabs();
+        selectSession(targetId);
+        showToast('✓ 已关闭其余所有会话标签');
+      } else if (action === 'closeAll') {
+        cockpitTabs = [];
+        createNewCockpitTab();
+        showToast('✓ 已关闭全部会话标签并初始化');
+      }
+    }
+
+    // 全局点击事件关闭右键菜单
+    window.addEventListener('click', () => {
+      closeTabContextMenu();
+    });
+
+    // 页面加载完成后立即初始化 Tab
+    window.addEventListener('DOMContentLoaded', () => {
+      renderCockpitTabs();
+    });
 
 </script>
 
