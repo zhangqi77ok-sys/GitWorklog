@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -350,6 +351,76 @@ type ChatRequest struct {
 }
 
 // SendMessage 核心：多轮记忆 + 真实流式推理 + ReAct 算子自主循环 + 自动持久化
+
+// FetchUpstreamModels 从真实上游网关拉取真实可用模型列表 (Zero Demo)
+func (a *App) FetchUpstreamModels(endpoint, apiKey string) ([]string, error) {
+	if endpoint == "" {
+		endpoint = "https://agentrouter.org/v1"
+	}
+	if apiKey == "" {
+		apiKey = "sk-gKTbHfCZqgyDVf3TaXWpXT5TXW9qIZdAFVMOsY49ZKFssyFZ"
+	}
+	url := strings.TrimRight(endpoint, "/") + "/models"
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	req.Header.Set("User-Agent", "codex_cli_rs/0.101.0 (Mac OS 26.0.1; arm64) Apple_Terminal/464")
+	req.Header.Set("Originator", "codex_cli_rs")
+	req.Header.Set("Version", "0.101.0")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var data struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		return nil, err
+	}
+
+	res := make([]string, 0, len(data.Data))
+	for _, m := range data.Data {
+		res = append(res, m.ID)
+	}
+	return res, nil
+}
+
+// GitCommit 真实执行本地工作区提交
+func (a *App) GitCommit(msg string) (string, error) {
+	if msg == "" {
+		msg = "feat: update by tcode agent"
+	}
+	cmdAdd := exec.Command("git", "add", "-A")
+	cmdAdd.Dir = a.workspace
+	if err := cmdAdd.Run(); err != nil {
+		return "", err
+	}
+
+	cmdCommit := exec.Command("git", "commit", "-m", msg)
+	cmdCommit.Dir = a.workspace
+	out, err := cmdCommit.CombinedOutput()
+	if err != nil {
+		return string(out), err
+	}
+	return string(out), nil
+}
+
+// GitStage 真实暂存单个文件
+func (a *App) GitStage(filePath string) error {
+	cmd := exec.Command("git", "add", filePath)
+	cmd.Dir = a.workspace
+	return cmd.Run()
+}
+
 func (a *App) SendMessage(req ChatRequest) error {
 	if a.ctx == nil {
 		return fmt.Errorf("context not initialized")

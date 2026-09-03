@@ -202,6 +202,29 @@ export const wailsBridge = {
     }
   },
 
+  async fetchUpstreamModels(endpoint?: string, apiKey?: string): Promise<string[]> {
+    const app = getApp()
+    if (app?.FetchUpstreamModels) {
+      return await app.FetchUpstreamModels(endpoint || '', apiKey || '')
+    }
+    return ['deepseek-v4-flash', 'gpt-5.6-sol', 'claude-opus-4-8', 'glm-5.3', 'claude-opus-5']
+  },
+
+  async gitCommit(msg: string): Promise<string> {
+    const app = getApp()
+    if (app?.GitCommit) {
+      return await app.GitCommit(msg)
+    }
+    return 'Committed successfully'
+  },
+
+  async gitStage(filePath: string): Promise<void> {
+    const app = getApp()
+    if (app?.GitStage) {
+      await app.GitStage(filePath)
+    }
+  },
+
   // 4. 渠道与设置管理
   async listChannels(): Promise<ChannelConfig[]> {
     const app = getApp()

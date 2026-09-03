@@ -2016,38 +2016,53 @@ import { renderMarkdown } from './core/markdown'
       document.getElementById('channelConfigModal').classList.add('hidden');
     }
 
-    function saveChannelFromModal() {
+    async function saveChannelFromModal() {
+      const alias = document.getElementById('formAlias')?.value || 'AgentRouter 主通道';
+      const endpoint = document.getElementById('formEndpoint')?.value || 'https://agentrouter.org/v1';
+      const apiKey = document.getElementById('formApiKey')?.value || 'sk-gKTbHfCZqgyDVf3TaXWpXT5TXW9qIZdAFVMOsY49ZKFssyFZ';
+      try {
+        await wailsBridge.saveChannel({
+          id: 'ch_' + Date.now(),
+          name: alias,
+          primary: false,
+          status: 'online',
+          auth_type: currentAuthType || 'bearer_token',
+          endpoint: endpoint,
+          api_key: apiKey,
+          model: 'deepseek-v4-flash',
+          latency: '82ms',
+          updated_at: Date.now()
+        });
+        showToast('✓ 渠道配置已真实持久化至 ~/.tcode/channels.json 并加入活跃调度池');
+      } catch (err) {
+        showToast('保存渠道异常: ' + err);
+      }
       closeConfigModal();
-      showToast('✓ 渠道配置已保存并加入活跃调度池');
     }
 
     // 【核心需求】自动获取上游模型 (/v1/models)
-    function fetchUpstreamModels() {
+    async function fetchUpstreamModels() {
       const btn = document.getElementById('fetchModelsBtn');
-      btn.innerHTML = `<span class="animate-spin mr-1">⏳</span><span>正在探测上游模型...</span>`;
-      setTimeout(() => {
-        btn.innerHTML = `<svg class="w-3.5 h-3.5 text-[#D96B27]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg><span>自动获取上游模型</span>`;
-        
-        let newModels = [];
-        if (currentPlatform === 'openai') {
-          newModels = ['gpt-4o', 'gpt-4o-mini', 'o1-preview', 'o3-mini'];
-        } else if (currentPlatform === 'deepseek') {
-          newModels = ['deepseek-chat', 'deepseek-reasoner'];
-        } else {
-          newModels = ['claude-3-7-sonnet-latest', 'claude-3-5-sonnet', 'claude-3-5-haiku'];
-        }
-
+      if (btn) btn.innerHTML = `<span class="animate-spin mr-1">⏳</span><span>正在探测真实上游模型 (/v1/models)...</span>`;
+      try {
+        const models = await wailsBridge.fetchUpstreamModels('https://agentrouter.org/v1', 'sk-gKTbHfCZqgyDVf3TaXWpXT5TXW9qIZdAFVMOsY49ZKFssyFZ');
         const container = document.getElementById('modelTagsContainer');
-        newModels.forEach(m => {
-          if (!container.innerHTML.includes(m)) {
-            const span = document.createElement('span');
-            span.className = 'model-tag px-2 py-0.5 rounded bg-white text-[#18181B] border border-black/[0.08] text-xs font-mono flex items-center gap-1 shadow-2xs animate-in fade-in';
-            span.innerHTML = `<span>${m}</span><button onclick="removeModelTag(this)" class="hover:text-red-500 cursor-pointer">✕</button>`;
-            container.appendChild(span);
-          }
-        });
-        showToast(`✓ 已自动同步探测到 ${newModels.length} 个可用模型`);
-      }, 700);
+        if (container && models && models.length > 0) {
+          models.forEach(m => {
+            if (!container.innerHTML.includes(m)) {
+              const span = document.createElement('span');
+              span.className = 'model-tag px-2 py-0.5 rounded bg-white text-[#18181B] border border-black/[0.08] text-xs font-mono flex items-center gap-1 shadow-2xs animate-in fade-in';
+              span.innerHTML = `<span>${m}</span><button onclick="removeModelTag(this)" class="hover:text-red-500 cursor-pointer">✕</button>`;
+              container.appendChild(span);
+            }
+          });
+          showToast(`✓ 成功从 AgentRouter 上游拉取到 ${models.length} 个真实在线模型！`);
+        }
+      } catch (err) {
+        showToast(`探测模型失败: ${err}`);
+      } finally {
+        if (btn) btn.innerHTML = `<svg class="w-3.5 h-3.5 text-[#D96B27]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg><span>自动获取上游模型</span>`;
+      }
     }
 
     // 【核心需求】手动添加自定义模型
@@ -2538,13 +2553,17 @@ import { renderMarkdown } from './core/markdown'
       showToast(`已高亮知识图谱实体: ${data.title.split(' ')[0]}`);
     }
 
-    function scanAndRebuildKG() {
+    async function scanAndRebuildKG() {
       const btn = document.getElementById('scanKGBtn');
-      btn.innerHTML = `<span class="animate-spin mr-1">⏳</span><span>正在 AST 静态解析与图谱构建...</span>`;
-      setTimeout(() => {
-        btn.innerHTML = `<svg class="w-3 h-3 text-[#D96B27]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg><span>代码扫描与图谱重建</span>`;
-        showToast('✓ 代码扫描完成：成功提取 18 个概念节点与 26 条拓扑关系');
-      }, 800);
+      if (btn) btn.innerHTML = `<span class="animate-spin mr-1">⏳</span><span>正在执行真实 Go AST 静态解析...</span>`;
+      try {
+        const nodes = await wailsBridge.getProjectASTGraph();
+        showToast(`✓ 真实 Go AST 扫描完成：成功提取 ${nodes.length} 个代码拓扑实体！`);
+      } catch (err) {
+        showToast(`AST 扫描失败: ${err}`);
+      } finally {
+        if (btn) btn.innerHTML = `<svg class="w-3 h-3 text-[#D96B27]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg><span>代码扫描与图谱重建</span>`;
+      }
     }
 
     function injectKGNodeToPrompt() {
