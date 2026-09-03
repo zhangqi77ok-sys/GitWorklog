@@ -129,6 +129,17 @@ Tcode 打破了单体硬编码调度逻辑，将 Agent 的执行循环、能力�
 ### 8. 纯净零数据初始状态 (Zero Demo & Clean Empty State)
 * 严格执行无假数据铁律，初次启动呈现干净的 0 项目、0 会话状态，只有用户显式打开本地项目后才载入工作区。
 
+### 9. 生产级前后端基础工程框架与原生双轨上游驱动 (Base Framework & Dual-Track Upstream Drivers)
+* **后端 Go 插件式微内核 (`backend/`)**：
+  * **强类型 SPI 契约 (`pkg/plugin/v1/`)**：规范 `Plugin`、`ProviderPlugin` (带背压通道)、`ToolPlugin` (入参 Schema 校验)、`RailPlugin` (多阶段拦截与阻断)；
+  * **分段锁注册中心 (`internal/host/registry.go`)**：无全局大锁，支持高并发读取与按优先级降序调度；
+  * **Panic 隔离看门狗 (`internal/host/guard.go`)**：结合 `recover()` 与 `debug.Stack()` 捕获插件堆栈，保障微内核常驻守护进程 100% 高可用；
+  * **OpenAI 与 Claude 双轨原生上游驱动**：中立规范层 (`pkg/protocol/canonical.go`) 抹平协议差异，原生支持 OpenAI Chat Completions 协议族（GPT-4o、DeepSeek、SiliconFlow）与 Anthropic Claude Messages API 官方协议（支持 Claude 3.7 Thinking 深度思考流与 Prompt Caching 用量审计）。
+* **前端 React 19 现代工程 (`frontend/`)**：
+  * 基于 **React 19 + TypeScript 5.5 (Strict) + Vite 6 + Tailwind CSS v4**；
+  * 完整落地 Warm Minimalist 调色盘（`#FAF8F5` / `#F4EFEA` / `#D96B27`）与 16:9 人机工学单焦点视口布局；
+  * 顶栏单焦点切换胶囊（`💬 对话` / `◫ 双栏协同` / `📝 代码区`）、48px 侧边活动栏、生产级双层 Git 源码控制面板与集成终端抽屉（`Ctrl + \`` 全局快捷唤起）。
+
 ---
 
 ## 🎨 四、视觉与人机工程学规范

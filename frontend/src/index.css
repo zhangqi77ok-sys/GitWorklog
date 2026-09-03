@@ -1,0 +1,42 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --bg-main: #FAF8F5;
+    --bg-panel: #F4EFEA;
+    --bg-card: #FFFFFF;
+    --border-warm: #EADFD7;
+    --brand-orange: #D96B27;
+    --brand-orange-hover: #BF5B1D;
+    --text-primary: #2C2825;
+    --text-secondary: #7A726B;
+    --text-muted: #A39B94;
+    --terminal-bg: #161412;
+  }
+
+  body {
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background-color: var(--bg-main);
+    color: var(--text-primary);
+  }
+
+  code, pre {
+    font-family: 'Fira Code', monospace;
+  }
+
+  /* 自定义极简暖色滚动条 */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #D9D0C7;
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #BFB4A9;
+  }
+}
