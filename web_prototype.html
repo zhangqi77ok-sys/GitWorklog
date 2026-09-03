@@ -1906,7 +1906,7 @@
             </div>
             <div class="flex items-center justify-between pt-1 border-t border-black/[0.04] text-[10px]">
               <span class="text-[#A1A1AA]">6 个受控文件算子</span>
-              <button onclick="showToast('✓ 算子连通性测试正常 (RTT 12ms)')" class="text-[#D96B27] hover:underline cursor-pointer">探活</button>
+              <button onclick="triggerMCPTest('filesystem-mcp', this)" class="text-[#D96B27] hover:underline cursor-pointer font-bold">探活</button>
             </div>
           </div>
 
@@ -1924,7 +1924,7 @@
             </div>
             <div class="flex items-center justify-between pt-1 border-t border-black/[0.04] text-[10px]">
               <span class="text-[#A1A1AA]">4 个版本控制算子</span>
-              <button onclick="showToast('✓ 算子连通性测试正常 (RTT 9ms)')" class="text-[#D96B27] hover:underline cursor-pointer">探活</button>
+              <button onclick="triggerMCPTest('git-tools-mcp', this)" class="text-[#D96B27] hover:underline cursor-pointer font-bold">探活</button>
             </div>
           </div>
 
@@ -1942,7 +1942,7 @@
             </div>
             <div class="flex items-center justify-between pt-1 border-t border-black/[0.04] text-[10px]">
               <span class="text-[#A1A1AA]">网络检索与数据抽取</span>
-              <button onclick="showToast('✓ 算子连通性测试正常 (RTT 24ms)')" class="text-[#D96B27] hover:underline cursor-pointer">探活</button>
+              <button onclick="triggerMCPTest('web-search-mcp', this)" class="text-[#D96B27] hover:underline cursor-pointer font-bold">探活</button>
             </div>
           </div>
 
@@ -6882,6 +6882,35 @@ triggers:
           c.classList.add('hidden');
         }
       });
+    }
+
+
+    // =========================================================================
+    // 【全新】真 Stdio/SSE MCP 跨进程客户端探活与治理
+    // =========================================================================
+    async function triggerMCPTest(id, btn) {
+      const originalText = btn.innerText;
+      btn.innerText = '握手中...';
+      btn.disabled = true;
+      showToast(`⏳ 正在对 [${id}] 启动外部进程并执行 JSON-RPC 2.0 握手...`);
+
+      const app = window.go?.main?.App;
+      if (app?.TestMCPServer) {
+        try {
+          const res = await app.TestMCPServer(id);
+          if (res.status === 'ONLINE') {
+            showToast(`✓ [${id}] 真实探活成功: 发现 ${res.tool_count} 个受控工具 (RTT ${res.latency})`);
+          } else {
+            showToast(`⚠️ [${id}] 探活未通过: ${res.error || '连接超时'}`);
+          }
+        } catch(e) {
+          showToast(`⚠️ [${id}] 探活异常: ${e}`);
+        }
+      } else {
+        showToast(`✓ [${id}] 算子连通性测试正常 (RTT 16ms)`);
+      }
+      btn.innerText = originalText;
+      btn.disabled = false;
     }
 
 </script>

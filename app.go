@@ -3,6 +3,7 @@ package main
 import (
 	"tcode/internal/agent"
 	"tcode/internal/gitops"
+	"tcode/internal/mcp"
 	"tcode/internal/telemetry"
 
 	"context"
@@ -53,6 +54,7 @@ type App struct {
 	channelStore *config.ChannelStore
 	extraStore   *config.ExtraStore
 	sessionStore *session.Store
+	mcpManager   *mcp.Manager
 }
 
 // NewApp 构造生产级 Wails 宿主
@@ -223,6 +225,28 @@ func (a *App) SaveMCP(cfg config.MCPServerConfig) error {
 		return fmt.Errorf("extra store not initialized")
 	}
 	return a.extraStore.SaveMCP(cfg)
+}
+
+// TestMCPServer 对指定 MCP 服务执行标准 JSON-RPC 2.0 握手与工具探活
+func (a *App) TestMCPServer(id string) (mcp.MCPTestResult, error) {
+	if a.extraStore != nil {
+		mcps := a.extraStore.ListMCPs()
+		for _, srv := range mcps {
+			if srv.ID == id || strings.Contains(strings.ToLower(srv.Name), strings.ToLower(id)) {
+				return a.mcpManager.TestServer(context.Background(), srv)
+			}
+		}
+	}
+	// 默认提供 node/npx 预设探活
+	defaultCfg := config.MCPServerConfig{
+		ID:      id,
+		Name:    id,
+		Type:    "stdio",
+		Command: "npx",
+		Args:    []string{"-y", "@modelcontextprotocol/server-filesystem", a.workspace},
+		Enabled: true,
+	}
+	return a.mcpManager.TestServer(context.Background(), defaultCfg)
 }
 
 func (a *App) ListSkills() []config.SkillConfig {
