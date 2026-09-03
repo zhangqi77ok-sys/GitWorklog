@@ -6,27 +6,34 @@ import { GitPanel } from './app/git/GitPanel'
 import { UsageCockpit } from './app/analytics/UsageCockpit'
 import { MessageBubble } from './app/chat/MessageBubble'
 import { EditorWorkspace } from './app/editor/EditorWorkspace'
+import { SettingsModal } from './app/settings/SettingsModal'
 import { useWorkspaceStore } from './core/store/workspaceStore'
 import { useChatStore } from './core/store/chatStore'
+import { useSettingsStore } from './core/store/settingsStore'
 import { Cpu, Send, Loader2, Sparkles } from 'lucide-react'
 
 export const App: React.FC = () => {
   const { mode, activityTab, toggleTerminal } = useWorkspaceStore()
   const { messages, isStreaming, sendMessage, currentModel, setCurrentModel } = useChatStore()
+  const { openSettings } = useSettingsStore()
   const [inputPrompt, setInputPrompt] = useState('')
   const chatBottomRef = useRef<HTMLDivElement>(null)
 
-  // 绑定全局快捷键 Ctrl + `
+  // 绑定全局快捷键 Ctrl + ` 与 Ctrl + ,
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && (e.key === '`' || e.code === 'Backquote')) {
         e.preventDefault()
         toggleTerminal()
       }
+      if ((e.ctrlKey || e.metaKey) && (e.key === ',' || e.code === 'Comma')) {
+        e.preventDefault()
+        openSettings()
+      }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [toggleTerminal])
+  }, [toggleTerminal, openSettings])
 
   // 自动滚屏至底部
   useEffect(() => {
@@ -142,6 +149,9 @@ export const App: React.FC = () => {
 
       {/* 底部集成式终端抽屉 */}
       <TerminalDrawer />
+
+      {/* 全局系统设置居中模态窗 */}
+      <SettingsModal />
     </div>
   )
 }

@@ -66,6 +66,72 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // 1.1 针对外部上游大模型网关的连通性测速探针
+  if (pathname === "/api/config/ping" && req.method === "POST") {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      try {
+        const { baseUrl = "https://agentrouter.org", apiKey = "", model = "deepseek-v4-flash" } = JSON.parse(body || "{}");
+        const start = Date.now();
+
+        const urlObj = new URL("/v1/chat/completions", baseUrl);
+        const headers = {
+          "Content-Type": "application/json",
+          "Authorization": apiKey ? "Bearer " + apiKey : "",
+        };
+
+        if (baseUrl.includes("agentrouter.org")) {
+          Object.assign(headers, AGENTROUTER_HEADERS);
+        }
+
+        const payload = JSON.stringify({
+          model: model,
+          messages: [{ role: "user", content: "ping" }],
+          max_tokens: 5,
+        });
+
+        const client = urlObj.protocol === "https:" ? https : http;
+        const pingReq = client.request(urlObj, {
+          method: "POST",
+          headers: headers,
+          timeout: 10000,
+        }, (pingRes) => {
+          let data = "";
+          pingRes.on("data", (c) => (data += c));
+          pingRes.on("end", () => {
+            const latency = Date.now() - start;
+            if (pingRes.statusCode === 200) {
+              res.writeHead(200, { "Content-Type": "application/json" });
+              res.end(JSON.stringify({ success: true, latency_ms: latency, status: pingRes.statusCode }));
+            } else {
+              res.writeHead(200, { "Content-Type": "application/json" });
+              res.end(JSON.stringify({ success: false, latency_ms: latency, status: pingRes.statusCode, error: data.slice(0, 200) }));
+            }
+          });
+        });
+
+        pingReq.on("error", (err) => {
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ success: false, error: err.message }));
+        });
+
+        pingReq.on("timeout", () => {
+          pingReq.destroy();
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ success: false, error: "Connection timeout (10s)" }));
+        });
+
+        pingReq.write(payload);
+        pingReq.end();
+      } catch (e) {
+        res.writeHead(500, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ success: false, error: e.message }));
+      }
+    });
+    return;
+  }
+
   // 2. 文件树
   if (pathname === "/api/fs/tree") {
     const ignoreDirs = new Set([".git", "node_modules", "dist", "target", ".gemini", ".vscode"]);
