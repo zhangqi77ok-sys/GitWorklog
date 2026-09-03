@@ -33,6 +33,7 @@ interface WorkspaceState {
   isCodeMaximized: boolean
   isApprovalMode: boolean
   activeSessionId: string
+  sessions: SessionItem[]
   selectedTag: string
   splitRatio: number
   projectPath: string
@@ -52,6 +53,8 @@ interface WorkspaceState {
   toggleCodeMaximize: () => void
   toggleApprovalMode: () => void
   setActiveSessionId: (id: string) => void
+  addSession: (session: SessionItem) => void
+  removeSession: (id: string) => void
   setSelectedTag: (tag: string) => void
   setSplitRatio: (ratio: number) => void
   fetchWorkspaceInfo: () => Promise<void>
@@ -123,6 +126,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   isCodeMaximized: false,
   isApprovalMode: true,
   activeSessionId: 'sess1',
+  sessions: INITIAL_SESSIONS,
   selectedTag: 'all',
   splitRatio: 0.5,
   projectPath: 'D:\\weihu\\agent-learning',
@@ -142,6 +146,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   toggleCodeMaximize: () => set((state) => ({ isCodeMaximized: !state.isCodeMaximized })),
   toggleApprovalMode: () => set((state) => ({ isApprovalMode: !state.isApprovalMode })),
   setActiveSessionId: (id) => set({ activeSessionId: id }),
+  addSession: (session) => set((state) => ({ sessions: [session, ...state.sessions] })),
+  removeSession: (id) => set((state) => ({ sessions: state.sessions.filter((s) => s.id !== id) })),
   setSelectedTag: (tag) => set({ selectedTag: tag }),
   setSplitRatio: (ratio) => set({ splitRatio: ratio }),
 

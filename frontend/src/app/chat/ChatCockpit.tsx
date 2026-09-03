@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import {
   Code2,
   Paperclip,
@@ -8,10 +8,14 @@ import {
   Check,
   ChevronRight,
   Zap,
+  GitFork,
+  History,
+  Copy,
 } from 'lucide-react'
-import { useWorkspaceStore, INITIAL_SESSIONS } from '../../core/store/workspaceStore'
+import { useWorkspaceStore } from '../../core/store/workspaceStore'
 import { useChatStore } from '../../core/store/chatStore'
 import { useEditorStore } from '../../core/store/editorStore'
+import { TimeTravelModal } from './TimeTravelModal'
 
 export const ChatCockpit: React.FC = () => {
   const {
@@ -21,9 +25,10 @@ export const ChatCockpit: React.FC = () => {
     toggleCodeWorkspace,
     isApprovalMode,
     toggleApprovalMode,
+    sessions,
   } = useWorkspaceStore()
 
-  const { messages, isStreaming, sendMessage, currentModel, setCurrentModel } = useChatStore()
+  const { messages, isStreaming, sendMessage, currentModel, setCurrentModel, switchSession } = useChatStore()
   const { openFile } = useEditorStore()
 
   const [inputPrompt, setInputPrompt] = useState('')
@@ -31,6 +36,22 @@ export const ChatCockpit: React.FC = () => {
   const [isSlashPopupOpen, setIsSlashPopupOpen] = useState(false)
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false)
   const [isThinkingOpen, setIsThinkingOpen] = useState(true)
+
+  // 会话分支与时光倒流模态窗
+  const [timeTravelState, setTimeTravelState] = useState<{
+    isOpen: boolean
+    mode: 'fork' | 'revert'
+    targetMessageId: string
+  }>({
+    isOpen: false,
+    mode: 'fork',
+    targetMessageId: '',
+  })
+
+  // 监听当前活跃会话切换，即时刷新消息
+  useEffect(() => {
+    switchSession(activeSessionId)
+  }, [activeSessionId, switchSession])
 
   // 展开算子明细
   const [openTools, setOpenTools] = useState<Record<string, boolean>>({
@@ -57,7 +78,7 @@ export const ChatCockpit: React.FC = () => {
       {/* 1. 顶部会话分支 TabBar 导航 */}
       <nav className="h-9 min-h-[36px] bg-[#FAF8F5] border-b border-black/[0.08] flex items-center justify-between px-2 select-none shrink-0">
         <div className="flex items-center gap-1 overflow-x-auto no-scrollbar flex-1 py-1">
-          {INITIAL_SESSIONS.map((sess) => {
+          {sessions.map((sess) => {
             const isActive = sess.id === activeSessionId
             return (
               <div
@@ -321,16 +342,42 @@ export const ChatCockpit: React.FC = () => {
         {messages.map((m) => {
           if (m.role === 'user') {
             return (
-              <div key={m.id} className="flex justify-end">
+              <div key={m.id} className="flex flex-col items-end group">
                 <div className="max-w-[80%] bg-[#F4EFEA] text-[#18181B] px-4 py-3 rounded-2xl rounded-tr-sm border border-black/[0.06] shadow-2xs text-xs leading-relaxed">
                   {m.content}
+                </div>
+                <div className="flex items-center gap-2 pt-1 px-1 opacity-0 group-hover:opacity-100 transition-opacity select-none text-[10px] text-[#71717A]">
+                  <button
+                    onClick={() => setTimeTravelState({ isOpen: true, mode: 'fork', targetMessageId: m.id })}
+                    title="从本轮提问分叉出独立探索分支 (Fork)"
+                    className="flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-black/[0.05] hover:text-[#D96B27] transition-all cursor-pointer"
+                  >
+                    <GitFork size={11} />
+                    <span>分叉分支</span>
+                  </button>
+                  <button
+                    onClick={() => setTimeTravelState({ isOpen: true, mode: 'revert', targetMessageId: m.id })}
+                    title="时光倒流：截断本轮之后的后续对话"
+                    className="flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-black/[0.05] hover:text-amber-700 transition-all cursor-pointer"
+                  >
+                    <History size={11} />
+                    <span>回退至此</span>
+                  </button>
+                  <button
+                    onClick={() => navigator.clipboard.writeText(m.content)}
+                    title="复制消息内容"
+                    className="flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-black/[0.05] hover:text-[#18181B] transition-all cursor-pointer"
+                  >
+                    <Copy size={11} />
+                    <span>复制</span>
+                  </button>
                 </div>
               </div>
             )
           }
 
           return (
-            <div key={m.id} className="flex flex-col items-start space-y-3 max-w-3xl">
+            <div key={m.id} className="flex flex-col items-start space-y-3 max-w-3xl group">
               {/* 头部身份 */}
               <div className="flex items-center gap-2 text-xs font-semibold text-[#18181B]">
                 <div className="w-4 h-4 rounded bg-[#D96B27] text-white flex items-center justify-center text-[9px] font-bold">
@@ -406,11 +453,47 @@ export const ChatCockpit: React.FC = () => {
                   {m.content}
                 </div>
               )}
+
+              {/* 消息底部操作条：分叉新分支、时光倒流回退、复制 */}
+              <div className="flex items-center gap-2 pt-0.5 px-1 opacity-0 group-hover:opacity-100 transition-opacity select-none text-[10px] text-[#71717A]">
+                <button
+                  onClick={() => setTimeTravelState({ isOpen: true, mode: 'fork', targetMessageId: m.id })}
+                  title="从该节点分叉出独立探索分支 (Fork)"
+                  className="flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-black/[0.05] hover:text-[#D96B27] transition-all cursor-pointer"
+                >
+                  <GitFork size={11} />
+                  <span>分叉分支</span>
+                </button>
+                <button
+                  onClick={() => setTimeTravelState({ isOpen: true, mode: 'revert', targetMessageId: m.id })}
+                  title="时光倒流：将对话回退至该节点并截除后续探索"
+                  className="flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-black/[0.05] hover:text-amber-700 transition-all cursor-pointer"
+                >
+                  <History size={11} />
+                  <span>回退至此</span>
+                </button>
+                <button
+                  onClick={() => navigator.clipboard.writeText(m.content)}
+                  title="复制消息正文"
+                  className="flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-black/[0.05] hover:text-[#18181B] transition-all cursor-pointer"
+                >
+                  <Copy size={11} />
+                  <span>复制</span>
+                </button>
+              </div>
             </div>
           )
         })}
         <div ref={messagesEndRef} />
       </div>
+
+      {/* 会话分叉与时光倒流模态窗 */}
+      <TimeTravelModal
+        isOpen={timeTravelState.isOpen}
+        mode={timeTravelState.mode}
+        targetMessageId={timeTravelState.targetMessageId}
+        onClose={() => setTimeTravelState((prev) => ({ ...prev, isOpen: false }))}
+      />
 
       {/* 3. 底部高级输入舱 (对齐原型) */}
       <div className="p-4 bg-gradient-to-t from-[#FAF8F5] via-[#FAF8F5]/90 to-transparent relative shrink-0">

@@ -15,7 +15,7 @@ import { useGitStore } from '../../core/store/gitStore'
 import { FileTreeView } from '../files/FileTreeView'
 
 export const LeftSidebar: React.FC = () => {
-  const { activityTab, activeSessionId, setActiveSessionId, selectedTag, setSelectedTag } =
+  const { activityTab, activeSessionId, setActiveSessionId, selectedTag, setSelectedTag, sessions } =
     useWorkspaceStore()
   const { branch, staged, working, stageFile, unstageFile, restoreFile } = useGitStore()
   const [searchQuery, setSearchQuery] = useState('')
@@ -24,7 +24,7 @@ export const LeftSidebar: React.FC = () => {
   const [commitMessage, setCommitMessage] = useState('')
 
   // 过滤分支列表
-  const filteredSessions = INITIAL_SESSIONS.filter((sess) => {
+  const filteredSessions = sessions.filter((sess) => {
     const matchTag = selectedTag === 'all' || sess.tag === selectedTag
     const matchSearch =
       !searchQuery ||
