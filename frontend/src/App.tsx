@@ -8,6 +8,8 @@ import { UsageCockpit } from './app/analytics/UsageCockpit'
 import { TerminalDrawer } from './app/terminal/TerminalDrawer'
 import { SettingsModal } from './app/settings/SettingsModal'
 import { KnowledgeGraphModal } from './app/kg/KnowledgeGraphModal'
+import { GitBranchModal } from './app/git/GitBranchModal'
+import { SnapshotModal } from './app/git/SnapshotModal'
 import { useWorkspaceStore } from './core/store/workspaceStore'
 import { useSettingsStore } from './core/store/settingsStore'
 
@@ -69,6 +71,12 @@ export const App: React.FC = () => {
 
       {/* 5. 项目知识图谱与记忆弹窗 */}
       <KnowledgeGraphModal />
+
+      {/* 6. Git 分支管理模态窗 */}
+      <GitBranchModal />
+
+      {/* 7. 微内核影子快照与安全回退中心 */}
+      <SnapshotModal />
     </div>
   )
 }

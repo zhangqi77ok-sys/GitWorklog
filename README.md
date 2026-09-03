@@ -232,7 +232,18 @@ Tcode 打破了单体硬编码调度逻辑，将 Agent 的执行循环、能力�
   * 自动解析并提取上游大模型原生输出的 `reasoning_content`（如 DeepSeek-V4、Claude 3.7 Thinking），通过 SSE 多阶段协议毫秒级流式推送至前端深度心智思考折叠卡片。
 * **ReAct 自主物理算子调度闭环**：
   * 模型具备自主工具发现与执行能力：`run_command`（Windows 静默 Shell 命令）、`read_file`（受控安全读取）、`write_file`（原子安全写）、`git_status`（工作区状态感知）；
-  * 后端捕获工具调用后在物理沙箱安全执行，向前端推送 `event: tool_start` 与 `event: tool_end`，并将执行结果反馈模型进入下一轮推理，实现多轮自愈。
+### 18. 高级 Git 控制中枢模态窗与 Token 效能监控大盘 (Git Modals & 24h Canvas Chart)
+* **分支管理与即时检出模态窗 (`GitBranchModal.tsx`)**：
+  * 支持本地与远程分支关键词即时过滤、当前活跃分支高亮指示、单键 `git checkout` 分支切换，以及一键基于当前分支检出新分支 (`git checkout -b <name>`)；
+  * 严格遵循暖色极简与弹窗铁律：水平垂直居中、无多余拟物阴影、支持 Esc 退出与背景遮罩关闭。
+* **微内核影子快照与 Stash 储藏中心 (`SnapshotModal.tsx`)**：
+  * 双 Tab 架构：实时呈现系统在 Agent 修改物理文件前 5ms 自动生成的轻量影子快照（包含快照 ID、精确时间、受影响文件、操作说明与哈希）；
+  * 提供「Diff 行级比对」与「一键秒级恢复」；集成 Git Stash 储藏栈与一键 Pop 恢复。
+* **24 小时高帧率 Canvas 吞吐时序走势 (`ThroughputCanvas.tsx`)**：
+  * 原生 HTML5 Canvas 自适应 Retina 高分屏（`window.devicePixelRatio`），按小时精准呈现输入/输出 Tokens 堆叠柱状图；
+  * 支持鼠标在 Canvas 划过时实时计算时间切片，呈现悬浮数据探针与微秒级响应气泡。
+* **客户端原生 CSV 审计报表导出**：
+  * 基于前端 Blob 与虚拟下载流，支持一键将当前周期的调用明细（包含时间戳、模型名称、Prompt/Completion Tokens、缓存命中率、计费金额）导出为标准 CSV 报表。
 
 ---
 

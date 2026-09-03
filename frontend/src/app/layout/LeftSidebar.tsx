@@ -227,6 +227,14 @@ export const LeftSidebar: React.FC = () => {
               </span>
               <div className="flex items-center gap-1">
                 <button
+                  onClick={() => useGitStore.getState().setSnapshotModalOpen(true)}
+                  title="微内核影子快照与安全回退中心"
+                  className="p-1 rounded text-[#71717A] hover:text-[#D96B27] hover:bg-black/[0.05] transition-all cursor-pointer"
+                >
+                  <span className="text-xs">🛡️</span>
+                </button>
+                <button
+                  onClick={() => useGitStore.getState().fetchStatus()}
                   title="刷新 Git 状态"
                   className="p-1 rounded text-[#71717A] hover:text-[#18181B] hover:bg-black/[0.05] transition-all cursor-pointer"
                 >
@@ -235,15 +243,22 @@ export const LeftSidebar: React.FC = () => {
               </div>
             </div>
 
-            {/* 当前分支胶囊按钮 */}
-            <div className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-white border border-black/[0.08] shadow-2xs text-xs">
+            {/* 当前分支胶囊按钮 (点击弹出分支管理模态窗) */}
+            <div
+              onClick={() => useGitStore.getState().setBranchModalOpen(true)}
+              title="切换分支或检出新分支"
+              className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-white hover:border-[#D96B27]/50 border border-black/[0.08] shadow-2xs text-xs cursor-pointer transition-all group"
+            >
               <div className="flex items-center gap-1.5 truncate">
                 <span className="text-[#D96B27]">🌿</span>
-                <span className="font-mono font-semibold text-[#18181B] truncate">{branch}</span>
+                <span className="font-mono font-semibold text-[#18181B] truncate group-hover:text-[#D96B27] transition-colors">
+                  {branch}
+                </span>
                 <span className="text-[10px] text-[#10A37F] bg-[#10A37F]/10 px-1 py-0.2 rounded font-sans">
                   已跟踪
                 </span>
               </div>
+              <span className="text-[10px] text-[#71717A] group-hover:text-[#18181B]">切换 ▾</span>
             </div>
           </div>
 
