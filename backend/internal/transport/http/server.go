@@ -21,11 +21,12 @@ type Server struct {
 	httpSrv     *http.Server
 	gitTool     *gitTool.Tool
 	snapshotMgr *sandbox.SnapshotManager
+	sandbox     *sandbox.Sandbox
 	engine      *loop.ExecutionEngine
 }
 
 // NewServer 构造本地服务端
-func NewServer(addr string, reg *host.Registry, gt *gitTool.Tool, sm *sandbox.SnapshotManager) *Server {
+func NewServer(addr string, reg *host.Registry, gt *gitTool.Tool, sm *sandbox.SnapshotManager, sb *sandbox.Sandbox) *Server {
 	if addr == "" {
 		addr = "127.0.0.1:8765"
 	}
@@ -34,6 +35,7 @@ func NewServer(addr string, reg *host.Registry, gt *gitTool.Tool, sm *sandbox.Sn
 		registry:    reg,
 		gitTool:     gt,
 		snapshotMgr: sm,
+		sandbox:     sb,
 		engine:      loop.NewExecutionEngine(reg),
 	}
 
@@ -46,6 +48,10 @@ func NewServer(addr string, reg *host.Registry, gt *gitTool.Tool, sm *sandbox.Sn
 	mux.HandleFunc("/api/git/restore", s.handleGitRestore)
 	mux.HandleFunc("/api/snapshots", s.handleListSnapshots)
 	mux.HandleFunc("/api/snapshots/rollback", s.handleRollbackSnapshot)
+	mux.HandleFunc("/api/fs/tree", s.handleFsTree)
+	mux.HandleFunc("/api/fs/read", s.handleFsRead)
+	mux.HandleFunc("/api/fs/original", s.handleFsOriginal)
+	mux.HandleFunc("/api/fs/write", s.handleFsWrite)
 
 	s.httpSrv = &http.Server{
 		Addr:         addr,
@@ -300,6 +306,151 @@ func (s *Server) handleRollbackSnapshot(w http.ResponseWriter, r *http.Request) 
 	}
 
 	if err := s.snapshotMgr.RollbackFile(req.CommitSHA, req.Path); err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":"%v"}`, err), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Write([]byte(`{"success":true}`))
+}
+
+// FileNode 目录树节点
+type FileNode struct {
+	Name     string      `json:"name"`
+	Path     string      `json:"path"`
+	IsDir    bool        `json:"is_dir"`
+	Children []*FileNode `json:"children,omitempty"`
+}
+
+// handleFsTree 遍历工作区目录树
+func (s *Server) handleFsTree(w http.ResponseWriter, r *http.Request) {
+	if s.sandbox == nil {
+		http.Error(w, `{"error":"sandbox not initialized"}`, http.StatusInternalServerError)
+		return
+	}
+
+	ignoreDirs := map[string]bool{
+		".git":         true,
+		"node_modules": true,
+		"dist":         true,
+		".gemini":      true,
+		"target":       true,
+		".vscode":      true,
+		".idea":        true,
+	}
+
+	var buildTree func(relPath string) ([]*FileNode, error)
+	buildTree = func(relPath string) ([]*FileNode, error) {
+		entries, err := s.sandbox.ListDir(relPath)
+		if err != nil {
+			return nil, err
+		}
+
+		nodes := make([]*FileNode, 0, len(entries))
+		for _, e := range entries {
+			name := e.Name()
+			if ignoreDirs[name] || strings.HasPrefix(name, ".tcode_tmp_") {
+				continue
+			}
+
+			childRel := filepath.ToSlash(filepath.Join(relPath, name))
+			node := &FileNode{
+				Name:  name,
+				Path:  childRel,
+				IsDir: e.IsDir(),
+			}
+
+			if e.IsDir() {
+				children, _ := buildTree(childRel)
+				node.Children = children
+			}
+
+			nodes = append(nodes, node)
+		}
+		return nodes, nil
+	}
+
+	tree, err := buildTree("")
+	if err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":"%v"}`, err), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(tree)
+}
+
+// handleFsRead 安全读取文件内容
+func (s *Server) handleFsRead(w http.ResponseWriter, r *http.Request) {
+	targetPath := r.URL.Query().Get("path")
+	if targetPath == "" {
+		http.Error(w, `{"error":"path query required"}`, http.StatusBadRequest)
+		return
+	}
+
+	data, err := s.sandbox.SafeReadFile(targetPath)
+	if err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":"%v"}`, err), http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"path":    targetPath,
+		"content": string(data),
+	})
+}
+
+// handleFsOriginal 获取文件的 Git 原始基准内容 (用于 Monaco Diff)
+func (s *Server) handleFsOriginal(w http.ResponseWriter, r *http.Request) {
+	targetPath := r.URL.Query().Get("path")
+	if targetPath == "" {
+		http.Error(w, `{"error":"path query required"}`, http.StatusBadRequest)
+		return
+	}
+
+	// 转换为斜杠格式让 git show HEAD:path 正确识别
+	slashPath := filepath.ToSlash(targetPath)
+	cmd := exec.Command("git", "show", fmt.Sprintf("HEAD:%s", slashPath))
+	cmd.Dir = s.sandbox.Root()
+
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	originalContent := ""
+	if err := cmd.Run(); err == nil {
+		originalContent = stdout.String()
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"path":     targetPath,
+		"original": originalContent,
+	})
+}
+
+// handleFsWrite 安全原子写文件
+func (s *Server) handleFsWrite(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Path    string `json:"path"`
+		Content string `json:"content"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Path == "" {
+		http.Error(w, `{"error":"path and content required"}`, http.StatusBadRequest)
+		return
+	}
+
+	if s.snapshotMgr != nil {
+		_, _ = s.snapshotMgr.CreateSnapshot(fmt.Sprintf("user edit: %s", req.Path))
+	}
+
+	if err := s.sandbox.AtomicWriteFile(req.Path, []byte(req.Content)); err != nil {
 		http.Error(w, fmt.Sprintf(`{"error":"%v"}`, err), http.StatusInternalServerError)
 		return
 	}

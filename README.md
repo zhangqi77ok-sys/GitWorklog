@@ -176,6 +176,16 @@ Tcode 打破了单体硬编码调度逻辑，将 Agent 的执行循环、能力�
   * 默认 32px 紧凑收起，点击平滑展开抽屉，内嵌代码暖黑（`#1E1C1A`）小代码块实时查阅入参 JSON 与返回输出；
   * 与 `ThinkingBlock`（思考卡片）和打字机气泡按严格时序编排渲染。
 
+### 13. Monaco 现代代码工作台与万行 Diff 虚拟化审查视图 (Monaco Editor & Dual-Column Diff Reviewer)
+* **真实文件资源管理器与多 Tab 标签页 (`frontend/src/app/editor/`)**：
+  * **树形工作区目录 (`FileTree.tsx`)**：递归树形结构，智能过滤 `.git`, `node_modules` 等开发中间层，按后缀自适应映射语言图标；
+  * **多 Tab 标签栏 (`TabBar.tsx`)**：纯白底色配顶部陶土暖橙强调线，支持多文件自由切换、一键保存与悬停关闭；
+* **Monaco 现代代码编辑器与 Diff 审查模式 (`EditorWorkspace.tsx`)**：
+  * 深度定制 Warm Minimalist 调色盘，适配 JetBrains Mono / Fira Code 等宽字体，代码行号、折叠与语法高亮完备；
+  * **万行 Diff 虚拟化审查 (Diff Reviewer)**：一键切入 Monaco `DiffEditor` 双栏对比，左侧基准（Git HEAD 原始快照）与右侧最新改动红绿对照，右上角悬浮工具条提供一键放弃更改（`Restore`）与一键暂存（`Stage`）。
+* **顶栏单焦点工作台联动**：
+  * 完美联动 `💬 对话`、`◫ 双栏协同`、`📝 代码模式`，实现从对话思维链到代码编辑的沉浸式无缝流转。
+
 ---
 
 ## 🎨 四、视觉与人机工程学规范

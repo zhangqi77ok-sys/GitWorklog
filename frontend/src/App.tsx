@@ -5,9 +5,10 @@ import { TerminalDrawer } from './app/terminal/TerminalDrawer'
 import { GitPanel } from './app/git/GitPanel'
 import { UsageCockpit } from './app/analytics/UsageCockpit'
 import { MessageBubble } from './app/chat/MessageBubble'
+import { EditorWorkspace } from './app/editor/EditorWorkspace'
 import { useWorkspaceStore } from './core/store/workspaceStore'
 import { useChatStore } from './core/store/chatStore'
-import { Cpu, Code2, Send, Loader2, Sparkles } from 'lucide-react'
+import { Cpu, Send, Loader2, Sparkles } from 'lucide-react'
 
 export const App: React.FC = () => {
   const { mode, activityTab, toggleTerminal } = useWorkspaceStore()
@@ -129,24 +130,10 @@ export const App: React.FC = () => {
               </section>
             )}
 
-            {/* 代码与编辑工作区 */}
+            {/* 代码与编辑工作区 (Monaco Editor & Diff Reviewer) */}
             {(mode === 'editor' || mode === 'split') && (
-              <section className="flex-1 flex flex-col bg-[#FAF8F5]">
-                <div className="h-8 bg-[#F4EFEA] border-b border-[#EADFD7] flex items-center px-3 text-xs text-[#7A726B] font-mono gap-2">
-                  <Code2 size={13} />
-                  <span>backend/plugins/provider/openai/openai_provider.go</span>
-                </div>
-                <div className="flex-1 p-4 font-mono text-xs text-[#2C2825] bg-white/70 overflow-auto">
-                  <pre className="text-[#7A726B] select-text">
-{`// ProviderPlugin 大模型网关驱动 SPI
-type ProviderPlugin interface {
-    Plugin
-    StreamChat(ctx context.Context, req *ChatRequest) (<-chan StreamChunk, error)
-    Ping(ctx context.Context) (time.Duration, error)
-    ListModels(ctx context.Context) ([]ModelDescriptor, error)
-}`}
-                  </pre>
-                </div>
+              <section className="flex-1 flex flex-col bg-[#FAF8F5] overflow-hidden">
+                <EditorWorkspace />
               </section>
             )}
           </main>

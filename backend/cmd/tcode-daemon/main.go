@@ -57,7 +57,7 @@ func main() {
 	fmt.Printf("[Tcode] Registered plugin: [%s] (%s)\n", gitT.ID(), gitT.Name())
 
 	// 3. 启动本地环回 HTTP/SSE 服务 (127.0.0.1:8765)
-	srv := transporthttp.NewServer("127.0.0.1:8765", reg, gitT, sm)
+	srv := transporthttp.NewServer("127.0.0.1:8765", reg, gitT, sm, sb)
 	go func() {
 		fmt.Println("[Tcode] HTTP/SSE Server listening on http://127.0.0.1:8765")
 		if err := srv.Start(); err != nil && err.Error() != "http: Server closed" {
