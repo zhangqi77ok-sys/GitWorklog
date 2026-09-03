@@ -244,7 +244,7 @@ func (a *App) GetFileDiff(filePath string) (string, error) {
 	return raw.Content, nil
 }
 
-// GetFileTree 真实获取工作区文件树 (供 ActivityBar 资源管理器)
+// GetFileTree 真实获取工作区文件树
 func (a *App) GetFileTree(dir string) ([]FileNode, error) {
 	targetDir := a.workspace
 	if dir != "" {
@@ -271,7 +271,6 @@ func (a *App) GetFileTree(dir string) ([]FileNode, error) {
 			IsDir: entry.IsDir(),
 		}
 		if entry.IsDir() {
-			// 一级子目录展开
 			subEntries, _ := os.ReadDir(filepath.Join(targetDir, name))
 			for _, sub := range subEntries {
 				subName := sub.Name()
@@ -331,7 +330,7 @@ type ChatRequest struct {
 	IsFullAuto bool   `json:"is_full_auto"`
 }
 
-// SendMessage 核心：发起真实流式大模型推理与工具调用闭环
+// SendMessage 核心：发起真实流式大模型推理与 Function Calling 算子自主循环闭环
 func (a *App) SendMessage(req ChatRequest) error {
 	if a.ctx == nil {
 		return fmt.Errorf("context not initialized")
@@ -365,7 +364,7 @@ func (a *App) SendMessage(req ChatRequest) error {
 		})
 
 		// 3. 构建提示词体系 (注入当前工作区上下文与规则)
-		systemPrompt := "你是 Tcode Studio 纯原生桌面智能体。在必要时使用所提供的工具直接修改和检验代码。请保持回答专业、准确且优雅。"
+		systemPrompt := "你是 Tcode Studio 纯原生桌面智能体。你有权调用工具来审查、读取、修改工程代码及运行测试命令。请优先利用工具解决问题，并在每次调用后解释原因。"
 		rules := a.extraStore.ListRules()
 		for _, r := range rules {
 			if r.Enabled {
@@ -373,18 +372,21 @@ func (a *App) SendMessage(req ChatRequest) error {
 			}
 		}
 
-		// 4. 调用真实流式大模型接口
+		conversation := []llm.Message{
+			{Role: "system", Content: systemPrompt},
+			{Role: "user", Content: req.Prompt},
+		}
+
+		// 4. 第一轮流式调用（携带工作区算子定义）
 		llmReq := llm.Request{
 			Endpoint: endpoint,
 			APIKey:   apiKey,
 			Model:    model,
-			Messages: []llm.Message{
-				{Role: "system", Content: systemPrompt},
-				{Role: "user", Content: req.Prompt},
-			},
+			Messages: conversation,
+			Tools:    llm.DefaultWorkspaceTools(),
 		}
 
-		err := llm.StreamChat(context.Background(), llmReq, llm.StreamHandlers{
+		toolCalls, err := llm.StreamChat(context.Background(), llmReq, llm.StreamHandlers{
 			OnThinking: func(text string) {
 				runtime.EventsEmit(a.ctx, "agent:thinking", map[string]any{
 					"session_id": req.SessionID,
@@ -397,25 +399,134 @@ func (a *App) SendMessage(req ChatRequest) error {
 					"delta":      delta,
 				})
 			},
-			OnDone: func() {
-				runtime.EventsEmit(a.ctx, "agent:done", map[string]any{
-					"session_id": req.SessionID,
-				})
-			},
 			OnError: func(err error) {
 				runtime.EventsEmit(a.ctx, "agent:chunk", map[string]any{
 					"session_id": req.SessionID,
 					"delta":      fmt.Sprintf("\n\n[系统错误: %v]", err),
 				})
-				runtime.EventsEmit(a.ctx, "agent:done", map[string]any{
-					"session_id": req.SessionID,
-				})
 			},
 		})
 
 		if err != nil {
-			runtime.LogErrorf(a.ctx, "StreamChat error: %v", err)
+			runtime.EventsEmit(a.ctx, "agent:done", map[string]any{"session_id": req.SessionID})
+			return
 		}
+
+		// 5. 若大模型决策触发算子调用，Go 微内核自动物理执行闭环！
+		if len(toolCalls) > 0 {
+			for _, tc := range toolCalls {
+				toolName := tc.Function.Name
+				toolArgs := tc.Function.Arguments
+
+				// 向前端派发工具启动卡片
+				runtime.EventsEmit(a.ctx, "agent:tool_start", map[string]any{
+					"session_id": req.SessionID,
+					"id":         tc.ID,
+					"tool":       toolName,
+					"args":       toolArgs,
+				})
+
+				var output string
+				switch toolName {
+				case "exec_command":
+					var argsObj struct {
+						Command string `json:"command"`
+					}
+					_ = json.Unmarshal([]byte(toolArgs), &argsObj)
+					res, err := a.termTool.Execute(context.Background(), []byte(toolArgs))
+					if err != nil {
+						output = fmt.Sprintf("执行失败: %v", err)
+					} else {
+						output = res.Content
+					}
+
+				case "write_file":
+					var argsObj struct {
+						RelPath string `json:"rel_path"`
+						Content string `json:"content"`
+					}
+					_ = json.Unmarshal([]byte(toolArgs), &argsObj)
+					err := a.sandbox.AtomicWriteFile(argsObj.RelPath, []byte(argsObj.Content))
+					if err != nil {
+						output = fmt.Sprintf("写入文件失败: %v", err)
+					} else {
+						output = fmt.Sprintf("✓ 成功原子写入文件: %s (%d 字节)", argsObj.RelPath, len(argsObj.Content))
+						// 派发文件变动事件，供前端展开 Diff
+						runtime.EventsEmit(a.ctx, "agent:files_changed", map[string]any{
+							"session_id": req.SessionID,
+							"file":       argsObj.RelPath,
+						})
+					}
+
+				case "read_file":
+					var argsObj struct {
+						RelPath string `json:"rel_path"`
+					}
+					_ = json.Unmarshal([]byte(toolArgs), &argsObj)
+					data, err := a.sandbox.SafeReadFile(argsObj.RelPath)
+					if err != nil {
+						output = fmt.Sprintf("读取文件失败: %v", err)
+					} else {
+						output = string(data)
+					}
+
+				case "git_status":
+					status, err := a.gitTool.GetStatus()
+					if err != nil {
+						output = fmt.Sprintf("查询 Git 失败: %v", err)
+					} else {
+						b, _ := json.MarshalIndent(status, "", "  ")
+						output = string(b)
+					}
+				default:
+					output = fmt.Sprintf("未知算子: %s", toolName)
+				}
+
+				// 向前端派发工具完成卡片
+				runtime.EventsEmit(a.ctx, "agent:tool_end", map[string]any{
+					"session_id": req.SessionID,
+					"id":         tc.ID,
+					"tool":       toolName,
+					"output":     output,
+				})
+
+				// 6. 将工具执行结果回传给大模型进行第二轮反思与总结
+				conversation = append(conversation, llm.Message{
+					Role:      "assistant",
+					ToolCalls: []llm.ToolCall{tc},
+				})
+				conversation = append(conversation, llm.Message{
+					Role:       "tool",
+					ToolCallID: tc.ID,
+					Name:       toolName,
+					Content:    output,
+				})
+			}
+
+			// 第二轮流式总结
+			step2Req := llm.Request{
+				Endpoint: endpoint,
+				APIKey:   apiKey,
+				Model:    model,
+				Messages: conversation,
+			}
+			_, _ = llm.StreamChat(context.Background(), step2Req, llm.StreamHandlers{
+				OnThinking: func(text string) {
+					runtime.EventsEmit(a.ctx, "agent:thinking", map[string]any{
+						"session_id": req.SessionID,
+						"thinking":   text,
+					})
+				},
+				OnContent: func(delta string) {
+					runtime.EventsEmit(a.ctx, "agent:chunk", map[string]any{
+						"session_id": req.SessionID,
+						"delta":      delta,
+					})
+				},
+			})
+		}
+
+		runtime.EventsEmit(a.ctx, "agent:done", map[string]any{"session_id": req.SessionID})
 	}()
 
 	return nil

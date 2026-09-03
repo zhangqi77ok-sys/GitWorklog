@@ -43,7 +43,7 @@
           <div class="flex items-center gap-2 text-xs font-semibold text-[#18181B]">
             <div class="w-4 h-4 rounded bg-[#D96B27] text-white flex items-center justify-center text-[9px] font-bold">T</div>
             <span>Tcode Agent</span>
-            <span class="text-[10px] text-[#10A37F] bg-[#10A37F]/10 px-1.5 py-0.2 rounded font-mono">{{ selectedModel }} · Act 模式</span>
+            <span class="text-[10px] text-[#10A37F] bg-[#10A37F]/10 px-1.5 py-0.2 rounded font-mono">{{ selectedModel }} · 自主算子模式</span>
           </div>
 
           <!-- 深度思考抽屉 (真实大模型 reasoning_content 流式动态展开) -->
@@ -52,54 +52,12 @@
               <div class="flex items-center gap-2">
                 <span class="text-sm">🧠</span>
                 <span class="text-xs font-semibold text-[#18181B]">深度心智思考 (Reasoning Process)</span>
-                <span class="text-[10px] text-[#A1A1AA] bg-black/[0.04] px-1.5 py-0.2 rounded font-mono">Token 级实时推流</span>
+                <span class="text-[10px] text-[#A1A1AA] bg-black/[0.04] px-1.5 py-0.2 rounded font-mono">实时推流</span>
               </div>
               <span class="text-xs text-[#71717A]">{{ expandedThinkingMap[msg.id] !== false ? '▲' : '▼' }}</span>
             </div>
             <div v-show="expandedThinkingMap[msg.id] !== false" class="px-3 pb-3 text-xs text-[#71717A] leading-relaxed italic border-t border-black/[0.04] bg-[#FAF8F5] pt-2 whitespace-pre-line">
               {{ msg.thinking }}
-            </div>
-          </div>
-
-          <!-- 需求澄清与参数选择卡片 (仅当第一条回答且尚未提交时展示) -->
-          <div v-if="msg.id === 'msg_2' && !hasSubmittedChoice" class="w-full rounded-2xl border border-[#D96B27]/30 bg-gradient-to-b from-[#FAF8F5] to-white p-4 space-y-3 shadow-xs">
-            <div class="flex items-center justify-between">
-              <div class="flex items-center gap-2">
-                <span class="w-6 h-6 rounded-lg bg-[#D96B27] text-white flex items-center justify-center text-xs font-bold shadow-xs">?</span>
-                <div>
-                  <h4 class="text-xs font-bold text-[#18181B]">需求澄清与参数多选 (请点击做出选择)</h4>
-                  <p class="text-[11px] text-[#71717A]">在为本项目生成 Wails 窗口控制代码前，请确认桌面窗体形态与托盘行为：</p>
-                </div>
-              </div>
-              <span class="text-[9px] text-[#D96B27] bg-[#D96B27]/10 px-2 py-0.5 rounded-full font-mono font-bold">等待您选择</span>
-            </div>
-
-            <div class="space-y-2 pt-1">
-              <label
-                v-for="opt in choiceOptions"
-                :key="opt.id"
-                @click="selectedChoice = opt.id"
-                :class="[
-                  'p-3 rounded-xl flex items-center justify-between cursor-pointer transition-all',
-                  selectedChoice === opt.id ? 'border-2 border-[#D96B27] bg-white shadow-2xs' : 'border border-black/[0.08] bg-white opacity-80'
-                ]"
-              >
-                <div class="flex items-center gap-3">
-                  <input type="radio" :checked="selectedChoice === opt.id" class="text-[#D96B27] focus:ring-[#D96B27]">
-                  <div>
-                    <div class="flex items-center gap-2">
-                      <span class="text-xs font-bold text-[#18181B]">{{ opt.title }}</span>
-                      <span class="text-[9px] bg-[#D96B27]/10 text-[#D96B27] px-1.5 py-0.2 rounded font-mono font-semibold">{{ opt.badge }}</span>
-                    </div>
-                    <div class="text-[11px] text-[#71717A] mt-0.5">{{ opt.desc }}</div>
-                  </div>
-                </div>
-              </label>
-            </div>
-
-            <div class="pt-2 border-t border-black/[0.06] flex items-center justify-between gap-3">
-              <input v-model="choiceCustomInput" type="text" placeholder="输入其他补充约束说明 (可选)..." class="flex-1 h-7 px-2.5 rounded-lg bg-white border border-black/[0.1] text-xs focus:outline-none focus:border-[#D96B27]">
-              <button @click="submitChoiceAction" class="px-4 py-1 rounded-lg bg-[#D96B27] hover:bg-[#B8551B] text-white text-xs font-semibold shadow-xs cursor-pointer">确定提交选择</button>
             </div>
           </div>
 
@@ -119,29 +77,30 @@
               </div>
               <div v-show="isToolLogOpen" class="border-t border-black/[0.06] bg-[#18181B] text-white p-3 font-code text-[11px] leading-relaxed space-y-1">
                 <div class="text-white/40 pb-1 border-b border-white/[0.08]">STDOUT / STDERR · Exit Code: 0</div>
-                <div class="text-emerald-400">{{ msg.tool.output || 'Command executed successfully.' }}</div>
+                <div class="text-emerald-400 whitespace-pre-wrap">{{ msg.tool.output || 'Command executed successfully.' }}</div>
               </div>
             </div>
           </div>
 
-          <!-- 回答正文 -->
-          <div class="text-xs text-[#27272A] leading-relaxed space-y-2 bg-white/40 p-3 rounded-xl border border-black/[0.04] w-full whitespace-pre-line">
-            {{ msg.content }}
-          </div>
+          <!-- 优雅 Markdown 回答正文 -->
+          <div
+            class="markdown-body text-xs text-[#27272A] leading-relaxed space-y-2 bg-white/50 p-3.5 rounded-xl border border-black/[0.04] w-full"
+            v-html="renderMarkdown(msg.content)"
+          ></div>
 
           <!-- 改动文件列表与即时 Diff 预览卡片 -->
-          <div v-if="msg.id === 'msg_2'" class="w-full rounded-2xl border border-black/[0.08] bg-white shadow-xs p-3 space-y-2.5">
+          <div v-if="msg.id === 'msg_2' || dynamicallyModifiedFiles.length > 0" class="w-full rounded-2xl border border-black/[0.08] bg-white shadow-xs p-3 space-y-2.5">
             <div class="flex items-center justify-between">
               <div class="flex items-center gap-1.5 text-xs font-bold text-[#18181B]">
                 <span class="text-sm">📝</span>
                 <span>检测到本轮涉及代码文件改动:</span>
               </div>
-              <span class="text-[10px] text-[#71717A]">点击任意文件卡片右侧立即预览 Diff 差异</span>
+              <span class="text-[10px] text-[#71717A]">点击右侧即时在 Monaco 中审查 Diff</span>
             </div>
 
             <div class="space-y-2 pt-0.5">
               <div
-                v-for="f in modifiedFiles"
+                v-for="f in allModifiedFiles"
                 :key="f.name"
                 class="p-2.5 rounded-xl bg-[#FAF8F5] border border-black/[0.06] hover:border-[#D96B27] hover:bg-white shadow-2xs flex items-center justify-between transition-all"
               >
@@ -230,7 +189,6 @@
         <!-- 工具栏 -->
         <div class="flex items-center justify-between border-t border-black/[0.04] pt-2 text-xs">
           <div class="flex items-center gap-1">
-            <!-- 真实系统文件选择对话框 -->
             <button
               @click="triggerUpload"
               class="px-2.5 py-1 rounded-full text-xs text-[#52525B] hover:text-[#18181B] hover:bg-black/[0.04] flex items-center gap-1 cursor-pointer"
@@ -282,20 +240,19 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, nextTick } from 'vue'
+import { ref, reactive, computed, nextTick } from 'vue'
 import { useChatStore } from '../stores/chatStore'
 import { wailsBridge } from '../core/wailsBridge'
+import { renderMarkdown } from '../core/markdown'
 
 const store = useChatStore()
 const inputPrompt = ref('')
 const selectedModel = ref('deepseek-v4-flash')
 const messageListRef = ref<HTMLDivElement | null>(null)
 const isToolLogOpen = ref(true)
-const selectedChoice = ref(1)
-const choiceCustomInput = ref('')
-const hasSubmittedChoice = ref(false)
 const attachedFiles = ref<string[]>([])
 const currentSessionTitle = ref('架构重构与执行流设计')
+const dynamicallyModifiedFiles = ref<any[]>([])
 
 const showMentionMenu = ref(false)
 const showCommandMenu = ref(false)
@@ -324,16 +281,14 @@ function toggleThinking(id: string) {
   }
 }
 
-const choiceOptions = [
-  { id: 1, title: '✨ (推荐) 无边框沉浸式 + 系统托盘常驻后台', badge: '推荐', desc: '点击右上角关闭时最小化至 Windows 系统托盘，保留 Agent 后台任务运行。' },
-  { id: 2, title: '🪟 Windows 11 原生 Mica 材质 + 退出即销毁进程', badge: '原生', desc: '遵循标准系统窗口控制，点击关闭直接退出并清理全部进程。' },
-  { id: 3, title: '🔌 纯后台 Headless 守护进程模式 (无图形窗体)', badge: '服务', desc: '仅作为本地后台轻量网关与算子宿主，供外部命令行调用。' }
-]
-
-const modifiedFiles = [
+const baseModifiedFiles = [
   { name: 'main.go', short: 'main.go', type: '~M (修改)', desc: '接入 Wails v2 原生启动绑定并清理遗留代理', diff: '+4 / -2 行', iconColor: 'text-[#D96B27]', badgeBg: 'bg-amber-100 text-amber-700' },
   { name: 'app.go', short: 'app.go', type: '+A (新增)', desc: '封装 Wails 原生事件桥接与操作系统级文件操作', diff: '+64 / -0 行', iconColor: 'text-[#10A37F]', badgeBg: 'bg-emerald-100 text-emerald-700' }
 ]
+
+const allModifiedFiles = computed(() => {
+  return [...baseModifiedFiles, ...dynamicallyModifiedFiles.value]
+})
 
 function handleKeydown(e: KeyboardEvent) {
   if (e.key === '@') {
@@ -384,19 +339,7 @@ async function triggerUpload() {
   }
 }
 
-// 提交选择
-function submitChoiceAction() {
-  const chosen = choiceOptions.find(o => o.id === selectedChoice.value)
-  let text = `我已选择【${chosen?.title}】`
-  if (choiceCustomInput.value.trim()) {
-    text += `，补充说明：${choiceCustomInput.value.trim()}`
-  }
-  hasSubmittedChoice.value = true
-  inputPrompt.value = text
-  handleSend()
-}
-
-// 真实发送消息并通过 Wails 管道流式推送真实大模型推理
+// 真实发送消息并通过 Wails 管道流式推送真实大模型推理与 Function Calling 算子
 async function handleSend() {
   const prompt = inputPrompt.value.trim()
   if (!prompt || store.isStreaming) return
@@ -461,7 +404,7 @@ async function handleSend() {
         onToolStart(tool, args) {
           const target = store.messages.find(m => m.id === assistantMsgId)
           if (target) {
-            target.tool = { name: tool, args: args }
+            target.tool = { name: tool, args: typeof args === 'string' ? JSON.parse(args) : args }
           }
         },
         onToolEnd(tool, output) {
@@ -481,3 +424,44 @@ async function handleSend() {
   }
 }
 </script>
+
+<style>
+.markdown-body pre {
+  background-color: #18181B;
+  color: #F4F4F5;
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  overflow-x: auto;
+  font-family: 'Fira Code', monospace;
+  margin: 0.5rem 0;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.markdown-body code {
+  font-family: 'Fira Code', monospace;
+  background-color: rgba(0, 0, 0, 0.05);
+  padding: 0.1rem 0.3rem;
+  border-radius: 0.25rem;
+}
+.markdown-body pre code {
+  background-color: transparent;
+  padding: 0;
+}
+.markdown-body p {
+  margin-bottom: 0.5rem;
+}
+.markdown-body ul, .markdown-body ol {
+  padding-left: 1.25rem;
+  margin-bottom: 0.5rem;
+}
+.markdown-body ul {
+  list-style-type: disc;
+}
+.markdown-body ol {
+  list-style-type: decimal;
+}
+.markdown-body h1, .markdown-body h2, .markdown-body h3 {
+  font-weight: 700;
+  margin: 0.75rem 0 0.25rem 0;
+  color: #18181B;
+}
+</style>
