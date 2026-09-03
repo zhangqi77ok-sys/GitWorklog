@@ -83,6 +83,7 @@ func main() {
 	}
 
 	// 3. 释放主体 tcode.exe
+	_ = os.Remove(targetExe)
 	if err := os.WriteFile(targetExe, tcodeBinary, 0755); err != nil {
 		messageBox("安装失败", fmt.Sprintf("无法写入应用程序文件: %v", err), MB_ICONERROR)
 		return
