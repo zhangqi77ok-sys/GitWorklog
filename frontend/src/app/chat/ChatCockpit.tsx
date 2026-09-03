@@ -26,6 +26,7 @@ export const ChatCockpit: React.FC = () => {
     isApprovalMode,
     toggleApprovalMode,
     sessions,
+    setKgModalOpen,
   } = useWorkspaceStore()
 
   const { messages, isStreaming, sendMessage, currentModel, setCurrentModel, switchSession } = useChatStore()
@@ -60,6 +61,28 @@ export const ChatCockpit: React.FC = () => {
   })
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  // 本地工程经验库 RAG 实时命中感知
+  const ragMatch = React.useMemo(() => {
+    const text = inputPrompt.toLowerCase()
+    if (!text.trim()) return null
+    if (text.includes('waf') || text.includes('穿透') || text.includes('指纹')) {
+      return { title: '12 - AgentRouter WAF 穿透指纹与 SSE Native Thinking' }
+    }
+    if (text.includes('打包') || text.includes('installer') || text.includes('tauri') || text.includes('setup')) {
+      return { title: '14 - Windows 独立安装包制作与 E2E 探活流水线' }
+    }
+    if (text.includes('静默') || text.includes('终端') || text.includes('shell') || text.includes('sandbox')) {
+      return { title: '13 - Windows CREATE_NO_WINDOW 零黑框静默执行沙箱' }
+    }
+    if (text.includes('测试') || text.includes('tdd') || text.includes('自愈') || text.includes('vitest')) {
+      return { title: '03 - LSP 编译报错诊断与 Red-Green-Refactor 测试自愈' }
+    }
+    if (text.includes('快照') || text.includes('snapshot') || text.includes('回退') || text.includes('git')) {
+      return { title: '02 - Git Plumbing refs/tcode/ 孤立安全影子快照' }
+    }
+    return null
+  }, [inputPrompt])
 
   const toggleTool = (id: string) => {
     setOpenTools((prev) => ({ ...prev, [id]: !prev[id] }))
@@ -584,6 +607,21 @@ export const ChatCockpit: React.FC = () => {
                 <span className="text-[11px] text-[#71717A]">审查未暂存改动</span>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* RAG 本地工程经验实时命中感知浮条 */}
+        {ragMatch && (
+          <div
+            onClick={() => setKgModalOpen(true)}
+            className="max-w-3xl mx-auto mb-2 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-900 text-xs flex items-center justify-between cursor-pointer hover:bg-amber-500/15 transition-colors shadow-2xs animate-in fade-in slide-in-from-bottom-1"
+          >
+            <div className="flex items-center gap-1.5 truncate">
+              <span>💡</span>
+              <span className="font-semibold text-[#18181B]">已智能命中本地工程实战经验：</span>
+              <span className="font-mono text-[#D96B27] underline truncate">{ragMatch.title}</span>
+            </div>
+            <span className="text-[10px] font-semibold text-[#D96B27] shrink-0 ml-2">研读避坑指南 ↗</span>
           </div>
         )}
 

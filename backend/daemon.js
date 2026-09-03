@@ -3,6 +3,8 @@ const https = require("https");
 const fs = require("fs");
 const path = require("path");
 const { execSync, spawn } = require("child_process");
+const { scanKnowledgeVault, searchKnowledge } = require("./lib/knowledgeEngine");
+const { scanAstTopology } = require("./lib/astTopology");
 
 const PORT = 8765;
 let WORKSPACE_ROOT = path.resolve(__dirname, "..");
@@ -592,6 +594,50 @@ const server = http.createServer(async (req, res) => {
         gitStatus: statusSummary,
       })
     );
+    return;
+  }
+
+  // 7.4 本地工程知识库沉淀列表 (RAG Knowledge Vault)
+  if (pathname === "/api/knowledge/list" && req.method === "GET") {
+    try {
+      const docs = scanKnowledgeVault(WORKSPACE_ROOT);
+      res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+      res.end(JSON.stringify({ success: true, count: docs.length, docs }));
+    } catch (e) {
+      res.writeHead(500, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ success: false, error: e.message }));
+    }
+    return;
+  }
+
+  // 7.5 本地工程知识库智能多权重搜索 (RAG Query Search)
+  if (pathname === "/api/knowledge/search" && req.method === "POST") {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      try {
+        const { query = "", topK = 4 } = JSON.parse(body || "{}");
+        const results = searchKnowledge(WORKSPACE_ROOT, query, topK);
+        res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+        res.end(JSON.stringify({ success: true, query, count: results.length, results }));
+      } catch (e) {
+        res.writeHead(500, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ success: false, error: e.message }));
+      }
+    });
+    return;
+  }
+
+  // 7.6 源码 AST 模块依赖与类/函数拓扑提取器 (AST Code Topology)
+  if (pathname === "/api/ast/topology" && req.method === "GET") {
+    try {
+      const topology = scanAstTopology(WORKSPACE_ROOT);
+      res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+      res.end(JSON.stringify({ success: true, topology }));
+    } catch (e) {
+      res.writeHead(500, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ success: false, error: e.message }));
+    }
     return;
   }
 
