@@ -171,6 +171,16 @@ func (a *App) RevertFile(filePath string) error {
 	return cmd.Run()
 }
 
+// ApplyDiffHunk 采纳指定代码块 (Hunk) 变更
+func (a *App) ApplyDiffHunk(filePath string, hunkIndex int, stageOnly bool) error {
+	return diff.ApplyHunkPatch(a.workspace, filePath, hunkIndex, stageOnly)
+}
+
+// DiscardDiffHunk 丢弃指定代码块 (Hunk) 变更
+func (a *App) DiscardDiffHunk(filePath string, hunkIndex int) error {
+	return diff.DiscardHunkPatch(a.workspace, filePath, hunkIndex)
+}
+
 // --- 渠道与插件设置 ---
 
 func (a *App) ListChannels() []config.ChannelConfig {

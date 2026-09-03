@@ -443,54 +443,141 @@
       }
     };
 
-    function openSpecificDiff(fileName, lang) {
-      const data = FILE_DIFFS[fileName] || FILE_DIFFS['main.go'];
+    async function openSpecificDiff(fileName, lang) {
       const codeWorkspace = document.getElementById('codeWorkspace');
       const toggleText = document.getElementById('codeToggleText');
 
       // 展开右侧代码视窗
       codeWorkspace.classList.remove('hidden');
-      toggleText.innerText = '收起代码';
+      if (toggleText) toggleText.innerText = '收起代码';
 
-      // 动态注入该文件的 Diff 数据
       const container = codeWorkspace.querySelector('.font-code');
       const headerTitle = codeWorkspace.querySelector('.font-mono.font-medium');
-      const statusSpan = codeWorkspace.querySelector('.font-code').previousElementSibling.querySelector('.px-1\\.5');
-      const bottomStats = codeWorkspace.querySelector('.h-6.bg-\\[\\#161412\\]');
+      const bottomStats = codeWorkspace.querySelector('.h-6.bg-\[\#161412\]');
 
-      if (headerTitle) headerTitle.innerText = data.name;
+      if (headerTitle) headerTitle.innerText = fileName;
 
-      // 重新生成行级 Diff
-      let html = `<div class="text-[10px] text-white/40 pb-1 border-b border-white/[0.06] mb-2">${data.header}</div>`;
-      data.lines.forEach(l => {
-        if (l.type === 'del') {
-          html += `
-            <div class="bg-red-500/20 text-red-300 px-1.5 py-0.5 rounded flex items-center justify-between animate-in fade-in">
-              <span>${l.text}</span>
-              <span class="text-[10px] opacity-60">${l.label || '删除'}</span>
-            </div>
-          `;
-        } else if (l.type === 'add') {
-          html += `
-            <div class="bg-green-500/20 text-green-300 px-1.5 py-0.5 rounded flex items-center justify-between animate-in fade-in">
-              <span>${l.text}</span>
-              <span class="text-[10px] opacity-60">${l.label || '新增'}</span>
-            </div>
-          `;
-        } else {
-          html += `<div class="text-white/60">${l.text}</div>`;
-        }
-      });
-      container.innerHTML = html;
+      const app = window.go?.main?.App;
+      let diffData = FILE_DIFFS[fileName] || FILE_DIFFS['main.go'];
 
-      if (bottomStats) {
-        bottomStats.innerHTML = `<span>${data.lang}</span><span>${data.stats}</span>`;
+      if (app?.GetStructuredDiff) {
+        try {
+          const rep = await app.GetStructuredDiff(fileName);
+          if (rep && (rep.lines?.length > 0 || rep.hunks?.length > 0)) {
+            diffData = {
+              name: fileName,
+              lang: rep.lang || 'Go · UTF-8',
+              header: rep.header,
+              stats: rep.stats,
+              lines: rep.lines,
+              hunks: rep.hunks
+            };
+          }
+        } catch(e) {}
       }
 
-      showToast(`已在右侧拉起【${data.name}】的 Diff 审查对比视窗`);
+      let html = '';
+      if (diffData.hunks && diffData.hunks.length > 0) {
+        diffData.hunks.forEach((hunk, idx) => {
+          html += `
+            <div class="p-2 rounded-xl bg-black/40 border border-white/[0.08] mb-3 select-none">
+              <div class="flex items-center justify-between pb-1.5 mb-1.5 border-b border-white/[0.06] text-[10px]">
+                <div class="flex items-center gap-1.5 font-mono">
+                  <span class="text-[#D96B27] font-bold">块 #${idx + 1}</span>
+                  <span class="text-white/40 truncate">${hunk.header}</span>
+                </div>
+                <div class="flex items-center gap-1">
+                  <button onclick="applyHunkAction('${fileName}', ${hunk.index}, true)" title="将此块代码改动暂存入 Git Index (git apply --cached)" class="px-2 py-0.5 rounded bg-[#10A37F]/20 hover:bg-[#10A37F]/30 text-[#10A37F] font-bold text-[9px] cursor-pointer transition-all">✓ 采纳块</button>
+                  <button onclick="discardHunkAction('${fileName}', ${hunk.index})" title="无损丢弃撤销此块代码改动 (git apply --reverse)" class="px-2 py-0.5 rounded bg-red-500/20 hover:bg-red-500/30 text-red-300 font-bold text-[9px] cursor-pointer transition-all">✕ 丢弃块</button>
+                </div>
+              </div>
+              <div class="space-y-0.5 font-mono text-[11px] select-text">`;
+
+          hunk.lines.forEach(l => {
+            if (l.type === 'del') {
+              html += `
+                <div class="bg-red-500/20 text-red-300 px-1.5 py-0.5 rounded flex items-center justify-between">
+                  <span>${l.text}</span>
+                  <span class="text-[9px] opacity-40 font-sans">删除</span>
+                </div>`;
+            } else if (l.type === 'add') {
+              html += `
+                <div class="bg-[#10A37F]/20 text-[#10A37F] px-1.5 py-0.5 rounded flex items-center justify-between">
+                  <span>${l.text}</span>
+                  <span class="text-[9px] opacity-40 font-sans">新增</span>
+                </div>`;
+            } else {
+              html += `<div class="text-white/50 px-1.5 py-0.2 hover:bg-white/[0.03] transition-colors">${l.text}</div>`;
+            }
+          });
+
+          html += `</div></div>`;
+        });
+      } else {
+        html += `<div class="text-[10px] text-white/40 pb-1 border-b border-white/[0.06] mb-2">${diffData.header}</div>`;
+        (diffData.lines || []).forEach(l => {
+          if (l.type === 'del') {
+            html += `
+              <div class="bg-red-500/20 text-red-300 px-1.5 py-0.5 rounded flex items-center justify-between animate-in fade-in">
+                <span>${l.text}</span>
+                <span class="text-[10px] opacity-60 font-sans">${l.label || '删除'}</span>
+              </div>`;
+          } else if (l.type === 'add') {
+            html += `
+              <div class="bg-green-500/20 text-green-300 px-1.5 py-0.5 rounded flex items-center justify-between animate-in fade-in">
+                <span>${l.text}</span>
+                <span class="text-[10px] opacity-60 font-sans">${l.label || '新增'}</span>
+              </div>`;
+          } else {
+            html += `<div class="text-white/60 px-1.5 py-0.5">${l.text}</div>`;
+          }
+        });
+      }
+
+      if (container) container.innerHTML = html;
+      if (bottomStats) {
+        bottomStats.innerHTML = `<span>${diffData.lang}</span><span>${diffData.stats}</span>`;
+      }
+      showToast(`已拉起【${fileName}】Diff 审查工作区`);
     }
 
-  
+    // =========================================================================
+    // 【全新】Monaco 双栏 Diff 行级块采纳与 Cherry-Pick 控制
+    // =========================================================================
+    async function applyHunkAction(fileName, hunkIdx, stageOnly) {
+      showToast(`⏳ 正在采纳 [${fileName}] 第 #${hunkIdx + 1} 个变更块...`);
+      const app = window.go?.main?.App;
+      if (app?.ApplyDiffHunk) {
+        try {
+          await app.ApplyDiffHunk(fileName, hunkIdx, stageOnly);
+          showToast(`✓ 已成功采纳该块变更 (git apply --cached)`);
+          await openSpecificDiff(fileName);
+          return;
+        } catch(e) {
+          showToast(`采纳变更块异常: ${e}`);
+        }
+      } else {
+        showToast(`✓ 已采纳该变更块至暂存区`);
+      }
+    }
+
+    async function discardHunkAction(fileName, hunkIdx) {
+      showToast(`⏳ 正在丢弃 [${fileName}] 第 #${hunkIdx + 1} 个变更块...`);
+      const app = window.go?.main?.App;
+      if (app?.DiscardDiffHunk) {
+        try {
+          await app.DiscardDiffHunk(fileName, hunkIdx);
+          showToast(`✓ 已成功丢弃撤销该块变更 (git apply --reverse)`);
+          await openSpecificDiff(fileName);
+          return;
+        } catch(e) {
+          showToast(`丢弃变更块异常: ${e}`);
+        }
+      } else {
+        showToast(`✓ 已丢弃该块代码变更`);
+      }
+    }
+
     function toggleToolOutput(id) {
       const output = document.getElementById('output-' + id);
       const arrow = document.getElementById('arrow-' + id);
