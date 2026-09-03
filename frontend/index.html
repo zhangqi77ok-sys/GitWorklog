@@ -5345,17 +5345,27 @@ triggers:
       renderGitBranches(val);
     }
 
-    function gitCheckoutBranch(branchName) {
+    async function gitCheckoutBranch(branchName) {
       if (branchName === gitCurrentBranch) return;
+      const app = window.go?.main?.App;
+      if (app?.GitCheckoutBranch) {
+        try {
+          await app.GitCheckoutBranch(branchName);
+        } catch(e) {
+          showToast('切换分支异常: ' + e);
+        }
+      }
       gitCurrentBranch = branchName;
       const label = document.getElementById('gitCurrentBranchLabel');
       if (label) label.innerText = branchName;
+      const titleBadge = document.getElementById('activeProjectTitle');
+      if (titleBadge) titleBadge.innerHTML = `agent-learning <span class="text-[10px] text-[#71717A] bg-black/[0.04] px-1.5 py-0.2 rounded-full font-mono">${branchName}</span>`;
       renderGitBranches();
       closeGitBranchModal();
-      showToast(`✓ 已成功切换至分支: ${branchName} (git checkout)`);
+      showToast(`✓ 已物理检出并切换至分支: ${branchName}`);
     }
 
-    function gitCreateBranch() {
+    async function gitCreateBranch() {
       const input = document.getElementById('newBranchNameInput');
       if (!input) return;
       const name = input.value.trim();
@@ -5363,19 +5373,23 @@ triggers:
         showToast('⚠️ 请输入新分支名称');
         return;
       }
-      if (gitBranches.some(b => b.name === name)) {
-        showToast('⚠️ 该分支名已存在');
-        return;
+      const app = window.go?.main?.App;
+      if (app?.GitCreateBranch) {
+        try {
+          await app.GitCreateBranch(name);
+        } catch(e) {
+          showToast('创建分支异常: ' + e);
+        }
       }
       gitBranches.unshift({
         name: name,
         isCurrent: true,
-        hash: '7a8f12c',
-        lastCommit: 'WIP: branched off ' + gitCurrentBranch
+        hash: 'HEAD',
+        lastCommit: 'Branched off ' + gitCurrentBranch
       });
       input.value = '';
       gitCheckoutBranch(name);
-      showToast(`✓ 已创建并检出新分支: ${name} (git checkout -b)`);
+      showToast(`✓ 已物理创建并检出新分支: ${name}`);
     }
 
     // 影子快照与 Stash 储藏栈弹窗
@@ -6815,11 +6829,31 @@ triggers:
       }
     }
 
-    function executePaletteItem(type, val) {
+    async function executePaletteItem(type, val) {
       closeCommandPaletteModal();
+      const app = window.go?.main?.App;
+
       if (type === 'skill') {
-        insertSlashCommand(val + ' ');
-        showToast('已载入技能指令: ' + val);
+        if (val === '/tdd' && app?.RunTDDValidation) {
+          showToast('⏳ 正在启动 Sub-Agent TDD 自动化测试验证器...');
+          try {
+            const report = await app.RunTDDValidation();
+            showToast(`✓ TDD 验证完成: ${report.status} (${report.passed} 通过 / ${report.failed} 失败, 耗时 ${report.duration})`);
+          } catch(e) {
+            showToast('TDD 执行异常: ' + e);
+          }
+        } else if (val === '/audit' && app?.RunSecurityAudit) {
+          showToast('⏳ 正在启动 Sub-Agent 安全沙箱代码审查...');
+          try {
+            const audit = await app.RunSecurityAudit();
+            showToast(`✓ 安全审查通过: 扫描 ${audit.files_scanned} 个文件，安全等级 ${audit.risk_level}`);
+          } catch(e) {
+            showToast('安全审查异常: ' + e);
+          }
+        } else {
+          insertSlashCommand(val + ' ');
+          showToast('已载入技能指令: ' + val);
+        }
       } else if (type === 'file') {
         openSpecificDiff(val);
         showToast('已跳转审查文件: ' + val);

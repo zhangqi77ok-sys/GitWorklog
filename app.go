@@ -1,6 +1,10 @@
 package main
 
 import (
+	"tcode/internal/agent"
+	"tcode/internal/gitops"
+	"tcode/internal/telemetry"
+
 	"context"
 	"encoding/json"
 	"fmt"
@@ -679,4 +683,51 @@ func (a *App) SendMessage(req ChatRequest) error {
 	}()
 
 	return nil
+}
+
+
+// GitListBranches 列出本地全部分支与当前分支
+func (a *App) GitListBranches() ([]string, string, error) {
+	return gitops.ListBranches(a.workspace)
+}
+
+// GitCheckoutBranch 切换检出分支
+func (a *App) GitCheckoutBranch(name string) error {
+	return gitops.CheckoutBranch(a.workspace, name)
+}
+
+// GitCreateBranch 创建并检出新分支
+func (a *App) GitCreateBranch(name string) error {
+	return gitops.CreateBranch(a.workspace, name)
+}
+
+// GitListSnapshots 枚举快照与暂存回溯点
+func (a *App) GitListSnapshots() ([]gitops.Snapshot, error) {
+	return gitops.ListSnapshots(a.workspace)
+}
+
+// GitCreateSnapshot 创建当前工作区检查点快照
+func (a *App) GitCreateSnapshot(msg string) error {
+	return gitops.CreateSnapshot(a.workspace, msg)
+}
+
+// GitRestoreSnapshot 还原指定快照
+func (a *App) GitRestoreSnapshot(stashID string) error {
+	return gitops.RestoreSnapshot(a.workspace, stashID)
+}
+
+// RunTDDValidation 触发 Sub-Agent TDD 自动化单测红绿灯自愈检查
+func (a *App) RunTDDValidation() (agent.TestReport, error) {
+	return agent.RunTDDValidation(a.workspace)
+}
+
+// RunSecurityAudit 触发 Sub-Agent 安全沙箱代码与命令审查
+func (a *App) RunSecurityAudit() (agent.AuditReport, error) {
+	return agent.RunSecurityAudit(a.workspace)
+}
+
+// GetUsageMetrics 获取 Token 消耗与网关使用量统计大盘
+func (a *App) GetUsageMetrics() telemetry.UsageMetrics {
+	sessions := a.sessionStore.List()
+	return telemetry.GetTracker().GetMetrics(len(sessions))
 }
