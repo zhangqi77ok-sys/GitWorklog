@@ -1,163 +1,184 @@
-﻿# Tcode 前端工程落地实施任务计划 (Frontend WBS)
+﻿# Tcode 工业级前端工程落地任务计划 (Production-Grade Frontend WBS)
 
-> **负责人**：Tcode 资深前端架构师与 UI/UX 工程师  
+> **版本**：v2.0.0-PROD  
+> **负责人**：Tcode 资深前端架构师与 UI/UX 体验工程师  
 > **设计基准**：[`prototype/web_prototype.html`](../web_prototype.html) 与 [`docs/UI_DESIGN_SPEC.md`](./UI_DESIGN_SPEC.md)  
-> **技术选型**：React 19 + TypeScript 5.5 + Tailwind CSS v4 + Zustand + Monaco Editor  
-> **设计规范**：Warm Minimalist 极简暖色系（`#FAF8F5` / `#F4EFEA` / `#D96B27` / `#18181B`），16:9 人机工学单焦点视口，全量弹窗居中且支持 Esc 退出与 Tooltip 提示
+> **技术栈**：React 19 + TypeScript 5.5 (Strict) + Tailwind CSS v4 + Zustand + Monaco Editor + Xterm.js 5.x + @tanstack/react-virtual  
+> **工程指标**：万行 Diff 渲染 60fps、终端 10 万行日志零卡顿、Monaco 实例池化零泄漏、SSE 智能重连、100% 严格类型守卫
 
 ---
 
-## 🎯 一、总体实施里程碑路线图 (Milestone Roadmap)
+## 🎯 一、技术选型与工业级依赖体系 (Architecture & Libs)
 
-| 阶段 | 里程碑名称 | 核心产出 | 计划周期 | 关键交付物 |
-| :--- | :--- | :--- | :--- | :--- |
-| **M1** | **单焦点主工作区聚合重构** | 告别三列挤压，顶栏三态切换与自适应分栏 | Sprint 1 (第 1 周) | `ActivityBar`, `WorkspaceSwitcher`, `SplitView` |
-| **M2** | **底部集成式终端抽屉组件** | `Ctrl+\`` 快捷唤起、交互式 Shell、SSE Trace | Sprint 2 (第 2 周) | `TerminalDrawer`, `ShellTab`, `TraceTab`, `DaemonTab` |
-| **M3** | **生产级 Git 控制中心与快照弹窗** | 双层暂存工作台、AI 提炼 Commit、分支与快照 Modal | Sprint 3 (第 3 周) | `GitDrawer`, `GitBranchModal`, `GitStashSnapshotModal` |
-| **M4** | **多模型使用量与效能监控大盘** | 全景大盘、四大 KPI 仪表卡、24h 走势与调用流水 | Sprint 4 (第 4 周) | `UsageCockpit`, `KpiGrid`, `UsageChart`, `AuditStream` |
-| **M5** | **微内核通信联动与发布构建验证** | SSE 实时通道联调、TS 严格类型防护、端到端测试 | Sprint 5 (第 5 周) | 通信客户端、全组件单元测试、打包安装包 |
-
----
-
-## 📋 二、细分任务分解与验收标准 (WBS & Acceptance Criteria)
-
-### 里程碑 1：单焦点主工作区聚合重构 (M1)
-
-#### 任务 1.1：最左侧 48px 活动栏组件重构 (`ActivityBar.tsx`)
-- **任务内容**：
-  1. 渲染极简图标导航项（`chat`, `files`, `git`, `usage`, `kg`, `terminal`, `settings`）；
-  2. 高亮项左侧添加 2.5px 宽陶土暖橙（`#D96B27`）竖线激活指示；
-  3. 为每一个图标封装统一的悬停微阴影气泡 Tooltip 组件，杜绝浏览器原生残缺提示。
-- **验收标准**：
-  - 100% 图标鼠标悬停均有准确、友好的 Tooltip 提示；点击切换左侧抽屉平滑流畅。
-
-#### 任务 1.2：工作台单焦点切换胶囊组件 (`WorkspaceSwitcher.tsx`)
-- **任务内容**：
-  1. 在顶栏居中嵌入 Warm Cream 风格的切换胶囊；
-  2. 支持三种核心视图模式：
-     - **`[💬 智能对话]`**：全宽沉浸式对话，右侧代码区折叠收拢；
-     - **`[◫ 双栏协同]`**：左侧对话流 + 右侧 Monaco 代码/Diff 对照审查；
-     - **`[📝 代码工作区]`**：全宽代码编辑器视窗，对话区收拢；
-  3. 基于 Zustand `useWorkspaceStore` 托管视图状态。
-- **验收标准**：
-  - 切换模式时视口过渡自然无跳闪；对话流中点击文件改动卡片可自适应平滑触发切至「双栏协同」。
-
-#### 任务 1.3：双栏流体弹性布局容器 (`SplitView.tsx`)
-- **任务内容**：
-  1. 封装中间分割拖拽手柄（`SplitResizer`）；
-  2. 支持双击分割线重置为黄金比例（50%:50%）；
-  3. 右侧代码工作区顶栏提供全屏、分屏和收起操作图标组。
-- **验收标准**：
-  - 拖拽平滑，左右最小宽度限制保护（防止单栏被压为 0 产生白屏崩溃）。
+坚决杜绝“把前端当玩具写”，必须满足大型代码仓库的高性能交互需求：
+- **核心框架**：React 19 原生并发模式（利用 `useTransition` 分离低优 Diff 渲染，保证输入流始终高响应）；
+- **类型安全**：TypeScript 5.5（强制开启 `strict: true`、`noUncheckedIndexedAccess: true`，禁止任何 `any` 侵入）；
+- **分层状态治理架构**：
+  - **持久业务状态**（会话历史、工作区配置）：Zustand 结合 IndexedDB（`idb-keyval`）异步分片落地，杜绝 LocalStorage 5MB 溢出与同步 IO 卡顿；
+  - **瞬态交互状态**（打字机逐字缓冲、展开折叠、拖拽尺寸）：严格限制在组件树局部，绝不污染全局 Store，避免雪崩式全量 Re-render；
+- **大数据量虚拟化渲染**：`@tanstack/react-virtual`（针对长会话流、终端输出、审计流虚拟化渲染）；
+- **虚拟终端引擎**：`@xterm/xterm` 5.3+ 配合 `@xterm/addon-canvas` 与 `@xterm/addon-fit`；
+- **编辑器核心**：`monaco-editor`，配置独立 Web Worker（`editor.worker.js`, `ts.worker.js`），彻底解放 UI 主线程。
 
 ---
 
-### 里程碑 2：底部集成式终端抽屉组件 (M2)
+## 📋 二、核心分层工程落地 WBS (5 大生产级模块)
 
-#### 任务 2.1：抽屉布局容器与全局快捷键监听 (`TerminalDrawer.tsx`)
-- **任务内容**：
-  1. 抽屉固定悬挂在主工作台底部，暗炭黑背景（`#161412`）；
-  2. 挂载全局键盘监听器，支持快捷键 **`Ctrl + \``**（反引号）瞬间唤起或收起终端；
-  3. 右上角提供清屏、最大化/还原（拉伸至 48vh）、收起操作按钮组。
-- **验收标准**：
-  - 快捷键在任意焦点（输入框除外）下均能秒级响应；最大化与还原动画流畅。
-
-#### 任务 2.2：三大核心 Tab 视窗实现
-- **任务内容**：
-  1. **`ShellTab.tsx`**：交互式虚拟命令行终端，支持真实手敲常用指令（`go test`, `git status`, `cargo check`, `clear`），维护命令历史记录（方向键上下键回溯）；
-  2. **`TraceTab.tsx`**：接收微内核 SSE 执行链路日志，流式渲染 Inner Loop 四步状态与算子执行耗时；
-  3. **`DaemonTab.tsx`**：展示 Tokio/Go 协程活跃 Worker 仪表、零泄漏内存指示与影子 Git 保护状态。
-- **验收标准**：
-  - 手敲 `clear` 瞬间清屏；错误指令以红字清晰提示；链路日志支持自动滚屏至最新行。
-
----
-
-### 里程碑 3：生产级 Git 控制中心与快照弹窗 (M3)
-
-#### 任务 3.1：双层暂存管理抽屉组件 (`GitDrawer.tsx`)
-- **任务内容**：
-  1. 严格划分为 **`已暂存的更改 (STAGED CHANGES)`** 与 **`工作区更改 (CHANGES)`** 双区域；
-  2. 单文件操作按钮组：`+` (暂存)、`-` (取消暂存)、`↺` (放弃修改)、`👁️` (查看 Diff)；
-  3. 批量操作按钮组：`全部暂存`、`全部取消`、`全部放弃`；
-  4. 点击文件或 Diff 按钮，右侧 Monaco 编辑器平滑展示行级差异对比。
-- **验收标准**：
-  - 暂存/取消暂存即时更新文件归属区域与顶部徽标计数；放弃修改时支持二次防误触安全确认。
-
-#### 任务 3.2：AI 语义化 Commit 提交面板 (`AiCommitBox.tsx`)
-- **任务内容**：
-  1. 多行 Commit Message 输入框，支持 `Ctrl + Enter` 快捷提交；
-  2. **`[🪄 AI 提炼]` 按钮**：调用 AI 分析暂存区变更，打字机动画自动填入符合 Conventional Commits 规范的语义化说明；
-  3. 提供 `✓ 提交更改` 与 `Commit & Push` 双重按钮。
-- **验收标准**：
-  - 暂存区为空时提交自动提示先暂存；提交成功后清空输入框并刷新文件树。
-
-#### 任务 3.3：分支管理模态弹窗 (`GitBranchModal.tsx`)
-- **任务内容**：
-  1. 遵循居中规范，具备显式 `[X]` 按钮，支持 `Esc` 退出与遮罩点击关闭；
-  2. 顶部提供新分支创建输入框与 `新建并检出 (git checkout -b)` 动作；
-  3. 列表展示本地与远程分支，支持关键词实时过滤与一键点击检出切换。
-- **验收标准**：
-  - 检出分支后立即更新全局分支胶囊显示，并弹出暖色微交互 Toast。
-
-#### 任务 3.4：影子快照与 Stash 储藏弹窗 (`GitStashSnapshotModal.tsx`)
-- **任务内容**：
-  1. 顶部 Tab 切换 **`[🛡️ 影子快照历史]`** 与 **`[📦 Git Stash 储藏栈]`**；
-  2. 影子快照列表清晰呈现生成时间、关联文件、触发操作与一键秒级恢复按钮；
-  3. Stash 栈提供一键暂存未完工工作区与一键 `Pop 恢复` 动作。
-- **验收标准**：
-  - 点击“一键秒级恢复”，工作区文件状态即刻复原，无延迟无损回退。
+```text
+frontend/src/
+├── app/
+│   ├── layout/                    # 主视口三态流体分栏架构 (Single-Focus Shell)
+│   │   ├── ActivityBar.tsx        # 48px 图标导航与 Tooltip 挂载
+│   │   ├── WorkspaceSwitcher.tsx  # 顶栏单焦点平滑切换胶囊
+│   │   └── SplitViewContainer.tsx # 左右弹性拖拽容器 (双击复位黄金分割)
+│   ├── chat/                      # 智能对话工作台
+│   │   ├── message/               # 消息气泡树 (流式打字、思考折叠、选择卡片)
+│   │   └── input/                 # 输入舱 (双向 @ 引用、/ 指令与审核开关)
+│   ├── terminal/                  # 底部集成终端抽屉
+│   │   ├── TerminalDrawer.tsx     # 抽屉外壳与 Ctrl+` 全局键盘快捷键
+│   │   ├── XtermView.tsx          # 真实 Xterm 终端实例挂载与双向管道
+│   │   └── TraceStreamView.tsx    # SSE 执行链路虚拟化渲染
+│   ├── git/                       # 生产级 Git 源代码管理中心
+│   │   ├── GitPanel.tsx           # 双层暂存 (Staged vs Working)
+│   │   ├── AiCommitBox.tsx        # AI 提炼 Conventional Commits
+│   │   ├── GitBranchModal.tsx     # 居中分支模态窗 (检出与新建)
+│   │   └── SnapshotModal.tsx      # 影子快照一键无损回退
+│   ├── analytics/                 # 模型使用量与 Token 效能监控大盘
+│   │   ├── UsageCockpit.tsx       # 全景监控工作舱 (今日/7天/30天切片)
+│   │   ├── KpiMetricsGrid.tsx     # 4 大 KPI 仪表盘
+│   │   ├── ThroughputCanvas.tsx   # 24 小时高帧率 Canvas 柱状时序波形
+│   │   └── AuditVirtualList.tsx   # 虚拟化调用审计流水
+│   └── modals/                    # 统一人机弹窗 (居中、显式[X]、Esc退出)
+├── core/
+│   ├── store/                     # Zustand 分层数据源
+│   │   ├── workspaceStore.ts      # 视图聚焦模式与分栏比例
+│   │   ├── sessionStore.ts        # 会话树与上下文
+│   │   └── gitStore.ts            # 暂存区与快照状态
+│   ├── monaco/                    # Monaco 编辑器与 Diff 实例池管理
+│   │   ├── editorPool.ts          # 实例复用池 (防内存暴涨)
+│   │   └── diffViewer.tsx         # 行级/块级比对组件
+│   └── transport/                 # 微内核长连接通信客户端
+│       ├── sseClient.ts           # 智能指数退避重连 SSE
+│       └── wsClient.ts            # 终端流控 WebSocket
+```
 
 ---
 
-### 里程碑 4：多模型使用量与效能监控大盘 (M4)
+### 阶段 1：单焦点工作区调度器与 Monaco 实例池 (Sprint 1)
 
-#### 任务 4.1：全景效能工作舱布局 (`UsageCockpit.tsx`)
-- **任务内容**：
-  1. 点击活动栏图表图标切换至该全景工作舱视图；
-  2. 顶栏包含周期切片组件（`今日` / `近 7 天` / `本月`）、`导出报表` 与 `✕ 关闭大盘`；
-  3. 支持轻按键盘 `Escape` 瞬间切回智能对话工作台。
-- **验收标准**：
-  - 页面响应式适配宽屏与笔记本视口，排版疏密得当。
+#### 1.1 顶栏单焦点平滑切换胶囊与自适应流转 (`app/layout/`)
+- **状态机定义**：
+  ```typescript
+  export type WorkspaceViewMode = 'chat' | 'split' | 'editor';
+  interface WorkspaceLayoutState {
+    mode: WorkspaceViewMode;
+    splitRatio: number; // 0.2 ~ 0.8，默认 0.5
+    setMode: (mode: WorkspaceViewMode) => void;
+    setSplitRatio: (ratio: number) => void;
+    triggerSmartSplit: (filePath: string, diffContent?: string) => void;
+  }
+  ```
+- **核心实现细节**：
+  - 在全宽对话（`mode === 'chat'`）模式下，若用户点击对话流内的文件修改卡片，`triggerSmartSplit` 触发，平滑过渡至 `split` 模式，右侧自动载入并滚动到修改行；
+  - 窗口尺寸小于 960px（笔记本屏幕）时，自动降级禁用双栏，防止视口坍缩。
+- **质量验收标准**：
+  - 切换过渡动画达 60fps，零跳闪；
+  - 双击分栏拖拽手柄准确复位为 50%:50%。
 
-#### 4.2：四维核心 KPI 卡片组件组 (`KpiGrid.tsx`)
-- **任务内容**：
-  1. 渲染今日 Token 总吞吐（输入/输出明细与环比趋势）；
-  2. 渲染预估累计花费（双币折算与单日预算限额水位警戒线）；
-  3. 渲染平均首字延迟 TTFT（极速状态指示）；
-  4. 渲染 Prompt Cache 缓存节省率（展示节省 Token 量与折合资金）。
-- **验收标准**：
-  - 数据数字格式化（带千分位逗号），对比色鲜明，符合 WCAG 2.1 对比度标准。
-
-#### 4.3：多模型对比与时序波形走势 (`UsageChart.tsx`)
-- **任务内容**：
-  1. 各模型（DeepSeek, Claude, GPT-4o, 本地 Ollama）占比高对比进度条；
-  2. 过去 24 小时吞吐波形柱状图，支持鼠标悬停浮动查看每个时间段的调用峰值。
-- **验收标准**：
-  - 柱状图带悬停微动画与精确 Token 数量 Tooltip。
-
-#### 4.4：微内核实时调用审计流 (`AuditStream.tsx`)
-- **任务内容**：
-  1. 实时流式列出最近调用的底层算子、所用模型、In/Out Tokens 明细、耗时与 HTTP 200 状态；
-  2. 提供一键生成并导出 `tcode-token-usage-audit.csv` 报表下载出口。
-- **验收标准**：
-  - 审计流条目时间倒序排列，支持一键复制单笔调用元数据。
+#### 1.2 Monaco 编辑器与 Diff 实例池化管理 (`core/monaco/editorPool.ts`)
+- **内存泄漏防御策略**：
+  - 严禁在组件每次挂载/卸载时重复执行 `monaco.editor.create()` 与 `createDiffEditor()`；
+  - 构建单例编辑器池（`EditorPool`），在切换视图模式时仅移动 DOM 挂载节点（`domNode.appendChild(pool.getDiffEditorContainer())`），彻底规避频繁垃圾回收（GC）导致的界面卡顿。
+- **质量验收标准**：
+  - 连续切换 100 次视图与文件，Chrome 堆内存曲线平稳，内存增量 $< 5\text{MB}$。
 
 ---
 
-### 里程碑 5：微内核通信联动与发布构建验证 (M5)
+### 阶段 2：Xterm 5.x 真实虚拟终端抽屉与双向流控 (Sprint 2)
 
-#### 任务 5.1：SSE 与 WebSocket 客户端通道封装
-- **任务内容**：
-  1. 封装 `useAgentStream` Hook，处理微内核 SSE 增量文本与思考过程流式分发；
-  2. 封装 `useTerminalSocket` Hook，与微内核终端管道建立双向通信；
-  3. 网络中断自动重连与清晰错误状态反馈。
-- **验收标准**：
-  - 流式打字机效果平滑无掉帧；终端输入即时回显无粘包。
+#### 2.1 终端抽屉布局与全局快捷键调度 (`app/terminal/TerminalDrawer.tsx`)
+- **核心实现细节**：
+  - 全局键盘监听挂载在顶层 Window：
+    ```typescript
+    if ((e.ctrlKey || e.metaKey) && (e.key === '`' || e.code === 'Backquote')) {
+      e.preventDefault();
+      useTerminalStore.getState().toggleOpen();
+    }
+    ```
+  - 支持快捷键在任意层级一键呼出与隐藏（高度默认 230px，最大化 48vh，记录用户自定义拖拽高度至 IndexedDB）。
 
-#### 任务 5.2：代码质量门禁与生产打包
-- **任务内容**：
-  1. 100% 严格 TypeScript 编译检查，零 `any`，全链路判空（`?.` 与 `??`）；
-  2. 执行 `npm test` 跑通全量组件单元测试；
-  3. 执行 `npm run build:installer` 构建生产环境 Windows 独立安装包。
-- **验收标准**：
-  - 安装包在纯净 Windows 环境静默安装成功，启动无白屏崩溃，探活接口正常通过。
+#### 2.2 Xterm 5.x Canvas 加速与 WebSocket 双向绑定 (`app/terminal/XtermView.tsx`)
+- **核心实现细节**：
+  - 加载 `@xterm/addon-canvas`，将终端文字渲染交由 GPU Canvas 加速，突破 DOM 节点性能瓶颈；
+  - 加载 `@xterm/addon-fit`，监听窗口与抽屉拉伸（`ResizeObserver`），动态计算并向微内核上报 `rows` 与 `cols`；
+  - 双向二进制数据通信：用户手敲按键通过 WebSocket 直接发送，微内核标准输出秒级回显，支持常用 ANSI 转义颜色码。
+- **质量验收标准**：
+  - 持续执行高频输出命令（如 `find /` 或大规模构建编译），界面无假死，保持流畅滚动。
+
+---
+
+### 阶段 3：生产级 Git 控制中心与差异比对系统 (Sprint 3)
+
+#### 3.1 双层暂存工作流与乐观更新 (`app/git/GitPanel.tsx`)
+- **核心实现细节**：
+  - 界面分为 **`已暂存 (STAGED CHANGES)`** 与 **`未暂存更改 (CHANGES)`**；
+  - 用户点击 `+` (暂存) 时，前端立即执行乐观 UI 更新（将其移入暂存列表），同时向微内核发起异步 `git add`；若后台返回失败，自动回滚 UI 并弹出错误 Toast；
+  - 放弃文件修改（`git restore`）时，弹出统一人机工程学确认浮层，杜绝误触丢弃代码。
+- **质量验收标准**：
+  - 无论仓库改动包含 2 个还是 200 个文件，状态流转无延迟迟滞。
+
+#### 3.2 AI Conventional Commits 提炼打字组件 (`app/git/AiCommitBox.tsx`)
+- **核心实现细节**：
+  - 用户点击 **`[🪄 AI 提炼]`**，向微内核发起当前暂存区 Diff 分析请求；
+  - 采用打字机流式渐显动画（`StreamTypewriter`），逐字打入规范描述（如 `feat(core): implement zero-copy ring buffer event bus`）；
+  - 支持快捷键 `Ctrl + Enter` 一键提交。
+
+#### 3.3 居中模态弹窗组规范落地 (`app/git/modals/`)
+- **严格遵循【铁律 5】**：
+  - `GitBranchModal.tsx` 与 `SnapshotModal.tsx` 严格居中；
+  - 右上角配置显式 `[X]` 关闭按钮，附悬停 Tooltip；
+  - 支持遮罩点击关闭与全局 `Esc` 层级阻断退出；
+  - 影子快照列表点击“一键秒级恢复”，向微内核发送快照 SHA，工作区磁盘与 Monaco 状态毫秒级无损复原。
+
+---
+
+### 阶段 4：多模型使用量与 Token 效能监控大盘 (Sprint 4)
+
+#### 4.1 全景工作舱与多维 KPI 仪表盘 (`app/analytics/`)
+- **核心实现细节**：
+  - 活动栏导航位切换专属工作舱（`UsageCockpit.tsx`），支持 `Esc` 秒级切回对话；
+  - 4 大 KPI 卡片数据格式化：
+    1. **今日 Tokens 吞吐**：千分位逗号格式化，区分输入/输出比例与昨日环比；
+    2. **预估计费支出**：双币种自动折算（`¥ 4.28 / $0.61`），计算日限额使用率百分比（`8.5%`）；
+    3. **平均首字延迟 (TTFT)**：毫秒级实时加权计算；
+    4. **Prompt Cache 节省率**：公式 $\frac{\text{Cached Tokens}}{\text{Total Input Tokens}} \times 100\%$，直观展现节约成本。
+
+#### 4.2 24 小时吞吐波形 Canvas 高帧率渲染 (`app/analytics/ThroughputCanvas.tsx`)
+- **核心实现细节**：
+  - 抛弃厚重的外部第三方图表库（减小体积 1.5MB），采用原生 HTML5 Canvas 绘制；
+  - 支持鼠标悬停高亮当前时间段柱子，浮出微阴影气泡卡片，展示具体时刻的输入 Tokens、输出 Tokens 与调用峰值；
+  - 高 DPI 屏幕（Retina）物理像素自适应（处理 `devicePixelRatio`，杜绝柱状图模糊毛边）。
+
+#### 4.3 虚拟化实时调用审计流 (`app/analytics/AuditVirtualList.tsx`)
+- **核心实现细节**：
+  - 挂载 `@tanstack/react-virtual`，仅渲染视口内可见的 10~15 个审计条目，即使后端推送 5,000 笔流水，内存占用亦恒定；
+  - 顶部提供 **「导出 CSV 报表」**：使用原生 `Blob` 生成 `tcode-token-usage-audit.csv` 并自动触发浏览器下载，零后端生成负担。
+
+---
+
+### 阶段 5：通信韧性、全链路容灾与安装包构建发布 (Sprint 5)
+
+#### 5.1 智能指数退避重连 SSE 客户端 (`core/transport/sseClient.ts`)
+- **核心容灾算法**：
+  - 使用 `fetch` 结合 `ReadableStream` 手动解码 SSE（替代功能简陋的原生 `EventSource`，原生不支持自定义 Headers 与 POST 请求）；
+  - 当微内核重启或网络波动中断时，触发退避算法：
+    $$T_{retry} = \min(T_{max}, T_{base} \times 2^n) \pm Jitter$$
+    其中 $T_{base}=100\text{ms}, T_{max}=5000\text{ms}$，带随机抖动防止并发请求风暴。
+
+#### 5.2 全局错误边界与代码质量门禁
+- **核心保护机制**：
+  - 根组件包裹 `GlobalErrorBoundary`，捕获未处理的 React 渲染异常，提供“一键重置当前工作区”与“复制崩溃堆栈”按钮，杜绝全屏纯白崩溃；
+- **硬性发布门禁**：
+  - [ ] `tsc --noEmit` 0 警告 0 类型错误；
+  - [ ] `npm test` 单元测试覆盖率 $\ge 80\%$；
+  - [ ] `npm run build:installer` 构建通过，生成生产独立安装包并完成静默安装调用测试。

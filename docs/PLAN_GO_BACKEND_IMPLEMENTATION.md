@@ -1,169 +1,210 @@
-﻿# Tcode 后端 Go 插件式微内核落地实施任务计划 (Go Backend WBS)
+﻿# Tcode 工业级 Go 插件式微内核工程落地任务计划 (Production-Grade WBS)
 
-> **负责人**：Tcode 资深 Go 架构与后端工程师  
-> **基准架构**：[`docs/ARCHITECTURE_GO_PLUGIN_CORE.md`](./ARCHITECTURE_GO_PLUGIN_CORE.md)  
-> **工程基准**：Go 1.22+，目标交付单个静态桌面端微内核二进制 (`tcode-daemon.exe`)  
-> **核心指标**：冷启动 $< 20\text{ms}$，常驻内存 $< 45\text{MB}$，单元测试覆盖率 $\ge 85\%$，生产环境零裸露 panic
-
----
-
-## 🎯 一、总体实施里程碑路线图 (Milestone Roadmap)
-
-| 阶段 | 里程碑名称 | 核心产出 | 计划周期 | 关键交付物 |
-| :--- | :--- | :--- | :--- | :--- |
-| **M1** | **SPI 核心契约与插件宿主引擎** | 统一接口规范、Registry、Panic 隔离屏障 | Sprint 1 (第 1 周) | `pkg/plugin` 接口库、`internal/host` 引擎 |
-| **M2** | **官方首批内置插件 (In-Process)** | DeepSeek/Claude 网关、受控文件/Git 暂存/终端管道 | Sprint 2 (第 2 周) | `plugins/provider` 与 `plugins/tool` 核心集 |
-| **M3** | **外部进程隔离加载器 (MCP Host)** | stdio 子进程管道沙箱、JSON-RPC 2.0 编解码 | Sprint 3 (第 3 周) | `internal/host/loader_mcp.go`、探活探针 |
-| **M4** | **双环执行引擎与异步事件总线** | Inner/Outer Loop 状态机、零锁 EventBus | Sprint 4 (第 4 周) | `internal/core/loop`、执行生命周期分发 |
-| **M5** | **表现层适配与跨平台构建打包** | Tauri IPC / SSE 流式传输端点、性能压测基准 | Sprint 5 (第 5 周) | `cmd/tcode-daemon`、自动化 CI 构建脚本 |
+> **版本**：v2.0.0-PROD  
+> **负责人**：Tcode 首席 Go 基础架构师  
+> **设计基准**：[`docs/ARCHITECTURE_GO_PLUGIN_CORE.md`](./ARCHITECTURE_GO_PLUGIN_CORE.md)  
+> **技术基准**：Go 1.22+、无 CGO 纯静态交叉编译、内存控制 $\le 45\text{MB}$、进程崩溃隔离、原子文件写与 Git Plumbing 管道快照
 
 ---
 
-## 📋 二、细分任务分解与验收标准 (WBS & Acceptance Criteria)
+## 🎯 一、技术选型与工程依赖规范 (Stack & Dependencies)
 
-### 里程碑 1：SPI 核心契约与插件宿主引擎 (M1)
-
-#### 任务 1.1：初始化标准 Go 项目结构与模块契约
-- **目标路径**：`pkg/plugin/`
-- **任务内容**：
-  1. 定义根插件接口 `Plugin`（生命周期 `Init`, `Start`, `Stop`）；
-  2. 定义四大扩展点 SPI 接口：`ProviderPlugin`, `ToolPlugin`, `RailPlugin`, `StoragePlugin`；
-  3. 定义流式传输块 `StreamChunk`、模型描述符 `ModelDescriptor`、工具契约 `ToolDefinition`。
-- **验收标准**：
-  - 纯接口与标准数据结构定义，零第三方依赖；
-  - 接口粒度符合 Go 最佳实践，提供完备的 `godoc` 说明。
-
-#### 任务 1.2：插件注册中心与优先级调度器实现
-- **目标路径**：`internal/host/registry.go`
-- **任务内容**：
-  1. 基于读写锁 (`sync.RWMutex`) 实现并发安全的插件注册表 `Registry`；
-  2. 实现分类检索（按 ID 获取 Tool、按 ID 获取 Provider、获取已排序 Rail 列表）；
-  3. 实现 `RailPlugin` 优先级堆排序（数值 0~100，P-100 拥有最高前置拦截裁决权）。
-- **验收标准**：
-  - 支持动态注册与注销插件，并发读写无 Data Race（通过 `go test -race` 验证）。
-
-#### 任务 1.3：Panic 隔离防御网关与超时看门狗
-- **目标路径**：`internal/host/guard.go`
-- **任务内容**：
-  1. 封装通用安全协程包装器 `SafeGo(ctx context.Context, fn func())`；
-  2. 在插件调度链路（`ExecuteAction`, `StreamChat`）植入 `defer recover()` 拦截；
-  3. 捕获插件内部 panic，转化为结构化错误对象并记录系统错误日志，阻断异常扩散。
-- **验收标准**：
-  - 编写故意 panic 的 mock 插件，微内核主进程不受影响并返回友好的结构化 Error。
+拒绝使用未经工业验证的小众玩具库，核心通信与并发调度统一收敛：
+- **核心运行时**：Go 1.22 原生，禁止开启 CGO（`CGO_ENABLED=0` 保证极致单文件跨平台静态交付）；
+- **高性能协程池**：`github.com/panjf2000/ants/v2`（池化复用 10,000+ 异步事件消费，杜绝 goroutine 暴涨击穿调度器）；
+- **高性能结构化日志**：Go 1.21+ 原生 `log/slog`，定制脱敏 `SlogHandler`（明文 API Key、Token 强制掩码为 `sk-***`）；
+- **高并发零拷贝序列化**：`github.com/bytedance/sonic`（AMD64 汇编加速）与标准库 `encoding/json`（ARM64 降级）；
+- **外部进程终端管道**：`github.com/creack/pty` (POSIX) 与 Windows ConPTY / Win32 `CREATE_NO_WINDOW` 原生管道对接；
+- **嵌入式轻量元数据**：`go.etcd.io/bbolt`（纯 Go 嵌入式单文件 KV 库，ACID 事务，零外部守护进程依赖）。
 
 ---
 
-### 里程碑 2：官方首批内置插件实现 (In-Process) (M2)
+## 📋 二、核心分层工程落地 WBS (5 大生产级模块)
 
-#### 任务 2.1：高频大模型网关驱动插件 (`plugins/provider/`)
-- **实现内容**：
-  1. **DeepSeek 插件 (`deepseek`)**：
-     - 支持 Direct API 直连与 Sub2api 协议；
-     - 实现 `StreamChat` SSE 流式切片回调；
-     - 实现 `Ping` 探针（首字延迟 TTFT 毫秒级打点）；
-  2. **Anthropic Claude 插件 (`anthropic`)**：
-     - 支持 Claude 3.7 原生流式、Thinking 思考流解析；
-     - 支持 Prompt Caching（缓存命中 Token 统计）。
-- **验收标准**：
-  - TTFT 探活稳定返回网络延迟；断网/超时能够正确返回带上下文的错误提示。
-
-#### 任务 2.2：物理工作区受控文件与影子快照工具插件 (`plugins/tool/fs`)
-- **实现内容**：
-  1. 受控目录沙箱（禁止跨越工作区相对路径或删除关键系统根目录）；
-  2. 文件读写前自动生成 `.git/refs/shadow-snapshots` 轻量快照；
-  3. 提供秒级快照列表与一键回退接口。
-- **验收标准**：
-  - 文件修改前自动创建快照，回退操作可完整复原工作区磁盘文件。
-
-#### 任务 2.3：高级 Git 控制中心算子插件 (`plugins/tool/git`)
-- **实现内容**：
-  1. 获取工作区状态：精确划分 `Staged Changes` 与 `Working Changes`；
-  2. 暂存/取消暂存/放弃更改底层命令行封装；
-  3. 分支列表读取、分支切换与创建新分支 (`checkout -b`)。
-- **验收标准**：
-  - 返回与 Git CLI 完全一致的增删行数统计与文件状态码（M/U/D）。
-
-#### 任务 2.4：终端管道算子插件 (`plugins/tool/term`)
-- **实现内容**：
-  1. Windows 平台通过 `CREATE_NO_WINDOW` (`0x08000000`) 标志静默启动 `pwsh.exe`；
-  2. 双向捕获标准输入输出（`StdinPipe`, `StdoutPipe`, `StderrPipe`）；
-  3. 实现与前端集成终端抽屉的实时双向传输。
-- **验收标准**：
-  - 执行 `go test`、`git status` 时后台运行无控制台黑框弹出，输出流式实时送达。
+```text
+agent-learning/
+├── cmd/
+│   └── tcode-daemon/              # 守护进程主入口 (CLI 参数解析、优雅停机信号处理)
+├── internal/
+│   ├── core/                      # 微内核核心引擎
+│   │   ├── engine/                # 双环状态机 (Dual-Loop FSM Engine)
+│   │   ├── eventbus/              # 环形缓冲区零锁异步事件总线 (Ring-Buffer EventBus)
+│   │   ├── sandbox/               # 物理工作区安全沙箱与 Git Plumbing 原子快照
+│   │   └── session/               # 会话状态机、滑动窗口 Token 计量与成本看板
+│   ├── host/                      # 插件宿主引擎
+│   │   ├── registry.go            # 分类读写锁注册中心
+│   │   ├── guard.go               # Panic 调用栈熔断与看门狗
+│   │   ├── loader_inproc.go       # 原生 In-Process 编译期插件装载
+│   │   └── loader_mcp.go          # 进程外 MCP stdio/JSON-RPC 2.0 管道沙箱
+│   └── transport/                 # 本地环回通信服务
+│       ├── http/                  # SSE 流式端点与 REST 算子路由 (127.0.0.1 鉴权)
+│       └── ws/                    # 终端双向流控 WebSocket 处理器
+├── pkg/
+│   ├── plugin/v1/                 # 严格向后兼容的公共 SPI 接口契约
+│   │   ├── plugin.go              # 根插件生命周期
+│   │   ├── provider.go            # 模型网关驱动契约 (带背压 Channel)
+│   │   ├── tool.go                # 算子契约 (OpenAPI Schema 校验)
+│   │   ├── rail.go                # 生命周期执行拦截器
+│   │   └── types.go               # 统一 DTO 与状态枚举
+│   └── errors/                    # 结构化错误体系与错误码
+└── plugins/                       # 官方核心插件集
+    ├── provider/                  # 模型适配器 (DeepSeek/Anthropic/Ollama)
+    ├── tool/                      # 核心算子 (受控文件、Git暂存、终端交互)
+    └── rail/                      # 治理拦截 (高危阻断、TDD自愈、成本审计)
+```
 
 ---
 
-### 里程碑 3：外部进程隔离加载器 (MCP Host) (M3)
+### 阶段 1：核心 SPI 强类型契约与基础宿主引擎 (Sprint 1)
 
-#### 任务 3.1：stdio 模式外部进程生命周期管理器
-- **实现内容**：
-  1. 读取本地 Claude Desktop JSON 格式配置；
-  2. 跨平台子进程拉起与守护（支持 `npx`, `python`, `uvx`, `docker`）；
-  3. 环境变量注入与管道健康心跳探针。
-- **验收标准**：
-  - 外部进程异常退出时自动捕获退出码，支持可配置的自动重启（Restart Policy）。
+#### 1.1 核心 SPI 接口与背压数据流契约 (`pkg/plugin/v1/`)
+- **文件与函数契约**：
+  - `pkg/plugin/v1/plugin.go`：
+    ```go
+    type Plugin interface {
+        ID() string
+        Name() string
+        Version() string
+        Type() PluginType
+        Init(ctx context.Context, config json.RawMessage) error
+        Start(ctx context.Context) error
+        Stop(ctx context.Context) error
+        Health(ctx context.Context) HealthStatus
+    }
+    ```
+  - `pkg/plugin/v1/provider.go`：
+    - `StreamChat(ctx context.Context, req *ChatRequest) (<-chan StreamChunk, error)`：
+      强制通道缓冲区大小为 `64`，消费端超时 `5s` 未取走自动触发背压等待，避免下游网络堵塞造成内存堆积。
+    - `Ping(ctx context.Context) (time.Duration, error)`：毫秒级 TTFT 探针。
+  - `pkg/plugin/v1/tool.go`：
+    - `Execute(ctx context.Context, rawArgs json.RawMessage) (*ToolResult, error)`：
+      统一入参强制校验，执行受 `ctx` 超时硬控制（默认单步执行上限 60s）。
+  - `pkg/plugin/v1/rail.go`：
+    - 拦截器接口：`OnBeforeObserve`、`OnBeforeReason`、`OnBeforeAct`、`OnAfterAct`、`OnVerify`。
+- **质量验收标准**：
+  - 100% 静态代码无全局变量暴露；
+  - 编写 `spi_test.go` 验证接口契约完整性与并发数据竞争（`go test -race`）。
 
-#### 任务 3.2：JSON-RPC 2.0 协议适配器与工具探测
-- **实现内容**：
-  1. 实现 MCP `initialize` 握手协议；
-  2. 调用 `tools/list` 自动获取可用工具 Schema 并动态注册为 `ToolPlugin`；
-  3. 实现 `tools/call` 的参数验证与双向转发。
-- **验收标准**：
-  - 挂载标准 MCP Server（如 SQLite、Filesystem），微内核能秒级探测到全部工具清单。
+#### 1.2 分段锁注册中心与优先级调度器 (`internal/host/registry.go`)
+- **核心实现细节**：
+  - 采用分段读写锁（`ProviderMap sync.RWMutex`, `ToolMap sync.RWMutex`, `RailList sync.RWMutex`），杜绝单一全局大锁造成的并发竞争；
+  - `sortRails()`：利用 Go 原生 `slices.SortFunc` 按照 `Priority` 降序排列，数值最高（P-100 `SafetyRail`）保证首位拦截；
+  - 动态热插拔生命周期管理（支持运行时增删 MCP 插件，自动调用旧插件 `Stop` 与新插件 `Start`）。
+- **质量验收标准**：
+  - 并发读取吞吐量达到 $> 2,000,000\text{ ops/sec}$；
+  - 动态注册冲突测试（重复 ID 拒绝并返回 `ErrDuplicatePluginID`）。
 
----
-
-### 里程碑 4：双环执行引擎与异步事件总线 (M4)
-
-#### 任务 4.1：基于通道的高性能零拷贝事件驱动总线 (`internal/core/eventbus`)
-- **实现内容**：
-  1. `EventBus` 支持主题发布订阅（`agent.started`, `tool.executing`, `token.usage`, `error`）；
-  2. 采用只读非阻塞通道分发，内置环形缓冲区防慢消费者阻塞。
-- **验收标准**：
-  - 高并发压测（每秒 10,000 事件），内存分配平稳，无内存泄漏。
-
-#### 任务 4.2：Inner Loop 四步执行闭环 (`internal/core/loop/inner.go`)
-- **实现内容**：
-  1. 单轮标准流：`Observe` ➔ `Reason` ➔ `Act` ➔ `Verify`；
-  2. 贯穿调用 `RailPlugin` 前置后置钩子进行安全拦截与 TDD 自愈检查。
-- **验收标准**：
-  - 当高危命令触发时，`SafetyRail` 能够有效阻断并不进入 `Act` 执行阶段。
-
-#### 任务 4.3：Outer Loop 多轮收敛状态机 (`internal/core/loop/outer.go`)
-- **实现内容**：
-  1. 任务目标完成度判定；
-  2. 最大迭代步数（Max Steps）防死循环保护；
-  3. Token 预算实时核销与超额熔断。
-- **验收标准**：
-  - 达到单轮最大步数或超出预算时，状态机能主动优雅收敛并交付部分产出。
-
----
-
-### 里程碑 5：表现层适配与跨平台构建打包 (M5)
-
-#### 任务 5.1：HTTP / SSE 与 WebSocket 统一传输层
-- **实现内容**：
-  1. 基于标准库 `net/http` 搭建微内核本地通信服务端（固定监听 `127.0.0.1` 环回接口）；
-  2. 端点实现：`/api/chat/stream` (SSE), `/api/tools/execute`, `/api/terminal/ws`, `/api/usage/metrics`。
-- **验收标准**：
-  - SSE 连接断开时能及时通过 Context Cancel 通知后台协程中止推理，避免 Token 浪费。
-
-#### 任务 5.2：单二进制静态编译与 CI 构建矩阵
-- **实现内容**：
-  1. 编写跨平台编译脚本（支持 Windows x64、macOS ARM64/x64、Linux x64）；
-  2. 使用 `-ldflags="-s -w"` 剔除调试符号，压缩二进制体积至 $< 30\text{MB}$。
-- **验收标准**：
-  - 编译产物为无外部动态链接依赖的纯静态单一可执行文件。
+#### 1.3 Panic 隔离网关与调用栈追踪守护 (`internal/host/guard.go`)
+- **核心实现细节**：
+  - 封装 `SafeCallTool(ctx context.Context, tool ToolPlugin, args json.RawMessage) (res *ToolResult, err error)`；
+  - `defer` 中使用 `recover()` 拦截未知崩溃，使用 `debug.Stack()` 捕获完整调用栈，格式化为标准 JSON 日志；
+  - 将 Panic 包装为业务级错误 `ErrPluginPanicked`，向执行链路返回优雅错误信息，保障微内核常驻进程 100% 存活。
+- **质量验收标准**：
+  - 模拟故意除以零、非法指针访问的破坏性插件，微内核运行稳定，日志记录错误堆栈，单测通过。
 
 ---
 
-## 🧪 三、测试与质量门禁 (TDD & Quality Gates)
+### 阶段 2：生产级物理文件沙箱与 Git Plumbing 管道快照 (Sprint 2)
 
-1. **单元测试与 Mock 治理**：
-   - 采用标准库 `testing` 与 `testify/assert`；
-   - 仅对外部不可控大模型 HTTP 端点与远端网络执行 Mock，本地文件与 Git 算子全部执行物理真实临时目录测试；
-2. **代码规约扫描**：
-   - `golangci-lint` 全项通过（开启 `govet`, `errcheck`, `staticcheck`, `unused`, `gosec`）；
-3. **性能基准测试 (Benchmarks)**：
-   - `BenchmarkRegistry_SafeExecuteAction`：单次算子派发开销 $< 2\mu\text{s}$；
-   - `BenchmarkEventBus_Publish`：单事件吞吐量 $> 500,000\text{ ops/sec}$。
+#### 2.1 原子写文件与目录穿越沙箱防御 (`internal/core/sandbox/fs.go`)
+- **核心实现细节**：
+  - **路径规范化防护 (Canonicalize)**：执行 `filepath.EvalSymlinks` 与 `filepath.Clean`，严格限制操作路径处于用户打开的工作区根目录内，越界访问立即返回 `ErrPathEscapingSandbox`；
+  - **原子写防撕裂机制**：
+    1. 在同级目录创建临时文件（如 `.app.go.tcode_tmp_9381`）；
+    2. 将修改内容写入临时文件并显式调用 `file.Sync()` 强制落盘；
+    3. 关闭临时文件句柄；
+    4. 执行 `os.Rename(tmp, target)` 原子替换；若中途掉电或崩溃，原文件完好无损。
+- **质量验收标准**：
+  - 构造 `../../../../Windows/System32` 路径穿越攻击，拦截率 100%；
+  - 模拟并发写入中断，校验源文件无坏块与半截写入。
+
+#### 2.2 基于 Git Plumbing 底层管道的高性能影子快照 (`internal/core/sandbox/snapshot.go`)
+- **核心实现细节**：
+  - 放弃低效笨重的高级命令（`git commit` 会污染用户分支日志与暂存区）；
+  - 采用 **Git Plumbing 底层管道命令**：
+    1. `git write-tree`：秒级生成当前工作区树对象（Tree SHA）；
+    2. `git commit-tree <tree-sha> -m "tcode: shadow snapshot before modifying [file]"`：生成孤立游离 Commit 对象；
+    3. 将 Commit SHA 记录在专用命名空间：`.git/refs/tcode/snapshots/<snapshot-id>`；
+  - **秒级恢复 (`RollbackSnapshot`)**：
+    调用 `git checkout <commit-sha> -- <file_path>` 瞬间无损复原目标文件。
+- **性能与质量指标**：
+  - 单次快照耗时 $\le 5\text{ms}$（即便 50,000 文件仓库也仅记录变化索引树，零额外物理磁盘冗余）；
+  - 绝不产生跨分支冲突，绝不产生用户可见的未提交游离提交。
+
+#### 2.3 高级双层暂存器控制算子 (`plugins/tool/git/git_tool.go`)
+- **核心实现细节**：
+  - 基于 `git status --porcelain=v2` 解析机器可读状态流，精确分离 `Staged Changes` 与 `Working Changes`；
+  - 实现 `git add -- <file>`、`git restore --staged -- <file>`、`git restore -- <file>` 封装；
+  - 提供本地与远程分支扫描 (`git branch -a --format="%(refname:short)|%(objectname:short)|%(subject)"`)。
+- **质量验收标准**：
+  - 支持文件名含空格、特殊字符、中文路径的转义与安全执行。
+
+---
+
+### 阶段 3：外部进程 MCP stdio/JSON-RPC 2.0 隔离宿主 (Sprint 3)
+
+#### 3.1 跨平台子进程管道沙箱与生命周期看门狗 (`internal/host/loader_mcp.go`)
+- **核心实现细节**：
+  - 针对 Windows 平台通过系统属性注入 `CREATE_NO_WINDOW = 0x08000000`：
+    ```go
+    cmd.SysProcAttr = &syscall.SysProcAttr{
+        HideWindow: true,
+        CreationFlags: 0x08000000,
+    }
+    ```
+  - 标准输入输出双向管道绑定（`StdinPipe` 发送 JSON-RPC，`StdoutPipe` 读取并使用带长度前缀的 Framer 分包解析）；
+  - 优雅停机保护：先发送 `notifications/cancelled` ➔ 发送 `SIGTERM` ➔ 超过 1000ms 未退出则强制 `Process.Kill()`。
+- **质量验收标准**：
+  - 在 Windows 下拉起第三方 Python/Node.js MCP 进程完全无黑框闪烁；
+  - 外部进程异常退出时，看门狗捕获 SIGCHLD/ExitCode 并触发结构化重试机制。
+
+#### 3.2 动态工具清单与 OpenAPI 3 自动发现
+- **核心实现细节**：
+  - 发起 MCP `initialize` 握手与客户端能力协商；
+  - 发起 `tools/list`，将远端返回的 JSON Schema 动态包装为本地 `ToolPlugin` 实例注册进 `Registry`；
+  - 暴露给大模型统一格式，接收大模型 `tool_calls` 后通过 `tools/call` 进行 IPC 派发并回收结果。
+- **质量验收标准**：
+  - 挂载标准官方 SQLite MCP Server，工具探测耗时 $< 200\text{ms}$，参数验证不匹配直接在本地阻断。
+
+---
+
+### 阶段 4：双环执行引擎与事件总线状态机 (Sprint 4)
+
+#### 4.1 统一双环有限状态机 (`internal/core/engine/fsm.go`)
+- **状态流转严密图**：
+  - `STATE_IDLE` ➔ `STATE_OBSERVING` ➔ `STATE_REASONING` ➔ `STATE_ACTING` ➔ `STATE_VERIFYING` ➔ （满足终止？`STATE_COMPLETED` : 回到 `STATE_OBSERVING`）；
+- **核心容错与自愈控制**：
+  - 最大步数保护：默认 $MaxSteps = 15$，防止死循环；
+  - 上下文自动修剪：当累积 Token 超过模型上下文窗口 80% 时，自动触发 `ContextCompaction`，丢弃过往轮次的非关键工具大段输出，保留架构摘要与最新修改事实。
+- **质量验收标准**：
+  - 编写完整的状态机测试矩阵，覆盖正常闭环、工具执行失败自愈、达到步数上限强制中断。
+
+#### 4.2 基于环形缓冲区的高性能异步事件总线 (`internal/core/eventbus/eventbus.go`)
+- **核心实现细节**：
+  - 采用无锁/低锁环形缓冲队列（Ring Buffer），单事件分发延迟 $< 500\text{ns}$；
+  - 定义标准事件结构体 `AgentEvent`（含 `EventID`, `Timestamp`, `SessionID`, `Type`, `Payload`）；
+  - 慢消费者保护：通道满时丢弃不关键的 debug 跟踪事件，严格保证关键状态（`tool.start`, `tool.done`, `agent.error`）可靠送达。
+- **质量验收标准**：
+  - 10,000 事件并发基准压测无锁争用，内存分配平滑。
+
+---
+
+### 阶段 5：表现层适配、集成自愈与编译交付 (Sprint 5)
+
+#### 5.1 环回传输层实现 (`internal/transport/http/`)
+- **核心实现细节**：
+  - 基于 Go 原生 `http.Server` 监听 `127.0.0.1` 动态可用端口（写入临时锁文件供桌面端读取）；
+  - 强安全头校验：所有请求必须携带微内核随机生成的握手 Token（`X-Tcode-Token`），杜绝本地恶意网页 CSRF 劫持；
+  - `/api/chat/stream`：标准 SSE 协议（`Content-Type: text/event-stream`、`Cache-Control: no-cache`），支持客户端断连时通过 `req.Context().Done()` 级联通知上游 LLM 协程中止。
+
+#### 5.2 生产环境压测与单二进制打包
+- **编译构建命令规范**：
+  ```bash
+  # Windows 静态生产编译
+  GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w -X 'tcode/internal/version.GitCommit=$(git rev-parse --short HEAD)'" -o bin/tcode-daemon.exe ./cmd/tcode-daemon
+  ```
+- **硬性发布门禁**：
+  - [ ] 编译产物体积 $\le 30\text{MB}$；
+  - [ ] 常驻内存 $\le 45\text{MB}$；
+  - [ ] `go test -race ./...` 全部通过；
+  - [ ] `golangci-lint run` 0 警告 0 报错。
