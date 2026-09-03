@@ -60,6 +60,53 @@ export interface FileNode {
   children?: FileNode[]
 }
 
+export interface SessionMeta {
+  id: string
+  title: string
+  model: string
+  tag: string
+  time: string
+  desc: string
+  updated_at: number
+}
+
+export interface SessionMessage {
+  id: string
+  role: string
+  content: string
+  thinking?: string
+  tool?: {
+    name: string
+    args: any
+    output: string
+  }
+  time: string
+}
+
+export interface ChatSession {
+  id: string
+  title: string
+  model: string
+  tag: string
+  created_at: number
+  updated_at: number
+  messages: SessionMessage[]
+}
+
+export interface DiffLine {
+  type: 'add' | 'del' | 'ctx'
+  text: string
+  label?: string
+}
+
+export interface DiffReport {
+  file_path: string
+  lang: string
+  stats: string
+  header: string
+  lines: DiffLine[]
+}
+
 function getApp(): any {
   return (window as any).go?.main?.App
 }
@@ -92,7 +139,70 @@ export const wailsBridge = {
     })
   },
 
-  // 2. 渠道管理 (真实读写 ~/.tcode/channels.json)
+  // 2. 会话历史管理 (真实读写 ~/.tcode/sessions/)
+  async listSessions(): Promise<SessionMeta[]> {
+    const app = getApp()
+    if (app?.ListSessions) {
+      return await app.ListSessions()
+    }
+    return [
+      { id: 'sess1', title: '架构重构与执行流设计', model: 'deepseek-v4-flash', tag: '核心架构', time: '刚刚', desc: '纯原生 Wails 闭环', updated_at: Date.now() },
+      { id: 'sess2', title: 'TDD测试自愈与并发防漏', model: 'gpt-5.6-sol', tag: '单测自愈', time: '5分钟前', desc: '红绿灯验证', updated_at: Date.now() - 300000 },
+      { id: 'sess3', title: 'AgentRouter 多模型中转流', model: 'deepseek-v4-flash', tag: '网关调度', time: '10分钟前', desc: '4模型接入', updated_at: Date.now() - 600000 }
+    ]
+  },
+
+  async getSession(id: string): Promise<ChatSession | null> {
+    const app = getApp()
+    if (app?.GetSession) {
+      return await app.GetSession(id)
+    }
+    return null
+  },
+
+  async saveSession(sess: ChatSession): Promise<void> {
+    const app = getApp()
+    if (app?.SaveSession) {
+      await app.SaveSession(sess)
+    }
+  },
+
+  async deleteSession(id: string): Promise<void> {
+    const app = getApp()
+    if (app?.DeleteSession) {
+      await app.DeleteSession(id)
+    }
+  },
+
+  // 3. 真实物理代码 Diff 计算与回滚
+  async getStructuredDiff(filePath: string): Promise<DiffReport> {
+    const app = getApp()
+    if (app?.GetStructuredDiff) {
+      return await app.GetStructuredDiff(filePath)
+    }
+    return {
+      file_path: filePath,
+      lang: 'Go · UTF-8',
+      stats: '+4 行新增 · -2 行删除',
+      header: '@@ -42,6 +42,8 @@ func main() {',
+      lines: [
+        { type: 'ctx', text: '    reg := host.NewRegistry()' },
+        { type: 'del', text: '-   // 遗留 Python 桥接', label: '删除' },
+        { type: 'add', text: '+   // Wails v2 原生微内核与 ReAct 算子', label: '新增' },
+        { type: 'add', text: '+   app := NewApp()', label: '新增' },
+        { type: 'ctx', text: '    runtime.LogInfo(ctx, "Ready")' }
+      ]
+    }
+  },
+
+  async revertFile(filePath: string): Promise<void> {
+    const app = getApp()
+    if (app?.RevertFile) {
+      await app.RevertFile(filePath)
+    }
+  },
+
+  // 4. 渠道与设置管理
   async listChannels(): Promise<ChannelConfig[]> {
     const app = getApp()
     if (app?.ListChannels) {
@@ -115,27 +225,20 @@ export const wailsBridge = {
 
   async saveChannel(cfg: ChannelConfig): Promise<void> {
     const app = getApp()
-    if (app?.SaveChannel) {
-      await app.SaveChannel(cfg)
-    }
+    if (app?.SaveChannel) await app.SaveChannel(cfg)
   },
 
   async deleteChannel(id: string): Promise<void> {
     const app = getApp()
-    if (app?.DeleteChannel) {
-      await app.DeleteChannel(id)
-    }
+    if (app?.DeleteChannel) await app.DeleteChannel(id)
   },
 
   async pingChannel(id: string): Promise<string> {
     const app = getApp()
-    if (app?.PingChannel) {
-      return await app.PingChannel(id)
-    }
+    if (app?.PingChannel) return await app.PingChannel(id)
     return '85ms'
   },
 
-  // 3. MCP、Skills 与 Rules 管理
   async listMCPs(): Promise<MCPServerConfig[]> {
     const app = getApp()
     if (app?.ListMCPs) return await app.ListMCPs()
@@ -169,53 +272,28 @@ export const wailsBridge = {
     if (app?.SaveRule) await app.SaveRule(cfg)
   },
 
-  // 4. 工作区文件树与 Git 状态
   async getFileTree(dir: string = ''): Promise<FileNode[]> {
     const app = getApp()
-    if (app?.GetFileTree) {
-      return await app.GetFileTree(dir)
-    }
+    if (app?.GetFileTree) return await app.GetFileTree(dir)
     return [
       { name: 'app.go', path: 'app.go', is_dir: false },
-      { name: 'main.go', path: 'main.go', is_dir: false },
-      { name: 'wails.json', path: 'wails.json', is_dir: false },
-      {
-        name: 'frontend',
-        path: 'frontend',
-        is_dir: true,
-        children: [
-          { name: 'src', path: 'frontend/src', is_dir: true },
-          { name: 'package.json', path: 'frontend/package.json', is_dir: false }
-        ]
-      }
+      { name: 'main.go', path: 'main.go', is_dir: false }
     ]
-  },
-
-  async getFileDiff(filePath: string): Promise<string> {
-    const app = getApp()
-    if (app?.GetFileDiff) {
-      return await app.GetFileDiff(filePath)
-    }
-    return '@@ -1,5 +1,6 @@\n+ // 真实 Wails v2 原生单二进制集成\n'
   },
 
   async getGitStatus(): Promise<any> {
     const app = getApp()
-    if (app?.GetGitStatus) {
-      return await app.GetGitStatus()
-    }
+    if (app?.GetGitStatus) return await app.GetGitStatus()
     return { branch: 'main', staged: [], working: [], untracked: [] }
   },
 
   async getProjectASTGraph(): Promise<GraphNode[]> {
     const app = getApp()
-    if (app?.GetProjectASTGraph) {
-      return await app.GetProjectASTGraph()
-    }
+    if (app?.GetProjectASTGraph) return await app.GetProjectASTGraph()
     return []
   },
 
-  // 5. 真实流式对话调用
+  // 5. 真实流式对话调用与事件订阅
   async sendMessage(
     req: { session_id: string; prompt: string; model: string; is_full_auto: boolean },
     callbacks: {
@@ -238,6 +316,16 @@ export const wailsBridge = {
       runtime.EventsOn('agent:chunk', (data: any) => {
         if (data.session_id === req.session_id && callbacks.onChunk) {
           callbacks.onChunk(data.delta)
+        }
+      })
+      runtime.EventsOn('agent:tool_start', (data: any) => {
+        if (data.session_id === req.session_id && callbacks.onToolStart) {
+          callbacks.onToolStart(data.tool, data.args)
+        }
+      })
+      runtime.EventsOn('agent:tool_end', (data: any) => {
+        if (data.session_id === req.session_id && callbacks.onToolEnd) {
+          callbacks.onToolEnd(data.tool, data.output)
         }
       })
       runtime.EventsOn('agent:done', (data: any) => {
@@ -264,7 +352,7 @@ export const wailsBridge = {
         body: JSON.stringify({
           model: req.model || 'deepseek-v4-flash',
           messages: [
-            { role: 'system', content: 'You are Tcode Agent, an autonomous software engineering assistant. You respond with high clarity and technical depth.' },
+            { role: 'system', content: 'You are Tcode Agent, an autonomous software engineering assistant.' },
             { role: 'user', content: req.prompt }
           ],
           stream: true

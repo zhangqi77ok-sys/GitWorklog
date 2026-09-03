@@ -5,17 +5,21 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 	"tcode/internal/ast"
 	"tcode/internal/config"
 	"tcode/internal/core/loop"
 	"tcode/internal/core/sandbox"
+	"tcode/internal/diff"
 	"tcode/internal/host"
 	"tcode/internal/llm"
 	"tcode/internal/network"
+	"tcode/internal/session"
 	"tcode/plugins/provider/openai"
 	fstool "tcode/plugins/tool/fs"
 	gittool "tcode/plugins/tool/git"
@@ -43,6 +47,7 @@ type App struct {
 	engine       *loop.ExecutionEngine
 	channelStore *config.ChannelStore
 	extraStore   *config.ExtraStore
+	sessionStore *session.Store
 }
 
 // NewApp 构造生产级 Wails 宿主
@@ -66,6 +71,7 @@ func NewApp() *App {
 
 	chStore, _ := config.NewChannelStore()
 	exStore, _ := config.NewExtraStore()
+	sessStore, _ := session.NewStore()
 
 	return &App{
 		workspace:    wd,
@@ -78,6 +84,7 @@ func NewApp() *App {
 		engine:       loop.NewExecutionEngine(reg),
 		channelStore: chStore,
 		extraStore:   exStore,
+		sessionStore: sessStore,
 	}
 }
 
@@ -115,7 +122,50 @@ func (a *App) OpenFileDialog() ([]string, error) {
 	return relFiles, nil
 }
 
-// ListChannels 真实读取本地渠道配置
+// --- 会话历史持久化 (Sessions) ---
+
+func (a *App) ListSessions() []session.SessionMeta {
+	if a.sessionStore == nil {
+		return nil
+	}
+	return a.sessionStore.List()
+}
+
+func (a *App) GetSession(id string) (*session.ChatSession, error) {
+	if a.sessionStore == nil {
+		return nil, fmt.Errorf("session store not initialized")
+	}
+	return a.sessionStore.Get(id)
+}
+
+func (a *App) SaveSession(sess session.ChatSession) error {
+	if a.sessionStore == nil {
+		return fmt.Errorf("session store not initialized")
+	}
+	return a.sessionStore.Save(sess)
+}
+
+func (a *App) DeleteSession(id string) error {
+	if a.sessionStore == nil {
+		return fmt.Errorf("session store not initialized")
+	}
+	return a.sessionStore.Delete(id)
+}
+
+// --- 代码行级 Diff 审查 ---
+
+func (a *App) GetStructuredDiff(filePath string) (diff.DiffReport, error) {
+	return diff.ComputeFileDiff(a.workspace, filePath)
+}
+
+func (a *App) RevertFile(filePath string) error {
+	cmd := exec.Command("git", "checkout", "HEAD", "--", filePath)
+	cmd.Dir = a.workspace
+	return cmd.Run()
+}
+
+// --- 渠道与插件设置 ---
+
 func (a *App) ListChannels() []config.ChannelConfig {
 	if a.channelStore == nil {
 		return nil
@@ -123,7 +173,6 @@ func (a *App) ListChannels() []config.ChannelConfig {
 	return a.channelStore.List()
 }
 
-// SaveChannel 真实保存渠道配置至 ~/.tcode/channels.json
 func (a *App) SaveChannel(cfg config.ChannelConfig) error {
 	if a.channelStore == nil {
 		return fmt.Errorf("channel store not initialized")
@@ -131,7 +180,6 @@ func (a *App) SaveChannel(cfg config.ChannelConfig) error {
 	return a.channelStore.Save(cfg)
 }
 
-// DeleteChannel 真实删除渠道
 func (a *App) DeleteChannel(id string) error {
 	if a.channelStore == nil {
 		return fmt.Errorf("channel store not initialized")
@@ -139,7 +187,6 @@ func (a *App) DeleteChannel(id string) error {
 	return a.channelStore.Delete(id)
 }
 
-// PingChannel 真实执行网络探活并测量毫秒往返延迟
 func (a *App) PingChannel(id string) (string, error) {
 	if a.channelStore == nil {
 		return "", fmt.Errorf("channel store not initialized")
@@ -159,7 +206,6 @@ func (a *App) PingChannel(id string) (string, error) {
 	return "", fmt.Errorf("channel [%s] not found", id)
 }
 
-// ListMCPs 真实读取 MCP 配置
 func (a *App) ListMCPs() []config.MCPServerConfig {
 	if a.extraStore == nil {
 		return nil
@@ -167,7 +213,6 @@ func (a *App) ListMCPs() []config.MCPServerConfig {
 	return a.extraStore.ListMCPs()
 }
 
-// SaveMCP 真实保存 MCP 配置
 func (a *App) SaveMCP(cfg config.MCPServerConfig) error {
 	if a.extraStore == nil {
 		return fmt.Errorf("extra store not initialized")
@@ -175,7 +220,6 @@ func (a *App) SaveMCP(cfg config.MCPServerConfig) error {
 	return a.extraStore.SaveMCP(cfg)
 }
 
-// ListSkills 真实读取 Skill 列表
 func (a *App) ListSkills() []config.SkillConfig {
 	if a.extraStore == nil {
 		return nil
@@ -183,7 +227,6 @@ func (a *App) ListSkills() []config.SkillConfig {
 	return a.extraStore.ListSkills()
 }
 
-// SaveSkill 真实保存 Skill 配置
 func (a *App) SaveSkill(cfg config.SkillConfig) error {
 	if a.extraStore == nil {
 		return fmt.Errorf("extra store not initialized")
@@ -191,7 +234,6 @@ func (a *App) SaveSkill(cfg config.SkillConfig) error {
 	return a.extraStore.SaveSkill(cfg)
 }
 
-// ListRules 真实读取工程规则
 func (a *App) ListRules() []config.RuleConfig {
 	if a.extraStore == nil {
 		return nil
@@ -199,7 +241,6 @@ func (a *App) ListRules() []config.RuleConfig {
 	return a.extraStore.ListRules()
 }
 
-// SaveRule 真实保存规则
 func (a *App) SaveRule(cfg config.RuleConfig) error {
 	if a.extraStore == nil {
 		return fmt.Errorf("extra store not initialized")
@@ -207,12 +248,10 @@ func (a *App) SaveRule(cfg config.RuleConfig) error {
 	return a.extraStore.SaveRule(cfg)
 }
 
-// GetProjectASTGraph 真实执行项目 AST 语义分析
 func (a *App) GetProjectASTGraph() ([]ast.GraphNode, error) {
 	return ast.ScanWorkspaceAST(a.workspace)
 }
 
-// GetGitStatus 真实读取工作区 Git Plumbing 状态
 func (a *App) GetGitStatus() (map[string]any, error) {
 	if a.gitTool == nil {
 		return map[string]any{"error": "git tool not initialized"}, nil
@@ -229,22 +268,6 @@ func (a *App) GetGitStatus() (map[string]any, error) {
 	}, nil
 }
 
-// GetFileDiff 真实计算文件 Diff 差异
-func (a *App) GetFileDiff(filePath string) (string, error) {
-	if a.gitTool == nil {
-		return "", fmt.Errorf("git tool not initialized")
-	}
-	raw, err := a.termTool.Execute(context.Background(), []byte(fmt.Sprintf(`{"command":"git diff HEAD -- %s"}`, filePath)))
-	if err != nil {
-		return "", err
-	}
-	if strings.TrimSpace(raw.Content) == "" {
-		return "无修改或文件未跟踪", nil
-	}
-	return raw.Content, nil
-}
-
-// GetFileTree 真实获取工作区文件树
 func (a *App) GetFileTree(dir string) ([]FileNode, error) {
 	targetDir := a.workspace
 	if dir != "" {
@@ -289,7 +312,6 @@ func (a *App) GetFileTree(dir string) ([]FileNode, error) {
 	return nodes, nil
 }
 
-// ReadFile 安全受控沙箱文件读取
 func (a *App) ReadFile(relPath string) (string, error) {
 	if a.sandbox == nil {
 		return "", fmt.Errorf("sandbox not initialized")
@@ -301,7 +323,6 @@ func (a *App) ReadFile(relPath string) (string, error) {
 	return string(data), nil
 }
 
-// WriteFile 安全原子写入文件
 func (a *App) WriteFile(relPath string, content string) error {
 	if a.sandbox == nil {
 		return fmt.Errorf("sandbox not initialized")
@@ -309,7 +330,6 @@ func (a *App) WriteFile(relPath string, content string) error {
 	return a.sandbox.AtomicWriteFile(relPath, []byte(content))
 }
 
-// ExecCommand 受控终端静默执行
 func (a *App) ExecCommand(command string) (string, error) {
 	if a.termTool == nil {
 		return "", fmt.Errorf("terminal tool not initialized")
@@ -322,7 +342,6 @@ func (a *App) ExecCommand(command string) (string, error) {
 	return res.Content, nil
 }
 
-// ChatRequest 对话请求
 type ChatRequest struct {
 	SessionID  string `json:"session_id"`
 	Prompt     string `json:"prompt"`
@@ -330,7 +349,7 @@ type ChatRequest struct {
 	IsFullAuto bool   `json:"is_full_auto"`
 }
 
-// SendMessage 核心：发起真实流式大模型推理与 Function Calling 算子自主循环闭环
+// SendMessage 核心：多轮记忆 + 真实流式推理 + ReAct 算子自主循环 + 自动持久化
 func (a *App) SendMessage(req ChatRequest) error {
 	if a.ctx == nil {
 		return fmt.Errorf("context not initialized")
@@ -357,13 +376,44 @@ func (a *App) SendMessage(req ChatRequest) error {
 			}
 		}
 
-		// 2. 发送开始事件
+		// 2. 加载已有会话历史，若不存在则新建
+		var currentSession session.ChatSession
+		existing, err := a.sessionStore.Get(req.SessionID)
+		if err == nil && existing != nil {
+			currentSession = *existing
+		} else {
+			currentSession = session.ChatSession{
+				ID:        req.SessionID,
+				Title:     req.Prompt,
+				Model:     model,
+				Tag:       "核心架构",
+				CreatedAt: time.Now().Unix(),
+				UpdatedAt: time.Now().Unix(),
+				Messages:  make([]session.SessionMessage, 0),
+			}
+			r := []rune(req.Prompt)
+			if len(r) > 16 {
+				currentSession.Title = string(r[:16]) + "..."
+			}
+		}
+
+		// 追加用户消息
+		userMsg := session.SessionMessage{
+			ID:      fmt.Sprintf("msg_%d", time.Now().UnixNano()),
+			Role:    "user",
+			Content: req.Prompt,
+			Time:    time.Now().Format("15:04"),
+		}
+		currentSession.Messages = append(currentSession.Messages, userMsg)
+		_ = a.sessionStore.Save(currentSession)
+
+		// 3. 发送开始事件
 		runtime.EventsEmit(a.ctx, "agent:start", map[string]any{
 			"session_id": req.SessionID,
 			"model":      model,
 		})
 
-		// 3. 构建提示词体系 (注入当前工作区上下文与规则)
+		// 4. 构建提示词体系 (注入规则 + 最近多轮历史)
 		systemPrompt := "你是 Tcode Studio 纯原生桌面智能体。你有权调用工具来审查、读取、修改工程代码及运行测试命令。请优先利用工具解决问题，并在每次调用后解释原因。"
 		rules := a.extraStore.ListRules()
 		for _, r := range rules {
@@ -374,10 +424,26 @@ func (a *App) SendMessage(req ChatRequest) error {
 
 		conversation := []llm.Message{
 			{Role: "system", Content: systemPrompt},
-			{Role: "user", Content: req.Prompt},
 		}
 
-		// 4. 第一轮流式调用（携带工作区算子定义）
+		// 选取最近 6 条历史消息防止超出上下文
+		startIdx := 0
+		if len(currentSession.Messages) > 6 {
+			startIdx = len(currentSession.Messages) - 6
+		}
+		for i := startIdx; i < len(currentSession.Messages); i++ {
+			m := currentSession.Messages[i]
+			conversation = append(conversation, llm.Message{
+				Role:    m.Role,
+				Content: m.Content,
+			})
+		}
+
+		var assistantThinking strings.Builder
+		var assistantContent strings.Builder
+		var lastToolExec *session.ToolExecution
+
+		// 5. 第一轮流式调用（携带工作区算子定义）
 		llmReq := llm.Request{
 			Endpoint: endpoint,
 			APIKey:   apiKey,
@@ -388,37 +454,35 @@ func (a *App) SendMessage(req ChatRequest) error {
 
 		toolCalls, err := llm.StreamChat(context.Background(), llmReq, llm.StreamHandlers{
 			OnThinking: func(text string) {
+				assistantThinking.WriteString(text)
 				runtime.EventsEmit(a.ctx, "agent:thinking", map[string]any{
 					"session_id": req.SessionID,
 					"thinking":   text,
 				})
 			},
 			OnContent: func(delta string) {
+				assistantContent.WriteString(delta)
 				runtime.EventsEmit(a.ctx, "agent:chunk", map[string]any{
 					"session_id": req.SessionID,
 					"delta":      delta,
 				})
 			},
 			OnError: func(err error) {
+				errMsg := fmt.Sprintf("\n\n[系统错误: %v]", err)
+				assistantContent.WriteString(errMsg)
 				runtime.EventsEmit(a.ctx, "agent:chunk", map[string]any{
 					"session_id": req.SessionID,
-					"delta":      fmt.Sprintf("\n\n[系统错误: %v]", err),
+					"delta":      errMsg,
 				})
 			},
 		})
 
-		if err != nil {
-			runtime.EventsEmit(a.ctx, "agent:done", map[string]any{"session_id": req.SessionID})
-			return
-		}
-
-		// 5. 若大模型决策触发算子调用，Go 微内核自动物理执行闭环！
-		if len(toolCalls) > 0 {
+		// 6. 若大模型决策触发算子调用，Go 微内核自动物理执行闭环！
+		if err == nil && len(toolCalls) > 0 {
 			for _, tc := range toolCalls {
 				toolName := tc.Function.Name
 				toolArgs := tc.Function.Arguments
 
-				// 向前端派发工具启动卡片
 				runtime.EventsEmit(a.ctx, "agent:tool_start", map[string]any{
 					"session_id": req.SessionID,
 					"id":         tc.ID,
@@ -429,10 +493,6 @@ func (a *App) SendMessage(req ChatRequest) error {
 				var output string
 				switch toolName {
 				case "exec_command":
-					var argsObj struct {
-						Command string `json:"command"`
-					}
-					_ = json.Unmarshal([]byte(toolArgs), &argsObj)
 					res, err := a.termTool.Execute(context.Background(), []byte(toolArgs))
 					if err != nil {
 						output = fmt.Sprintf("执行失败: %v", err)
@@ -451,7 +511,6 @@ func (a *App) SendMessage(req ChatRequest) error {
 						output = fmt.Sprintf("写入文件失败: %v", err)
 					} else {
 						output = fmt.Sprintf("✓ 成功原子写入文件: %s (%d 字节)", argsObj.RelPath, len(argsObj.Content))
-						// 派发文件变动事件，供前端展开 Diff
 						runtime.EventsEmit(a.ctx, "agent:files_changed", map[string]any{
 							"session_id": req.SessionID,
 							"file":       argsObj.RelPath,
@@ -482,7 +541,12 @@ func (a *App) SendMessage(req ChatRequest) error {
 					output = fmt.Sprintf("未知算子: %s", toolName)
 				}
 
-				// 向前端派发工具完成卡片
+				lastToolExec = &session.ToolExecution{
+					Name:   toolName,
+					Args:   toolArgs,
+					Output: output,
+				}
+
 				runtime.EventsEmit(a.ctx, "agent:tool_end", map[string]any{
 					"session_id": req.SessionID,
 					"id":         tc.ID,
@@ -490,7 +554,6 @@ func (a *App) SendMessage(req ChatRequest) error {
 					"output":     output,
 				})
 
-				// 6. 将工具执行结果回传给大模型进行第二轮反思与总结
 				conversation = append(conversation, llm.Message{
 					Role:      "assistant",
 					ToolCalls: []llm.ToolCall{tc},
@@ -503,7 +566,7 @@ func (a *App) SendMessage(req ChatRequest) error {
 				})
 			}
 
-			// 第二轮流式总结
+			// 第二轮流式总结反思
 			step2Req := llm.Request{
 				Endpoint: endpoint,
 				APIKey:   apiKey,
@@ -512,12 +575,14 @@ func (a *App) SendMessage(req ChatRequest) error {
 			}
 			_, _ = llm.StreamChat(context.Background(), step2Req, llm.StreamHandlers{
 				OnThinking: func(text string) {
+					assistantThinking.WriteString(text)
 					runtime.EventsEmit(a.ctx, "agent:thinking", map[string]any{
 						"session_id": req.SessionID,
 						"thinking":   text,
 					})
 				},
 				OnContent: func(delta string) {
+					assistantContent.WriteString(delta)
 					runtime.EventsEmit(a.ctx, "agent:chunk", map[string]any{
 						"session_id": req.SessionID,
 						"delta":      delta,
@@ -525,6 +590,19 @@ func (a *App) SendMessage(req ChatRequest) error {
 				},
 			})
 		}
+
+		// 7. 持久化 Assistant 回复至磁盘
+		asstMsg := session.SessionMessage{
+			ID:       fmt.Sprintf("msg_%d", time.Now().UnixNano()),
+			Role:     "assistant",
+			Content:  assistantContent.String(),
+			Thinking: assistantThinking.String(),
+			Tool:     lastToolExec,
+			Time:     time.Now().Format("15:04"),
+		}
+		currentSession.Messages = append(currentSession.Messages, asstMsg)
+		currentSession.UpdatedAt = time.Now().Unix()
+		_ = a.sessionStore.Save(currentSession)
 
 		runtime.EventsEmit(a.ctx, "agent:done", map[string]any{"session_id": req.SessionID})
 	}()

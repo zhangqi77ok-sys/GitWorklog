@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import { wailsBridge, type SessionMessage } from '../core/wailsBridge'
 
 export interface ChatMessage {
   id: string
@@ -18,7 +19,7 @@ export const useChatStore = defineStore('chat', () => {
   const currentSessionId = ref('sess1')
   const isFullAuto = ref(false)
   const isThinkingExpanded = ref(true)
-  const activeDiffFile = ref('main.go')
+  const activeDiffFile = ref('app.go')
   const isDiffWorkspaceOpen = ref(true)
   const isKnowledgeGraphOpen = ref(false)
   const isSettingsOpen = ref(false)
@@ -42,9 +43,9 @@ export const useChatStore = defineStore('chat', () => {
 2. 补齐自动抓取与手动模型录入；
 3. 落地 MCP、Skill、Rules 设置管理。`,
       content: `已成功按照原型与技术规范重构为纯原生 Go 1.22 + Wails v2 + Vue 3.4 架构。
-所有 Python 与旧 React 遗留已全部清理，系统已接通原生 IPC 通信管道。`,
+所有 Python 与旧 React 遗留已全部清理，系统已接通原生 IPC 通信管道与 ReAct 自主算子循环。`,
       tool: {
-        name: 'run_command',
+        name: 'exec_command',
         args: { command: 'go build -o bin/tcode.exe .' },
         output: 'Wails v2.9.2 Native Compiler Packaged bin/tcode.exe (5.1MB)'
       },
@@ -60,13 +61,36 @@ export const useChatStore = defineStore('chat', () => {
     isDiffWorkspaceOpen.value = !isDiffWorkspaceOpen.value
   }
 
-  function openDiff(fileName: string) {
-    activeDiffFile.value = fileName
+  function openDiff(file: string) {
+    activeDiffFile.value = file
     isDiffWorkspaceOpen.value = true
   }
 
   function appendMessage(msg: ChatMessage) {
     messages.value.push(msg)
+  }
+
+  async function switchSession(id: string) {
+    currentSessionId.value = id
+    try {
+      const sess = await wailsBridge.getSession(id)
+      if (sess && sess.messages && sess.messages.length > 0) {
+        messages.value = sess.messages.map(m => ({
+          id: m.id,
+          role: m.role as 'user' | 'assistant',
+          content: m.content,
+          thinking: m.thinking,
+          tool: m.tool ? {
+            name: m.tool.name,
+            args: m.tool.args,
+            output: m.tool.output
+          } : undefined,
+          time: m.time
+        }))
+      }
+    } catch (err) {
+      console.error('Failed to load session history:', err)
+    }
   }
 
   return {
@@ -83,6 +107,7 @@ export const useChatStore = defineStore('chat', () => {
     toggleApprovalMode,
     toggleDiffWorkspace,
     openDiff,
-    appendMessage
+    appendMessage,
+    switchSession
   }
 })
