@@ -67,9 +67,11 @@ export const App: React.FC = () => {
             onChange={(e) => setCurrentModel(e.target.value)}
             className="bg-white border border-[#EADFD7] rounded text-[11px] px-2 py-0.5 text-[#2C2825] focus:outline-none focus:border-[#D96B27]"
           >
+            <option value="deepseek-v4-flash">DeepSeek-V4 Flash (Thinking)</option>
+            <option value="gpt-5.6-sol">GPT-5.6 Sol (Ultra-Fast)</option>
+            <option value="claude-opus-4-8">Claude Opus 4.8</option>
+            <option value="glm-5.3">GLM-5.3 (Thinking)</option>
             <option value="gpt-4o">GPT-4o (Omni)</option>
-            <option value="deepseek-chat">DeepSeek-V4</option>
-            <option value="deepseek-reasoner">DeepSeek-R1 (Thinking)</option>
           </select>
           <span className="flex items-center gap-1">
             <span className="w-1.5 h-1.5 rounded-full bg-[#52D17C] animate-pulse" />

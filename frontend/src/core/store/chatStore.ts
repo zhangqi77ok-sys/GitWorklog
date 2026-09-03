@@ -31,7 +31,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     },
   ],
   isStreaming: false,
-  currentModel: 'gpt-4o',
+  currentModel: 'deepseek-v4-flash',
 
   setCurrentModel: (model) => set({ currentModel: model }),
 
