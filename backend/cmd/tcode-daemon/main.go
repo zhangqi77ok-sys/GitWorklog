@@ -14,6 +14,7 @@ import (
 	"tcode/plugins/provider/openai"
 	fstool "tcode/plugins/tool/fs"
 	gittool "tcode/plugins/tool/git"
+	terminaltool "tcode/plugins/tool/terminal"
 )
 
 const (
@@ -52,9 +53,13 @@ func main() {
 	gitT := gittool.NewTool(workspaceRoot)
 	_ = reg.Register(gitT)
 
+	termT := terminaltool.NewTool(workspaceRoot)
+	_ = reg.Register(termT)
+
 	fmt.Printf("[Tcode] Registered plugin: [%s] (%s)\n", openaiProv.ID(), openaiProv.Name())
 	fmt.Printf("[Tcode] Registered plugin: [%s] (%s)\n", fsT.ID(), fsT.Name())
 	fmt.Printf("[Tcode] Registered plugin: [%s] (%s)\n", gitT.ID(), gitT.Name())
+	fmt.Printf("[Tcode] Registered plugin: [%s] (%s)\n", termT.ID(), termT.Name())
 
 	// 3. 启动本地环回 HTTP/SSE 服务 (127.0.0.1:8765)
 	srv := transporthttp.NewServer("127.0.0.1:8765", reg, gitT, sm, sb)

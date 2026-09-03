@@ -132,6 +132,59 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // 1.2 受控终端执行器 (零弹窗 CREATE_NO_WINDOW windowsHide: true)
+  if (pathname === "/api/terminal/exec" && req.method === "POST") {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      try {
+        const { command = "" } = JSON.parse(body || "{}");
+        if (!command.trim()) {
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "command is required" }));
+          return;
+        }
+
+        // 以流式分块形式返回执行输出
+        res.writeHead(200, {
+          "Content-Type": "text/plain; charset=utf-8",
+          "Transfer-Encoding": "chunked",
+        });
+
+        const isWin = process.platform === "win32";
+        const shell = isWin ? "cmd.exe" : "/bin/sh";
+        const shellArgs = isWin ? ["/d", "/s", "/c", command] : ["-c", command];
+
+        // 强制注入 windowsHide: true，杜绝 Windows 黑色黑框弹出
+        const child = spawn(shell, shellArgs, {
+          cwd: WORKSPACE_ROOT,
+          windowsHide: true,
+          env: process.env,
+        });
+
+        child.stdout.on("data", (chunk) => {
+          res.write(chunk);
+        });
+
+        child.stderr.on("data", (chunk) => {
+          res.write(chunk);
+        });
+
+        child.on("close", (code) => {
+          res.end(`\r\n[Process exited with code ${code}]\r\n`);
+        });
+
+        child.on("error", (err) => {
+          res.end(`\r\n[Process error: ${err.message}]\r\n`);
+        });
+      } catch (err) {
+        res.writeHead(500, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: err.message }));
+      }
+    });
+    return;
+  }
+
   // 2. 文件树
   if (pathname === "/api/fs/tree") {
     const ignoreDirs = new Set([".git", "node_modules", "dist", "target", ".gemini", ".vscode"]);
