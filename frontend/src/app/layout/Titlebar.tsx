@@ -15,13 +15,16 @@ export const Titlebar: React.FC = () => {
           T
         </div>
         <span className="text-xs font-semibold tracking-tight text-[#18181B]">Tcode Studio</span>
-        <span className="text-[#A1A1AA] text-xs">/</span>
-        <span className="text-xs font-medium text-[#27272A] flex items-center gap-1.5">
-          agent-learning
-          <span className="text-[10px] text-[#71717A] bg-black/[0.04] px-1.5 py-0.2 rounded-full font-mono">
+        <div
+          onClick={() => useWorkspaceStore.getState().openNativeFolderPicker()}
+          title={`当前项目: ${useWorkspaceStore.getState().projectName}\n路径: ${useWorkspaceStore.getState().projectPath}\n点击唤起 Windows 原生资源管理器更换项目`}
+          className="text-xs font-medium text-[#27272A] hover:text-[#D96B27] flex items-center gap-1.5 cursor-pointer px-1.5 py-0.5 rounded hover:bg-black/[0.04] transition-colors group"
+        >
+          <span className="font-mono">{useWorkspaceStore.getState().projectName || 'agent-learning'}</span>
+          <span className="text-[10px] text-[#71717A] group-hover:text-[#D96B27] bg-black/[0.04] px-1.5 py-0.2 rounded-full font-mono">
             main
           </span>
-        </span>
+        </div>
         <div className="h-3 w-[1px] bg-black/[0.08] mx-1" />
         <div className="flex items-center gap-1.5 text-[11px] text-[#10A37F] font-medium bg-[#10A37F]/10 px-2 py-0.5 rounded-full">
           <span className="w-1.5 h-1.5 rounded-full bg-[#10A37F] animate-pulse" />

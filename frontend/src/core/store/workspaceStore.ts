@@ -14,6 +14,14 @@ export interface SessionItem {
   project: string
 }
 
+export interface FileNode {
+  name: string
+  path: string
+  relPath: string
+  isDirectory: boolean
+  children?: FileNode[]
+}
+
 interface WorkspaceState {
   mode: WorkspaceMode
   activityTab: ActivityTab
@@ -27,6 +35,10 @@ interface WorkspaceState {
   activeSessionId: string
   selectedTag: string
   splitRatio: number
+  projectPath: string
+  projectName: string
+  fileTree: FileNode[]
+  isFolderPickerLoading: boolean
 
   setMode: (mode: WorkspaceMode) => void
   setActivityTab: (tab: ActivityTab) => void
@@ -42,6 +54,9 @@ interface WorkspaceState {
   setActiveSessionId: (id: string) => void
   setSelectedTag: (tag: string) => void
   setSplitRatio: (ratio: number) => void
+  fetchWorkspaceInfo: () => Promise<void>
+  openNativeFolderPicker: () => Promise<void>
+  setWorkspaceRoot: (targetPath: string) => Promise<void>
 }
 
 export const INITIAL_SESSIONS: SessionItem[] = [
@@ -110,6 +125,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   activeSessionId: 'sess1',
   selectedTag: 'all',
   splitRatio: 0.5,
+  projectPath: 'D:\\weihu\\agent-learning',
+  projectName: 'agent-learning',
+  fileTree: [],
+  isFolderPickerLoading: false,
 
   setMode: (mode) => set({ mode }),
   setActivityTab: (tab) => set({ activityTab: tab }),
@@ -125,4 +144,69 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   setActiveSessionId: (id) => set({ activeSessionId: id }),
   setSelectedTag: (tag) => set({ selectedTag: tag }),
   setSplitRatio: (ratio) => set({ splitRatio: ratio }),
+
+  fetchWorkspaceInfo: async () => {
+    try {
+      const res = await fetch('/api/workspace/info')
+      if (res.ok) {
+        const data = await res.json()
+        set({
+          projectPath: data.rootPath || '',
+          projectName: data.projectName || '',
+          fileTree: data.fileTree || [],
+        })
+      }
+    } catch (e) {
+      console.error('Failed to fetch workspace info:', e)
+    }
+  },
+
+  openNativeFolderPicker: async () => {
+    set({ isFolderPickerLoading: true })
+    try {
+      const res = await fetch('/api/workspace/pick-folder', { method: 'POST' })
+      if (res.ok) {
+        const { selectedPath } = await res.json()
+        if (selectedPath) {
+          const rootRes = await fetch('/api/workspace/set-root', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: selectedPath }),
+          })
+          if (rootRes.ok) {
+            const data = await rootRes.json()
+            set({
+              projectPath: data.rootPath,
+              projectName: data.projectName,
+              fileTree: data.fileTree || [],
+            })
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Failed to open native folder dialog:', e)
+    } finally {
+      set({ isFolderPickerLoading: false })
+    }
+  },
+
+  setWorkspaceRoot: async (targetPath: string) => {
+    try {
+      const rootRes = await fetch('/api/workspace/set-root', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: targetPath }),
+      })
+      if (rootRes.ok) {
+        const data = await rootRes.json()
+        set({
+          projectPath: data.rootPath,
+          projectName: data.projectName,
+          fileTree: data.fileTree || [],
+        })
+      }
+    } catch (e) {
+      console.error('Failed to set workspace root:', e)
+    }
+  },
 }))

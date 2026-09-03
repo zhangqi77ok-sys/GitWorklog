@@ -12,7 +12,7 @@ import {
 } from 'lucide-react'
 import { useWorkspaceStore, INITIAL_SESSIONS } from '../../core/store/workspaceStore'
 import { useGitStore } from '../../core/store/gitStore'
-import { FileTree } from '../editor/FileTree'
+import { FileTreeView } from '../files/FileTreeView'
 
 export const LeftSidebar: React.FC = () => {
   const { activityTab, activeSessionId, setActiveSessionId, selectedTag, setSelectedTag } =
@@ -210,9 +210,7 @@ export const LeftSidebar: React.FC = () => {
 
       {/* 视图 2：工程文件资源管理器 (Files Explorer) */}
       {activityTab === 'files' && (
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <FileTree />
-        </div>
+        <FileTreeView />
       )}
 
       {/* 视图 3：Git 源代码管理抽屉 (Git Control) */}
@@ -422,12 +420,19 @@ export const LeftSidebar: React.FC = () => {
         </div>
       )}
 
-      {/* 抽屉底栏：当前项目路径 */}
-      <div className="p-2.5 border-t border-black/[0.06] bg-[#EFEAE4] flex items-center justify-between text-[11px] text-[#71717A] shrink-0">
+      {/* 抽屉底栏：当前项目与路径切换 */}
+      <div
+        onClick={() => useWorkspaceStore.getState().openNativeFolderPicker()}
+        title={`当前工程: ${useWorkspaceStore.getState().projectName}\n点击使用系统原生资源管理器更换项目`}
+        className="p-2.5 border-t border-black/[0.06] bg-[#EFEAE4] hover:bg-[#E8E1D9] flex items-center justify-between text-[11px] text-[#71717A] shrink-0 cursor-pointer transition-colors group"
+      >
         <div className="flex items-center gap-1.5 truncate">
           <span className="w-2 h-2 rounded-full bg-[#10A37F]" />
-          <span className="truncate font-mono">agent-learning</span>
+          <span className="truncate font-mono font-medium group-hover:text-[#D96B27]">
+            {useWorkspaceStore.getState().projectName || 'agent-learning'}
+          </span>
         </div>
+        <span className="text-[10px] text-[#A1A1AA] group-hover:text-[#18181B]">切换 ▾</span>
       </div>
     </aside>
   )

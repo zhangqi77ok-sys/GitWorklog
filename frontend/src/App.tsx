@@ -16,8 +16,13 @@ import { useWorkspaceStore } from './core/store/workspaceStore'
 import { useSettingsStore } from './core/store/settingsStore'
 
 export const App: React.FC = () => {
-  const { mode, activityTab, isCodeWorkspaceOpen, toggleTerminal } = useWorkspaceStore()
+  const { mode, activityTab, isCodeWorkspaceOpen, toggleTerminal, fetchWorkspaceInfo } = useWorkspaceStore()
   const { openSettings } = useSettingsStore()
+
+  // 初始化加载工作区物理目录树与状态
+  useEffect(() => {
+    fetchWorkspaceInfo()
+  }, [fetchWorkspaceInfo])
 
   // 绑定全局快捷键 Ctrl + ` 与 Ctrl + ,
   useEffect(() => {

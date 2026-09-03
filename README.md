@@ -260,9 +260,15 @@ Tcode 打破了单体硬编码调度逻辑，将 Agent 的执行循环、能力�
     * [`workspaceStore.test.ts`](file:///d:/weihu/agent-learning/frontend/src/core/store/__tests__/workspaceStore.test.ts)：工作区模式切换、终端抽屉开关与多模态窗生命周期；
     * [`gitStore.test.ts`](file:///d:/weihu/agent-learning/frontend/src/core/store/__tests__/gitStore.test.ts)：分支列表过滤、检出切换、新建分支与影子快照；
     * [`settingsStore.test.ts`](file:///d:/weihu/agent-learning/frontend/src/core/store/__tests__/settingsStore.test.ts)：默认空 Key Fail-Closed 安全断言、运行时动态变更与面板唤起；
-* **打包前置测试门禁 (Pre-Packaging Gate)**：
-  * 在 `build_installer.py` 流水线首要步骤注入 `run_tests()`；
-  * 任何单元测试或 TypeScript 严格编译失败，立即阻断打包并输出定位日志，杜绝带病发布。
+### 23. 系统原生文件夹选择与动态工作区装载 (Native Folder Picker & Dynamic Workspace)
+* **Windows 原生对话框集成 (`backend/daemon.js`)**：
+  * 基于 WinForms 原生 `FolderBrowserDialog` 与 `CREATE_NO_WINDOW` (`0x08000000`) 标志位，通过 `/api/workspace/pick-folder` 唤起操作系统级原生文件选择窗口，彻底告别浏览器端手输物理路径（严格遵照【铁律 5】）；
+* **递归目录树与智能排除 (`scanDirectory`)**：
+  * 自动智能排除 `node_modules`、`.git`、`dist`、`build`、`.venv`、`coverage` 等大体积目录；
+  * 提供 `/api/workspace/set-root` 与 `/api/workspace/info` 接口，支持动态切换任意本地工程仓库；
+* **前端动态资源管理器与联动视图 (`FileTreeView.tsx`)**：
+  * 左侧活动栏抽屉与沉浸式顶栏均支持点击更换工作区；
+  * 树状组件动态递归渲染目录层级，支持文件夹展开折叠记忆、文件类型彩色标识，并即时同步更新底层 Git 分支与改动文件。
 
 ---
 

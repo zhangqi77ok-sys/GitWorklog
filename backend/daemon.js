@@ -5,7 +5,45 @@ const path = require("path");
 const { execSync, spawn } = require("child_process");
 
 const PORT = 8765;
-const WORKSPACE_ROOT = path.resolve(__dirname, "..");
+let WORKSPACE_ROOT = path.resolve(__dirname, "..");
+
+// 递归扫描目录树（智能忽略超大依赖与临时目录）
+function scanDirectory(dirPath, maxDepth = 2, currentDepth = 0) {
+  const IGNORED = new Set([
+    "node_modules", ".git", "dist", "build", ".venv", "__pycache__", 
+    ".idea", ".vscode", "coverage", "target", "release"
+  ]);
+  
+  if (!fs.existsSync(dirPath)) return [];
+  try {
+    const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+    const result = [];
+
+    for (const entry of entries) {
+      if (IGNORED.has(entry.name)) continue;
+      if (entry.name.startsWith(".") && entry.name !== ".agents") continue;
+
+      const fullPath = path.join(dirPath, entry.name);
+      const isDir = entry.isDirectory();
+
+      const node = {
+        name: entry.name,
+        path: fullPath,
+        relPath: path.relative(WORKSPACE_ROOT, fullPath).replace(/\\/g, "/"),
+        isDirectory: isDir,
+        children: isDir && currentDepth < maxDepth ? scanDirectory(fullPath, maxDepth, currentDepth + 1) : []
+      };
+      result.push(node);
+    }
+
+    return result.sort((a, b) => {
+      if (a.isDirectory === b.isDirectory) return a.name.localeCompare(b.name);
+      return a.isDirectory ? -1 : 1;
+    });
+  } catch (e) {
+    return [];
+  }
+}
 
 // AgentRouter WAF 穿透请求头
 const AGENTROUTER_HEADERS = {
@@ -468,6 +506,92 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ success: true }));
     });
+    return;
+  }
+
+  // 7.1 工作区：唤起 Windows 原生文件夹选择器 (经由 PowerShell WinForms，CREATE_NO_WINDOW 零黑框)
+  if (pathname === "/api/workspace/pick-folder" && req.method === "POST") {
+    const isWin = process.platform === "win32";
+    if (!isWin) {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ selectedPath: WORKSPACE_ROOT }));
+      return;
+    }
+
+    const psScript = `
+    Add-Type -AssemblyName System.Windows.Forms
+    $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
+    $dialog.Description = '请选择要载入 Tcode 的工程项目目录'
+    $dialog.ShowNewFolderButton = $true
+    if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+        [Console]::Out.Write($dialog.SelectedPath)
+    } else {
+        [Console]::Out.Write('__CANCELLED__')
+    }
+    `.trim();
+
+    const child = spawn("powershell", ["-NoProfile", "-NonInteractive", "-Command", psScript], {
+      windowsHide: true,
+    });
+
+    let stdout = "";
+    child.stdout.on("data", (d) => (stdout += d.toString("utf8")));
+    child.on("close", () => {
+      const raw = stdout.trim();
+      const selectedPath = (raw && raw !== "__CANCELLED__") ? raw : null;
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ selectedPath }));
+    });
+    return;
+  }
+
+  // 7.2 工作区：设置当前工程根路径并扫描文件树与 Git 状态
+  if (pathname === "/api/workspace/set-root" && req.method === "POST") {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      try {
+        const { path: targetPath } = JSON.parse(body || "{}");
+        if (targetPath && fs.existsSync(targetPath)) {
+          WORKSPACE_ROOT = path.resolve(targetPath);
+        }
+        const fileTree = scanDirectory(WORKSPACE_ROOT, 2);
+        const branch = execGit("branch --show-current") || "main";
+        const statusSummary = execGit("status -s");
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify({
+            success: true,
+            rootPath: WORKSPACE_ROOT,
+            projectName: path.basename(WORKSPACE_ROOT),
+            fileTree,
+            gitBranch: branch,
+            gitStatus: statusSummary,
+          })
+        );
+      } catch (e) {
+        res.writeHead(500, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
+    return;
+  }
+
+  // 7.3 工作区：获取当前信息与文件树
+  if (pathname === "/api/workspace/info" && req.method === "GET") {
+    const fileTree = scanDirectory(WORKSPACE_ROOT, 2);
+    const branch = execGit("branch --show-current") || "main";
+    const statusSummary = execGit("status -s");
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(
+      JSON.stringify({
+        rootPath: WORKSPACE_ROOT,
+        projectName: path.basename(WORKSPACE_ROOT),
+        fileTree,
+        gitBranch: branch,
+        gitStatus: statusSummary,
+      })
+    );
     return;
   }
 
