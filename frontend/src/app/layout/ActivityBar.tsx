@@ -136,7 +136,7 @@ export const ActivityBar: React.FC = () => {
 
         {/* 系统设置 */}
         <button
-          onClick={openSettings}
+          onClick={() => openSettings()}
           title="系统全局设置 (Ctrl+,)"
           className="w-10 h-10 rounded-xl flex items-center justify-center text-[#71717A] hover:text-[#18181B] hover:bg-white/60 transition-all cursor-pointer"
         >

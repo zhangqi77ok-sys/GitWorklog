@@ -19,7 +19,7 @@ interface SettingsState {
   pingLatency: number | null
   pingMessage: string | null
 
-  openSettings: () => void
+  openSettings: (defaultTab?: 'providers' | 'sandbox' | 'prompts' | 'models' | 'mcp' | unknown) => void
   closeSettings: () => void
   setActiveTab: (tab: 'providers' | 'sandbox' | 'prompts') => void
   updateConfig: (partial: Partial<AppConfig>) => void
@@ -56,7 +56,16 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   pingLatency: null,
   pingMessage: null,
 
-  openSettings: () => set({ isOpen: true, pingStatus: 'idle', pingLatency: null, pingMessage: null }),
+  openSettings: (defaultTab?: 'providers' | 'sandbox' | 'prompts' | 'models' | 'mcp' | unknown) => set({
+    isOpen: true,
+    activeTab:
+      typeof defaultTab === 'string' && (defaultTab === 'providers' || defaultTab === 'sandbox' || defaultTab === 'prompts')
+        ? defaultTab
+        : 'providers',
+    pingStatus: 'idle',
+    pingLatency: null,
+    pingMessage: null,
+  }),
   closeSettings: () => set({ isOpen: false }),
   setActiveTab: (tab) => set({ activeTab: tab }),
 

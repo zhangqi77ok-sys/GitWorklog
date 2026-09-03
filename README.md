@@ -254,10 +254,15 @@ Tcode 打破了单体硬编码调度逻辑，将 Agent 的执行循环、能力�
 ### 21. 真实大模型自主 ReAct 物理编程实战验证 (Autonomous Coding Showcase)
 * **模型选型与实测配置**：
   * 基于上游真实 `deepseek-v4-flash` 大模型与生产网关 `https://agentrouter.org`，执行首字延迟 (TTFT) 极速响应测试；
-* **物理双环自主闭环实录**：
-  1. **自主环境勘测**：大模型接收需求后，自主调度 `run_command`（`ls -la backend`）勘测工程结构；
-  2. **物理代码原子落盘**：自主调度 `write_file`，生成 0 第三方依赖的 Node.js 系统负载检测脚本 [`backend/sys_probe.js`](file:///d:/weihu/agent-learning/backend/sys_probe.js)；
-  3. **自主回归验证与探针捕获**：自主调度 `run_command` 静默执行 `node backend/sys_probe.js`，无黑框精准采集本地 CPU 核心数、内存占用率与运行时间并汇报，达成真实物理代码自愈闭环。
+### 22. Vitest 单元测试矩阵与流水线构建门禁 (`test-automation-mock-governance`)
+* **自动化测试套件架构**：
+  * 基于 Vitest + JSDOM 构建现代测试环境，对核心状态机开展 100% 针对性测试：
+    * [`workspaceStore.test.ts`](file:///d:/weihu/agent-learning/frontend/src/core/store/__tests__/workspaceStore.test.ts)：工作区模式切换、终端抽屉开关与多模态窗生命周期；
+    * [`gitStore.test.ts`](file:///d:/weihu/agent-learning/frontend/src/core/store/__tests__/gitStore.test.ts)：分支列表过滤、检出切换、新建分支与影子快照；
+    * [`settingsStore.test.ts`](file:///d:/weihu/agent-learning/frontend/src/core/store/__tests__/settingsStore.test.ts)：默认空 Key Fail-Closed 安全断言、运行时动态变更与面板唤起；
+* **打包前置测试门禁 (Pre-Packaging Gate)**：
+  * 在 `build_installer.py` 流水线首要步骤注入 `run_tests()`；
+  * 任何单元测试或 TypeScript 严格编译失败，立即阻断打包并输出定位日志，杜绝带病发布。
 
 ---
 

@@ -24,12 +24,15 @@ def run_cmd(cmd, cwd=WORKSPACE):
     if res.returncode != 0:
         raise RuntimeError(f"Command failed with exit code {res.returncode}")
 
+def run_tests():
+    log("Running automated Vitest test gate before packaging [Iron Rule 1 SDD+TDD]...")
+    run_cmd("npm test", cwd=FRONTEND_DIR)
+    log("Vitest test gate passed 100% green!")
+
 def build_frontend():
-    if not os.path.exists(os.path.join(FRONTEND_DIST, "index.html")):
-        log("Frontend dist not found, running npm run build...")
-        run_cmd("npm run build", cwd=FRONTEND_DIR)
-    else:
-        log("Frontend dist already built.")
+    run_tests()
+    log("Running frontend build: tsc -b && vite build...")
+    run_cmd("npm run build", cwd=FRONTEND_DIR)
 
 def create_payload():
     log("Step 1: Compiling desktop_app.py -> Tcode.exe...")

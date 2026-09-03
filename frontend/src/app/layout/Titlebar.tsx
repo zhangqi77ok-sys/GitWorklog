@@ -83,7 +83,7 @@ export const Titlebar: React.FC = () => {
         </button>
 
         <button
-          onClick={openSettings}
+          onClick={() => openSettings()}
           title="打开系统设置中枢 (Esc可关闭)"
           className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium text-[#18181B] bg-white border border-black/[0.08] shadow-2xs hover:bg-black/[0.03] transition-all cursor-pointer"
         >
