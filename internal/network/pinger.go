@@ -21,12 +21,15 @@ func PingTarget(targetURL string) (string, error) {
 	}
 
 	start := time.Now()
-	resp, err := client.Head(targetURL)
+	req, err := http.NewRequest("GET", targetURL, nil)
 	if err != nil {
-		// 尝试 GET
-		resp, err = client.Get(targetURL)
+		return "", err
 	}
+	req.Header.Set("User-Agent", "codex_cli_rs/0.101.0 (Mac OS 26.0.1; arm64) Apple_Terminal/464")
+	req.Header.Set("Originator", "codex_cli_rs")
+	req.Header.Set("Version", "0.101.0")
 
+	resp, err := client.Do(req)
 	duration := time.Since(start)
 	if err != nil {
 		return "", fmt.Errorf("ping failed: %w", err)

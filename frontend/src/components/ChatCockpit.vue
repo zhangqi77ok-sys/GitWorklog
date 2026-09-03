@@ -1,10 +1,23 @@
 <template>
   <main class="flex-1 bg-[#FAF8F5] flex flex-col justify-between overflow-hidden relative font-sans">
-    <!-- 顶栏: 场景标签与收起代码按钮 -->
-    <header class="h-9 min-h-[36px] bg-[#FAF8F5] border-b border-black/[0.08] px-3 flex items-center justify-between text-xs select-none z-10 shrink-0">
+    <!-- 顶栏: 场景标签、真实多模型切换器与收起代码按钮 -->
+    <header class="h-10 min-h-[40px] bg-[#FAF8F5] border-b border-black/[0.08] px-3 flex items-center justify-between text-xs select-none z-10 shrink-0">
       <div class="flex items-center gap-2">
         <span class="font-bold text-[#18181B]">{{ currentSessionTitle }}</span>
-        <span class="text-[10px] text-[#10A37F] bg-[#10A37F]/10 px-1.5 py-0.2 rounded font-mono">DeepSeek-V4-Flash · Act 模式</span>
+        <span class="text-[10px] text-[#71717A] bg-black/[0.04] px-1.5 py-0.2 rounded font-mono">AgentRouter</span>
+
+        <!-- 真实模型下拉选择器 -->
+        <div class="relative flex items-center">
+          <select
+            v-model="selectedModel"
+            class="bg-white border border-black/[0.1] rounded-lg px-2 py-0.8 text-xs font-mono font-medium text-[#10A37F] focus:outline-none focus:border-[#D96B27] cursor-pointer shadow-2xs"
+          >
+            <option value="deepseek-v4-flash">⚡ deepseek-v4-flash (深度心智思考)</option>
+            <option value="gpt-5.6-sol">🧠 gpt-5.6-sol (OpenAI 架构旗舰)</option>
+            <option value="claude-opus-4-8">👑 claude-opus-4-8 (Claude 顶级推理)</option>
+            <option value="glm-5.3">🌐 glm-5.3 (多语言通用模型)</option>
+          </select>
+        </div>
       </div>
 
       <button
@@ -30,16 +43,16 @@
           <div class="flex items-center gap-2 text-xs font-semibold text-[#18181B]">
             <div class="w-4 h-4 rounded bg-[#D96B27] text-white flex items-center justify-center text-[9px] font-bold">T</div>
             <span>Tcode Agent</span>
-            <span class="text-[10px] text-[#10A37F] bg-[#10A37F]/10 px-1.5 py-0.2 rounded font-mono">DeepSeek-V4 · Act 模式</span>
+            <span class="text-[10px] text-[#10A37F] bg-[#10A37F]/10 px-1.5 py-0.2 rounded font-mono">{{ selectedModel }} · Act 模式</span>
           </div>
 
-          <!-- 深度思考抽屉 (流式动态更新) -->
+          <!-- 深度思考抽屉 (真实大模型 reasoning_content 流式动态展开) -->
           <div v-if="msg.thinking" class="w-full rounded-xl border border-black/[0.08] bg-white/60 shadow-2xs overflow-hidden">
             <div @click="toggleThinking(msg.id)" class="p-2.5 flex items-center justify-between hover:bg-black/[0.02] cursor-pointer">
               <div class="flex items-center gap-2">
                 <span class="text-sm">🧠</span>
-                <span class="text-xs font-semibold text-[#18181B]">深度心智思考</span>
-                <span class="text-[10px] text-[#A1A1AA] bg-black/[0.04] px-1.5 py-0.2 rounded">原生 IPC 管道</span>
+                <span class="text-xs font-semibold text-[#18181B]">深度心智思考 (Reasoning Process)</span>
+                <span class="text-[10px] text-[#A1A1AA] bg-black/[0.04] px-1.5 py-0.2 rounded font-mono">Token 级实时推流</span>
               </div>
               <span class="text-xs text-[#71717A]">{{ expandedThinkingMap[msg.id] !== false ? '▲' : '▼' }}</span>
             </div>
@@ -85,7 +98,7 @@
             </div>
 
             <div class="pt-2 border-t border-black/[0.06] flex items-center justify-between gap-3">
-              <input v-model="choiceCustomInput" type="text" placeholder="输入其他补充约束说明 (可选)..." class="flex-1 h-7 px-2.5 rounded-lg bg-white border border-black/[0.08] text-xs focus:outline-none focus:border-[#D96B27]">
+              <input v-model="choiceCustomInput" type="text" placeholder="输入其他补充约束说明 (可选)..." class="flex-1 h-7 px-2.5 rounded-lg bg-white border border-black/[0.1] text-xs focus:outline-none focus:border-[#D96B27]">
               <button @click="submitChoiceAction" class="px-4 py-1 rounded-lg bg-[#D96B27] hover:bg-[#B8551B] text-white text-xs font-semibold shadow-xs cursor-pointer">确定提交选择</button>
             </div>
           </div>
@@ -121,7 +134,7 @@
             <div class="flex items-center justify-between">
               <div class="flex items-center gap-1.5 text-xs font-bold text-[#18181B]">
                 <span class="text-sm">📝</span>
-                <span>检测到本轮回答涉及 2 个代码文件改动:</span>
+                <span>检测到本轮涉及代码文件改动:</span>
               </div>
               <span class="text-[10px] text-[#71717A]">点击任意文件卡片右侧立即预览 Diff 差异</span>
             </div>
@@ -161,7 +174,35 @@
     </div>
 
     <!-- 底部输入胶囊舱 (Prompt Capsule) -->
-    <div class="p-3 bg-[#FAF8F5] border-t border-black/[0.06] select-none">
+    <div class="p-3 bg-[#FAF8F5] border-t border-black/[0.06] select-none relative">
+      <!-- @ 引用浮层菜单 -->
+      <div v-if="showMentionMenu" class="absolute left-4 bottom-20 w-64 bg-white rounded-xl shadow-xl border border-black/[0.1] p-2 space-y-1 z-50 text-xs">
+        <div class="px-2 py-1 text-[10px] font-bold text-[#71717A] uppercase border-b border-black/[0.04]">引用上下文 (@)</div>
+        <div
+          v-for="item in mentionItems"
+          :key="item.label"
+          @click="insertMention(item.label)"
+          class="px-2 py-1.5 rounded-lg hover:bg-[#D96B27]/10 hover:text-[#D96B27] cursor-pointer flex items-center justify-between"
+        >
+          <span class="font-medium">{{ item.label }}</span>
+          <span class="text-[10px] text-[#A1A1AA]">{{ item.type }}</span>
+        </div>
+      </div>
+
+      <!-- / 快捷指令浮层菜单 -->
+      <div v-if="showCommandMenu" class="absolute left-16 bottom-20 w-72 bg-white rounded-xl shadow-xl border border-black/[0.1] p-2 space-y-1 z-50 text-xs">
+        <div class="px-2 py-1 text-[10px] font-bold text-[#71717A] uppercase border-b border-black/[0.04]">快捷算子指令 (/)</div>
+        <div
+          v-for="cmd in commandItems"
+          :key="cmd.command"
+          @click="insertCommand(cmd.command)"
+          class="px-2 py-1.5 rounded-lg hover:bg-[#D96B27]/10 hover:text-[#D96B27] cursor-pointer flex items-center justify-between"
+        >
+          <span class="font-bold font-mono">{{ cmd.command }}</span>
+          <span class="text-[10px] text-[#71717A]">{{ cmd.desc }}</span>
+        </div>
+      </div>
+
       <!-- 真实附件预览托盘 -->
       <div v-if="attachedFiles.length" class="flex items-center gap-1.5 pb-2 overflow-x-auto no-scrollbar">
         <div
@@ -180,8 +221,9 @@
         <textarea
           v-model="inputPrompt"
           rows="2"
-          :placeholder="store.isFullAuto ? '给 Tcode Agent 发送指令 (⚡ 全自动模式：Agent 自主闭环执行所有命令与代码修改，无需逐项批准)...' : '给 Tcode Agent 发送指令 (点击 📎 选择本地文件，输入 @ 引用会话，Enter 发送)...'"
+          :placeholder="store.isFullAuto ? '给 Tcode Agent 发送指令 (⚡ 全自动免审核模式：Agent 自主闭环执行代码写入与终端命令)...' : '给 Tcode Agent 发送指令 (输入 @ 引用工程，输入 / 调起算子，Enter 发送)...'"
           class="w-full text-xs text-[#18181B] placeholder-[#A1A1AA] bg-transparent focus:outline-none resize-none leading-relaxed"
+          @keydown="handleKeydown"
           @keydown.enter.prevent="handleSend"
         ></textarea>
 
@@ -196,8 +238,8 @@
             >
               <span>📎</span><span>上传</span>
             </button>
-            <button @click="inputPrompt += '@'" class="px-2 py-1 rounded-full text-xs text-[#52525B] hover:text-[#18181B] hover:bg-black/[0.04] cursor-pointer">@</button>
-            <button @click="inputPrompt += '/'" class="px-2 py-1 rounded-full text-xs text-[#52525B] hover:text-[#18181B] hover:bg-black/[0.04] cursor-pointer">/</button>
+            <button @click="toggleMention" class="px-2 py-1 rounded-full text-xs text-[#52525B] hover:text-[#18181B] hover:bg-black/[0.04] cursor-pointer">@</button>
+            <button @click="toggleCommand" class="px-2 py-1 rounded-full text-xs text-[#52525B] hover:text-[#18181B] hover:bg-black/[0.04] cursor-pointer">/</button>
             <div class="h-3.5 w-px bg-black/[0.1] mx-1"></div>
 
             <!-- Act 双环模式标识 -->
@@ -221,7 +263,7 @@
           </div>
 
           <div class="flex items-center gap-2">
-            <span class="text-[10px] text-[#A1A1AA] font-mono">{{ store.isStreaming ? '正在生成...' : '就绪' }}</span>
+            <span class="text-[10px] text-[#A1A1AA] font-mono">{{ store.isStreaming ? '正在流式推理...' : '就绪' }}</span>
             <button
               @click="handleSend"
               :disabled="store.isStreaming"
@@ -246,6 +288,7 @@ import { wailsBridge } from '../core/wailsBridge'
 
 const store = useChatStore()
 const inputPrompt = ref('')
+const selectedModel = ref('deepseek-v4-flash')
 const messageListRef = ref<HTMLDivElement | null>(null)
 const isToolLogOpen = ref(true)
 const selectedChoice = ref(1)
@@ -253,6 +296,23 @@ const choiceCustomInput = ref('')
 const hasSubmittedChoice = ref(false)
 const attachedFiles = ref<string[]>([])
 const currentSessionTitle = ref('架构重构与执行流设计')
+
+const showMentionMenu = ref(false)
+const showCommandMenu = ref(false)
+
+const mentionItems = [
+  { label: 'main.go', type: '代码文件' },
+  { label: 'app.go', type: '代码文件' },
+  { label: 'wails.json', type: '工程配置' },
+  { label: 'TDD 自愈技能', type: 'Agent 技能' }
+]
+
+const commandItems = [
+  { command: '/test', desc: '运行项目全量单元测试并检查红绿灯' },
+  { command: '/diff', desc: '查看当前工作区未暂存行级差异' },
+  { command: '/ast', desc: '重新解析代码语义拓扑树' },
+  { command: '/clean', desc: '清理工作区临时编译残留' }
+]
 
 const expandedThinkingMap = reactive<Record<string, boolean>>({})
 
@@ -274,6 +334,39 @@ const modifiedFiles = [
   { name: 'main.go', short: 'main.go', type: '~M (修改)', desc: '接入 Wails v2 原生启动绑定并清理遗留代理', diff: '+4 / -2 行', iconColor: 'text-[#D96B27]', badgeBg: 'bg-amber-100 text-amber-700' },
   { name: 'app.go', short: 'app.go', type: '+A (新增)', desc: '封装 Wails 原生事件桥接与操作系统级文件操作', diff: '+64 / -0 行', iconColor: 'text-[#10A37F]', badgeBg: 'bg-emerald-100 text-emerald-700' }
 ]
+
+function handleKeydown(e: KeyboardEvent) {
+  if (e.key === '@') {
+    showMentionMenu.value = true
+    showCommandMenu.value = false
+  } else if (e.key === '/') {
+    showCommandMenu.value = true
+    showMentionMenu.value = false
+  } else if (e.key === 'Escape') {
+    showMentionMenu.value = false
+    showCommandMenu.value = false
+  }
+}
+
+function toggleMention() {
+  showMentionMenu.value = !showMentionMenu.value
+  showCommandMenu.value = false
+}
+
+function toggleCommand() {
+  showCommandMenu.value = !showCommandMenu.value
+  showMentionMenu.value = false
+}
+
+function insertMention(label: string) {
+  inputPrompt.value += `@${label} `
+  showMentionMenu.value = false
+}
+
+function insertCommand(cmd: string) {
+  inputPrompt.value = cmd + ' '
+  showCommandMenu.value = false
+}
 
 // 调起真实系统文件选择窗口
 async function triggerUpload() {
@@ -303,12 +396,14 @@ function submitChoiceAction() {
   handleSend()
 }
 
-// 真实发送消息并通过 Wails 管道流式推送
+// 真实发送消息并通过 Wails 管道流式推送真实大模型推理
 async function handleSend() {
   const prompt = inputPrompt.value.trim()
   if (!prompt || store.isStreaming) return
 
   inputPrompt.value = ''
+  showMentionMenu.value = false
+  showCommandMenu.value = false
   store.isStreaming = true
 
   // 1. 追加用户消息
@@ -335,13 +430,13 @@ async function handleSend() {
     messageListRef.value.scrollTop = messageListRef.value.scrollHeight
   }
 
-  // 3. 发起流式推理
+  // 3. 发起真实流式大模型推理
   try {
     await wailsBridge.sendMessage(
       {
         session_id: store.currentSessionId,
         prompt: prompt,
-        model: 'DeepSeek-V4',
+        model: selectedModel.value,
         is_full_auto: store.isFullAuto
       },
       {
@@ -349,6 +444,9 @@ async function handleSend() {
           const target = store.messages.find(m => m.id === assistantMsgId)
           if (target) {
             target.thinking = (target.thinking || '') + thinking
+          }
+          if (messageListRef.value) {
+            messageListRef.value.scrollTop = messageListRef.value.scrollHeight
           }
         },
         onChunk(delta) {

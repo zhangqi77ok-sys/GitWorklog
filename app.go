@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"time"
+	"strings"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 	"tcode/internal/ast"
@@ -14,12 +14,21 @@ import (
 	"tcode/internal/core/loop"
 	"tcode/internal/core/sandbox"
 	"tcode/internal/host"
+	"tcode/internal/llm"
 	"tcode/internal/network"
 	"tcode/plugins/provider/openai"
 	fstool "tcode/plugins/tool/fs"
 	gittool "tcode/plugins/tool/git"
 	terminaltool "tcode/plugins/tool/terminal"
 )
+
+// FileNode 文件树节点
+type FileNode struct {
+	Name     string     `json:"name"`
+	Path     string     `json:"path"`
+	IsDir    bool       `json:"is_dir"`
+	Children []FileNode `json:"children,omitempty"`
+}
 
 // App Wails Go 原生桌面宿主结构体
 type App struct {
@@ -33,6 +42,7 @@ type App struct {
 	termTool     *terminaltool.Tool
 	engine       *loop.ExecutionEngine
 	channelStore *config.ChannelStore
+	extraStore   *config.ExtraStore
 }
 
 // NewApp 构造生产级 Wails 宿主
@@ -55,6 +65,7 @@ func NewApp() *App {
 	_ = reg.Register(term)
 
 	chStore, _ := config.NewChannelStore()
+	exStore, _ := config.NewExtraStore()
 
 	return &App{
 		workspace:    wd,
@@ -66,6 +77,7 @@ func NewApp() *App {
 		termTool:     term,
 		engine:       loop.NewExecutionEngine(reg),
 		channelStore: chStore,
+		extraStore:   exStore,
 	}
 }
 
@@ -91,7 +103,6 @@ func (a *App) OpenFileDialog() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	// 转换为相对于工作区的相对路径展示
 	relFiles := make([]string, 0, len(files))
 	for _, f := range files {
 		rel, err := filepath.Rel(a.workspace, f)
@@ -148,6 +159,54 @@ func (a *App) PingChannel(id string) (string, error) {
 	return "", fmt.Errorf("channel [%s] not found", id)
 }
 
+// ListMCPs 真实读取 MCP 配置
+func (a *App) ListMCPs() []config.MCPServerConfig {
+	if a.extraStore == nil {
+		return nil
+	}
+	return a.extraStore.ListMCPs()
+}
+
+// SaveMCP 真实保存 MCP 配置
+func (a *App) SaveMCP(cfg config.MCPServerConfig) error {
+	if a.extraStore == nil {
+		return fmt.Errorf("extra store not initialized")
+	}
+	return a.extraStore.SaveMCP(cfg)
+}
+
+// ListSkills 真实读取 Skill 列表
+func (a *App) ListSkills() []config.SkillConfig {
+	if a.extraStore == nil {
+		return nil
+	}
+	return a.extraStore.ListSkills()
+}
+
+// SaveSkill 真实保存 Skill 配置
+func (a *App) SaveSkill(cfg config.SkillConfig) error {
+	if a.extraStore == nil {
+		return fmt.Errorf("extra store not initialized")
+	}
+	return a.extraStore.SaveSkill(cfg)
+}
+
+// ListRules 真实读取工程规则
+func (a *App) ListRules() []config.RuleConfig {
+	if a.extraStore == nil {
+		return nil
+	}
+	return a.extraStore.ListRules()
+}
+
+// SaveRule 真实保存规则
+func (a *App) SaveRule(cfg config.RuleConfig) error {
+	if a.extraStore == nil {
+		return fmt.Errorf("extra store not initialized")
+	}
+	return a.extraStore.SaveRule(cfg)
+}
+
 // GetProjectASTGraph 真实执行项目 AST 语义分析
 func (a *App) GetProjectASTGraph() ([]ast.GraphNode, error) {
 	return ast.ScanWorkspaceAST(a.workspace)
@@ -168,6 +227,67 @@ func (a *App) GetGitStatus() (map[string]any, error) {
 		"working":   report.Working,
 		"untracked": report.Untracked,
 	}, nil
+}
+
+// GetFileDiff 真实计算文件 Diff 差异
+func (a *App) GetFileDiff(filePath string) (string, error) {
+	if a.gitTool == nil {
+		return "", fmt.Errorf("git tool not initialized")
+	}
+	raw, err := a.termTool.Execute(context.Background(), []byte(fmt.Sprintf(`{"command":"git diff HEAD -- %s"}`, filePath)))
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(raw.Content) == "" {
+		return "无修改或文件未跟踪", nil
+	}
+	return raw.Content, nil
+}
+
+// GetFileTree 真实获取工作区文件树 (供 ActivityBar 资源管理器)
+func (a *App) GetFileTree(dir string) ([]FileNode, error) {
+	targetDir := a.workspace
+	if dir != "" {
+		targetDir = filepath.Join(a.workspace, dir)
+	}
+
+	entries, err := os.ReadDir(targetDir)
+	if err != nil {
+		return nil, err
+	}
+
+	nodes := make([]FileNode, 0, len(entries))
+	for _, entry := range entries {
+		name := entry.Name()
+		if strings.HasPrefix(name, ".") || name == "node_modules" || name == "bin" {
+			continue
+		}
+		rel, _ := filepath.Rel(a.workspace, filepath.Join(targetDir, name))
+		rel = filepath.ToSlash(rel)
+
+		node := FileNode{
+			Name:  name,
+			Path:  rel,
+			IsDir: entry.IsDir(),
+		}
+		if entry.IsDir() {
+			// 一级子目录展开
+			subEntries, _ := os.ReadDir(filepath.Join(targetDir, name))
+			for _, sub := range subEntries {
+				subName := sub.Name()
+				if !strings.HasPrefix(subName, ".") && subName != "node_modules" {
+					subRel, _ := filepath.Rel(a.workspace, filepath.Join(targetDir, name, subName))
+					node.Children = append(node.Children, FileNode{
+						Name:  subName,
+						Path:  filepath.ToSlash(subRel),
+						IsDir: sub.IsDir(),
+					})
+				}
+			}
+		}
+		nodes = append(nodes, node)
+	}
+	return nodes, nil
 }
 
 // ReadFile 安全受控沙箱文件读取
@@ -211,64 +331,91 @@ type ChatRequest struct {
 	IsFullAuto bool   `json:"is_full_auto"`
 }
 
-// SendMessage 发起真实流式对话，使用 runtime.EventsEmit 推送事件
+// SendMessage 核心：发起真实流式大模型推理与工具调用闭环
 func (a *App) SendMessage(req ChatRequest) error {
 	if a.ctx == nil {
 		return fmt.Errorf("context not initialized")
 	}
 
 	go func() {
-		// 1. 发送开始事件
-		runtime.EventsEmit(a.ctx, "agent:start", map[string]any{
-			"session_id": req.SessionID,
-			"model":      req.Model,
-		})
-
-		// 2. 模拟思考心智展开
-		thinkingText := fmt.Sprintf("分析当前指令: \"%s\"\n正在核查工作区文件系统与本地 Git 变更状态...", req.Prompt)
-		runtime.EventsEmit(a.ctx, "agent:thinking", map[string]any{
-			"session_id": req.SessionID,
-			"thinking":   thinkingText,
-		})
-		time.Sleep(300 * time.Millisecond)
-
-		// 3. 执行工具调用（若全自动模式，静默执行）
-		runtime.EventsEmit(a.ctx, "agent:tool_start", map[string]any{
-			"session_id": req.SessionID,
-			"tool":       "git_status",
-			"args":       map[string]string{"path": "."},
-		})
-		time.Sleep(200 * time.Millisecond)
-		runtime.EventsEmit(a.ctx, "agent:tool_end", map[string]any{
-			"session_id": req.SessionID,
-			"tool":       "git_status",
-			"output":     "Git working tree checked. Ready for execution.",
-		})
-
-		// 4. 流式推送回答内容
-		reply := fmt.Sprintf("收到您的指令：\"%s\"。\n\n已通过 Wails 原生微内核在工作区 [%s] 完成环境就绪核查。\n当前处于 %s 模式，工具调用与沙箱快照均已就绪。",
-			req.Prompt,
-			filepath.Base(a.workspace),
-			func() string {
-				if req.IsFullAuto {
-					return "⚡ 全自动免审核"
-				}
-				return "🛡️ 人工审核"
-			}(),
-		)
-
-		for _, char := range reply {
-			runtime.EventsEmit(a.ctx, "agent:chunk", map[string]any{
-				"session_id": req.SessionID,
-				"delta":      string(char),
-			})
-			time.Sleep(15 * time.Millisecond)
+		// 1. 获取主用渠道凭据
+		primary := a.channelStore.GetPrimary()
+		endpoint := "https://agentrouter.org/v1"
+		apiKey := "sk-gKTbHfCZqgyDVf3TaXWpXT5TXW9qIZdAFVMOsY49ZKFssyFZ"
+		model := req.Model
+		if model == "" {
+			model = "deepseek-v4-flash"
+		}
+		if primary != nil {
+			if primary.Endpoint != "" {
+				endpoint = primary.Endpoint
+			}
+			if primary.APIKey != "" {
+				apiKey = primary.APIKey
+			}
+			if req.Model == "" && primary.Model != "" {
+				model = primary.Model
+			}
 		}
 
-		// 5. 完成事件
-		runtime.EventsEmit(a.ctx, "agent:done", map[string]any{
+		// 2. 发送开始事件
+		runtime.EventsEmit(a.ctx, "agent:start", map[string]any{
 			"session_id": req.SessionID,
+			"model":      model,
 		})
+
+		// 3. 构建提示词体系 (注入当前工作区上下文与规则)
+		systemPrompt := "你是 Tcode Studio 纯原生桌面智能体。在必要时使用所提供的工具直接修改和检验代码。请保持回答专业、准确且优雅。"
+		rules := a.extraStore.ListRules()
+		for _, r := range rules {
+			if r.Enabled {
+				systemPrompt += "\n[规则规约] " + r.Content
+			}
+		}
+
+		// 4. 调用真实流式大模型接口
+		llmReq := llm.Request{
+			Endpoint: endpoint,
+			APIKey:   apiKey,
+			Model:    model,
+			Messages: []llm.Message{
+				{Role: "system", Content: systemPrompt},
+				{Role: "user", Content: req.Prompt},
+			},
+		}
+
+		err := llm.StreamChat(context.Background(), llmReq, llm.StreamHandlers{
+			OnThinking: func(text string) {
+				runtime.EventsEmit(a.ctx, "agent:thinking", map[string]any{
+					"session_id": req.SessionID,
+					"thinking":   text,
+				})
+			},
+			OnContent: func(delta string) {
+				runtime.EventsEmit(a.ctx, "agent:chunk", map[string]any{
+					"session_id": req.SessionID,
+					"delta":      delta,
+				})
+			},
+			OnDone: func() {
+				runtime.EventsEmit(a.ctx, "agent:done", map[string]any{
+					"session_id": req.SessionID,
+				})
+			},
+			OnError: func(err error) {
+				runtime.EventsEmit(a.ctx, "agent:chunk", map[string]any{
+					"session_id": req.SessionID,
+					"delta":      fmt.Sprintf("\n\n[系统错误: %v]", err),
+				})
+				runtime.EventsEmit(a.ctx, "agent:done", map[string]any{
+					"session_id": req.SessionID,
+				})
+			},
+		})
+
+		if err != nil {
+			runtime.LogErrorf(a.ctx, "StreamChat error: %v", err)
+		}
 	}()
 
 	return nil

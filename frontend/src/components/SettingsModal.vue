@@ -1,11 +1,11 @@
 <template>
   <div
     v-if="store.isSettingsOpen"
-    class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs animate-in fade-in duration-150"
+    class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs animate-in fade-in duration-150 font-sans"
   >
-    <div class="w-[90vw] max-w-[1020px] h-[82vh] bg-white rounded-2xl shadow-2xl border border-black/[0.1] flex flex-col overflow-hidden relative">
+    <div class="w-[90vw] max-w-[1050px] h-[82vh] bg-white rounded-2xl shadow-2xl border border-black/[0.1] flex flex-col overflow-hidden relative">
       <!-- 顶栏 -->
-      <header class="h-12 bg-[#FAF8F5] border-b border-black/[0.08] flex items-center justify-between px-5">
+      <header class="h-12 bg-[#FAF8F5] border-b border-black/[0.08] flex items-center justify-between px-5 select-none shrink-0">
         <div class="flex items-center gap-2">
           <span class="text-base">⚙️</span>
           <span class="font-bold text-sm text-[#18181B]">系统全局设置中枢 (Tcode Studio Settings)</span>
@@ -16,7 +16,7 @@
       <!-- 主体: 左侧导航 + 右侧内容 -->
       <div class="flex-1 flex overflow-hidden">
         <!-- 左侧菜单 -->
-        <aside class="w-48 bg-[#F4EFEA] border-r border-black/[0.08] p-3 space-y-1">
+        <aside class="w-48 bg-[#F4EFEA] border-r border-black/[0.08] p-3 space-y-1 select-none shrink-0">
           <button
             v-for="m in [
               { id: 'gateway', label: '🌐 模型与网关渠道' },
@@ -39,7 +39,7 @@
 
         <!-- 右侧内容区 -->
         <main class="flex-1 p-5 overflow-y-auto bg-white space-y-4">
-          <!-- 渠道管理 (Master-Detail 真实持久化与测速) -->
+          <!-- 1. 渠道管理 (Master-Detail 真实持久化与测速) -->
           <div v-if="activeMenu === 'gateway'" class="space-y-4">
             <div class="flex items-center justify-between">
               <div>
@@ -51,7 +51,7 @@
               </button>
             </div>
 
-            <!-- 渠道卡片列表 (真实 Pinia 响应式) -->
+            <!-- 渠道卡片列表 -->
             <div class="space-y-2">
               <div
                 v-for="ch in channels"
@@ -75,7 +75,7 @@
                       <span class="text-[9px] bg-black/[0.04] text-[#52525B] px-1.5 py-0.2 rounded font-mono">{{ ch.auth_type }}</span>
                     </div>
                     <div class="text-[11px] text-[#71717A] mt-0.5 font-mono">
-                      {{ ch.endpoint }} · 延迟: <strong :class="pingLoadingMap[ch.id] ? 'text-amber-500 animate-pulse' : 'text-[#10A37F]'">{{ pingLoadingMap[ch.id] ? '测速中...' : ch.latency }}</strong>
+                      {{ ch.endpoint }} · 模型: <strong class="text-[#18181B]">{{ ch.model }}</strong> · 延迟: <strong :class="pingLoadingMap[ch.id] ? 'text-amber-500 animate-pulse' : 'text-[#10A37F]'">{{ pingLoadingMap[ch.id] ? '测速中...' : ch.latency }}</strong>
                     </div>
                   </div>
                 </div>
@@ -114,7 +114,7 @@
               <div class="grid grid-cols-2 gap-3 text-xs">
                 <div>
                   <label class="block font-medium text-[#71717A] mb-1">渠道名称</label>
-                  <input v-model="form.name" type="text" placeholder="例如：DeepSeek 专有主通道" class="w-full px-2.5 py-1.5 rounded-lg border border-black/[0.1] text-xs focus:outline-none focus:border-[#D96B27]">
+                  <input v-model="form.name" type="text" placeholder="例如：AgentRouter 聚合中转站" class="w-full px-2.5 py-1.5 rounded-lg border border-black/[0.1] text-xs focus:outline-none focus:border-[#D96B27]">
                 </div>
                 <div>
                   <label class="block font-medium text-[#71717A] mb-1">认证类型</label>
@@ -126,7 +126,7 @@
                 </div>
                 <div class="col-span-2">
                   <label class="block font-medium text-[#71717A] mb-1">API Base URL / Endpoint</label>
-                  <input v-model="form.endpoint" type="text" placeholder="https://api.openai.com/v1" class="w-full px-2.5 py-1.5 rounded-lg border border-black/[0.1] text-xs focus:outline-none focus:border-[#D96B27]">
+                  <input v-model="form.endpoint" type="text" placeholder="https://agentrouter.org/v1" class="w-full px-2.5 py-1.5 rounded-lg border border-black/[0.1] text-xs focus:outline-none focus:border-[#D96B27]">
                 </div>
                 <div>
                   <label class="block font-medium text-[#71717A] mb-1">API Key / Token (加密存储)</label>
@@ -134,7 +134,7 @@
                 </div>
                 <div>
                   <label class="block font-medium text-[#71717A] mb-1">默认模型标识</label>
-                  <input v-model="form.model" type="text" placeholder="gpt-4o / deepseek-chat" class="w-full px-2.5 py-1.5 rounded-lg border border-black/[0.1] text-xs focus:outline-none focus:border-[#D96B27]">
+                  <input v-model="form.model" type="text" placeholder="deepseek-v4-flash / gpt-5.6-sol" class="w-full px-2.5 py-1.5 rounded-lg border border-black/[0.1] text-xs focus:outline-none focus:border-[#D96B27]">
                 </div>
               </div>
 
@@ -145,11 +145,95 @@
             </div>
           </div>
 
-          <!-- 其他分类真实展示 -->
+          <!-- 2. MCP 服务协议管理 -->
+          <div v-else-if="activeMenu === 'mcp'" class="space-y-4">
+            <div class="flex items-center justify-between">
+              <div>
+                <h3 class="text-xs font-bold text-[#18181B]">Model Context Protocol (MCP) 本地服务</h3>
+                <p class="text-[11px] text-[#71717A] mt-0.5">支持 stdio 与 SSE 双协议规范 · 动态暴露工具算子给 Agent</p>
+              </div>
+            </div>
+
+            <div class="space-y-2">
+              <div
+                v-for="mcp in mcps"
+                :key="mcp.id"
+                class="p-3 rounded-xl border border-black/[0.08] bg-[#FAF8F5] flex items-center justify-between shadow-2xs"
+              >
+                <div>
+                  <div class="flex items-center gap-2">
+                    <span class="text-xs font-bold text-[#18181B]">{{ mcp.name }}</span>
+                    <span class="text-[9px] bg-black/[0.04] text-[#52525B] px-1.5 py-0.2 rounded font-mono">{{ mcp.type }}</span>
+                  </div>
+                  <div class="text-[11px] text-[#71717A] mt-0.5 font-mono">{{ mcp.command }} {{ (mcp.args || []).join(' ') }}</div>
+                </div>
+                <label class="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" v-model="mcp.enabled" @change="toggleMCP(mcp)" class="sr-only peer">
+                  <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#10A37F]"></div>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <!-- 3. Skill 技能库管理 -->
+          <div v-else-if="activeMenu === 'skill'" class="space-y-4">
+            <div class="flex items-center justify-between">
+              <div>
+                <h3 class="text-xs font-bold text-[#18181B]">Agent 技能库 (Skills)</h3>
+                <p class="text-[11px] text-[#71717A] mt-0.5">预制工程化能力模型 · 指导 Agent 在特定领域行为</p>
+              </div>
+            </div>
+
+            <div class="space-y-2">
+              <div
+                v-for="skill in skills"
+                :key="skill.id"
+                class="p-3 rounded-xl border border-black/[0.08] bg-[#FAF8F5] flex items-center justify-between shadow-2xs"
+              >
+                <div>
+                  <div class="flex items-center gap-2">
+                    <span class="text-xs font-bold text-[#18181B]">{{ skill.name }}</span>
+                  </div>
+                  <div class="text-[11px] text-[#71717A] mt-0.5">{{ skill.description }}</div>
+                </div>
+                <label class="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" v-model="skill.enabled" @change="toggleSkill(skill)" class="sr-only peer">
+                  <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#10A37F]"></div>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <!-- 4. Rules 规则管理 -->
+          <div v-else-if="activeMenu === 'rules'" class="space-y-4">
+            <div>
+              <h3 class="text-xs font-bold text-[#18181B]">软件工程规则与提示词规约</h3>
+              <p class="text-[11px] text-[#71717A] mt-0.5">所有指令将自动注入 Agent 每次对话的 System Prompt 中</p>
+            </div>
+
+            <div class="space-y-2">
+              <div
+                v-for="rule in rules"
+                :key="rule.id"
+                class="p-3 rounded-xl border border-black/[0.08] bg-[#FAF8F5] space-y-1.5 shadow-2xs"
+              >
+                <div class="flex items-center justify-between">
+                  <span class="text-xs font-bold text-[#18181B]">{{ rule.title }}</span>
+                  <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" v-model="rule.enabled" @change="toggleRule(rule)" class="sr-only peer">
+                    <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#10A37F]"></div>
+                  </label>
+                </div>
+                <div class="text-[11px] text-[#52525B] font-mono bg-white p-2 rounded border border-black/[0.04]">{{ rule.content }}</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 5. 外观与安全 -->
           <div v-else class="space-y-3">
-            <h3 class="text-xs font-bold text-[#18181B]">{{ activeMenu.toUpperCase() }} 设置</h3>
+            <h3 class="text-xs font-bold text-[#18181B]">{{ activeMenu.toUpperCase() }} 配置</h3>
             <div class="p-3 rounded-xl bg-[#FAF8F5] border border-black/[0.06] text-xs text-[#52525B] leading-relaxed">
-              当前分类已受 Wails 原生微内核受控沙箱全权托管。配置项将直接生效于系统运行时。
+              当前配置由 Wails v2 原生微内核与本地磁盘持久化全权托管，所做修改即时生效。
             </div>
           </div>
         </main>
@@ -161,13 +245,23 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { useChatStore } from '../stores/chatStore'
-import { wailsBridge, type ChannelConfig } from '../core/wailsBridge'
+import {
+  wailsBridge,
+  type ChannelConfig,
+  type MCPServerConfig,
+  type SkillConfig,
+  type RuleConfig
+} from '../core/wailsBridge'
 
 const store = useChatStore()
 const activeMenu = ref('gateway')
 const isEditing = ref(false)
 
 const channels = ref<ChannelConfig[]>([])
+const mcps = ref<MCPServerConfig[]>([])
+const skills = ref<SkillConfig[]>([])
+const rules = ref<RuleConfig[]>([])
+
 const pingLoadingMap = reactive<Record<string, boolean>>({})
 
 const form = reactive<ChannelConfig>({
@@ -176,37 +270,68 @@ const form = reactive<ChannelConfig>({
   primary: false,
   status: 'online',
   auth_type: 'bearer_token',
-  endpoint: 'https://api.openai.com/v1',
+  endpoint: 'https://agentrouter.org/v1',
   api_key: '',
-  model: 'gpt-4o',
-  latency: '120ms',
+  model: 'deepseek-v4-flash',
+  latency: '82ms',
   updated_at: 0
 })
 
 onMounted(async () => {
-  await loadChannels()
+  await Promise.all([loadChannels(), loadMCPs(), loadSkills(), loadRules()])
 })
 
 async function loadChannels() {
   try {
     const list = await wailsBridge.listChannels()
-    if (list && list.length > 0) {
-      channels.value = list
-    }
+    if (list && list.length > 0) channels.value = list
   } catch (err) {
     console.error('Failed to load channels:', err)
   }
 }
 
-// 真实测速
+async function loadMCPs() {
+  try {
+    mcps.value = await wailsBridge.listMCPs()
+  } catch (err) {
+    console.error('Failed to load MCPs:', err)
+  }
+}
+
+async function loadSkills() {
+  try {
+    skills.value = await wailsBridge.listSkills()
+  } catch (err) {
+    console.error('Failed to load Skills:', err)
+  }
+}
+
+async function loadRules() {
+  try {
+    rules.value = await wailsBridge.listRules()
+  } catch (err) {
+    console.error('Failed to load Rules:', err)
+  }
+}
+
+async function toggleMCP(mcp: MCPServerConfig) {
+  await wailsBridge.saveMCP(mcp)
+}
+
+async function toggleSkill(skill: SkillConfig) {
+  await wailsBridge.saveSkill(skill)
+}
+
+async function toggleRule(rule: RuleConfig) {
+  await wailsBridge.saveRule(rule)
+}
+
 async function executePing(id: string) {
   pingLoadingMap[id] = true
   try {
     const latency = await wailsBridge.pingChannel(id)
     const target = channels.value.find(c => c.id === id)
-    if (target) {
-      target.latency = latency
-    }
+    if (target) target.latency = latency
   } catch (err) {
     console.error('Ping failed:', err)
   } finally {
@@ -219,9 +344,7 @@ function setPrimaryChannel(id: string) {
     c.primary = (c.id === id)
   })
   const current = channels.value.find(c => c.id === id)
-  if (current) {
-    wailsBridge.saveChannel(current)
-  }
+  if (current) wailsBridge.saveChannel(current)
 }
 
 function openAddChannel() {
@@ -230,9 +353,9 @@ function openAddChannel() {
   form.primary = false
   form.status = 'online'
   form.auth_type = 'bearer_token'
-  form.endpoint = 'https://api.openai.com/v1'
+  form.endpoint = 'https://agentrouter.org/v1'
   form.api_key = ''
-  form.model = 'gpt-4o'
+  form.model = 'deepseek-v4-flash'
   form.latency = '未测速'
   isEditing.value = true
 }
@@ -254,9 +377,7 @@ async function deleteChannel(id: string) {
 async function saveChannelForm() {
   if (!form.name.trim() || !form.endpoint.trim()) return
   const toSave: ChannelConfig = { ...form }
-  if (!toSave.id) {
-    toSave.id = 'ch_' + Date.now()
-  }
+  if (!toSave.id) toSave.id = 'ch_' + Date.now()
   try {
     await wailsBridge.saveChannel(toSave)
     await loadChannels()
