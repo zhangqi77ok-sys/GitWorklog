@@ -164,6 +164,18 @@ Tcode 打破了单体硬编码调度逻辑，将 Agent 的执行循环、能力�
   * 解析 `git status --porcelain=v2`，精准呈现已暂存（Staged）与未暂存（Working）文件列表；
   * 支持一键单文件暂存（`+`）、取消暂存（`-`）、撤销放弃更改（`↺`）与带状态感知的 Commit 提交。
 
+### 12. ReAct 双环自主执行引擎与动态工具调用卡片 (ReAct Autonomous Engine & ToolCard)
+* **微内核 ReAct 自主执行状态机 (`backend/internal/core/loop/engine.go`)**：
+  * **自主工具发现与声明**：自动扫描并收集注册中心内的全部 `ToolPlugin` 动态注入 OpenAI 规范的 `tools` 契约；
+  * **流式切片拼接器 (`ToolReassembler`)**：增量聚合上游模型切碎的 `tool_calls` 参数分片，防止 JSON 截断畸形；
+  * **多轮自愈循环 (Inner Loop)**：模型调用工具 ➔ 本地沙箱执行 ➔ 结果转换为 `role: tool` 回传上下文 ➔ 再次推理，支持最多 15 步防死循环熔断保护。
+* **微内核多阶段 SSE 协议传输 (`backend/internal/transport/http/server.go`)**：
+  * 扩展标准事件：`chunk` (正文与思考增量)、`tool_start` (工具启动与入参)、`tool_end` (执行结果与成功状态)、`done` (任务收敛完成)。
+* **前端工具调用卡片 (`frontend/src/app/chat/ToolCard.tsx`)**：
+  * 遵循 Warm Minimalist 暖色极简设计：工作台米灰（`#F4EFEA`）外框、运行中陶土暖橙（`#D96B27`）呼吸光晕、成功绿色指示；
+  * 默认 32px 紧凑收起，点击平滑展开抽屉，内嵌代码暖黑（`#1E1C1A`）小代码块实时查阅入参 JSON 与返回输出；
+  * 与 `ThinkingBlock`（思考卡片）和打字机气泡按严格时序编排渲染。
+
 ---
 
 ## 🎨 四、视觉与人机工程学规范

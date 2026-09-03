@@ -9,11 +9,26 @@ export interface ChatChunkPayload {
   }
 }
 
+export interface ToolStartPayload {
+  id: string
+  name: string
+  args: any
+}
+
+export interface ToolEndPayload {
+  id: string
+  name: string
+  output: string
+  is_error: boolean
+}
+
 export interface StreamChatOptions {
   model: string
   prompt: string
   messages?: Array<{ role: string; content: string }>
   onChunk: (chunk: ChatChunkPayload) => void
+  onToolStart?: (payload: ToolStartPayload) => void
+  onToolEnd?: (payload: ToolEndPayload) => void
   onError?: (error: Error) => void
   onDone?: () => void
   signal?: AbortSignal
@@ -23,7 +38,7 @@ export interface StreamChatOptions {
  * 发起流式推理并逐帧解码 SSE 事件流
  */
 export async function streamChatApi(options: StreamChatOptions): Promise<void> {
-  const { model, prompt, messages, onChunk, onError, onDone, signal } = options
+  const { model, prompt, messages, onChunk, onToolStart, onToolEnd, onError, onDone, signal } = options
 
   try {
     const response = await fetch('/api/chat/stream', {
@@ -80,6 +95,26 @@ export async function streamChatApi(options: StreamChatOptions): Promise<void> {
 
           if (currentEvent === 'error') {
             throw new Error(dataStr)
+          }
+
+          if (currentEvent === 'tool_start') {
+            try {
+              const payload: ToolStartPayload = JSON.parse(dataStr)
+              if (onToolStart) onToolStart(payload)
+            } catch (e) {
+              console.error('[SSE] Failed to parse tool_start:', e)
+            }
+            continue
+          }
+
+          if (currentEvent === 'tool_end') {
+            try {
+              const payload: ToolEndPayload = JSON.parse(dataStr)
+              if (onToolEnd) onToolEnd(payload)
+            } catch (e) {
+              console.error('[SSE] Failed to parse tool_end:', e)
+            }
+            continue
           }
 
           try {

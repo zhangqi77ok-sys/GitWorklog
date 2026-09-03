@@ -2,6 +2,7 @@ import React from 'react'
 import { Bot, User } from 'lucide-react'
 import { ChatMessage } from '../../core/store/chatStore'
 import { ThinkingBlock } from './ThinkingBlock'
+import { ToolCard } from './ToolCard'
 
 interface MessageBubbleProps {
   message: ChatMessage
@@ -31,8 +32,17 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
 
       <div className="flex-1 bg-[#FAF8F5] border border-[#EADFD7] p-3.5 rounded-2xl rounded-tl-xs text-xs text-[#2C2825] shadow-2xs leading-relaxed">
         {/* 若有思考内容，渲染思考折叠卡片 */}
-        {(message.thinking || message.isStreaming) && (
+        {(message.thinking || (message.isStreaming && !message.content && (!message.toolCalls || message.toolCalls.length === 0))) && (
           <ThinkingBlock thinking={message.thinking || ''} isStreaming={message.isStreaming && !message.content} />
+        )}
+
+        {/* 若有工具调用，渲染工具折叠卡片列表 */}
+        {message.toolCalls && message.toolCalls.length > 0 && (
+          <div className="my-2 flex flex-col gap-1">
+            {message.toolCalls.map((tc) => (
+              <ToolCard key={tc.id} tool={tc} />
+            ))}
+          </div>
         )}
 
         {/* 助手正文回复 */}

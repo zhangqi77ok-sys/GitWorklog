@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"tcode/internal/core/loop"
 	"tcode/internal/core/sandbox"
 	"tcode/internal/host"
 	gitTool "tcode/plugins/tool/git"
@@ -20,6 +21,7 @@ type Server struct {
 	httpSrv     *http.Server
 	gitTool     *gitTool.Tool
 	snapshotMgr *sandbox.SnapshotManager
+	engine      *loop.ExecutionEngine
 }
 
 // NewServer 构造本地服务端
@@ -32,6 +34,7 @@ func NewServer(addr string, reg *host.Registry, gt *gitTool.Tool, sm *sandbox.Sn
 		registry:    reg,
 		gitTool:     gt,
 		snapshotMgr: sm,
+		engine:      loop.NewExecutionEngine(reg),
 	}
 
 	mux := http.NewServeMux()
@@ -111,13 +114,6 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 		req.Model = "gpt-4o"
 	}
 
-	// 查找可用 Provider
-	prov, ok := s.registry.GetProvider("provider.openai")
-	if !ok {
-		http.Error(w, "provider.openai not registered in micro-kernel", http.StatusServiceUnavailable)
-		return
-	}
-
 	// 配置 SSE 头部
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -130,46 +126,55 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 构造模型请求
-	chatReq := &v1.ChatRequest{
-		Model:    req.Model,
-		Messages: req.Messages,
-		Stream:   true,
+	// 委托给 ReAct 自主执行引擎驱动 Inner Loop 循环
+	engineReq := &loop.EngineRequest{
+		Model:  req.Model,
+		Prompt: req.Prompt,
 	}
 
-	// 若未传 messages 数组，自动封装用户 prompt
-	if len(req.Messages) == 0 && req.Prompt != "" {
-		singleUserMsg, _ := json.Marshal([]map[string]string{
-			{"role": "user", "content": req.Prompt},
-		})
-		chatReq.Messages = singleUserMsg
-	}
+	eventChan := make(chan loop.EngineEvent, 64)
+	go func() {
+		_ = s.engine.Execute(r.Context(), engineReq, eventChan)
+	}()
 
-	ctx := r.Context()
-	chunkChan, err := prov.StreamChat(ctx, chatReq)
-	if err != nil {
-		fmt.Fprintf(w, "event: error\ndata: %s\n\n", err.Error())
-		flusher.Flush()
-		return
-	}
-
-	for chunk := range chunkChan {
-		if chunk.Error != nil {
-			fmt.Fprintf(w, "event: error\ndata: %s\n\n", chunk.Error.Error())
-			flusher.Flush()
-			return
-		}
-
-		payload, err := json.Marshal(chunk)
-		if err == nil {
+	for event := range eventChan {
+		switch event.Type {
+		case loop.EventChunk:
+			payload, _ := json.Marshal(map[string]string{
+				"delta":    event.DeltaContent,
+				"thinking": event.Thinking,
+			})
 			fmt.Fprintf(w, "event: chunk\ndata: %s\n\n", string(payload))
 			flusher.Flush()
+
+		case loop.EventToolStart:
+			payload, _ := json.Marshal(map[string]any{
+				"id":   event.ToolCallID,
+				"name": event.ToolName,
+				"args": event.ToolArgs,
+			})
+			fmt.Fprintf(w, "event: tool_start\ndata: %s\n\n", string(payload))
+			flusher.Flush()
+
+		case loop.EventToolEnd:
+			payload, _ := json.Marshal(map[string]any{
+				"id":       event.ToolCallID,
+				"name":     event.ToolName,
+				"output":   event.ToolOutput,
+				"is_error": event.IsError,
+			})
+			fmt.Fprintf(w, "event: tool_end\ndata: %s\n\n", string(payload))
+			flusher.Flush()
+
+		case loop.EventError:
+			fmt.Fprintf(w, "event: error\ndata: %s\n\n", event.ErrorMessage)
+			flusher.Flush()
+
+		case loop.EventDone:
+			fmt.Fprintf(w, "event: done\ndata: [DONE]\n\n")
+			flusher.Flush()
 		}
 	}
-
-	// 优雅发送完成标桩
-	fmt.Fprintf(w, "event: done\ndata: [DONE]\n\n")
-	flusher.Flush()
 }
 
 // handleGitStatus 获取物理 Git 状态

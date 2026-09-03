@@ -212,6 +212,24 @@ func (p *Provider) StreamChat(ctx context.Context, req *v1.ChatRequest) (<-chan 
 			}
 		}
 
+		// 注入工具定义声明 (OpenAI function calling 格式)
+		if len(req.Tools) > 0 {
+			openAITools := make([]map[string]any, 0, len(req.Tools))
+			for _, t := range req.Tools {
+				var params any
+				_ = json.Unmarshal(t.Parameters, &params)
+				openAITools = append(openAITools, map[string]any{
+					"type": "function",
+					"function": map[string]any{
+						"name":        t.Name,
+						"description": t.Description,
+						"parameters":  params,
+					},
+				})
+			}
+			upstreamReqBody["tools"] = openAITools
+		}
+
 		bodyBytes, err := json.Marshal(upstreamReqBody)
 		if err != nil {
 			outChan <- v1.StreamChunk{Error: fmt.Errorf("failed to encode request: %w", err)}
@@ -283,6 +301,15 @@ func (p *Provider) StreamChat(ctx context.Context, req *v1.ChatRequest) (<-chan 
 					Delta struct {
 						Content          string `json:"content"`
 						ReasoningContent string `json:"reasoning_content"` // DeepSeek R1 专有字段
+						ToolCalls        []struct {
+							Index    int    `json:"index"`
+							ID       string `json:"id"`
+							Type     string `json:"type"`
+							Function struct {
+								Name      string `json:"name"`
+								Arguments string `json:"arguments"`
+							} `json:"function"`
+						} `json:"tool_calls"`
 					} `json:"delta"`
 					FinishReason string `json:"finish_reason"`
 				} `json:"choices"`
@@ -329,6 +356,19 @@ func (p *Provider) StreamChat(ctx context.Context, req *v1.ChatRequest) (<-chan 
 				} else {
 					chunk.DeltaContent += rawContent
 				}
+
+				// 3. 处理流式工具调用分片
+				if len(choice.Delta.ToolCalls) > 0 {
+					chunk.ToolCalls = make([]v1.ToolCallChunk, 0, len(choice.Delta.ToolCalls))
+					for _, tc := range choice.Delta.ToolCalls {
+						chunk.ToolCalls = append(chunk.ToolCalls, v1.ToolCallChunk{
+							Index:          tc.Index,
+							ID:             tc.ID,
+							Name:           tc.Function.Name,
+							ArgumentsDelta: tc.Function.Arguments,
+						})
+					}
+				}
 			}
 
 			if sseChunk.Usage != nil {
@@ -339,7 +379,7 @@ func (p *Provider) StreamChat(ctx context.Context, req *v1.ChatRequest) (<-chan 
 				}
 			}
 
-			if chunk.DeltaContent != "" || chunk.Thinking != "" || chunk.Usage != nil || chunk.FinishReason != "" {
+			if chunk.DeltaContent != "" || chunk.Thinking != "" || len(chunk.ToolCalls) > 0 || chunk.Usage != nil || chunk.FinishReason != "" {
 				outChan <- chunk
 			}
 		}

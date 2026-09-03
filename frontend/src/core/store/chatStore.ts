@@ -1,11 +1,13 @@
 import { create } from 'zustand'
 import { streamChatApi } from '../transport/sseClient'
+import type { ToolCallItem } from '../../app/chat/ToolCard'
 
 export interface ChatMessage {
   id: string
   role: 'user' | 'assistant'
   content: string
   thinking?: string
+  toolCalls?: ToolCallItem[]
   timestamp: number
   model?: string
   isStreaming?: boolean
@@ -90,6 +92,43 @@ export const useChatStore = create<ChatState>((set, get) => ({
               ...m,
               content: newContent,
               thinking: newThinking,
+            }
+          }),
+        }))
+      },
+      onToolStart: (tool) => {
+        set((state) => ({
+          messages: state.messages.map((m) => {
+            if (m.id !== assistantMsgId) return m
+            const existing = m.toolCalls || []
+            const item: ToolCallItem = {
+              id: tool.id,
+              name: tool.name,
+              args: tool.args,
+              status: 'running',
+            }
+            return {
+              ...m,
+              toolCalls: [...existing, item],
+            }
+          }),
+        }))
+      },
+      onToolEnd: (tool) => {
+        set((state) => ({
+          messages: state.messages.map((m) => {
+            if (m.id !== assistantMsgId) return m
+            const existing = m.toolCalls || []
+            return {
+              ...m,
+              toolCalls: existing.map((tc) => {
+                if (tc.id !== tool.id) return tc
+                return {
+                  ...tc,
+                  output: tool.output,
+                  status: tool.is_error ? 'error' : 'success',
+                }
+              }),
             }
           }),
         }))
