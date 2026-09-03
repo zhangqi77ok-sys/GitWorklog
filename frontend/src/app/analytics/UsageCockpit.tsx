@@ -1,75 +1,206 @@
-import React from 'react'
-import { Coins, Zap, Sparkles, TrendingUp } from 'lucide-react'
+import React, { useState } from 'react'
+import { Download, X } from 'lucide-react'
+import { useWorkspaceStore } from '../../core/store/workspaceStore'
 
 export const UsageCockpit: React.FC = () => {
+  const { setActivityTab } = useWorkspaceStore()
+  const [timeframe, setTimeframe] = useState<'today' | '7d' | '30d'>('today')
+
   return (
-    <div className="flex-1 bg-[#FAF8F5] p-6 overflow-y-auto flex flex-col gap-6 select-none">
-      {/* 顶栏标题与统计时间 */}
-      <div className="flex items-center justify-between border-b border-[#EADFD7] pb-4">
-        <div>
-          <h2 className="text-lg font-bold text-[#2C2825]">模型使用效能与 Token 监控大盘</h2>
-          <p className="text-xs text-[#7A726B] mt-0.5">全景追踪多模型 API 吞吐、延迟表现与成本节约情况</p>
+    <div className="flex-1 overflow-y-auto bg-[#FAF8F5] p-6 space-y-6 select-none animate-in fade-in duration-150">
+      {/* 顶栏：标题 + 时间维度切换 + 导出与返回 */}
+      <div className="flex items-center justify-between">
+        <div className="space-y-0.5">
+          <h2 className="text-base font-bold text-[#18181B] flex items-center gap-2">
+            <span>📊</span>
+            <span>模型使用情况与 Token 效能监控大盘</span>
+            <span className="text-[10px] text-[#10A37F] bg-[#10A37F]/10 px-2 py-0.5 rounded-full font-mono font-medium">
+              ● 生产网关已联机
+            </span>
+          </h2>
+          <p className="text-xs text-[#71717A]">
+            实时多模型吞吐计费、首字延迟 (TTFT)、Prompt 缓存节省率与调度流水
+          </p>
         </div>
+
         <div className="flex items-center gap-2">
-          <span className="text-xs bg-[#F4EFEA] text-[#2C2825] px-2.5 py-1 rounded-md border border-[#EADFD7] font-medium">
-            统计周期: 今日 (24h)
-          </span>
+          {/* 时间维度切换 */}
+          <div className="flex items-center p-0.5 bg-black/[0.05] rounded-xl text-xs font-medium">
+            <button
+              onClick={() => setTimeframe('today')}
+              className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                timeframe === 'today'
+                  ? 'bg-white text-[#D96B27] shadow-2xs font-semibold'
+                  : 'text-[#71717A] hover:text-[#18181B]'
+              }`}
+            >
+              今日
+            </button>
+            <button
+              onClick={() => setTimeframe('7d')}
+              className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                timeframe === '7d'
+                  ? 'bg-white text-[#D96B27] shadow-2xs font-semibold'
+                  : 'text-[#71717A] hover:text-[#18181B]'
+              }`}
+            >
+              近 7 天
+            </button>
+            <button
+              onClick={() => setTimeframe('30d')}
+              className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                timeframe === '30d'
+                  ? 'bg-white text-[#D96B27] shadow-2xs font-semibold'
+                  : 'text-[#71717A] hover:text-[#18181B]'
+              }`}
+            >
+              本月
+            </button>
+          </div>
+
+          <button
+            onClick={() => alert('已导出 Token 审计报表')}
+            className="px-3 py-1.5 rounded-lg bg-white border border-black/[0.08] shadow-2xs text-xs font-medium text-[#18181B] hover:border-[#D96B27] flex items-center gap-1.5 transition-all cursor-pointer"
+          >
+            <Download size={13} className="text-[#71717A]" />
+            <span>导出报表</span>
+          </button>
+
+          <button
+            onClick={() => setActivityTab('chat')}
+            className="px-3 py-1.5 rounded-lg bg-[#18181B] hover:bg-[#D96B27] text-white text-xs font-medium flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+          >
+            <X size={13} />
+            <span>关闭大盘</span>
+          </button>
         </div>
       </div>
 
-      {/* 四大 KPI 仪表盘 */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white p-4 rounded-xl border border-[#EADFD7] shadow-2xs flex flex-col justify-between">
-          <div className="flex items-center justify-between text-xs text-[#7A726B]">
-            <span>今日 Tokens 吞吐</span>
-            <Coins size={15} className="text-[#D96B27]" />
+      {/* 4 大核心 KPI 指标卡片 (严格对齐原型) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* KPI 1: 今日 Token 总吞吐 */}
+        <div className="p-4 rounded-2xl bg-white border border-black/[0.08] shadow-2xs space-y-2">
+          <div className="flex items-center justify-between text-xs text-[#71717A]">
+            <span className="font-medium">今日 Tokens 吞吐</span>
+            <span className="text-[10px] text-[#10A37F] font-bold bg-[#10A37F]/10 px-1.5 py-0.5 rounded">
+              ↑ 18.4%
+            </span>
           </div>
-          <div className="text-2xl font-bold text-[#2C2825] my-2">342,850</div>
-          <div className="text-[11px] text-[#52D17C] flex items-center gap-1 font-medium">
-            <TrendingUp size={11} /> 环比昨日 +18.4%
+          <div className="text-2xl font-bold font-mono text-[#18181B] tracking-tight">342,850</div>
+          <div className="flex items-center justify-between text-[11px] text-[#A1A1AA] pt-1 border-t border-black/[0.04]">
+            <span>输入: 215.4k</span>
+            <span>输出: 127.4k</span>
           </div>
         </div>
 
-        <div className="bg-white p-4 rounded-xl border border-[#EADFD7] shadow-2xs flex flex-col justify-between">
-          <div className="flex items-center justify-between text-xs text-[#7A726B]">
-            <span>预估计费支出</span>
-            <span className="text-[10px] bg-[#F4EFEA] text-[#7A726B] px-1.5 py-0.5 rounded font-mono">日限额 ¥50</span>
+        {/* KPI 2: 预估累计费用 */}
+        <div className="p-4 rounded-2xl bg-white border border-black/[0.08] shadow-2xs space-y-2">
+          <div className="flex items-center justify-between text-xs text-[#71717A]">
+            <span className="font-medium">预估计费支出</span>
+            <span className="text-[10px] text-[#D96B27] font-bold bg-[#D96B27]/10 px-1.5 py-0.5 rounded">
+              配额正常
+            </span>
           </div>
-          <div className="text-2xl font-bold text-[#2C2825] my-2">¥ 4.28 <span className="text-xs font-normal text-[#7A726B]">($0.61)</span></div>
-          <div className="text-[11px] text-[#7A726B]">当前水位 8.5%</div>
+          <div className="text-2xl font-bold font-mono text-[#D96B27] tracking-tight">
+            ¥ 4.28 <span className="text-xs text-[#A1A1AA] font-normal">($0.61)</span>
+          </div>
+          <div className="flex items-center justify-between text-[11px] text-[#A1A1AA] pt-1 border-t border-black/[0.04]">
+            <span>单日预算上限: ¥50.00</span>
+            <span className="text-[#10A37F] font-medium">8.5% 使用率</span>
+          </div>
         </div>
 
-        <div className="bg-white p-4 rounded-xl border border-[#EADFD7] shadow-2xs flex flex-col justify-between">
-          <div className="flex items-center justify-between text-xs text-[#7A726B]">
-            <span>平均首字延迟 (TTFT)</span>
-            <Zap size={15} className="text-[#D96B27]" />
+        {/* KPI 3: 平均首字延迟 TTFT */}
+        <div className="p-4 rounded-2xl bg-white border border-black/[0.08] shadow-2xs space-y-2">
+          <div className="flex items-center justify-between text-xs text-[#71717A]">
+            <span className="font-medium">平均首字延迟 (TTFT)</span>
+            <span className="text-[10px] text-[#10A37F] font-bold bg-[#10A37F]/10 px-1.5 py-0.5 rounded">
+              极速
+            </span>
           </div>
-          <div className="text-2xl font-bold text-[#2C2825] my-2">480ms</div>
-          <div className="text-[11px] text-[#52D17C] font-medium">极速流式响应</div>
+          <div className="text-2xl font-bold font-mono text-[#18181B] tracking-tight">
+            480 <span className="text-xs text-[#A1A1AA] font-normal">ms</span>
+          </div>
+          <div className="flex items-center justify-between text-[11px] text-[#A1A1AA] pt-1 border-t border-black/[0.04]">
+            <span>DeepSeek: 420ms</span>
+            <span>Claude: 1,150ms</span>
+          </div>
         </div>
 
-        <div className="bg-white p-4 rounded-xl border border-[#EADFD7] shadow-2xs flex flex-col justify-between">
-          <div className="flex items-center justify-between text-xs text-[#7A726B]">
-            <span>Prompt Cache 节省率</span>
-            <Sparkles size={15} className="text-[#D96B27]" />
+        {/* KPI 4: Prompt Cache 缓存节省率 */}
+        <div className="p-4 rounded-2xl bg-white border border-black/[0.08] shadow-2xs space-y-2">
+          <div className="flex items-center justify-between text-xs text-[#71717A]">
+            <span className="font-medium">Prompt Cache 节省率</span>
+            <span className="text-[10px] text-purple-700 font-bold bg-purple-100 px-1.5 py-0.5 rounded">
+              深度优化
+            </span>
           </div>
-          <div className="text-2xl font-bold text-[#D96B27] my-2">82.4%</div>
-          <div className="text-[11px] text-[#7A726B]">节约 ~210,000 Tokens</div>
+          <div className="text-2xl font-bold font-mono text-purple-700 tracking-tight">82.4%</div>
+          <div className="flex items-center justify-between text-[11px] text-[#A1A1AA] pt-1 border-t border-black/[0.04]">
+            <span>今日省下 182k Tokens</span>
+            <span className="text-purple-600 font-medium">节约 ¥2.36</span>
+          </div>
         </div>
       </div>
 
-      {/* 模型占比条速览 */}
-      <div className="bg-white p-5 rounded-xl border border-[#EADFD7] shadow-2xs">
-        <h3 className="text-xs font-semibold text-[#2C2825] uppercase tracking-wider mb-3">活跃模型调度占比</h3>
-        <div className="w-full h-3 bg-[#F4EFEA] rounded-full overflow-hidden flex">
-          <div style={{ width: '65%' }} className="bg-[#D96B27]" title="DeepSeek-V4: 65%" />
-          <div style={{ width: '25%' }} className="bg-[#C15F22]" title="Claude-3.7-Sonnet: 25%" />
-          <div style={{ width: '10%' }} className="bg-[#2C2825]" title="GPT-4o: 10%" />
+      {/* 详细厂商大模型调用明细卡片 */}
+      <div className="p-5 rounded-2xl bg-white border border-black/[0.08] shadow-2xs space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-bold text-[#18181B] flex items-center gap-1.5">
+            <span>🤖</span>
+            <span>各厂商大模型调用明细与负载占比</span>
+          </h3>
+          <span className="text-xs text-[#A1A1AA]">按 Tokens 消耗排序</span>
         </div>
-        <div className="flex items-center gap-4 text-xs text-[#7A726B] mt-3">
-          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-[#D96B27]" /> DeepSeek-V4 (65%)</span>
-          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-[#C15F22]" /> Claude 3.7 (25%)</span>
-          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-[#2C2825]" /> GPT-4o (10%)</span>
+
+        {/* 模型 1: DeepSeek-V4 */}
+        <div className="p-3.5 rounded-xl bg-[#FAF8F5] border border-black/[0.06] space-y-2">
+          <div className="flex items-center justify-between text-xs">
+            <div className="flex items-center gap-2">
+              <span className="font-mono font-bold text-[#18181B]">DeepSeek-V4-Flash</span>
+              <span className="text-[10px] text-[#10A37F] bg-[#10A37F]/10 px-1.5 py-0.2 rounded font-mono">
+                主力日常
+              </span>
+            </div>
+            <div className="font-mono text-xs">
+              <span className="font-bold text-[#D96B27]">234,100</span>{' '}
+              <span className="text-[#A1A1AA] text-[10px]">Tokens (68.3%)</span>
+            </div>
+          </div>
+          <div className="w-full h-2 rounded-full bg-black/[0.06] overflow-hidden">
+            <div className="h-full bg-[#D96B27] rounded-full" style={{ width: '68.3%' }} />
+          </div>
+          <div className="flex items-center justify-between text-[11px] text-[#71717A] pt-1">
+            <span>调用 142 次 · 平均耗时 420ms</span>
+            <span>
+              预估费用: <strong className="text-[#18181B] font-mono">¥ 1.17</strong>
+            </span>
+          </div>
+        </div>
+
+        {/* 模型 2: GPT-5.6 Sol */}
+        <div className="p-3.5 rounded-xl bg-[#FAF8F5] border border-black/[0.06] space-y-2">
+          <div className="flex items-center justify-between text-xs">
+            <div className="flex items-center gap-2">
+              <span className="font-mono font-bold text-[#18181B]">GPT-5.6-Sol</span>
+              <span className="text-[10px] text-blue-700 bg-blue-50 px-1.5 py-0.2 rounded font-mono">
+                极速推理
+              </span>
+            </div>
+            <div className="font-mono text-xs">
+              <span className="font-bold text-[#D96B27]">86,400</span>{' '}
+              <span className="text-[#A1A1AA] text-[10px]">Tokens (25.2%)</span>
+            </div>
+          </div>
+          <div className="w-full h-2 rounded-full bg-black/[0.06] overflow-hidden">
+            <div className="h-full bg-blue-600 rounded-full" style={{ width: '25.2%' }} />
+          </div>
+          <div className="flex items-center justify-between text-[11px] text-[#71717A] pt-1">
+            <span>调用 38 次 · 平均耗时 1.1s</span>
+            <span>
+              预估费用: <strong className="text-[#18181B] font-mono">¥ 2.59</strong>
+            </span>
+          </div>
         </div>
       </div>
     </div>

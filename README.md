@@ -210,6 +210,24 @@ Tcode 打破了单体硬编码调度逻辑，将 Agent 的执行循环、能力�
 * **Agent 自主构建与验证算子 (`exec_command`)**：
   * 注册进微内核执行引擎，赋予 ReAct 智能体修改代码后自主执行单测（`npm test`）与编译构建（`go build`）的自愈闭环能力。
 
+### 16. 高保真原型架构 100% 像素级对齐 (High-Fidelity Prototype Architecture Alignment)
+* **顶层沉浸式标题栏 (`Titlebar.tsx`)**：
+  * 高度严格锁定 38px，左侧呈现 `T` Logo、项目与分支徽标以及 `DeepSeek-V4 · 就绪` 绿色微核探针；
+  * 中间集成单焦点工作区胶囊（`💬 智能对话` / `◫ 双栏协同` / `📝 代码工作区`）；
+  * 右侧快捷集成终端抽屉开关、全局设置弹窗与原生窗口控制。
+* **左侧 48px 极简活动栏与 260px 次级多功能抽屉 (`ActivityBar.tsx` & `LeftSidebar.tsx`)**：
+  * 48px 活动栏挂载 7 大功能（`chat`, `files`, `git`, `usage`, `kg`, `mcp`, `terminal`），激活态伴随陶土暖橙左指示线；
+  * 260px 次级抽屉实现平滑切换：会话分支抽屉（多工程折叠、`#标签` 快速筛选、分支切换与新建）、工程文件目录树、Git 源代码管理抽屉（分支徽标、AI 提炼提交信息、双层暂存列表）。
+* **智能对话工作台与代码 Diff 深度联动 (`ChatCockpit.tsx` & `CodeWorkspace.tsx`)**：
+  * 顶部多会话 Tab 切换与代码区展开/收起按钮；
+  * 消息流完整呈现深度心智思考链卡片、多算子调用抽屉日志（`run_command`, `replace_file_content`, `invoke_subagent`, `tdd_test_runner`）；
+  * **改动文件卡片组**：展示改动文件列表（`~M` / `+A`）与增删行数统计，点击 `查看 Diff` 立即在右侧 Monaco 打开行级双栏对比；
+  * 底部高级输入舱挂载 `@` 引用弹窗（会话与技能）、`/` 快捷指令弹窗、`Act 极速双环` 标识与 `需人工审核` 切换开关；
+  * 右侧暖炭黑（`#1E1C1A`）代码审查台配备 `✕ 放弃` 与 `✓ 一键采纳`。
+* **模型使用量全景大盘与知识图谱弹窗 (`UsageCockpit.tsx` & `KnowledgeGraphModal.tsx`)**：
+  * 4 大核心 KPI 指标卡片（Tokens 吞吐、计费支出、TTFT、Prompt Cache 节省率）与多厂商调用明细；
+  * 知识图谱实体拓扑、架构决策 (ADR) 审查与核心代码文件约束呈现。
+
 ---
 
 ## 🎨 四、视觉与人机工程学规范
