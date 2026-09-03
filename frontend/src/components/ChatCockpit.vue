@@ -1,5 +1,23 @@
 <template>
-  <main class="flex-1 bg-[#FAF8F5] flex flex-col justify-between overflow-hidden relative font-sans">
+  <main
+    class="flex-1 bg-[#FAF8F5] flex flex-col justify-between overflow-hidden relative font-sans"
+    @dragover.prevent="isDraggingOver = true"
+    @dragenter.prevent="isDraggingOver = true"
+    @dragleave.prevent="isDraggingOver = false"
+    @drop.prevent="handleDrop"
+  >
+    <!-- 原生文件拖拽放置全屏浮层 (Drag & Drop Overlay) -->
+    <div
+      v-if="isDraggingOver"
+      class="absolute inset-0 bg-[#FAF8F5]/90 backdrop-blur-xs z-50 flex flex-col items-center justify-center border-2 border-dashed border-[#D96B27] m-3 rounded-2xl animate-in fade-in duration-150"
+    >
+      <div class="w-16 h-16 rounded-2xl bg-[#D96B27]/10 text-[#D96B27] flex items-center justify-center text-3xl mb-3 shadow-xs">
+        📎
+      </div>
+      <div class="text-base font-bold text-[#18181B]">松开鼠标，即可将文件注入 Agent 上下文</div>
+      <div class="text-xs text-[#71717A] mt-1 font-mono">支持 Go、Vue、TypeScript、Markdown、JSON 等工程文件</div>
+    </div>
+
     <!-- 顶栏: 场景标签、真实多模型切换器与收起代码按钮 -->
     <header class="h-10 min-h-[40px] bg-[#FAF8F5] border-b border-black/[0.08] px-3 flex items-center justify-between text-xs select-none z-10 shrink-0">
       <div class="flex items-center gap-2">
@@ -68,7 +86,7 @@
                 <div class="flex items-center gap-2 min-w-0">
                   <span class="w-5 h-5 rounded-md bg-[#18181B] text-white flex items-center justify-center font-mono text-[10px] font-bold">$_</span>
                   <span class="text-xs font-mono font-bold text-[#18181B]">{{ msg.tool.name }}</span>
-                  <span class="text-xs font-mono text-[#52525B] bg-[#FAF8F5] border border-black/[0.06] px-2 py-0.5 rounded truncate max-w-md">{{ msg.tool.args.command || JSON.stringify(msg.tool.args) }}</span>
+                  <span class="text-xs font-mono text-[#52525B] bg-[#FAF8F5] border border-black/[0.06] px-2 py-0.5 rounded truncate max-w-md">{{ typeof msg.tool.args === 'string' ? msg.tool.args : (msg.tool.args.command || JSON.stringify(msg.tool.args)) }}</span>
                 </div>
                 <div class="flex items-center gap-2 shrink-0">
                   <span class="text-[10px] text-[#10A37F] font-mono font-bold">● 执行成功</span>
@@ -134,17 +152,23 @@
 
     <!-- 底部输入胶囊舱 (Prompt Capsule) -->
     <div class="p-3 bg-[#FAF8F5] border-t border-black/[0.06] select-none relative">
-      <!-- @ 引用浮层菜单 -->
-      <div v-if="showMentionMenu" class="absolute left-4 bottom-20 w-64 bg-white rounded-xl shadow-xl border border-black/[0.1] p-2 space-y-1 z-50 text-xs">
-        <div class="px-2 py-1 text-[10px] font-bold text-[#71717A] uppercase border-b border-black/[0.04]">引用上下文 (@)</div>
+      <!-- 真实全工程文件检索 @ 引用浮层菜单 -->
+      <div v-if="showMentionMenu" class="absolute left-4 bottom-20 w-80 max-h-64 overflow-y-auto bg-white rounded-xl shadow-xl border border-black/[0.1] p-2 space-y-1 z-50 text-xs">
+        <div class="px-2 py-1 text-[10px] font-bold text-[#71717A] uppercase border-b border-black/[0.04] flex items-center justify-between">
+          <span>引用工程代码上下文 (@)</span>
+          <span class="text-[9px] font-mono text-[#D96B27]">{{ filteredProjectFiles.length }} 个文件</span>
+        </div>
         <div
-          v-for="item in mentionItems"
-          :key="item.label"
-          @click="insertMention(item.label)"
-          class="px-2 py-1.5 rounded-lg hover:bg-[#D96B27]/10 hover:text-[#D96B27] cursor-pointer flex items-center justify-between"
+          v-for="item in filteredProjectFiles"
+          :key="item.path"
+          @click="insertMention(item.path)"
+          class="px-2 py-1.5 rounded-lg hover:bg-[#D96B27]/10 hover:text-[#D96B27] cursor-pointer flex items-center justify-between transition-colors"
         >
-          <span class="font-medium">{{ item.label }}</span>
-          <span class="text-[10px] text-[#A1A1AA]">{{ item.type }}</span>
+          <div class="flex items-center gap-2 min-w-0">
+            <span>📄</span>
+            <span class="font-mono truncate">{{ item.path }}</span>
+          </div>
+          <span class="text-[10px] text-[#A1A1AA] font-mono shrink-0">{{ item.ext }}</span>
         </div>
       </div>
 
@@ -162,14 +186,14 @@
         </div>
       </div>
 
-      <!-- 真实附件预览托盘 -->
+      <!-- 真实附件预览托盘 (含原生拖拽入库) -->
       <div v-if="attachedFiles.length" class="flex items-center gap-1.5 pb-2 overflow-x-auto no-scrollbar">
         <div
           v-for="(file, idx) in attachedFiles"
           :key="idx"
           class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white border border-black/[0.08] text-xs font-mono shadow-2xs text-[#18181B]"
         >
-          <span>📄</span>
+          <span class="text-[#D96B27]">📎</span>
           <span class="truncate max-w-xs">{{ file }}</span>
           <button @click="attachedFiles.splice(idx, 1)" class="text-[#71717A] hover:text-red-500 cursor-pointer">✕</button>
         </div>
@@ -178,9 +202,10 @@
       <!-- 核心输入卡片 -->
       <div class="rounded-2xl bg-white border border-black/[0.12] shadow-sm focus-within:border-[#D96B27] focus-within:ring-2 focus-within:ring-[#D96B27]/15 transition-all p-2.5 flex flex-col gap-2">
         <textarea
+          ref="textareaRef"
           v-model="inputPrompt"
           rows="2"
-          :placeholder="store.isFullAuto ? '给 Tcode Agent 发送指令 (⚡ 全自动免审核模式：Agent 自主闭环执行代码写入与终端命令)...' : '给 Tcode Agent 发送指令 (输入 @ 引用工程，输入 / 调起算子，Enter 发送)...'"
+          :placeholder="store.isFullAuto ? '给 Tcode Agent 发送指令 (⚡ 全自动免审核模式：Agent 自主闭环执行代码写入与终端命令)...' : '给 Tcode Agent 发送指令 (支持直接拖拽文件入内，输入 @ 检索工程，/ 调起算子)...'"
           class="w-full text-xs text-[#18181B] placeholder-[#A1A1AA] bg-transparent focus:outline-none resize-none leading-relaxed"
           @keydown="handleKeydown"
           @keydown.enter.prevent="handleSend"
@@ -196,8 +221,8 @@
             >
               <span>📎</span><span>上传</span>
             </button>
-            <button @click="toggleMention" class="px-2 py-1 rounded-full text-xs text-[#52525B] hover:text-[#18181B] hover:bg-black/[0.04] cursor-pointer">@</button>
-            <button @click="toggleCommand" class="px-2 py-1 rounded-full text-xs text-[#52525B] hover:text-[#18181B] hover:bg-black/[0.04] cursor-pointer">/</button>
+            <button @click="toggleMention" class="px-2 py-1 rounded-full text-xs text-[#52525B] hover:text-[#18181B] hover:bg-black/[0.04] cursor-pointer" title="引用工程文件">@</button>
+            <button @click="toggleCommand" class="px-2 py-1 rounded-full text-xs text-[#52525B] hover:text-[#18181B] hover:bg-black/[0.04] cursor-pointer" title="调起算子">/</button>
             <div class="h-3.5 w-px bg-black/[0.1] mx-1"></div>
 
             <!-- Act 双环模式标识 -->
@@ -240,29 +265,25 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, nextTick } from 'vue'
+import { ref, reactive, computed, onMounted, nextTick } from 'vue'
 import { useChatStore } from '../stores/chatStore'
-import { wailsBridge } from '../core/wailsBridge'
+import { wailsBridge, type FileNode } from '../core/wailsBridge'
 import { renderMarkdown } from '../core/markdown'
 
 const store = useChatStore()
 const inputPrompt = ref('')
 const selectedModel = ref('deepseek-v4-flash')
 const messageListRef = ref<HTMLDivElement | null>(null)
+const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const isToolLogOpen = ref(true)
 const attachedFiles = ref<string[]>([])
 const currentSessionTitle = ref('架构重构与执行流设计')
 const dynamicallyModifiedFiles = ref<any[]>([])
 
+const isDraggingOver = ref(false)
 const showMentionMenu = ref(false)
 const showCommandMenu = ref(false)
-
-const mentionItems = [
-  { label: 'main.go', type: '代码文件' },
-  { label: 'app.go', type: '代码文件' },
-  { label: 'wails.json', type: '工程配置' },
-  { label: 'TDD 自愈技能', type: 'Agent 技能' }
-]
+const allProjectFiles = ref<{ path: string; ext: string }[]>([])
 
 const commandItems = [
   { command: '/test', desc: '运行项目全量单元测试并检查红绿灯' },
@@ -290,6 +311,51 @@ const allModifiedFiles = computed(() => {
   return [...baseModifiedFiles, ...dynamicallyModifiedFiles.value]
 })
 
+// 加载全工程文件供 @ 检索
+onMounted(async () => {
+  try {
+    const tree = await wailsBridge.getFileTree()
+    const flat: { path: string; ext: string }[] = []
+    const traverse = (nodes: FileNode[]) => {
+      for (const n of nodes) {
+        if (n.is_dir && n.children) {
+          traverse(n.children)
+        } else if (!n.is_dir) {
+          const parts = n.path.split('.')
+          flat.push({
+            path: n.path,
+            ext: parts.length > 1 ? '.' + parts.pop() : ''
+          })
+        }
+      }
+    }
+    traverse(tree)
+    allProjectFiles.value = flat
+  } catch (err) {
+    console.error('Failed to load project files for mention:', err)
+  }
+})
+
+const filteredProjectFiles = computed(() => {
+  return allProjectFiles.value.slice(0, 15)
+})
+
+// 原生拖拽上传处理
+function handleDrop(e: DragEvent) {
+  isDraggingOver.value = false
+  if (!e.dataTransfer) return
+
+  const files = e.dataTransfer.files
+  if (files && files.length > 0) {
+    for (let i = 0; i < files.length; i++) {
+      const f = files[i]
+      if (!attachedFiles.value.includes(f.name)) {
+        attachedFiles.value.push(f.name)
+      }
+    }
+  }
+}
+
 function handleKeydown(e: KeyboardEvent) {
   if (e.key === '@') {
     showMentionMenu.value = true
@@ -313,8 +379,8 @@ function toggleCommand() {
   showMentionMenu.value = false
 }
 
-function insertMention(label: string) {
-  inputPrompt.value += `@${label} `
+function insertMention(path: string) {
+  inputPrompt.value += `@${path} `
   showMentionMenu.value = false
 }
 
@@ -323,7 +389,6 @@ function insertCommand(cmd: string) {
   showCommandMenu.value = false
 }
 
-// 调起真实系统文件选择窗口
 async function triggerUpload() {
   try {
     const selected = await wailsBridge.openFileDialog()
@@ -339,17 +404,21 @@ async function triggerUpload() {
   }
 }
 
-// 真实发送消息并通过 Wails 管道流式推送真实大模型推理与 Function Calling 算子
 async function handleSend() {
-  const prompt = inputPrompt.value.trim()
+  let prompt = inputPrompt.value.trim()
   if (!prompt || store.isStreaming) return
 
+  // 若存在拖拽或上传的附件，附加至 Prompt
+  if (attachedFiles.value.length > 0) {
+    prompt += `\n[附件参考文件]: ${attachedFiles.value.join(', ')}`
+  }
+
   inputPrompt.value = ''
+  attachedFiles.value = []
   showMentionMenu.value = false
   showCommandMenu.value = false
   store.isStreaming = true
 
-  // 1. 追加用户消息
   const userMsgId = 'msg_' + Date.now()
   store.appendMessage({
     id: userMsgId,
@@ -358,7 +427,6 @@ async function handleSend() {
     time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
   })
 
-  // 2. 准备 Assistant 消息骨架
   const assistantMsgId = 'asst_' + Date.now()
   store.appendMessage({
     id: assistantMsgId,
@@ -373,7 +441,6 @@ async function handleSend() {
     messageListRef.value.scrollTop = messageListRef.value.scrollHeight
   }
 
-  // 3. 发起真实流式大模型推理
   try {
     await wailsBridge.sendMessage(
       {
