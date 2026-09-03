@@ -2,7 +2,9 @@
 
 > **设计哲学**：单一主轴、高度解耦、积木思想、Harness 治具思想、ReAct 循环思想，拒绝过度封装。  
 > 基于 **Tauri v2 (Rust 原生内核) + React 19 + TypeScript + GatewayBus 积木总线**。  
-> 💡 **Go 插件式微内核专项架构规约**：详见 [ARCHITECTURE_GO_PLUGIN_CORE.md](./ARCHITECTURE_GO_PLUGIN_CORE.md)
+> 💡 **Go 插件式微内核专项架构规约**：详见 [ARCHITECTURE_GO_PLUGIN_CORE.md](./ARCHITECTURE_GO_PLUGIN_CORE.md)  
+> 📌 **后端 Go 插件微内核落地实施计划**：详见 [PLAN_GO_BACKEND_IMPLEMENTATION.md](./PLAN_GO_BACKEND_IMPLEMENTATION.md)  
+> 📌 **前端工程落地实施计划**：详见 [PLAN_FRONTEND_IMPLEMENTATION.md](./PLAN_FRONTEND_IMPLEMENTATION.md)
 
 ---
 
