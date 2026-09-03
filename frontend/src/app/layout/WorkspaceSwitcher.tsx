@@ -1,4 +1,4 @@
-﻿import React from 'react'
+import React from 'react'
 import { MessageSquare, Columns2, Code2 } from 'lucide-react'
 import { useWorkspaceStore, WorkspaceMode } from '../../core/store/workspaceStore'
 

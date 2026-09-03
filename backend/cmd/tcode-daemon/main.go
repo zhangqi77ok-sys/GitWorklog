@@ -9,14 +9,16 @@ import (
 	"time"
 
 	"tcode/internal/host"
+	transporthttp "tcode/internal/transport/http"
+	"tcode/plugins/provider/openai"
 )
 
 const (
-	Version   = "2.0.0-PROD"
-	Banner    = `
+	Version = "2.0.0-PROD"
+	Banner  = `
  _____               _        ____                                   
 |_   _|__ ___   __| | ___  |  _ \  __ _  ___ _ __ ___   ___  _ __  
-  | |/ __/ _ \ / _` |/ _ \ | | | |/ _` |/ _ \ '_ ` _ \ / _ \| '_ \ 
+  | |/ __/ _ \ / _` + "`" + ` |/ _ \ | | | |/ _` + "`" + ` |/ _ \ '_ ` + "`" + ` _ \ / _ \| '_ \ 
   | | (_| (_) | (_| |  __/ | |_| | (_| |  __/ | | | | | (_) | | | |
   |_|\___\___/ \__,_|\___| |____/ \__,_|\___|_| |_| |_|\___/|_| |_|
                Tcode Micro-Kernel Daemon (Go Edition)
@@ -27,28 +29,34 @@ func main() {
 	fmt.Println(Banner)
 	fmt.Printf("[Tcode] Starting Micro-Kernel Daemon v%s...\n", Version)
 
-	// 1. 初始化插件宿主引擎
+	// 1. 初始化插件宿主引擎与注册核心 Provider
 	reg := host.NewRegistry()
-	fmt.Printf("[Tcode] Plugin Registry initialized successfully. Ready for SPI registration.\n")
+	openaiProv := openai.NewProvider()
+	if err := reg.Register(openaiProv); err != nil {
+		fmt.Printf("[Tcode] Failed to register openai provider: %v\n", err)
+	} else {
+		fmt.Printf("[Tcode] Registered plugin: [%s] (%s v%s)\n", openaiProv.ID(), openaiProv.Name(), openaiProv.Version())
+	}
 
-	// 2. 准备上下文与优雅退出通道
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	// 2. 启动本地环回 HTTP/SSE 服务 (127.0.0.1:8765)
+	srv := transporthttp.NewServer("127.0.0.1:8765", reg)
+	go func() {
+		fmt.Println("[Tcode] HTTP/SSE Server listening on http://127.0.0.1:8765")
+		if err := srv.Start(); err != nil && err.Error() != "http: Server closed" {
+			fmt.Printf("[Tcode] HTTP Server error: %v\n", err)
+		}
+	}()
 
+	// 3. 阻塞等待优雅停机信号
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 
-	fmt.Println("[Tcode] Micro-Kernel listening on 127.0.0.1 (Loopback IPC). Press Ctrl+C to stop.")
-
-	// 3. 阻塞等待停机信号
 	sig := <-sigChan
 	fmt.Printf("\n[Tcode] Received shutdown signal: %v. Cleaning up resources...\n", sig)
 
-	// 给插件释放资源预留 3 秒超时
-	shutdownCtx, shutdownCancel := context.WithTimeout(ctx, 3*time.Second)
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer shutdownCancel()
 
-	_ = reg
-	_ = shutdownCtx
-	fmt.Println("[Tcode] Daemon gracefully stopped.")
+	_ = srv.Stop(shutdownCtx)
+	fmt.Println("[Tcode] Micro-Kernel gracefully stopped.")
 }

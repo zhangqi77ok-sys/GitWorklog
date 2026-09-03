@@ -1,4 +1,4 @@
-﻿import { create } from 'zustand'
+import { create } from 'zustand'
 
 export type WorkspaceMode = 'chat' | 'split' | 'editor'
 export type ActivityTab = 'chat' | 'files' | 'git' | 'usage' | 'settings'

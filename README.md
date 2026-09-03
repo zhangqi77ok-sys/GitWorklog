@@ -140,6 +140,19 @@ Tcode 打破了单体硬编码调度逻辑，将 Agent 的执行循环、能力�
   * 完整落地 Warm Minimalist 调色盘（`#FAF8F5` / `#F4EFEA` / `#D96B27`）与 16:9 人机工学单焦点视口布局；
   * 顶栏单焦点切换胶囊（`💬 对话` / `◫ 双栏协同` / `📝 代码区`）、48px 侧边活动栏、生产级双层 Git 源码控制面板与集成终端抽屉（`Ctrl + \`` 全局快捷唤起）。
 
+### 10. 首条端到端流式推理闭环与深度思考卡片 (End-to-End Streaming Loop & Thinking Block)
+* **首个模型驱动插件落地 (`backend/plugins/provider/openai/`)**：
+  * 基于 `net/http` 原生实现 OpenAI / DeepSeek SSE 流式长连接；
+  * 自动识别并无损剥离 `<think>...</think>` 思考流与正文流，实时统计 Token 消耗；
+  * 提供轻量 `Ping()` 探针，毫秒级探测网络 TTFT 表现。
+* **本地环回 SSE 传输服务 (`backend/internal/transport/http/`)**：
+  * 监听 `127.0.0.1:8765`，暴露 `/api/health` 探活与 `/api/chat/stream` SSE 流式端点；
+  * **客户端断开级联取消**：当检测到前端断连时，立即中止向上游模型的拉取协程，杜绝 Token 浪费。
+* **前端流式解码与人机交互 (`frontend/src/`)**：
+  * **流式客户端 (`core/transport/sseClient.ts`)**：基于 `ReadableStream` 逐帧解析，解决 UTF-8 多字节分片乱码；
+  * **深度思考折叠卡片 (`app/chat/ThinkingBlock.tsx`)**：思考中呼吸指示灯 + 思考完毕紧凑折叠，支持随时展开查阅思维链；
+  * **平滑打字机上屏**：助手回复平滑逐字增量流式渲染，附带打字防抖与自动平滑滚动。
+
 ---
 
 ## 🎨 四、视觉与人机工程学规范

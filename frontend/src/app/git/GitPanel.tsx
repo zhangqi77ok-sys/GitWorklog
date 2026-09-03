@@ -1,4 +1,4 @@
-﻿import React from 'react'
+import React from 'react'
 import { Plus, RotateCcw, Check, Sparkles, GitBranch } from 'lucide-react'
 
 export const GitPanel: React.FC = () => {

@@ -1,4 +1,4 @@
-﻿import React from 'react'
+import React from 'react'
 import { MessageSquare, FolderGit2, BarChart3, Terminal, Settings } from 'lucide-react'
 import { useWorkspaceStore, ActivityTab } from '../../core/store/workspaceStore'
 

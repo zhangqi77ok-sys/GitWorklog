@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react'
+import React, { useState } from 'react'
 import { Terminal, Activity, ShieldCheck, X, Maximize2, Minimize2, Trash2 } from 'lucide-react'
 import { useWorkspaceStore } from '../../core/store/workspaceStore'
 

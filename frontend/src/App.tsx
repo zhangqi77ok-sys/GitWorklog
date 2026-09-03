@@ -1,14 +1,19 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, useState, useRef } from 'react'
 import { ActivityBar } from './app/layout/ActivityBar'
 import { WorkspaceSwitcher } from './app/layout/WorkspaceSwitcher'
 import { TerminalDrawer } from './app/terminal/TerminalDrawer'
 import { GitPanel } from './app/git/GitPanel'
 import { UsageCockpit } from './app/analytics/UsageCockpit'
+import { MessageBubble } from './app/chat/MessageBubble'
 import { useWorkspaceStore } from './core/store/workspaceStore'
-import { Cpu, Bot, Code2, Send } from 'lucide-react'
+import { useChatStore } from './core/store/chatStore'
+import { Cpu, Code2, Send, Loader2, Sparkles } from 'lucide-react'
 
 export const App: React.FC = () => {
   const { mode, activityTab, toggleTerminal } = useWorkspaceStore()
+  const { messages, isStreaming, sendMessage, currentModel, setCurrentModel } = useChatStore()
+  const [inputPrompt, setInputPrompt] = useState('')
+  const chatBottomRef = useRef<HTMLDivElement>(null)
 
   // 绑定全局快捷键 Ctrl + `
   useEffect(() => {
@@ -21,6 +26,24 @@ export const App: React.FC = () => {
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [toggleTerminal])
+
+  // 自动滚屏至底部
+  useEffect(() => {
+    chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages])
+
+  const handleSend = () => {
+    if (!inputPrompt.trim() || isStreaming) return
+    sendMessage(inputPrompt)
+    setInputPrompt('')
+  }
+
+  const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleSend()
+    }
+  }
 
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-[#FAF8F5]">
@@ -37,8 +60,17 @@ export const App: React.FC = () => {
         {/* 顶栏单焦点切换胶囊 */}
         <WorkspaceSwitcher />
 
-        {/* 右侧探针指示 */}
+        {/* 右侧探针指示与模型选择 */}
         <div className="flex items-center gap-2 text-xs text-[#7A726B]">
+          <select
+            value={currentModel}
+            onChange={(e) => setCurrentModel(e.target.value)}
+            className="bg-white border border-[#EADFD7] rounded text-[11px] px-2 py-0.5 text-[#2C2825] focus:outline-none focus:border-[#D96B27]"
+          >
+            <option value="gpt-4o">GPT-4o (Omni)</option>
+            <option value="deepseek-chat">DeepSeek-V4</option>
+            <option value="deepseek-reasoner">DeepSeek-R1 (Thinking)</option>
+          </select>
           <span className="flex items-center gap-1">
             <span className="w-1.5 h-1.5 rounded-full bg-[#52D17C] animate-pulse" />
             <Cpu size={12} />
@@ -62,27 +94,34 @@ export const App: React.FC = () => {
             {/* 对话工作区 */}
             {(mode === 'chat' || mode === 'split') && (
               <section className="flex-1 flex flex-col bg-white border-r border-[#EADFD7] relative">
-                <div className="flex-1 p-4 overflow-y-auto flex flex-col gap-3">
-                  <div className="flex items-start gap-2.5 max-w-2xl">
-                    <div className="w-7 h-7 rounded-full bg-[#FAF2EC] border border-[#F0D5C3] text-[#D96B27] flex items-center justify-center shrink-0">
-                      <Bot size={15} />
-                    </div>
-                    <div className="bg-[#FAF8F5] border border-[#EADFD7] p-3 rounded-xl text-xs text-[#2C2825] leading-relaxed shadow-2xs">
-                      你好！Tcode 生产级微内核与前端基础框架已就绪。
-                      已原生配置 OpenAI 与 Claude 双轨上游协议支持，支持通过按键 <kbd className="px-1 py-0.5 bg-white border border-[#D9D0C7] rounded text-[10px] font-mono">Ctrl + `</kbd> 呼出集成终端抽屉。
-                    </div>
-                  </div>
+                {/* 消息滚动流 */}
+                <div className="flex-1 p-4 overflow-y-auto flex flex-col">
+                  {messages.map((msg) => (
+                    <MessageBubble key={msg.id} message={msg} />
+                  ))}
+                  <div ref={chatBottomRef} />
                 </div>
 
                 {/* 底部输入舱 */}
                 <div className="p-3 border-t border-[#EADFD7] bg-[#FAF8F5]/60 flex items-center gap-2">
-                  <input
-                    type="text"
-                    placeholder="输入指令或提问 (支持 @ 引用上下文，/ 调用算子)..."
-                    className="flex-1 text-xs px-3 py-2 rounded-lg border border-[#EADFD7] bg-white focus:outline-none focus:border-[#D96B27]"
-                  />
-                  <button className="p-2 bg-[#D96B27] hover:bg-[#BF5B1D] text-white rounded-lg transition-colors">
-                    <Send size={14} />
+                  <div className="relative flex-1">
+                    <input
+                      type="text"
+                      value={inputPrompt}
+                      onChange={(e) => setInputPrompt(e.target.value)}
+                      onKeyDown={handleInputKeyDown}
+                      placeholder={isStreaming ? '模型正在推理流式输出中...' : '输入指令 (按 Enter 发送，支持模型思考流)...'}
+                      disabled={isStreaming}
+                      className="w-full text-xs pl-3 pr-8 py-2 rounded-lg border border-[#EADFD7] bg-white focus:outline-none focus:border-[#D96B27] disabled:bg-gray-50 disabled:text-gray-400"
+                    />
+                    <Sparkles size={13} className="absolute right-2.5 top-2.5 text-[#A39B94]" />
+                  </div>
+                  <button
+                    onClick={handleSend}
+                    disabled={isStreaming || !inputPrompt.trim()}
+                    className="p-2 bg-[#D96B27] hover:bg-[#BF5B1D] disabled:bg-gray-300 text-white rounded-lg transition-colors cursor-pointer disabled:cursor-not-allowed"
+                  >
+                    {isStreaming ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
                   </button>
                 </div>
               </section>
@@ -93,7 +132,7 @@ export const App: React.FC = () => {
               <section className="flex-1 flex flex-col bg-[#FAF8F5]">
                 <div className="h-8 bg-[#F4EFEA] border-b border-[#EADFD7] flex items-center px-3 text-xs text-[#7A726B] font-mono gap-2">
                   <Code2 size={13} />
-                  <span>backend/pkg/plugin/v1/provider.go</span>
+                  <span>backend/plugins/provider/openai/openai_provider.go</span>
                 </div>
                 <div className="flex-1 p-4 font-mono text-xs text-[#2C2825] bg-white/70 overflow-auto">
                   <pre className="text-[#7A726B] select-text">

@@ -1,4 +1,4 @@
-﻿import React from 'react'
+import React from 'react'
 import { Coins, Zap, Sparkles, TrendingUp } from 'lucide-react'
 
 export const UsageCockpit: React.FC = () => {
