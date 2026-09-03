@@ -410,6 +410,14 @@ export const LeftSidebar: React.FC = () => {
               </div>
               <p className="text-[11px] text-[#71717A]">Windows CREATE_NO_WINDOW 零弹窗 Shell 管道</p>
             </div>
+
+            <button
+              onClick={() => useWorkspaceStore.getState().setMcpModalOpen(true)}
+              className="w-full py-2 px-3 rounded-xl bg-white hover:bg-[#FAF8F5] border border-dashed border-[#D96B27]/60 hover:border-[#D96B27] text-[#D96B27] font-semibold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-2xs mt-2"
+            >
+              <span>➕</span>
+              <span>添加 / 导入 MCP 协议服务</span>
+            </button>
           </div>
         </div>
       )}

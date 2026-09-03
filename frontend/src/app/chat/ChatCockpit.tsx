@@ -450,6 +450,16 @@ export const ChatCockpit: React.FC = () => {
                 <span>🧪 @tdd-test-runner</span>
                 <span className="text-[10px] text-[#10A37F]">内置技能</span>
               </div>
+              <div
+                onClick={() => {
+                  setIsAtPopupOpen(false)
+                  useWorkspaceStore.getState().setSkillModalOpen(true)
+                }}
+                className="p-2 rounded-xl bg-[#FAF8F5] hover:bg-[#D96B27]/10 text-[#D96B27] font-semibold cursor-pointer flex items-center justify-between border border-dashed border-[#D96B27]/40 mt-1"
+              >
+                <span>🛠️ 添加 / 导入自定义技能 (SKILL.md)</span>
+                <span className="text-[10px]">打开向导 ▾</span>
+              </div>
             </div>
           </div>
         )}

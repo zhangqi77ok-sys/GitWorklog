@@ -19,6 +19,8 @@ interface WorkspaceState {
   activityTab: ActivityTab
   isTerminalOpen: boolean
   isKgModalOpen: boolean
+  isMcpModalOpen: boolean
+  isSkillModalOpen: boolean
   isCodeWorkspaceOpen: boolean
   isCodeMaximized: boolean
   isApprovalMode: boolean
@@ -31,6 +33,8 @@ interface WorkspaceState {
   toggleTerminal: () => void
   setTerminalOpen: (open: boolean) => void
   setKgModalOpen: (open: boolean) => void
+  setMcpModalOpen: (open: boolean) => void
+  setSkillModalOpen: (open: boolean) => void
   setCodeWorkspaceOpen: (open: boolean) => void
   toggleCodeWorkspace: () => void
   toggleCodeMaximize: () => void
@@ -98,6 +102,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   activityTab: 'chat',
   isTerminalOpen: false,
   isKgModalOpen: false,
+  isMcpModalOpen: false,
+  isSkillModalOpen: false,
   isCodeWorkspaceOpen: true,
   isCodeMaximized: false,
   isApprovalMode: true,
@@ -110,6 +116,8 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   toggleTerminal: () => set((state) => ({ isTerminalOpen: !state.isTerminalOpen })),
   setTerminalOpen: (open) => set({ isTerminalOpen: open }),
   setKgModalOpen: (open) => set({ isKgModalOpen: open }),
+  setMcpModalOpen: (open) => set({ isMcpModalOpen: open }),
+  setSkillModalOpen: (open) => set({ isSkillModalOpen: open }),
   setCodeWorkspaceOpen: (open) => set({ isCodeWorkspaceOpen: open }),
   toggleCodeWorkspace: () => set((state) => ({ isCodeWorkspaceOpen: !state.isCodeWorkspaceOpen })),
   toggleCodeMaximize: () => set((state) => ({ isCodeMaximized: !state.isCodeMaximized })),

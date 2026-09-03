@@ -10,6 +10,8 @@ import { SettingsModal } from './app/settings/SettingsModal'
 import { KnowledgeGraphModal } from './app/kg/KnowledgeGraphModal'
 import { GitBranchModal } from './app/git/GitBranchModal'
 import { SnapshotModal } from './app/git/SnapshotModal'
+import { MCPImportModal } from './app/mcp/MCPImportModal'
+import { SkillImportModal } from './app/skills/SkillImportModal'
 import { useWorkspaceStore } from './core/store/workspaceStore'
 import { useSettingsStore } from './core/store/settingsStore'
 
@@ -77,6 +79,12 @@ export const App: React.FC = () => {
 
       {/* 7. 微内核影子快照与安全回退中心 */}
       <SnapshotModal />
+
+      {/* 8. MCP 协议服务导入模态窗 */}
+      <MCPImportModal />
+
+      {/* 9. Agent 技能库定制与导入向导 */}
+      <SkillImportModal />
     </div>
   )
 }

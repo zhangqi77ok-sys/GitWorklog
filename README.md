@@ -243,7 +243,13 @@ Tcode 打破了单体硬编码调度逻辑，将 Agent 的执行循环、能力�
   * 原生 HTML5 Canvas 自适应 Retina 高分屏（`window.devicePixelRatio`），按小时精准呈现输入/输出 Tokens 堆叠柱状图；
   * 支持鼠标在 Canvas 划过时实时计算时间切片，呈现悬浮数据探针与微秒级响应气泡。
 * **客户端原生 CSV 审计报表导出**：
-  * 基于前端 Blob 与虚拟下载流，支持一键将当前周期的调用明细（包含时间戳、模型名称、Prompt/Completion Tokens、缓存命中率、计费金额）导出为标准 CSV 报表。
+### 19. MCP 工具协议服务导入与 Agent 专家技能定制中心 (MCP & Skill Hubs)
+* **MCP 工具协议服务导入模态窗 (`MCPImportModal.tsx`)**：
+  * 支持三种录入路径：Claude Desktop / Cursor 标准 `mcpServers` JSON 一键粘贴（带语法校验与一键示例填入）、手动表单配置（支持 `stdio` 标准进程管道与 `sse` HTTP 管道）、以及社区官方精选服务（PostgreSQL 只读分析、GitHub API 自动化）一键安装；
+  * 左侧 MCP 抽屉点击 `[ ➕ 添加 / 导入 MCP 协议服务 ]` 瞬间居中弹出，支持 Esc 与遮罩点击关闭。
+* **Agent 技能库导入与定制中心 (`SkillImportModal.tsx`)**：
+  * 支持三大技能扩展管道：本地 `SKILL.md` 规范文件/目录拖拽与解析预览、自定义表单录入（技能标识符、领域分类、触发场景与 Markdown 工作流规约，内置经典 TDD 红-绿循环模板一键填入）、以及官方核心专家库（`rust-core-engineer`、`ui-ux-pro-max`）一键激活；
+  * 对话输入舱输入 `@` 弹出引用浮窗时，支持一键点击 `[ 🛠️ 添加 / 导入自定义技能 ]` 快速唤起定制向导。
 
 ---
 
