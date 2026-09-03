@@ -251,9 +251,13 @@ Tcode 打破了单体硬编码调度逻辑，将 Agent 的执行循环、能力�
 * **自动化增量编译流水线 (`build_installer.py`)**：
   * 联动前端 Vite 打包 (`npm run build`)，编译并生成高内聚桌面端微内核宿主 `Tcode.exe`（嵌入前端静态产物与 API 代理）；
   * 自动将微内核与运行时资源打包为自解压载荷，编译生成单文件安装向导 `dist/Tcode-Setup.exe` 并同步输出至 `release/Tcode-Setup-v2.0.0.exe` 与 `release/Tcode-Setup-v2.0.0-windows-x64.zip`；
-* **严格落实【铁律 1.5】真实安装与探活验证闭环**：
-  * **静默安装验证**：执行 `Tcode-Setup.exe --silent-install-dir <dir>`，确保无阻塞解压与目录权限合规；
-  * **桌面端真实调用测试**：自动唤起沙箱目录中安装的 `Tcode.exe`，对物理端口发起 `GET /api/health` 探活与 `GET /` 完整 HTML 挂载验证，测试全绿通过后自动清理临时沙箱，杜绝死进程残留与假成功。
+### 21. 真实大模型自主 ReAct 物理编程实战验证 (Autonomous Coding Showcase)
+* **模型选型与实测配置**：
+  * 基于上游真实 `deepseek-v4-flash` 大模型与生产网关 `https://agentrouter.org`，执行首字延迟 (TTFT) 极速响应测试；
+* **物理双环自主闭环实录**：
+  1. **自主环境勘测**：大模型接收需求后，自主调度 `run_command`（`ls -la backend`）勘测工程结构；
+  2. **物理代码原子落盘**：自主调度 `write_file`，生成 0 第三方依赖的 Node.js 系统负载检测脚本 [`backend/sys_probe.js`](file:///d:/weihu/agent-learning/backend/sys_probe.js)；
+  3. **自主回归验证与探针捕获**：自主调度 `run_command` 静默执行 `node backend/sys_probe.js`，无黑框精准采集本地 CPU 核心数、内存占用率与运行时间并汇报，达成真实物理代码自愈闭环。
 
 ---
 
