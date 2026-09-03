@@ -19,6 +19,9 @@
 | **09** | **会话消息持久化存盘与时间戳防御性渲染** | 数据持久化 / 对话状态追踪 / 消息防丢失 | 对话消息自动异步落盘存盘、`updated_at` 时间戳实时刷新与 `NaN:NaN` 防御性格式化 | [09-session-message-persistence-and-timestamp-formatting.md](./09-session-message-persistence-and-timestamp-formatting.md) |
 | **10** | **自主 Agent 多轮工具闭环 (Multi-Turn Loop) 与 DSML 工具调用解析** | Agent 认知架构 / 自动工具执行 | DSML XML 工具指令正则提取、本地 `Lookup`/`read_file` 执行网桥与多轮 Agent 自动协作闭环 | [10-autonomous-agent-multi-turn-loop-and-dsml-tool-calling.md](./10-autonomous-agent-multi-turn-loop-and-dsml-tool-calling.md) |
 | **11** | **OpenAI 双上游协议、Claude 独立协议适配、流式防中断与 Markdown 渲染引擎设计** | 模型网关 / 多协议适配 / UI富文本渲染 | OpenAI Chat vs Responses 协议、Anthropic Messages 顶层 system 约束、流式 chunk 零裁剪与专有 Markdown 渲染器 | [11-upstream-protocols-and-markdown-rendering.md](./11-upstream-protocols-and-markdown-rendering.md) |
+| **12** | **AgentRouter WAF 穿透指纹、SSE Native Thinking 流式解析与 Fail-Closed 凭据纪律** | 模型网关 / 安全防御 / 流式传输 | `claude-cli` 客户端标头特征绕过、`reasoning_content` 原生深度心智思考流提取与零泄密凭据治理 | [12-agentrouter-waf-penetration-and-sse-native-thinking.md](./12-agentrouter-waf-penetration-and-sse-native-thinking.md) |
+| **13** | **ReAct 自主智能体多轮自愈循环、物理算子沙箱与 Windows 静默 Shell 规范** | Agent 执行引擎 / 进程控制 / 防灾回退 | `CREATE_NO_WINDOW` (0x08000000) 零黑框弹窗、受控路径安全读写与微内核影子 Git 快照毫秒级回退 | [13-react-autonomous-loop-and-silent-sandbox-execution.md](./13-react-autonomous-loop-and-silent-sandbox-execution.md) |
+| **14** | **Windows 单文件安装向导构建、PyInstaller 资源内嵌与铁律 1.5 验证闭环** | 桌面端分发 / 构建运维 / 自动化测试 | 双阶段安装包架构、`sys._MEIPASS` 静态资源自愈挂载、`--silent-install-dir` 静默安装与运行时物理探活闭环 | [14-windows-standalone-installer-and-e2e-verification-pipeline.md](./14-windows-standalone-installer-and-e2e-verification-pipeline.md) |
 
 ---
 
