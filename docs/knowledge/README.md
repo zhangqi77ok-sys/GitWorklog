@@ -22,6 +22,8 @@
 | **12** | **AgentRouter WAF 穿透指纹、SSE Native Thinking 流式解析与 Fail-Closed 凭据纪律** | 模型网关 / 安全防御 / 流式传输 | `claude-cli` 客户端标头特征绕过、`reasoning_content` 原生深度心智思考流提取与零泄密凭据治理 | [12-agentrouter-waf-penetration-and-sse-native-thinking.md](./12-agentrouter-waf-penetration-and-sse-native-thinking.md) |
 | **13** | **ReAct 自主智能体多轮自愈循环、物理算子沙箱与 Windows 静默 Shell 规范** | Agent 执行引擎 / 进程控制 / 防灾回退 | `CREATE_NO_WINDOW` (0x08000000) 零黑框弹窗、受控路径安全读写与微内核影子 Git 快照毫秒级回退 | [13-react-autonomous-loop-and-silent-sandbox-execution.md](./13-react-autonomous-loop-and-silent-sandbox-execution.md) |
 | **14** | **Windows 单文件安装向导构建、PyInstaller 资源内嵌与铁律 1.5 验证闭环** | 桌面端分发 / 构建运维 / 自动化测试 | 双阶段安装包架构、`sys._MEIPASS` 静态资源自愈挂载、`--silent-install-dir` 静默安装与运行时物理探活闭环 | [14-windows-standalone-installer-and-e2e-verification-pipeline.md](./14-windows-standalone-installer-and-e2e-verification-pipeline.md) |
+| **15** | **Wails v2 生产级 Desktop 标签编译、Frameless 沉浸式窗体与纯 Go 原生安装向导封装** | 桌面端内核 / 原生分发 / 自动化测试 | `-tags "desktop,production"` 标签编译、Frameless 无边框窗口对接、纯 Go 嵌入式单文件安装向导（`MessageBoxW`/快捷方式/注册表）与物理闭环 | [15-wails-v2-production-build-and-frameless-installer.md](./15-wails-v2-production-build-and-frameless-installer.md) |
+
 
 ---
 

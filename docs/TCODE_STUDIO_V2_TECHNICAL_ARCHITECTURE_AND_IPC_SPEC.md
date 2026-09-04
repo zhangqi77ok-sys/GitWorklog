@@ -284,18 +284,27 @@
 ## 5. 项目工程目录全景拓扑 (Repository Layout)
 
 ```
-e:/pro/agent-learning/
+d:/weihu/agent-learning/
 ├── app.go                       # Wails v2 宿主主入口与全部 IPC 契约实现
 ├── main.go                      # Windows 原生无边框桌面窗体启动与资源嵌入
 ├── wails.json                   # Wails 桌面打包与编译器配置
 ├── web_prototype.html           # 【核心】6,987 行纯净原生设计原型真理源
+├── prototype/
+│   └── index.html               # 交互式原型独立交付系统 (铁律 0 & 铁律 3 同构镜像)
+├── cmd/
+│   ├── installer/
+│   │   ├── main.go              # 纯 Go 独立单文件自解压安装向导
+│   │   └── assets/              # 内嵌二进制资产 (tcode.exe, uninstall.exe)
+│   └── uninstaller/
+│       └── main.go              # 纯 Go 独立安全卸载程序
 ├── internal/
 │   ├── ast/
 │   │   └── scanner.go           # Go AST 语法树静态分析与拓扑提取器
 │   ├── diff/
 │   │   └── differ.go            # Git 行级结构化 Diff 报告生成器
 │   ├── llm/
-│   │   └── client.go            # AgentRouter 多模型 SSE 流式客户端与 Tool 协议封包
+│   │   ├── client.go            # AgentRouter 多模型 SSE 流式客户端与 Tool 协议封包
+│   │   └── client_real_test.go  # 真实模型流式推理与工具调度回归测试
 │   ├── sandbox/
 │   │   └── runner.go            # 本地受控终端算子执行器与高危指令拦截防线
 │   └── session/
@@ -305,15 +314,40 @@ e:/pro/agent-learning/
 │   ├── package.json             # 前端构建依赖配置
 │   ├── vite.config.ts           # Vite 6 构建流水线配置
 │   └── src/
+│       ├── App.vue              # Vue 3.4 响应式主视图组件
 │       ├── core/
 │       │   ├── wailsBridge.ts   # TypeScript 强类型 IPC 桥接封装
 │       │   └── markdown.ts      # Marked GFM 渲染器与暗黑代码块配置
-│       └── style.css            # Tailwind CSS 本地样式层
-└── bin/
-    └── tcode.exe                # 3.95MB Windows 原生独立可执行 GUI 二进制程序
+│       └── index.css            # Tailwind CSS 本地样式层
+├── bin/
+│   ├── tcode.exe                # 9.62MB 生产级无边框桌面可执行主程序
+│   ├── uninstall.exe            # 1.72MB 独立卸载可执行程序
+│   └── TcodeStudio_Setup_v2.0.0.exe # 13.08MB 单文件自解压安装向导
+└── docs/
+    └── knowledge/               # 核心工程实战经验知识库 (四段论归档)
 ```
 
 ---
 
-## 6. 总结与后续迭代指南
-本说明书与工程源码及 `web_prototype.html` 保持 **100% 绝对对齐**。后续用户继续扩充原型设计、出具 PRD 或新增算子协议时，可遵循本规范第三章的 IPC API 契约进行横向扩展，确保桌面端桌面体验始终坚如磐石、优雅纯粹。
+## 6. Windows 单文件安装向导与【铁律 1.5】物理验证流水线
+
+根据项目级绝对强制铁律【铁律 1.5】，任何开发完成必须通过增量打包与真实安装测试：
+
+### 6.1 纯 Go 自包含单文件向导架构
+1. **轻量自解压**：通过 `//go:embed` 将编译好的 `tcode.exe` 与 `uninstall.exe` 作为二进制数据编译进 `TcodeStudio_Setup_v2.0.0.exe`；
+2. **Win32 原生交互**：使用 `user32.dll!MessageBoxW` 弹出高亲和度系统对话框；
+3. **免提权静默部署**：支持 `-silent` 命令行参数，默认部署至 `%LOCALAPPDATA%\Programs\TcodeStudio\`；
+4. **系统集成规范**：通过 WScript.Shell 生成桌面与开始菜单快捷方式，并在 Windows 注册表写入标准卸载项。
+
+### 6.2 铁律 1.5 验证门禁
+每次发布前必须自动化执行以下验证：
+1. `Start-Process -FilePath ".\bin\TcodeStudio_Setup_v2.0.0.exe" -ArgumentList "-silent" -Wait` 静默安装；
+2. 校验文件完整落盘与桌面快捷方式生成；
+3. 真实启动安装后二进制，验证进程常驻与无异常崩溃；
+4. 执行 `go test -v -timeout 60s ./internal/llm` 验证真实模型流式推理与工具调度。
+
+---
+
+## 7. 总结与后续迭代指南
+本说明书与工程源码及 `web_prototype.html` 保持 **100% 绝对对齐**。后续扩充原型设计、出具 PRD 或新增算子协议时，可遵循本规范第三章的 IPC API 契约进行横向扩展，确保桌面端体验坚如磐石、优雅纯粹。
+
