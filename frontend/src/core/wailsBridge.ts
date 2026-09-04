@@ -183,11 +183,7 @@ export const wailsBridge = {
     if (app?.ListSessions) {
       return await app.ListSessions()
     }
-    return [
-      { id: 'sess1', title: '架构重构与执行流设计', model: 'deepseek-v4-flash', tag: '核心架构', time: '刚刚', desc: '纯原生 Wails 闭环', updated_at: Date.now() },
-      { id: 'sess2', title: 'TDD测试自愈与并发防漏', model: 'gpt-5.6-sol', tag: '单测自愈', time: '5分钟前', desc: '红绿灯验证', updated_at: Date.now() - 300000 },
-      { id: 'sess3', title: 'AgentRouter 多模型中转流', model: 'deepseek-v4-flash', tag: '网关调度', time: '10分钟前', desc: '4模型接入', updated_at: Date.now() - 600000 }
-    ]
+    return []
   },
 
   async getSession(id: string): Promise<ChatSession | null> {
@@ -220,16 +216,10 @@ export const wailsBridge = {
     }
     return {
       file_path: filePath,
-      lang: 'Go · UTF-8',
-      stats: '+4 行新增 · -2 行删除',
-      header: '@@ -42,6 +42,8 @@ func main() {',
-      lines: [
-        { type: 'ctx', text: '    reg := host.NewRegistry()' },
-        { type: 'del', text: '-   // 遗留 Python 桥接', label: '删除' },
-        { type: 'add', text: '+   // Wails v2 原生微内核与 ReAct 算子', label: '新增' },
-        { type: 'add', text: '+   app := NewApp()', label: '新增' },
-        { type: 'ctx', text: '    runtime.LogInfo(ctx, "Ready")' }
-      ]
+      lang: 'Clean',
+      stats: '0 行修改',
+      header: '@@ 暂无代码改动 @@',
+      lines: []
     }
   },
 
@@ -298,7 +288,7 @@ export const wailsBridge = {
     if (app?.FetchUpstreamModels) {
       return await app.FetchUpstreamModels(endpoint || '', apiKey || '')
     }
-    return ['deepseek-v4-flash', 'gpt-5.6-sol', 'claude-opus-4-8', 'glm-5.3', 'claude-opus-5']
+    return []
   },
 
   async gitCommit(msg: string): Promise<string> {
@@ -322,19 +312,7 @@ export const wailsBridge = {
     if (app?.ListChannels) {
       return await app.ListChannels()
     }
-    return [
-      {
-        id: 'ch_agentrouter',
-        name: 'AgentRouter 聚合中转站 (测试主通道)',
-        primary: true,
-        status: 'online',
-        auth_type: 'bearer_token',
-        endpoint: 'https://agentrouter.org/v1',
-        model: 'deepseek-v4-flash',
-        latency: '82ms',
-        updated_at: Date.now()
-      }
-    ]
+    return []
   },
 
   async saveChannel(cfg: ChannelConfig): Promise<void> {
@@ -350,7 +328,7 @@ export const wailsBridge = {
   async pingChannel(id: string): Promise<string> {
     const app = getApp()
     if (app?.PingChannel) return await app.PingChannel(id)
-    return '85ms'
+    return 'timeout'
   },
 
   async listMCPs(): Promise<MCPServerConfig[]> {
@@ -375,10 +353,11 @@ export const wailsBridge = {
     return {
       id,
       name: id,
-      status: 'ONLINE',
-      latency: '20ms',
-      tool_count: 2,
-      tools: ['read_file', 'write_file']
+      status: 'ERROR',
+      latency: '0ms',
+      tool_count: 0,
+      tools: [],
+      error: 'MCP 服务未连接'
     }
   },
 
@@ -413,10 +392,7 @@ export const wailsBridge = {
   async getFileTree(dir: string = ''): Promise<FileNode[]> {
     const app = getApp()
     if (app?.GetFileTree) return await app.GetFileTree(dir)
-    return [
-      { name: 'app.go', path: 'app.go', is_dir: false },
-      { name: 'main.go', path: 'main.go', is_dir: false }
-    ]
+    return []
   },
 
   async getGitStatus(): Promise<any> {

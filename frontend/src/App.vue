@@ -152,6 +152,12 @@
 
           <!-- 真实会话卡片列表 (从 ~/.tcode/sessions/ 动态读取) -->
           <div class="flex-1 overflow-y-auto p-2 space-y-1.5">
+            <div v-if="filteredSessions.length === 0" class="p-6 text-center text-[#A1A1AA] text-xs flex flex-col items-center justify-center gap-2 mt-8">
+              <span class="text-2xl">📭</span>
+              <span>暂无会话记录</span>
+              <button @click="createNewSession" class="text-[11px] text-[#D96B27] font-semibold hover:underline cursor-pointer">＋ 新建会话</button>
+            </div>
+
             <div
               v-for="sess in filteredSessions"
               :key="sess.id"
@@ -189,6 +195,13 @@
           </div>
 
           <div class="flex-1 overflow-y-auto p-2 text-xs space-y-1 font-mono">
+            <div v-if="isFileTreeLoading" class="p-6 text-center text-[#A1A1AA] text-xs flex flex-col items-center justify-center gap-2">
+              <span class="animate-spin text-lg">⏳</span>
+              <span>正在读取工程目录...</span>
+            </div>
+            <div v-else-if="fileTree.length === 0" class="p-6 text-center text-[#A1A1AA] text-xs">
+              <span>工作区暂无文件</span>
+            </div>
             <div v-for="node in fileTree" :key="node.path" class="space-y-0.5">
               <div
                 @click="handleFileClick(node)"
@@ -228,11 +241,18 @@
           </div>
 
           <div class="flex-1 overflow-y-auto p-3 space-y-3 text-xs">
-            <div>
+            <div v-if="isGitLoading" class="p-6 text-center text-[#A1A1AA] text-xs flex flex-col items-center justify-center gap-2">
+              <span class="animate-spin text-lg">⏳</span>
+              <span>正在获取 Git 状态...</span>
+            </div>
+            <div v-else>
               <div class="text-[10px] font-bold text-[#71717A] uppercase mb-1">变更文件 (WORKING TREE)</div>
-              <div class="space-y-1">
+              <div v-if="!gitStatus.working || gitStatus.working.length === 0" class="p-3 text-center text-[#A1A1AA] text-xs bg-black/[0.02] rounded-lg">
+                ✓ 工作区干净，无未暂存改动
+              </div>
+              <div v-else class="space-y-1">
                 <div
-                  v-for="file in (gitStatus.working || ['main.go', 'app.go'])"
+                  v-for="file in gitStatus.working"
                   :key="file"
                   @click="openFileDiff(file)"
                   class="p-1.5 rounded hover:bg-black/[0.04] cursor-pointer flex items-center justify-between font-mono text-[11px]"
@@ -285,7 +305,26 @@
         </header>
 
         <!-- 真实动态对话消息列表 (从当前 Session 动态读取与渲染) -->
-        <div ref="messagesContainerRef" class="flex-1 overflow-y-auto p-4 space-y-4">
+        <div ref="messagesContainerRef" class="flex-1 overflow-y-auto p-4 space-y-4 flex flex-col">
+          <!-- 干净真实的空会话状态 -->
+          <div v-if="!currentSession.messages || currentSession.messages.length === 0" class="flex-1 flex flex-col items-center justify-center text-center p-8 select-none my-auto">
+            <div class="w-14 h-14 rounded-2xl bg-white border border-black/[0.08] shadow-xs flex items-center justify-center text-2xl mb-4">
+              💬
+            </div>
+            <h3 class="text-sm font-bold text-[#18181B] mb-1.5">Tcode Agentic Studio</h3>
+            <p class="text-xs text-[#71717A] max-w-sm mb-5 leading-relaxed">
+              当前暂无活跃对话。请在下方输入框键入编程任务，或点击【＋新建会话】开始。
+            </p>
+            <div class="flex items-center gap-2">
+              <button
+                @click="createNewSession"
+                class="px-3.5 py-1.5 rounded-xl bg-[#D96B27] text-white text-xs font-semibold shadow-xs hover:bg-[#B8551B] transition-all cursor-pointer flex items-center gap-1"
+              >
+                <span>＋</span><span>新建会话</span>
+              </button>
+            </div>
+          </div>
+
           <template v-for="msg in currentSession.messages" :key="msg.id">
             <!-- 用户提问气泡 -->
             <div v-if="msg.role === 'user'" class="flex justify-end">
@@ -482,7 +521,15 @@
         </header>
 
         <!-- 真实物理行级 Diff (Red / Green) -->
-        <div class="flex-1 overflow-y-auto bg-[#18181B] text-[#F4F4F5] font-mono text-[11px] p-2 space-y-2 select-text">
+        <div class="flex-1 overflow-y-auto bg-[#18181B] text-[#F4F4F5] font-mono text-[11px] p-2 space-y-2 select-text flex flex-col">
+          <div v-if="!activeDiffFile || !diffReport?.lines || diffReport.lines.length === 0" class="flex-1 flex flex-col items-center justify-center p-8 text-center text-[#71717A] my-auto">
+            <span class="text-3xl mb-3">📄</span>
+            <p class="text-xs font-semibold text-[#A1A1AA]">暂无代码差异对比</p>
+            <p class="text-[11px] text-[#71717A] mt-1.5 max-w-xs leading-relaxed">
+              当前工作区干净，或尚未选定对比文件。可从左侧文件树或 Git 状态点击文件审查。
+            </p>
+          </div>
+
           <!-- 分块 Hunks 细粒度审查模式 -->
           <template v-if="diffReport?.hunks && diffReport.hunks.length > 0">
             <div
@@ -748,6 +795,12 @@
 
               <!-- 渠道卡片列表 -->
               <div class="space-y-2">
+                <div v-if="channels.length === 0" class="p-8 text-center bg-[#FAF8F5] rounded-xl border border-black/[0.06] text-[#71717A] text-xs">
+                  <span class="text-2xl block mb-2">🌐</span>
+                  <span class="font-bold text-[#18181B] block mb-1">当前未配置任何模型渠道</span>
+                  <p class="text-[11px] text-[#A1A1AA] mb-3">支持配置 AgentRouter、OpenAI、Claude、DeepSeek 等兼容端点</p>
+                  <button @click="openAddChannelModal" class="px-3 py-1.5 rounded-lg bg-[#D96B27] text-white text-xs font-semibold shadow-xs hover:bg-[#B8551B] cursor-pointer">➕ 新增渠道</button>
+                </div>
                 <div
                   v-for="ch in channels"
                   :key="ch.id"
@@ -789,6 +842,11 @@
               </div>
 
               <div class="space-y-2">
+                <div v-if="mcps.length === 0" class="p-8 text-center bg-[#FAF8F5] rounded-xl border border-black/[0.06] text-[#71717A] text-xs">
+                  <span class="text-2xl block mb-2">🧩</span>
+                  <span class="font-bold text-[#18181B] block mb-1">当前暂无挂载的 MCP 本地服务</span>
+                  <p class="text-[11px] text-[#A1A1AA]">可导入并管理基于 Model Context Protocol 的工具算子服务</p>
+                </div>
                 <div v-for="mcp in mcps" :key="mcp.id" class="p-3 rounded-xl border border-black/[0.08] bg-[#FAF8F5] flex items-center justify-between shadow-2xs">
                   <div>
                     <div class="flex items-center gap-2">
@@ -818,6 +876,11 @@
               </div>
 
               <div class="space-y-2">
+                <div v-if="skills.length === 0" class="p-8 text-center bg-[#FAF8F5] rounded-xl border border-black/[0.06] text-[#71717A] text-xs">
+                  <span class="text-2xl block mb-2">🛠️</span>
+                  <span class="font-bold text-[#18181B] block mb-1">当前暂无自定义技能</span>
+                  <p class="text-[11px] text-[#A1A1AA]">点击右上角可为智能体扩展专有技术栈提示词与工作流</p>
+                </div>
                 <div v-for="skill in skills" :key="skill.id" class="p-3 rounded-xl border border-black/[0.08] bg-[#FAF8F5] flex items-center justify-between shadow-2xs">
                   <div>
                     <span class="text-xs font-bold text-[#18181B]">{{ skill.name }}</span>
@@ -844,6 +907,11 @@
               </div>
 
               <div class="space-y-2">
+                <div v-if="rules.length === 0" class="p-8 text-center bg-[#FAF8F5] rounded-xl border border-black/[0.06] text-[#71717A] text-xs">
+                  <span class="text-2xl block mb-2">📜</span>
+                  <span class="font-bold text-[#18181B] block mb-1">当前暂无自定义工程规则</span>
+                  <p class="text-[11px] text-[#A1A1AA]">点击右上角可配置规范守卫，自动在推理时注入智能体 System Prompt</p>
+                </div>
                 <div v-for="rule in rules" :key="rule.id" class="p-3 rounded-xl border border-black/[0.08] bg-[#FAF8F5] space-y-1 shadow-2xs">
                   <div class="flex items-center justify-between">
                     <span class="text-xs font-bold text-[#18181B]">{{ rule.title }}</span>
@@ -897,28 +965,41 @@
         <div class="flex-1 flex overflow-hidden">
           <!-- 拓扑节点列表 -->
           <div class="flex-1 p-5 overflow-y-auto bg-[#FAF8F5] space-y-3">
-            <div class="text-xs font-bold text-[#71717A] uppercase mb-2">已解析提取的代码拓扑实体 ({{ astNodes.length }} 个节点)</div>
-            <div class="grid grid-cols-2 gap-3">
-              <div
-                v-for="node in astNodes"
-                :key="node.id"
-                @click="selectedAstNode = node"
-                :class="[
-                  'p-3.5 rounded-2xl border bg-white shadow-2xs flex items-center justify-between cursor-pointer transition-all',
-                  selectedAstNode?.id === node.id ? 'border-2 border-[#D96B27] ring-2 ring-[#D96B27]/20' : 'border-black/[0.08] hover:border-[#D96B27]/40'
-                ]"
-              >
-                <div>
-                  <div class="flex items-center gap-2">
-                    <span class="text-sm">{{ node.type === 'package' ? '📦' : (node.type === 'struct' ? '🏛️' : '📄') }}</span>
-                    <span class="text-xs font-bold text-[#18181B] font-mono">{{ node.name }}</span>
-                    <span class="text-[9px] bg-[#D96B27]/10 text-[#D96B27] px-1.5 py-0.2 rounded font-mono font-bold">{{ node.type }}</span>
+            <div v-if="isGraphLoading" class="p-12 text-center text-[#71717A] text-xs flex flex-col items-center justify-center gap-3 mt-12">
+              <span class="animate-spin text-3xl">⏳</span>
+              <span class="font-bold text-[#18181B] text-sm">正在深度解析工作区 Go AST 语法拓扑树...</span>
+              <p class="text-[11px] text-[#A1A1AA]">提取代码包、结构体、接口与依赖实体，请稍候</p>
+            </div>
+            <div v-else-if="astNodes.length === 0" class="p-12 text-center text-[#71717A] text-xs flex flex-col items-center justify-center gap-2 mt-12">
+              <span class="text-3xl">🕸️</span>
+              <span class="font-bold text-[#18181B]">暂无代码拓扑节点</span>
+              <p class="text-[11px] text-[#A1A1AA]">点击右上角【代码扫描与图谱重建】即可扫描当前工作区</p>
+            </div>
+            <div v-else>
+              <div class="text-xs font-bold text-[#71717A] uppercase mb-2">已解析提取的代码拓扑实体 ({{ astNodes.length }} 个节点)</div>
+              <div class="grid grid-cols-2 gap-3">
+                <div
+                  v-for="node in astNodes"
+                  :key="node.id"
+                  @click="selectedAstNode = node"
+                  :class="[
+                    'p-3.5 rounded-2xl border bg-white shadow-2xs flex items-center justify-between cursor-pointer transition-all',
+                    selectedAstNode?.id === node.id ? 'border-2 border-[#D96B27] ring-2 ring-[#D96B27]/20' : 'border-black/[0.08] hover:border-[#D96B27]/40'
+                  ]"
+                >
+                  <div>
+                    <div class="flex items-center gap-2">
+                      <span class="text-sm">{{ node.type === 'package' ? '📦' : (node.type === 'struct' ? '🏛️' : '📄') }}</span>
+                      <span class="text-xs font-bold text-[#18181B] font-mono">{{ node.name }}</span>
+                      <span class="text-[9px] bg-[#D96B27]/10 text-[#D96B27] px-1.5 py-0.2 rounded font-mono font-bold">{{ node.type }}</span>
+                    </div>
+                    <div class="text-[11px] text-[#71717A] mt-1 font-mono">{{ node.file }}</div>
                   </div>
-                  <div class="text-[11px] text-[#71717A] mt-1 font-mono">{{ node.file }}</div>
                 </div>
               </div>
             </div>
           </div>
+
 
           <!-- 实体详情侧板 -->
           <aside class="w-80 border-l border-black/[0.08] bg-white p-5 flex flex-col justify-between overflow-y-auto">
@@ -1012,8 +1093,8 @@ import { renderMarkdown } from './core/markdown'
 
 // 1. 活动栏与工作区状态
 const activeActivity = ref('chat')
-const isDiffOpen = ref(true)
-const activeDiffFile = ref('app.go')
+const isDiffOpen = ref(false)
+const activeDiffFile = ref('')
 const isSettingsOpen = ref(false)
 const isKnowledgeGraphOpen = ref(false)
 const isChannelModalOpen = ref(false)
@@ -1023,6 +1104,10 @@ const isRuleModalOpen = ref(false)
 const activeSettingsTab = ref('models')
 const isFullAuto = ref(false)
 const isStreaming = ref(false)
+
+const isGraphLoading = ref(false)
+const isFileTreeLoading = ref(false)
+const isGitLoading = ref(false)
 
 const toastMessage = ref('')
 function showToast(msg: string) {
@@ -1035,41 +1120,22 @@ function showToast(msg: string) {
 // 2. 真实会话管理 (读写 ~/.tcode/sessions/)
 const sessions = ref<SessionMeta[]>([])
 const activeTag = ref('全部')
-const currentSessionId = ref('sess1')
+const currentSessionId = ref('')
 const selectedModel = ref('deepseek-v4-flash')
 
 const currentSession = ref<ChatSession>({
-  id: 'sess1',
-  title: '架构重构与执行流设计',
+  id: '',
+  title: '新会话',
   model: 'deepseek-v4-flash',
-  tag: '核心架构',
+  tag: '全部',
   created_at: Date.now(),
   updated_at: Date.now(),
-  messages: [
-    {
-      id: 'msg_1',
-      role: 'user',
-      content: '1. 原型设计上，厂商不仅支持自动获取模型，还要支持手动添加。\n2. 还缺skill管理、MCP管理、软件规则管理。\n3. 主页面应该还要有一个最左侧的活动导航栏。',
-      time: '14:20'
-    },
-    {
-      id: 'msg_2',
-      role: 'assistant',
-      thinking: '1. 引入 48px 最左侧活动栏，支持工作台秒切；\n2. 补齐自动抓取与手动模型录入；\n3. 落地 MCP、Skill、Rules 设置管理。',
-      content: '已成功按照原型与技术规范重构为纯原生 Go 1.22 + Wails v2 + Vue 3.4 架构。\n所有 Python 与旧 React 遗留已全部清理，系统已接通原生 IPC 通信管道与 ReAct 自主算子循环。',
-      tool: {
-        name: 'exec_command',
-        args: { command: 'go test -v ./...' },
-        output: 'PASS ok tcode/internal/core/sandbox (0.01s)\nWails v2.9.2 Native Compiler Packaged bin/tcode.exe'
-      },
-      time: '14:21'
-    }
-  ]
+  messages: []
 })
 
 const filteredSessions = computed(() => {
   if (activeTag.value === '全部') return sessions.value
-  return sessions.value.filter(s => (s.tag || '核心架构') === activeTag.value)
+  return sessions.value.filter(s => (s.tag || '') === activeTag.value)
 })
 
 async function loadSessionsList() {
@@ -1314,9 +1380,9 @@ const rules = ref<RuleConfig[]>([])
 const pingLoadingMap = reactive<Record<string, boolean>>({})
 
 const channelForm = reactive({
-  name: 'AgentRouter 主通道',
-  endpoint: 'https://agentrouter.org/v1',
-  api_key: 'sk-gKTbHfCZqgyDVf3TaXWpXT5TXW9qIZdAFVMOsY49ZKFssyFZ'
+  name: '',
+  endpoint: '',
+  api_key: ''
 })
 
 async function loadSettingsData() {
@@ -1358,6 +1424,9 @@ function setPrimaryChannel(id: string) {
 }
 
 function openAddChannelModal() {
+  channelForm.name = ''
+  channelForm.endpoint = ''
+  channelForm.api_key = ''
   isChannelModalOpen.value = true
 }
 
@@ -1417,21 +1486,23 @@ async function toggleRule(rule: RuleConfig) {
 const astNodes = ref<GraphNode[]>([])
 const selectedAstNode = ref<GraphNode | null>(null)
 
-async function openKnowledgeGraphModal() {
+function openKnowledgeGraphModal() {
   isKnowledgeGraphOpen.value = true
-  if (astNodes.value.length === 0) {
-    await scanASTGraph()
+  if (astNodes.value.length === 0 && !isGraphLoading.value) {
+    scanASTGraph()
   }
 }
 
 async function scanASTGraph() {
+  isGraphLoading.value = true
   try {
     const nodes = await wailsBridge.getProjectASTGraph()
-    astNodes.value = nodes
-    if (nodes.length > 0) selectedAstNode.value = nodes[0]
-    showToast(`✓ 成功完成 Go AST 语法树解析：提取 ${nodes.length} 个代码实体！`)
+    astNodes.value = nodes || []
+    if (astNodes.value.length > 0) selectedAstNode.value = astNodes.value[0]
   } catch (err) {
     showToast('AST 扫描失败: ' + err)
+  } finally {
+    isGraphLoading.value = false
   }
 }
 
@@ -1452,18 +1523,12 @@ const activeTerminalTab = ref<'shell' | 'logs'>('shell')
 const isTerminalRunning = ref(false)
 const terminalInputCmd = ref('')
 const currentTerminalBuffer = ref('')
-const terminalOutputs = ref<TerminalOutputItem[]>([
-  { type: 'cmd', text: 'go version' },
-  { type: 'output', text: 'go version go1.22.10 windows/amd64' }
-])
-const commandHistory = ref<string[]>(['go version'])
+const terminalOutputs = ref<TerminalOutputItem[]>([])
+const commandHistory = ref<string[]>([])
 const historyIndex = ref(-1)
 const terminalScrollRef = ref<HTMLDivElement | null>(null)
 
-const agentTraceLogs = ref<{ time: string; phase: string; message: string }[]>([
-  { time: '10:00:01', phase: 'core:init', message: 'Tcode Studio Wails Microkernel Ready' },
-  { time: '10:00:02', phase: 'sandbox', message: 'CREATE_NO_WINDOW protected execution pipeline mounted' }
-])
+const agentTraceLogs = ref<{ time: string; phase: string; message: string }[]>([])
 
 function toggleTerminalDrawer(forceState?: boolean) {
   isTerminalOpen.value = forceState !== undefined ? forceState : !isTerminalOpen.value
@@ -1566,17 +1631,20 @@ onMounted(async () => {
     }
   })
 
-  await Promise.all([
-    loadSessionsList(),
-    loadFileTree(),
-    loadGitStatus(),
-    loadDiff(),
-    loadSettingsData()
-  ])
+  // 异步非阻塞平滑载入真实持久化数据
+  loadSessionsList()
+  loadSettingsData()
 })
 </script>
 
 <style>
+button {
+  transition: transform 0.08s ease, background-color 0.15s ease, opacity 0.15s ease;
+}
+button:active {
+  transform: scale(0.96);
+}
+
 .markdown-body pre {
   background-color: #18181B;
   color: #F4F4F5;

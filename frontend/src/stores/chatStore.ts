@@ -32,32 +32,8 @@ export const useChatStore = defineStore('chat', () => {
   const activeActivity = ref('chat')
   const isStreaming = ref(false)
 
-  // 动态对话消息队列
-  const messages = ref<ChatMessage[]>([
-    {
-      id: 'msg_1',
-      role: 'user',
-      content: `1. 原型设计上，厂商不仅支持自动获取模型，还要支持手动添加。
-2. 还缺skill管理、MCP管理、软件规则管理。
-3. 主页面应该还要有一个最左侧的活动导航栏。`,
-      time: '14:20'
-    },
-    {
-      id: 'msg_2',
-      role: 'assistant',
-      thinking: `1. 引入 48px 最左侧活动栏，支持工作台秒切；
-2. 补齐自动抓取与手动模型录入；
-3. 落地 MCP、Skill、Rules 设置管理。`,
-      content: `已成功按照原型与技术规范重构为纯原生 Go 1.22 + Wails v2 + Vue 3.4 架构。
-所有 Python 与旧 React 遗留已全部清理，系统已接通原生 IPC 通信管道与 ReAct 自主算子循环。`,
-      tool: {
-        name: 'exec_command',
-        args: { command: 'go build -o bin/tcode.exe .' },
-        output: 'Wails v2.9.2 Native Compiler Packaged bin/tcode.exe (5.1MB)'
-      },
-      time: '14:21'
-    }
-  ])
+  // 动态对话消息队列 (纯净真实空状态)
+  const messages = ref<ChatMessage[]>([])
 
   function toggleApprovalMode() {
     isFullAuto.value = !isFullAuto.value
