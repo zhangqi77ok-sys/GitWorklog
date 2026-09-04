@@ -27,6 +27,7 @@
 | **17** | **Windows CREATE_NO_WINDOW 受控流式终端管道、命令中断与前后端双向事件流设计** | 进程控制 / 终端交互 / 实时推流 | `CREATE_NO_WINDOW = 0x08000000` 零黑框弹窗、双管道并发非阻塞流式输出、`context.WithCancel` 进程可控取消与 `Ctrl+\`` 快捷键集成 | [17-controlled-streaming-terminal-and-no-window-pty.md](./17-controlled-streaming-terminal-and-no-window-pty.md) |
 | **18** | **MCP 跨进程 Stdio 协议传输、生命周期管理与 ReAct 算子动态调度机制** | 扩展生态 / MCP 协议 / ReAct 调度 | Anthropic MCP JSON-RPC 2.0 管道握手、Windows 零黑框进程管控、Manager 全局算子路由树与 ReAct 自动派发闭环 | [18-mcp-protocol-stdio-lifecycle-and-react-dispatch.md](./18-mcp-protocol-stdio-lifecycle-and-react-dispatch.md) |
 | **19** | **LSP 编译器毫秒级语法诊断自愈守卫与 MCP 前端服务治理看板** | 编译器工具链 / 自愈回路 / UI运维 | 多语言静态语法诊断、落盘自动触发自愈注入、Windows 零黑框编译器探针与前端 MCP 实时探活看板 | [19-lsp-compiler-diagnostics-and-mcp-dashboard.md](./19-lsp-compiler-diagnostics-and-mcp-dashboard.md) |
+| **20** | **跨语言工作区技术栈自适应探测与多轮自主 ReAct 自然收敛自愈状态机** | Agent 认知架构 / 技术栈感知 / 状态机 | 多语言工程特征自动识别（Node/Rust/Py/Go/Java）、Zero Tool Calls 自然收敛准则与前端时序流动执行卡片 | [20-language-agnostic-stack-detection-and-natural-react-loop.md](./20-language-agnostic-stack-detection-and-natural-react-loop.md) |
 
 
 

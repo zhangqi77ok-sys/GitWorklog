@@ -2,16 +2,22 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { wailsBridge, type SessionMessage } from '../core/wailsBridge'
 
+export interface ToolCallRecord {
+  id?: string
+  name: string
+  args: any
+  output?: string
+  status?: 'running' | 'success' | 'error'
+  turn?: number
+}
+
 export interface ChatMessage {
   id: string
   role: 'user' | 'assistant'
   content: string
   thinking?: string
-  tool?: {
-    name: string
-    args: any
-    output?: string
-  }
+  tool?: ToolCallRecord
+  tools?: ToolCallRecord[]
   time: string
 }
 

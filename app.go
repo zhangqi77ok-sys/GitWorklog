@@ -655,13 +655,18 @@ func (a *App) SendMessage(req ChatRequest) error {
 			"model":      model,
 		})
 
-		// 4. 构建提示词体系 (注入规则 + 最近多轮历史)
+		// 4. 构建提示词体系 (注入规则 + 工作区技术栈感知 + 最近多轮历史)
 		systemPrompt := "你是 Tcode Studio 纯原生桌面智能体。你有权调用工具来审查、读取、修改工程代码及运行测试命令。请优先利用工具解决问题，并在每次调用后解释原因。"
 		rules := a.extraStore.ListRules()
 		for _, r := range rules {
 			if r.Enabled {
 				systemPrompt += "\n[规则规约] " + r.Content
 			}
+		}
+		// 动态侦测工作区项目技术栈并注入环境上下文
+		stackInfo := sandbox.DetectProjectStack(a.workspace)
+		if stackPrompt := sandbox.FormatStackPrompt(stackInfo); stackPrompt != "" {
+			systemPrompt += "\n" + stackPrompt
 		}
 
 		conversation := []llm.Message{
@@ -685,7 +690,7 @@ func (a *App) SendMessage(req ChatRequest) error {
 		var assistantContent strings.Builder
 		var lastToolExec *session.ToolExecution
 
-		// 5. 第一轮流式调用（合并工作区内置沙箱算子与外部已激活 MCP 协议算子）
+		// 5. 准备工作区内置沙箱算子与外部已激活 MCP 协议算子
 		workspaceTools := llm.DefaultWorkspaceTools()
 		if a.mcpManager != nil {
 			if mcpTools, err := a.mcpManager.GetAllTools(context.Background()); err == nil && len(mcpTools) > 0 {
@@ -693,41 +698,60 @@ func (a *App) SendMessage(req ChatRequest) error {
 			}
 		}
 
-		llmReq := llm.Request{
-			Endpoint: endpoint,
-			APIKey:   apiKey,
-			Model:    model,
-			Messages: conversation,
-			Tools:    workspaceTools,
-		}
+		// 6. 通用多轮自主自愈状态机 (以大模型不再调用工具或目标达成作为核心自然收敛依据)
+		const maxWatchdogTurns = 12
+		for turn := 1; turn <= maxWatchdogTurns; turn++ {
+			llmReq := llm.Request{
+				Endpoint: endpoint,
+				APIKey:   apiKey,
+				Model:    model,
+				Messages: conversation,
+				Tools:    workspaceTools,
+			}
 
-		toolCalls, err := llm.StreamChat(context.Background(), llmReq, llm.StreamHandlers{
-			OnThinking: func(text string) {
-				assistantThinking.WriteString(text)
-				runtime.EventsEmit(a.ctx, "agent:thinking", map[string]any{
-					"session_id": req.SessionID,
-					"thinking":   text,
-				})
-			},
-			OnContent: func(delta string) {
-				assistantContent.WriteString(delta)
-				runtime.EventsEmit(a.ctx, "agent:chunk", map[string]any{
-					"session_id": req.SessionID,
-					"delta":      delta,
-				})
-			},
-			OnError: func(err error) {
-				errMsg := fmt.Sprintf("\n\n[系统错误: %v]", err)
-				assistantContent.WriteString(errMsg)
-				runtime.EventsEmit(a.ctx, "agent:chunk", map[string]any{
-					"session_id": req.SessionID,
-					"delta":      errMsg,
-				})
-			},
-		})
+			var roundContent strings.Builder
+			toolCalls, err := llm.StreamChat(context.Background(), llmReq, llm.StreamHandlers{
+				OnThinking: func(text string) {
+					assistantThinking.WriteString(text)
+					runtime.EventsEmit(a.ctx, "agent:thinking", map[string]any{
+						"session_id": req.SessionID,
+						"thinking":   text,
+						"turn":       turn,
+					})
+				},
+				OnContent: func(delta string) {
+					assistantContent.WriteString(delta)
+					roundContent.WriteString(delta)
+					runtime.EventsEmit(a.ctx, "agent:chunk", map[string]any{
+						"session_id": req.SessionID,
+						"delta":      delta,
+						"turn":       turn,
+					})
+				},
+				OnError: func(err error) {
+					errMsg := fmt.Sprintf("\n\n[系统错误: %v]", err)
+					assistantContent.WriteString(errMsg)
+					runtime.EventsEmit(a.ctx, "agent:chunk", map[string]any{
+						"session_id": req.SessionID,
+						"delta":      errMsg,
+						"turn":       turn,
+					})
+				},
+			})
 
-		// 6. 若大模型决策触发算子调用，Go 微内核自动物理执行闭环！
-		if err == nil && len(toolCalls) > 0 {
+			// 核心自然收敛判定：若模型没有发起工具调用 (Zero Tool Calls) 或发生错误，说明目标已达成或已汇报完毕，立即退出循环！
+			if err != nil || len(toolCalls) == 0 {
+				break
+			}
+
+			// 将模型本轮决策与工具调用注入上下文
+			conversation = append(conversation, llm.Message{
+				Role:      "assistant",
+				Content:   roundContent.String(),
+				ToolCalls: toolCalls,
+			})
+
+			// 物理执行当前轮下发的各个算子并收集反馈
 			for _, tc := range toolCalls {
 				toolName := tc.Function.Name
 				toolArgs := tc.Function.Arguments
@@ -737,6 +761,7 @@ func (a *App) SendMessage(req ChatRequest) error {
 					"id":         tc.ID,
 					"tool":       toolName,
 					"args":       toolArgs,
+					"turn":       turn,
 				})
 
 				var output string
@@ -829,12 +854,9 @@ func (a *App) SendMessage(req ChatRequest) error {
 					"id":         tc.ID,
 					"tool":       toolName,
 					"output":     output,
+					"turn":       turn,
 				})
 
-				conversation = append(conversation, llm.Message{
-					Role:      "assistant",
-					ToolCalls: []llm.ToolCall{tc},
-				})
 				conversation = append(conversation, llm.Message{
 					Role:       "tool",
 					ToolCallID: tc.ID,
@@ -842,30 +864,6 @@ func (a *App) SendMessage(req ChatRequest) error {
 					Content:    output,
 				})
 			}
-
-			// 第二轮流式总结反思
-			step2Req := llm.Request{
-				Endpoint: endpoint,
-				APIKey:   apiKey,
-				Model:    model,
-				Messages: conversation,
-			}
-			_, _ = llm.StreamChat(context.Background(), step2Req, llm.StreamHandlers{
-				OnThinking: func(text string) {
-					assistantThinking.WriteString(text)
-					runtime.EventsEmit(a.ctx, "agent:thinking", map[string]any{
-						"session_id": req.SessionID,
-						"thinking":   text,
-					})
-				},
-				OnContent: func(delta string) {
-					assistantContent.WriteString(delta)
-					runtime.EventsEmit(a.ctx, "agent:chunk", map[string]any{
-						"session_id": req.SessionID,
-						"delta":      delta,
-					})
-				},
-			})
 		}
 
 		// 7. 持久化 Assistant 回复至磁盘

@@ -437,8 +437,8 @@ export const wailsBridge = {
     callbacks: {
       onThinking?: (text: string) => void
       onChunk?: (delta: string) => void
-      onToolStart?: (tool: string, args: any) => void
-      onToolEnd?: (tool: string, output: string) => void
+      onToolStart?: (tool: string, args: any, tcId?: string, turn?: number) => void
+      onToolEnd?: (tool: string, output: string, tcId?: string, turn?: number) => void
       onDone?: () => void
     }
   ): Promise<void> {
@@ -458,12 +458,12 @@ export const wailsBridge = {
       })
       runtime.EventsOn('agent:tool_start', (data: any) => {
         if (data.session_id === req.session_id && callbacks.onToolStart) {
-          callbacks.onToolStart(data.tool, data.args)
+          callbacks.onToolStart(data.tool, data.args, data.id, data.turn)
         }
       })
       runtime.EventsOn('agent:tool_end', (data: any) => {
         if (data.session_id === req.session_id && callbacks.onToolEnd) {
-          callbacks.onToolEnd(data.tool, data.output)
+          callbacks.onToolEnd(data.tool, data.output, data.id, data.turn)
         }
       })
       runtime.EventsOn('agent:done', (data: any) => {

@@ -79,23 +79,30 @@
             </div>
           </div>
 
-          <!-- Tool Call 算子与命令卡片 -->
-          <div v-if="msg.tool" class="w-full space-y-2">
-            <div class="rounded-xl border border-black/[0.08] bg-white shadow-2xs overflow-hidden">
-              <div @click="isToolLogOpen = !isToolLogOpen" class="p-2.5 flex items-center justify-between hover:bg-black/[0.02] cursor-pointer">
+          <!-- Tool Call 算子与命令卡片列表 (多轮自主执行时序链路) -->
+          <div v-if="(msg.tools && msg.tools.length > 0) || msg.tool" class="w-full space-y-2">
+            <div
+              v-for="(tItem, tIdx) in (msg.tools && msg.tools.length > 0 ? msg.tools : [msg.tool!])"
+              :key="tItem.id || tIdx"
+              class="rounded-xl border border-black/[0.08] bg-white shadow-2xs overflow-hidden"
+            >
+              <div @click="toggleToolCard(tItem.id || String(tIdx))" class="p-2.5 flex items-center justify-between hover:bg-black/[0.02] cursor-pointer">
                 <div class="flex items-center gap-2 min-w-0">
                   <span class="w-5 h-5 rounded-md bg-[#18181B] text-white flex items-center justify-center font-mono text-[10px] font-bold">$_</span>
-                  <span class="text-xs font-mono font-bold text-[#18181B]">{{ msg.tool.name }}</span>
-                  <span class="text-xs font-mono text-[#52525B] bg-[#FAF8F5] border border-black/[0.06] px-2 py-0.5 rounded truncate max-w-md">{{ typeof msg.tool.args === 'string' ? msg.tool.args : (msg.tool.args.command || JSON.stringify(msg.tool.args)) }}</span>
+                  <span class="text-xs font-mono font-bold text-[#18181B]">{{ tItem.name }}</span>
+                  <span v-if="tItem.turn" class="text-[9px] bg-orange-50 text-[#D96B27] px-1 rounded font-mono font-bold">第 {{ tItem.turn }} 轮</span>
+                  <span class="text-xs font-mono text-[#52525B] bg-[#FAF8F5] border border-black/[0.06] px-2 py-0.5 rounded truncate max-w-md">{{ typeof tItem.args === 'string' ? tItem.args : (tItem.args?.command || tItem.args?.rel_path || JSON.stringify(tItem.args)) }}</span>
                 </div>
                 <div class="flex items-center gap-2 shrink-0">
-                  <span class="text-[10px] text-[#10A37F] font-mono font-bold">● 执行成功</span>
-                  <span class="text-xs text-[#71717A]">{{ isToolLogOpen ? '▲' : '▼' }}</span>
+                  <span :class="tItem.output ? 'text-[#10A37F]' : 'text-amber-500 animate-pulse'" class="text-[10px] font-mono font-bold">
+                    {{ tItem.output ? '● 执行完成' : '● 执行中...' }}
+                  </span>
+                  <span class="text-xs text-[#71717A]">{{ openToolCardsMap[tItem.id || String(tIdx)] !== false ? '▲' : '▼' }}</span>
                 </div>
               </div>
-              <div v-show="isToolLogOpen" class="border-t border-black/[0.06] bg-[#18181B] text-white p-3 font-code text-[11px] leading-relaxed space-y-1">
+              <div v-show="openToolCardsMap[tItem.id || String(tIdx)] !== false" class="border-t border-black/[0.06] bg-[#18181B] text-white p-3 font-code text-[11px] leading-relaxed space-y-1">
                 <div class="text-white/40 pb-1 border-b border-white/[0.08]">STDOUT / STDERR · Exit Code: 0</div>
-                <div class="text-emerald-400 whitespace-pre-wrap">{{ msg.tool.output || 'Command executed successfully.' }}</div>
+                <div class="text-emerald-400 whitespace-pre-wrap">{{ tItem.output || '正在物理执行命令/操作...' }}</div>
               </div>
             </div>
           </div>
@@ -293,12 +300,21 @@ const commandItems = [
 ]
 
 const expandedThinkingMap = reactive<Record<string, boolean>>({})
+const openToolCardsMap = reactive<Record<string, boolean>>({})
 
 function toggleThinking(id: string) {
   if (expandedThinkingMap[id] === undefined) {
     expandedThinkingMap[id] = false
   } else {
     expandedThinkingMap[id] = !expandedThinkingMap[id]
+  }
+}
+
+function toggleToolCard(id: string) {
+  if (openToolCardsMap[id] === undefined) {
+    openToolCardsMap[id] = false
+  } else {
+    openToolCardsMap[id] = !openToolCardsMap[id]
   }
 }
 
@@ -468,16 +484,45 @@ async function handleSend() {
             messageListRef.value.scrollTop = messageListRef.value.scrollHeight
           }
         },
-        onToolStart(tool, args) {
+        onToolStart(tool, args, tcId, turn) {
           const target = store.messages.find(m => m.id === assistantMsgId)
           if (target) {
-            target.tool = { name: tool, args: typeof args === 'string' ? JSON.parse(args) : args }
+            if (!target.tools) target.tools = []
+            let parsedArgs = args
+            if (typeof args === 'string') {
+              try { parsedArgs = JSON.parse(args) } catch { parsedArgs = args }
+            }
+            const record = {
+              id: tcId || 'tool_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+              name: tool,
+              args: parsedArgs,
+              turn: turn,
+              status: 'running' as const
+            }
+            target.tools.push(record)
+            target.tool = record
+            openToolCardsMap[record.id] = true
+          }
+          if (messageListRef.value) {
+            messageListRef.value.scrollTop = messageListRef.value.scrollHeight
           }
         },
-        onToolEnd(tool, output) {
+        onToolEnd(tool, output, tcId, turn) {
           const target = store.messages.find(m => m.id === assistantMsgId)
-          if (target && target.tool) {
-            target.tool.output = output
+          if (target && target.tools) {
+            const found = tcId
+              ? target.tools.find(t => t.id === tcId)
+              : target.tools.slice().reverse().find(t => t.name === tool)
+            if (found) {
+              found.output = output
+              found.status = 'success' as const
+            }
+            if (target.tool && target.tool.name === tool) {
+              target.tool.output = output
+            }
+          }
+          if (messageListRef.value) {
+            messageListRef.value.scrollTop = messageListRef.value.scrollHeight
           }
         },
         onDone() {
