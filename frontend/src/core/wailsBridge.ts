@@ -99,12 +99,22 @@ export interface DiffLine {
   label?: string
 }
 
+export interface DiffHunk {
+  index: number
+  header: string
+  lines: DiffLine[]
+  add_count: number
+  del_count: number
+  raw_patch: string
+}
+
 export interface DiffReport {
   file_path: string
   lang: string
   stats: string
   header: string
   lines: DiffLine[]
+  hunks?: DiffHunk[]
 }
 
 function getApp(): any {
@@ -199,6 +209,20 @@ export const wailsBridge = {
     const app = getApp()
     if (app?.RevertFile) {
       await app.RevertFile(filePath)
+    }
+  },
+
+  async applyDiffHunk(filePath: string, hunkIndex: number, stageOnly: boolean = true): Promise<void> {
+    const app = getApp()
+    if (app?.ApplyDiffHunk) {
+      await app.ApplyDiffHunk(filePath, hunkIndex, stageOnly)
+    }
+  },
+
+  async discardDiffHunk(filePath: string, hunkIndex: number): Promise<void> {
+    const app = getApp()
+    if (app?.DiscardDiffHunk) {
+      await app.DiscardDiffHunk(filePath, hunkIndex)
     }
   },
 

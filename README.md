@@ -182,7 +182,8 @@ Tcode 打破了单体硬编码调度逻辑，将 Agent 的执行循环、能力�
   * **多 Tab 标签栏 (`TabBar.tsx`)**：纯白底色配顶部陶土暖橙强调线，支持多文件自由切换、一键保存与悬停关闭；
 * **Monaco 现代代码编辑器与 Diff 审查模式 (`EditorWorkspace.tsx`)**：
   * 深度定制 Warm Minimalist 调色盘，适配 JetBrains Mono / Fira Code 等宽字体，代码行号、折叠与语法高亮完备；
-  * **万行 Diff 虚拟化审查 (Diff Reviewer)**：一键切入 Monaco `DiffEditor` 双栏对比，左侧基准（Git HEAD 原始快照）与右侧最新改动红绿对照，右上角悬浮工具条提供一键放弃更改（`Restore`）与一键暂存（`Stage`）。
+  * **万行 Diff 虚拟化审查 (Diff Reviewer)**：一键切入 Monaco `DiffEditor` 双栏对比，左侧基准（Git HEAD 原始快照）与右侧最新改动红绿对照，右上角悬浮工具条提供一键放弃更改（`Restore`）与一键暂存（`Stage`）；
+  * **行级 Hunk 状态机分块与单块 Cherry-Pick**：右侧审查区通过 Go 微内核将 Diff 结构化切分为独立变更块（Hunk），直观呈现 `块 #N` 增删行数统计；每个 Hunk 配备独立的 `[✓ 采纳块]`（`git apply --cached` 暂存入 Index）与 `[✕ 丢弃块]`（`git apply --reverse` 局部无损反向还原），并即时与左侧 Git 抽屉联动刷新，实现极致的细粒度代码控制。
 * **顶栏单焦点工作台联动**：
   * 完美联动 `💬 对话`、`◫ 双栏协同`、`📝 代码模式`，实现从对话思维链到代码编辑的沉浸式无缝流转。
 

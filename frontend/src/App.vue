@@ -464,23 +464,74 @@
         </header>
 
         <!-- 真实物理行级 Diff (Red / Green) -->
-        <div class="flex-1 overflow-y-auto bg-[#18181B] text-[#F4F4F5] font-mono text-[11px] p-2 space-y-0.5 select-text">
-          <div v-if="diffReport?.header" class="text-white/40 pb-1 mb-1 border-b border-white/[0.06] text-[10px]">
-            {{ diffReport.header }}
-          </div>
-          <div
-            v-for="(line, idx) in (diffReport?.lines || [])"
-            :key="idx"
-            :class="[
-              'px-2 py-0.5 rounded leading-relaxed flex items-center gap-2 whitespace-pre-wrap font-mono transition-colors',
-              line.type === 'add' ? 'bg-[#10A37F]/15 text-emerald-300 border-l-2 border-emerald-500' : '',
-              line.type === 'del' ? 'bg-red-500/15 text-rose-300 border-l-2 border-rose-500' : '',
-              line.type === 'ctx' ? 'text-zinc-400 hover:bg-white/[0.02]' : ''
-            ]"
-          >
-            <span class="w-5 text-[10px] select-none opacity-40 font-mono text-right">{{ idx + 1 }}</span>
-            <span class="flex-1">{{ line.text }}</span>
-          </div>
+        <div class="flex-1 overflow-y-auto bg-[#18181B] text-[#F4F4F5] font-mono text-[11px] p-2 space-y-2 select-text">
+          <!-- 分块 Hunks 细粒度审查模式 -->
+          <template v-if="diffReport?.hunks && diffReport.hunks.length > 0">
+            <div
+              v-for="(hunk, hIdx) in diffReport.hunks"
+              :key="hIdx"
+              class="p-2.5 rounded-xl bg-black/40 border border-white/[0.08] select-none"
+            >
+              <div class="flex items-center justify-between pb-1.5 mb-1.5 border-b border-white/[0.06] text-[10px]">
+                <div class="flex items-center gap-1.5 font-mono min-w-0">
+                  <span class="text-[#D96B27] font-bold shrink-0">块 #{{ hIdx + 1 }}</span>
+                  <span class="text-white/40 truncate">{{ hunk.header }}</span>
+                  <span v-if="hunk.add_count > 0" class="text-emerald-400 font-bold shrink-0">+{{ hunk.add_count }}</span>
+                  <span v-if="hunk.del_count > 0" class="text-rose-400 font-bold shrink-0">-{{ hunk.del_count }}</span>
+                </div>
+                <div class="flex items-center gap-1.5 shrink-0">
+                  <button
+                    @click="applyHunkAction(hunk.index, true)"
+                    title="将此块代码改动暂存入 Git Index (git apply --cached)"
+                    class="px-2 py-0.5 rounded bg-[#10A37F]/20 hover:bg-[#10A37F]/30 text-[#10A37F] font-bold text-[10px] cursor-pointer transition-all active:scale-95"
+                  >
+                    ✓ 采纳块
+                  </button>
+                  <button
+                    @click="discardHunkAction(hunk.index)"
+                    title="无损丢弃撤销此块代码改动 (git apply --reverse)"
+                    class="px-2 py-0.5 rounded bg-red-500/20 hover:bg-red-500/30 text-red-300 font-bold text-[10px] cursor-pointer transition-all active:scale-95"
+                  >
+                    ✕ 丢弃块
+                  </button>
+                </div>
+              </div>
+              <div class="space-y-0.5 font-mono text-[11px] select-text">
+                <div
+                  v-for="(line, lIdx) in hunk.lines"
+                  :key="lIdx"
+                  :class="[
+                    'px-2 py-0.5 rounded leading-relaxed flex items-center gap-2 whitespace-pre-wrap font-mono transition-colors',
+                    line.type === 'add' ? 'bg-[#10A37F]/15 text-emerald-300 border-l-2 border-emerald-500' : '',
+                    line.type === 'del' ? 'bg-red-500/15 text-rose-300 border-l-2 border-rose-500' : '',
+                    line.type === 'ctx' ? 'text-zinc-400 hover:bg-white/[0.02]' : ''
+                  ]"
+                >
+                  <span class="flex-1">{{ line.text }}</span>
+                </div>
+              </div>
+            </div>
+          </template>
+
+          <!-- 备用平铺模式 (Clean 工作区或无 Hunk 分块) -->
+          <template v-else>
+            <div v-if="diffReport?.header" class="text-white/40 pb-1 mb-1 border-b border-white/[0.06] text-[10px]">
+              {{ diffReport.header }}
+            </div>
+            <div
+              v-for="(line, idx) in (diffReport?.lines || [])"
+              :key="idx"
+              :class="[
+                'px-2 py-0.5 rounded leading-relaxed flex items-center gap-2 whitespace-pre-wrap font-mono transition-colors',
+                line.type === 'add' ? 'bg-[#10A37F]/15 text-emerald-300 border-l-2 border-emerald-500' : '',
+                line.type === 'del' ? 'bg-red-500/15 text-rose-300 border-l-2 border-rose-500' : '',
+                line.type === 'ctx' ? 'text-zinc-400 hover:bg-white/[0.02]' : ''
+              ]"
+            >
+              <span class="w-5 text-[10px] select-none opacity-40 font-mono text-right">{{ idx + 1 }}</span>
+              <span class="flex-1">{{ line.text }}</span>
+            </div>
+          </template>
         </div>
 
         <footer class="h-6 bg-[#FAF8F5] border-t border-black/[0.08] px-3 flex items-center justify-between text-[10px] text-[#71717A] font-mono select-none shrink-0">
@@ -991,9 +1042,34 @@ async function revertFileAction() {
   try {
     await wailsBridge.revertFile(activeDiffFile.value)
     await loadDiff()
+    await loadGitStatus()
     showToast(`✓ 已物理撤回 ${activeDiffFile.value} 磁盘改动 (Git Checkout)`)
   } catch (err) {
     showToast('撤回异常: ' + err)
+  }
+}
+
+async function applyHunkAction(hunkIndex: number, stageOnly: boolean = true) {
+  try {
+    showToast(`⏳ 正在采纳 [${activeDiffFile.value}] 第 #${hunkIndex + 1} 个变更块...`)
+    await wailsBridge.applyDiffHunk(activeDiffFile.value, hunkIndex, stageOnly)
+    showToast(`✓ 已成功采纳该块变更 (git apply --cached)`)
+    await loadDiff()
+    await loadGitStatus()
+  } catch (err) {
+    showToast(`采纳变更块异常: ${err}`)
+  }
+}
+
+async function discardHunkAction(hunkIndex: number) {
+  try {
+    showToast(`⏳ 正在丢弃 [${activeDiffFile.value}] 第 #${hunkIndex + 1} 个变更块...`)
+    await wailsBridge.discardDiffHunk(activeDiffFile.value, hunkIndex)
+    showToast(`✓ 已成功丢弃撤销该块变更 (git apply --reverse)`)
+    await loadDiff()
+    await loadGitStatus()
+  } catch (err) {
+    showToast(`丢弃变更块异常: ${err}`)
   }
 }
 
