@@ -6,12 +6,28 @@ export function ApplyDiffHunk(arg1, arg2, arg3) {
   return window['go']['main']['App']['ApplyDiffHunk'](arg1, arg2, arg3);
 }
 
+export function CancelTerminalCommand() {
+  return window['go']['main']['App']['CancelTerminalCommand']();
+}
+
+export function CloseWindow() {
+  return window['go']['main']['App']['CloseWindow']();
+}
+
 export function DeleteChannel(arg1) {
   return window['go']['main']['App']['DeleteChannel'](arg1);
 }
 
+export function DeleteMCP(arg1) {
+  return window['go']['main']['App']['DeleteMCP'](arg1);
+}
+
 export function DeleteSession(arg1) {
   return window['go']['main']['App']['DeleteSession'](arg1);
+}
+
+export function DiagnoseFile(arg1) {
+  return window['go']['main']['App']['DiagnoseFile'](arg1);
 }
 
 export function DiscardDiffHunk(arg1, arg2) {
@@ -20,6 +36,10 @@ export function DiscardDiffHunk(arg1, arg2) {
 
 export function ExecCommand(arg1) {
   return window['go']['main']['App']['ExecCommand'](arg1);
+}
+
+export function ExecTerminalStream(arg1) {
+  return window['go']['main']['App']['ExecTerminalStream'](arg1);
 }
 
 export function FetchUpstreamModels(arg1, arg2) {
@@ -102,6 +122,10 @@ export function ListSkills() {
   return window['go']['main']['App']['ListSkills']();
 }
 
+export function MinimizeWindow() {
+  return window['go']['main']['App']['MinimizeWindow']();
+}
+
 export function OpenFileDialog() {
   return window['go']['main']['App']['OpenFileDialog']();
 }
@@ -152,6 +176,10 @@ export function SendMessage(arg1) {
 
 export function TestMCPServer(arg1) {
   return window['go']['main']['App']['TestMCPServer'](arg1);
+}
+
+export function ToggleMaximizeWindow() {
+  return window['go']['main']['App']['ToggleMaximizeWindow']();
 }
 
 export function WriteFile(arg1, arg2) {
