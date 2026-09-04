@@ -1,6 +1,6 @@
 # Tcode (Next-Gen AI Agentic Studio)
 
-新一代开源 AI 编程桌面工作台，基于 **Tauri v2 + Tokio 异步 Rust Core Daemon + React 19 + TypeScript**，采用 **Inner/Outer Loop 统一双环执行内核**、**Rail 能力插件体系** 与 **Swarm Flow 算子化多智能体编排流**，严格遵循暖米白（`#FAF8F5`）、工作台米灰（`#F4EFEA`）与陶土暖橙（`#D96B27`）的极简工程人机美学规范。
+新一代开源 AI 编程桌面工作台，基于 **Wails v2 + Go 原生微内核 + Vue 3 + TypeScript**，采用 **Inner/Outer Loop 统一双环执行内核**、**Rail 能力插件体系** 与 **Swarm Flow 算子化多智能体编排流**，严格遵循暖米白（`#FAF8F5`）、工作台米灰（`#F4EFEA`）与陶土暖橙（`#D96B27`）的极简工程人机美学规范。
 
 ---
 
@@ -10,13 +10,13 @@ Tcode 打破了单体硬编码调度逻辑，将 Agent 的执行循环、能力�
 
 ```text
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
-│                              Tcode Frontend (React 19 + TypeScript)                    │
+│                              Tcode Frontend (Vue 3 + TypeScript)                      │
 │      [ 单焦点主工作区 (智能对话 / Monaco编辑器 聚合切换) | Diff 对比 | 终端抽屉 | 纯净空状态 ]       │
 └───────────────────────────────────────────┬────────────────────────────────────────────┘
-                                            │ Tauri v2 Zero-Copy IPC / Typed Event Streams
+                                            │ Wails v2 原生 IPC / Typed Event Streams
                                             ▼
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
-│                          Tcode Rust Core Daemon (Tokio Async Engine)                   │
+│                          Tcode Go Native Microkernel (Wails v2 Engine)                 │
 │                                                                                        │
 │  ┌──────────────────────────────────────────────────────────────────────────────────┐  │
 │  │                    Swarm Flow 算子化多智能体编排流 (Swarm Flow Operators)            │  │
@@ -91,7 +91,7 @@ Tcode 打破了单体硬编码调度逻辑，将 Agent 的执行循环、能力�
 * **三维一体控制台**：
   * `$_ pwsh 命令行终端`：支持用户手动键入指令（`go test`, `git status`, `cargo check` 等），与 Agent 沙箱物理环境同构；
   * `⚡ Agent 执行链路 (SSE Trace)`：流式推送微内核 Inner Loop 状态、算子分发事件与 Token 开销；
-  * `🛰️ Tokio 微内核状态`：实时呈现协程池活跃 Worker、零泄漏内存监控与影子 Git 保护状态。
+  * `🛰️ Go 微内核运行状态`：实时呈现 Goroutine 活跃数、零泄漏内存监控与影子 Git 保护状态。
 
 ### 3. 动态多平台模型网关 (对齐 sub2api 业界规范)
 * **厂商与认证强联动矩阵**：覆盖 Anthropic Claude, OpenAI, Google Gemini, DeepSeek, SiliconFlow, Kimi, Zhipu GLM 与本地 Ollama；不同厂商动态展示支持的认证类型（原生支持 API Key、Sub2 订阅池、Cap 凭据包、OAuth 2.0、代理反代等）；
@@ -121,7 +121,7 @@ Tcode 打破了单体硬编码调度逻辑，将 Agent 的执行循环、能力�
 * **实时微内核调度审计流**：流式记录最近底层算子、所用模型、In/Out Tokens 明细与延迟耗时，支持导出 CSV 审计报表。
 
 ### 7. Agent Skill 技能与提示词引擎 (Prompt & Skill Hub)
-* **多源导入与一键激活**：支持直接从本地文件系统拖拽/选取 `SKILL.md` 规约文件与目录，自动解析 Frontmatter 元数据；同时内置官方专家技能市场（Rust 微内核、UI/UX 规范先行、TDD 测试治理、分布式架构守卫）；
+* **多源导入与一键激活**：支持直接从本地文件系统拖拽/选取 `SKILL.md` 规约文件与目录，自动解析 Frontmatter 元数据；同时内置官方专家技能市场（Go 微内核调优、UI/UX 规范先行、TDD 测试治理、分布式架构守卫）；
 * **指令驱动触发**：支持在对话框中以 `/` 触发词（如 `/review`, `/tdd`, `/security`, `/perf`）精准调用；
 * **多行 Markdown 系统级指令**：支持舒适编辑系统提示词，规范角色契约、执行流、审查清单与输出格式；
 * **业界经典预设一键套用**：内置 Thermo-Nuclear 架构审查专家、TDD 红绿重构测试生成器、全维白盒安全守卫、性能与并发调优专家模版。
@@ -135,8 +135,8 @@ Tcode 打破了单体硬编码调度逻辑，将 Agent 的执行循环、能力�
   * **分段锁注册中心 (`internal/host/registry.go`)**：无全局大锁，支持高并发读取与按优先级降序调度；
   * **Panic 隔离看门狗 (`internal/host/guard.go`)**：结合 `recover()` 与 `debug.Stack()` 捕获插件堆栈，保障微内核常驻守护进程 100% 高可用；
   * **OpenAI 与 Claude 双轨原生上游驱动**：中立规范层 (`pkg/protocol/canonical.go`) 抹平协议差异，原生支持 OpenAI Chat Completions 协议族（GPT-4o、DeepSeek、SiliconFlow）与 Anthropic Claude Messages API 官方协议（支持 Claude 3.7 Thinking 深度思考流与 Prompt Caching 用量审计）。
-* **前端 React 19 现代工程 (`frontend/`)**：
-  * 基于 **React 19 + TypeScript 5.5 (Strict) + Vite 6 + Tailwind CSS v4**；
+* **前端 Vue 3 现代工程 (`frontend/`)**：
+  * 基于 **Vue 3 + TypeScript 5.5 (Strict) + Vite 6 + Tailwind CSS v4**；
   * 完整落地 Warm Minimalist 调色盘（`#FAF8F5` / `#F4EFEA` / `#D96B27`）与 16:9 人机工学单焦点视口布局；
   * 顶栏单焦点切换胶囊（`💬 对话` / `◫ 双栏协同` / `📝 代码区`）、48px 侧边活动栏、生产级双层 Git 源码控制面板与集成终端抽屉（`Ctrl + \`` 全局快捷唤起）。
 
