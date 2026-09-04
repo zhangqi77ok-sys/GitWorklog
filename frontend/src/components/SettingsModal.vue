@@ -145,32 +145,130 @@
             </div>
           </div>
 
-          <!-- 2. MCP 服务协议管理 -->
+          <!-- 2. MCP 服务协议管理 (全量探活与工具探测面板) -->
           <div v-else-if="activeMenu === 'mcp'" class="space-y-4">
             <div class="flex items-center justify-between">
               <div>
-                <h3 class="text-xs font-bold text-[#18181B]">Model Context Protocol (MCP) 本地服务</h3>
-                <p class="text-[11px] text-[#71717A] mt-0.5">支持 stdio 与 SSE 双协议规范 · 动态暴露工具算子给 Agent</p>
+                <h3 class="text-xs font-bold text-[#18181B]">Model Context Protocol (MCP) 服务治理看板</h3>
+                <p class="text-[11px] text-[#71717A] mt-0.5">跨进程 Stdio 与 SSE 动态扩展 · 算子自动注入 ReAct 执行循环</p>
               </div>
+              <button @click="openAddMCP" class="px-3 py-1.5 rounded-xl bg-[#D96B27] text-white text-xs font-bold shadow-xs hover:bg-[#B8551B] cursor-pointer flex items-center gap-1">
+                <span>➕</span><span>新增 MCP 服务</span>
+              </button>
             </div>
 
-            <div class="space-y-2">
+            <!-- MCP 服务列表 -->
+            <div class="space-y-2.5">
               <div
                 v-for="mcp in mcps"
                 :key="mcp.id"
-                class="p-3 rounded-xl border border-black/[0.08] bg-[#FAF8F5] flex items-center justify-between shadow-2xs"
+                class="rounded-xl border border-black/[0.08] bg-[#FAF8F5] p-3 shadow-2xs hover:border-[#D96B27]/40 transition-all space-y-2"
               >
-                <div>
-                  <div class="flex items-center gap-2">
-                    <span class="text-xs font-bold text-[#18181B]">{{ mcp.name }}</span>
-                    <span class="text-[9px] bg-black/[0.04] text-[#52525B] px-1.5 py-0.2 rounded font-mono">{{ mcp.type }}</span>
+                <!-- 卡片顶层元数据与操作 -->
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-2.5">
+                    <span :class="mcp.enabled ? 'bg-emerald-500' : 'bg-gray-300'" class="w-2.5 h-2.5 rounded-full inline-block shrink-0"></span>
+                    <div>
+                      <div class="flex items-center gap-2">
+                        <span class="text-xs font-bold text-[#18181B]">{{ mcp.name }}</span>
+                        <span class="text-[9px] bg-black/[0.05] text-[#52525B] px-1.5 py-0.2 rounded font-mono font-semibold">{{ mcp.type }}</span>
+                        <span v-if="mcpTestResultMap[mcp.id]" :class="mcpTestResultMap[mcp.id].status === 'ONLINE' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'" class="text-[9px] px-1.5 py-0.2 rounded font-mono font-bold">
+                          {{ mcpTestResultMap[mcp.id].status === 'ONLINE' ? '⚡ ' + mcpTestResultMap[mcp.id].latency : '❌ 连接失败' }}
+                        </span>
+                        <span v-if="mcpTestResultMap[mcp.id]?.tool_count" class="text-[9px] bg-orange-50 text-[#D96B27] px-1.5 py-0.2 rounded font-mono font-bold">
+                          🛠️ {{ mcpTestResultMap[mcp.id].tool_count }} 算子
+                        </span>
+                      </div>
+                      <div class="text-[11px] text-[#71717A] mt-0.5 font-mono">
+                        {{ mcp.command }} {{ (mcp.args || []).join(' ') }}
+                      </div>
+                    </div>
                   </div>
-                  <div class="text-[11px] text-[#71717A] mt-0.5 font-mono">{{ mcp.command }} {{ (mcp.args || []).join(' ') }}</div>
+
+                  <!-- 交互按钮组 -->
+                  <div class="flex items-center gap-2">
+                    <button
+                      @click="executeTestMCP(mcp)"
+                      :disabled="mcpTestLoadingMap[mcp.id]"
+                      class="px-2.5 py-1 rounded-lg bg-white border border-black/[0.08] text-xs font-medium hover:bg-black/[0.02] cursor-pointer flex items-center gap-1"
+                    >
+                      <span>{{ mcpTestLoadingMap[mcp.id] ? '⏳ 握手中...' : '⚡ 测速探活' }}</span>
+                    </button>
+                    <button
+                      v-if="mcpTestResultMap[mcp.id]?.tools?.length"
+                      @click="toggleToolsList(mcp.id)"
+                      class="px-2.5 py-1 rounded-lg bg-white border border-black/[0.08] text-xs font-medium hover:bg-black/[0.02] cursor-pointer"
+                    >
+                      {{ expandedToolsMap[mcp.id] ? '收起算子 ▲' : '查看算子 ▼' }}
+                    </button>
+                    <button
+                      @click="editMCP(mcp)"
+                      class="px-2.5 py-1 rounded-lg bg-white border border-black/[0.08] text-xs font-medium hover:bg-black/[0.02] cursor-pointer"
+                    >
+                      ✏️ 配置
+                    </button>
+                    <button
+                      @click="deleteMCP(mcp.id)"
+                      class="px-2 py-1 rounded-lg bg-white border border-red-200 text-xs font-medium text-red-600 hover:bg-red-50 cursor-pointer"
+                    >
+                      🗑️
+                    </button>
+                    <label class="relative inline-flex items-center cursor-pointer ml-1">
+                      <input type="checkbox" v-model="mcp.enabled" @change="toggleMCP(mcp)" class="sr-only peer">
+                      <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#10A37F]"></div>
+                    </label>
+                  </div>
                 </div>
-                <label class="relative inline-flex items-center cursor-pointer">
-                  <input type="checkbox" v-model="mcp.enabled" @change="toggleMCP(mcp)" class="sr-only peer">
-                  <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#10A37F]"></div>
-                </label>
+
+                <!-- 探测到的工具清单抽屉 (可折叠) -->
+                <div v-if="expandedToolsMap[mcp.id] && mcpTestResultMap[mcp.id]?.tools?.length" class="mt-2 pt-2 border-t border-black/[0.06] space-y-1.5 animate-in fade-in">
+                  <div class="text-[10px] font-bold text-[#71717A] uppercase tracking-wider">已挂载受控工具清单 (Tools Available):</div>
+                  <div class="grid grid-cols-2 gap-1.5">
+                    <div
+                      v-for="tName in mcpTestResultMap[mcp.id].tools"
+                      :key="tName"
+                      class="px-2.5 py-1.5 rounded-lg bg-white border border-black/[0.06] text-xs flex items-center gap-1.5 font-mono"
+                    >
+                      <span class="text-[#D96B27] font-bold">🔧</span>
+                      <span class="text-[#18181B] font-semibold">{{ tName }}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 内嵌表单抽屉: 新增/编辑 MCP 服务 -->
+            <div v-if="isEditingMCP" class="p-4 rounded-xl border border-[#D96B27]/40 bg-white shadow-sm space-y-3">
+              <div class="flex items-center justify-between border-b border-black/[0.06] pb-2">
+                <h4 class="text-xs font-bold text-[#18181B]">{{ mcpForm.id ? '编辑 MCP 服务配置' : '新增 MCP 服务配置' }}</h4>
+                <button @click="isEditingMCP = false" class="text-xs text-[#71717A] hover:text-[#18181B]">取消</button>
+              </div>
+
+              <div class="grid grid-cols-2 gap-3 text-xs">
+                <div>
+                  <label class="block font-medium text-[#71717A] mb-1">服务名称</label>
+                  <input v-model="mcpForm.name" type="text" placeholder="例如：Local Filesystem" class="w-full px-2.5 py-1.5 rounded-lg border border-black/[0.1] text-xs focus:outline-none focus:border-[#D96B27]">
+                </div>
+                <div>
+                  <label class="block font-medium text-[#71717A] mb-1">协议传输类型</label>
+                  <select v-model="mcpForm.type" class="w-full px-2.5 py-1.5 rounded-lg border border-black/[0.1] text-xs focus:outline-none focus:border-[#D96B27] bg-white">
+                    <option value="stdio">stdio (本地外部子进程管道)</option>
+                    <option value="sse">sse (远程 HTTP SSE 端点)</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block font-medium text-[#71717A] mb-1">启动命令 (Command)</label>
+                  <input v-model="mcpForm.command" type="text" placeholder="例如：npx / uvx / node" class="w-full px-2.5 py-1.5 rounded-lg border border-black/[0.1] text-xs focus:outline-none focus:border-[#D96B27]">
+                </div>
+                <div>
+                  <label class="block font-medium text-[#71717A] mb-1">启动参数 (以空格分隔)</label>
+                  <input v-model="mcpArgsInput" type="text" placeholder="-y @modelcontextprotocol/server-filesystem ." class="w-full px-2.5 py-1.5 rounded-lg border border-black/[0.1] text-xs focus:outline-none focus:border-[#D96B27]">
+                </div>
+              </div>
+
+              <div class="flex justify-end gap-2 pt-2 border-t border-black/[0.06]">
+                <button @click="isEditingMCP = false" class="px-3 py-1 rounded-lg border border-black/[0.1] text-xs text-[#52525B]">取消</button>
+                <button @click="saveMCPForm" class="px-4 py-1 rounded-lg bg-[#D96B27] text-white text-xs font-semibold hover:bg-[#B8551B]">保存 MCP 服务</button>
               </div>
             </div>
           </div>
@@ -249,6 +347,7 @@ import {
   wailsBridge,
   type ChannelConfig,
   type MCPServerConfig,
+  type MCPTestResult,
   type SkillConfig,
   type RuleConfig
 } from '../core/wailsBridge'
@@ -256,6 +355,7 @@ import {
 const store = useChatStore()
 const activeMenu = ref('gateway')
 const isEditing = ref(false)
+const isEditingMCP = ref(false)
 
 const channels = ref<ChannelConfig[]>([])
 const mcps = ref<MCPServerConfig[]>([])
@@ -263,6 +363,20 @@ const skills = ref<SkillConfig[]>([])
 const rules = ref<RuleConfig[]>([])
 
 const pingLoadingMap = reactive<Record<string, boolean>>({})
+const mcpTestLoadingMap = reactive<Record<string, boolean>>({})
+const mcpTestResultMap = reactive<Record<string, MCPTestResult>>({})
+const expandedToolsMap = reactive<Record<string, boolean>>({})
+
+const mcpForm = reactive<MCPServerConfig>({
+  id: '',
+  name: '',
+  type: 'stdio',
+  command: 'npx',
+  args: [],
+  enabled: true,
+  updated_at: 0
+})
+const mcpArgsInput = ref('')
 
 const form = reactive<ChannelConfig>({
   id: '',
@@ -385,5 +499,68 @@ async function saveChannelForm() {
   } catch (err) {
     console.error('Save channel error:', err)
   }
+}
+
+function openAddMCP() {
+  mcpForm.id = ''
+  mcpForm.name = ''
+  mcpForm.type = 'stdio'
+  mcpForm.command = 'npx'
+  mcpForm.args = []
+  mcpForm.enabled = true
+  mcpArgsInput.value = ''
+  isEditingMCP.value = true
+}
+
+function editMCP(mcp: MCPServerConfig) {
+  Object.assign(mcpForm, mcp)
+  mcpArgsInput.value = (mcp.args || []).join(' ')
+  isEditingMCP.value = true
+}
+
+async function deleteMCP(id: string) {
+  try {
+    await wailsBridge.deleteMCP(id)
+    mcps.value = mcps.value.filter(m => m.id !== id)
+    delete mcpTestResultMap[id]
+    delete expandedToolsMap[id]
+  } catch (err) {
+    console.error('Delete MCP error:', err)
+  }
+}
+
+async function saveMCPForm() {
+  if (!mcpForm.name.trim() || !mcpForm.command.trim()) return
+  const toSave: MCPServerConfig = {
+    ...mcpForm,
+    args: mcpArgsInput.value.trim() ? mcpArgsInput.value.trim().split(/\s+/) : []
+  }
+  if (!toSave.id) toSave.id = 'mcp_' + Date.now()
+  try {
+    await wailsBridge.saveMCP(toSave)
+    await loadMCPs()
+    isEditingMCP.value = false
+  } catch (err) {
+    console.error('Save MCP error:', err)
+  }
+}
+
+async function executeTestMCP(mcp: MCPServerConfig) {
+  mcpTestLoadingMap[mcp.id] = true
+  try {
+    const res = await wailsBridge.testMCPServer(mcp.id)
+    mcpTestResultMap[mcp.id] = res
+    if (res.tools && res.tools.length > 0) {
+      expandedToolsMap[mcp.id] = true
+    }
+  } catch (err) {
+    console.error('Test MCP error:', err)
+  } finally {
+    mcpTestLoadingMap[mcp.id] = false
+  }
+}
+
+function toggleToolsList(id: string) {
+  expandedToolsMap[id] = !expandedToolsMap[id]
 }
 </script>

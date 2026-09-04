@@ -314,6 +314,17 @@ Tcode 打破了单体硬编码调度逻辑，将 Agent 的执行循环、能力�
   * 在大模型发起第一轮流式推理前，将本地沙箱工具（`exec_command`, `write_file`, `read_file`, `git_status`）与所有在线 MCP 算子合并生成工具集；
   * 当模型发起算子调用时，微内核在 $O(1)$ 时间内精准路由派发到对应子进程，执行后结果返回 ReAct 上下文驱动后续自愈推理，完成全自主端到端闭环。
 
+### 29. LSP 编译器语法诊断自愈守卫与 MCP 服务治理看板 (LSP Diagnostics & MCP Management)
+* **轻量级多语言编译器语法探针**：
+  - 原生支持 Go (`go vet`)、TypeScript/JavaScript (`npx tsc --noEmit`) 与 Python (`python -m py_compile`) 毫秒级轻量静态检查；
+  - 探针运行全程注入 Windows 零黑框标志位（`CREATE_NO_WINDOW = 0x08000000`），超时 4 秒严格熔断，不侵入主交互线程；
+* **落盘即诊断与 ReAct 智能体自愈回路 (Self-Healing Loop)**：
+  - 当大模型触发 `write_file` 动作原子落盘代码后，Go 微内核自动运行编译器诊断；若捕获未定义标识符、缺少 import 或语法红线，自动置顶追加至工具返回结果中，驱动大模型在下一轮循环中自动修复消除编译错误；
+* **前端 MCP 运维可视化看板 (`SettingsModal.vue`)**：
+  - 采用 Warm Minimalist 极简卡片，实时呈现服务在线状态指示灯、毫秒级握手延迟与算子数量；
+  - 支持一键「⚡ 测速探活」，点击「查看算子 ▼」可平滑展开探测到的工具列表（名称与参数说明）；
+  - 提供表单抽屉支持即时添加、编辑、持久化删除（`DeleteMCP`）以及一键启停服务。
+
 ---
 
 ## 🎨 四、视觉与人机工程学规范

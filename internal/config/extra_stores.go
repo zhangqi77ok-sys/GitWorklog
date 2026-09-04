@@ -199,6 +199,25 @@ func (s *ExtraStore) SaveMCP(cfg MCPServerConfig) error {
 	return s.saveMCPs()
 }
 
+// DeleteMCP 从配置中删除指定 MCP
+func (s *ExtraStore) DeleteMCP(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	idx := -1
+	for i, item := range s.mcps {
+		if item.ID == id {
+			idx = i
+			break
+		}
+	}
+	if idx >= 0 {
+		s.mcps = append(s.mcps[:idx], s.mcps[idx+1:]...)
+		return s.saveMCPs()
+	}
+	return nil
+}
+
 // ListSkills 获取 Skills 列表
 func (s *ExtraStore) ListSkills() []SkillConfig {
 	s.mu.RLock()

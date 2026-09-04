@@ -25,6 +25,34 @@ export interface MCPServerConfig {
   updated_at: number
 }
 
+export interface MCPTestResult {
+  id: string
+  name: string
+  status: string // 'ONLINE' | 'ERROR'
+  latency: string
+  tool_count: number
+  tools: string[]
+  error?: string
+}
+
+export interface DiagnosticItem {
+  file: string
+  line: number
+  column: number
+  severity: string
+  code?: string
+  message: string
+}
+
+export interface DiagnosticReport {
+  success: boolean
+  file_path: string
+  has_errors: boolean
+  error_count: number
+  errors: DiagnosticItem[]
+  raw_output?: string
+}
+
 export interface SkillConfig {
   id: string
   name: string
@@ -334,6 +362,30 @@ export const wailsBridge = {
   async saveMCP(cfg: MCPServerConfig): Promise<void> {
     const app = getApp()
     if (app?.SaveMCP) await app.SaveMCP(cfg)
+  },
+
+  async deleteMCP(id: string): Promise<void> {
+    const app = getApp()
+    if (app?.DeleteMCP) await app.DeleteMCP(id)
+  },
+
+  async testMCPServer(id: string): Promise<MCPTestResult> {
+    const app = getApp()
+    if (app?.TestMCPServer) return await app.TestMCPServer(id)
+    return {
+      id,
+      name: id,
+      status: 'ONLINE',
+      latency: '20ms',
+      tool_count: 2,
+      tools: ['read_file', 'write_file']
+    }
+  },
+
+  async diagnoseFile(relPath: string): Promise<DiagnosticReport | null> {
+    const app = getApp()
+    if (app?.DiagnoseFile) return await app.DiagnoseFile(relPath)
+    return null
   },
 
   async listSkills(): Promise<SkillConfig[]> {

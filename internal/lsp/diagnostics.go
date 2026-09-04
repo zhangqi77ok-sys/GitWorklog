@@ -1,0 +1,233 @@
+package lsp
+
+import (
+	"bytes"
+	"context"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"regexp"
+	"strconv"
+	"strings"
+	"syscall"
+	"time"
+)
+
+// DiagnosticItem 单条编译器语法/类型错误诊断
+type DiagnosticItem struct {
+	File     string `json:"file"`
+	Line     int    `json:"line"`
+	Column   int    `json:"column"`
+	Severity string `json:"severity"` // "ERROR" | "WARNING"
+	Code     string `json:"code,omitempty"`
+	Message  string `json:"message"`
+}
+
+// DiagnosticReport 诊断汇总报告
+type DiagnosticReport struct {
+	Success    bool             `json:"success"`
+	FilePath   string           `json:"file_path"`
+	HasErrors  bool             `json:"has_errors"`
+	ErrorCount int              `json:"error_count"`
+	Errors     []DiagnosticItem `json:"errors"`
+	RawOutput  string           `json:"raw_output,omitempty"`
+}
+
+var (
+	// Go 错误输出正则: main.go:12:5: undefined: abc 或 main.go:12: syntax error: ...
+	goErrRegex = regexp.MustCompile(`(?m)^(.+?\.go):(\d+)(?::(\d+))?:\s*(.+)$`)
+	// TS 错误输出正则: src/foo.ts:10:5 - error TS2322: Type 'string' is not assignable to type 'number'.
+	tsErrRegex = regexp.MustCompile(`(?m)^(.+?\.[tj]sx?):(\d+):(\d+)\s*-\s*error\s*(TS\d+)?:\s*(.+)$`)
+	// Python 语法错误正则: File "foo.py", line 12
+	pyErrRegex = regexp.MustCompile(`(?m)File "(.+?)", line (\d+)(?:, in .+)?\n(?:\s+.*\n)*\s*(.+Error:\s*.+)`)
+)
+
+// DiagnoseFile 对指定工作区内的文件进行毫秒级轻量编译器语法诊断
+func DiagnoseFile(workspace string, relPath string) (*DiagnosticReport, error) {
+	absPath := filepath.Join(workspace, relPath)
+	if _, err := os.Stat(absPath); os.IsNotExist(err) {
+		return nil, fmt.Errorf("file not found: %s", relPath)
+	}
+
+	ext := strings.ToLower(filepath.Ext(relPath))
+	report := &DiagnosticReport{
+		Success:    true,
+		FilePath:   relPath,
+		Errors:     make([]DiagnosticItem, 0),
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	defer cancel()
+
+	var rawErr string
+	switch ext {
+	case ".go":
+		rawErr = runGoDiagnostics(ctx, workspace, relPath)
+		report.Errors = parseGoErrors(rawErr, relPath)
+	case ".ts", ".tsx", ".js":
+		rawErr = runTSDiagnostics(ctx, workspace, relPath)
+		report.Errors = parseTSErrors(rawErr, relPath)
+	case ".py":
+		rawErr = runPythonDiagnostics(ctx, workspace, absPath)
+		report.Errors = parsePythonErrors(rawErr, relPath)
+	default:
+		// 其他语言暂不执行静态诊断
+		return report, nil
+	}
+
+	report.RawOutput = rawErr
+	report.ErrorCount = len(report.Errors)
+	report.HasErrors = report.ErrorCount > 0
+	return report, nil
+}
+
+// FormatDiagnosticFeedback 将诊断结果格式化为注入 ReAct 智能体自愈回路的标准提示语
+func FormatDiagnosticFeedback(report *DiagnosticReport) string {
+	if report == nil || !report.HasErrors {
+		return ""
+	}
+
+	var sb strings.Builder
+	sb.WriteString("\n\n⚠️ 【⚡ 编译器实时语法诊断告警 (LSP Compiler Diagnostics)】\n")
+	sb.WriteString("代码落盘后编译器检测到以下语法或类型错误：\n")
+
+	limit := 5
+	if len(report.Errors) < limit {
+		limit = len(report.Errors)
+	}
+
+	for i := 0; i < limit; i++ {
+		errItem := report.Errors[i]
+		codeStr := errItem.Code
+		if codeStr == "" {
+			codeStr = "SYNTAX"
+		}
+		sb.WriteString(fmt.Sprintf("%d. [%s %s] %s (第 %d 行, 第 %d 列): %s\n",
+			i+1, errItem.Severity, codeStr, errItem.File, errItem.Line, errItem.Column, errItem.Message))
+	}
+
+	if len(report.Errors) > limit {
+		sb.WriteString(fmt.Sprintf("... 以及其余 %d 处错误\n", len(report.Errors)-limit))
+	}
+	sb.WriteString("⚠️ 严禁忽视上述编译器报错！请在进行下一步之前，优先修改代码消除上述编译错误。")
+	return sb.String()
+}
+
+func runGoDiagnostics(ctx context.Context, workspace string, relPath string) string {
+	dir := filepath.Dir(relPath)
+	// 优先在同目录下执行 go vet
+	cmd := exec.CommandContext(ctx, "go", "vet", "./"+filepath.ToSlash(dir))
+	cmd.Dir = workspace
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		HideWindow:    true,
+		CreationFlags: 0x08000000, // 零黑框防护
+	}
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	_ = cmd.Run()
+	return stderr.String()
+}
+
+func runTSDiagnostics(ctx context.Context, workspace string, relPath string) string {
+	// 若存在 npx tsc，针对当前文件进行轻量检查
+	cmd := exec.CommandContext(ctx, "npx", "tsc", "--noEmit", "--skipLibCheck", relPath)
+	cmd.Dir = workspace
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		HideWindow:    true,
+		CreationFlags: 0x08000000,
+	}
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &out
+	_ = cmd.Run()
+	return out.String()
+}
+
+func runPythonDiagnostics(ctx context.Context, workspace string, absPath string) string {
+	cmd := exec.CommandContext(ctx, "python", "-m", "py_compile", absPath)
+	cmd.Dir = workspace
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		HideWindow:    true,
+		CreationFlags: 0x08000000,
+	}
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	_ = cmd.Run()
+	return stderr.String()
+}
+
+func parseGoErrors(raw string, targetFile string) []DiagnosticItem {
+	items := make([]DiagnosticItem, 0)
+	matches := goErrRegex.FindAllStringSubmatch(raw, -1)
+	for _, m := range matches {
+		if len(m) < 5 {
+			continue
+		}
+		file := filepath.Base(m[1])
+		targetBase := filepath.Base(targetFile)
+		// 优先匹配当前修改的文件
+		if file != targetBase && !strings.Contains(m[1], targetBase) {
+			continue
+		}
+		line, _ := strconv.Atoi(m[2])
+		col := 0
+		if m[3] != "" {
+			col, _ = strconv.Atoi(m[3])
+		}
+		msg := strings.TrimSpace(m[4])
+		items = append(items, DiagnosticItem{
+			File:     targetFile,
+			Line:     line,
+			Column:   col,
+			Severity: "ERROR",
+			Code:     "GO_VET",
+			Message:  msg,
+		})
+	}
+	return items
+}
+
+func parseTSErrors(raw string, targetFile string) []DiagnosticItem {
+	items := make([]DiagnosticItem, 0)
+	matches := tsErrRegex.FindAllStringSubmatch(raw, -1)
+	for _, m := range matches {
+		if len(m) < 6 {
+			continue
+		}
+		line, _ := strconv.Atoi(m[2])
+		col, _ := strconv.Atoi(m[3])
+		code := m[4]
+		msg := strings.TrimSpace(m[5])
+		items = append(items, DiagnosticItem{
+			File:     targetFile,
+			Line:     line,
+			Column:   col,
+			Severity: "ERROR",
+			Code:     code,
+			Message:  msg,
+		})
+	}
+	return items
+}
+
+func parsePythonErrors(raw string, targetFile string) []DiagnosticItem {
+	items := make([]DiagnosticItem, 0)
+	matches := pyErrRegex.FindAllStringSubmatch(raw, -1)
+	for _, m := range matches {
+		if len(m) < 4 {
+			continue
+		}
+		line, _ := strconv.Atoi(m[2])
+		msg := strings.TrimSpace(m[3])
+		items = append(items, DiagnosticItem{
+			File:     targetFile,
+			Line:     line,
+			Column:   1,
+			Severity: "ERROR",
+			Code:     "PY_COMPILE",
+			Message:  msg,
+		})
+	}
+	return items
+}

@@ -3,6 +3,7 @@ package main
 import (
 	"tcode/internal/agent"
 	"tcode/internal/gitops"
+	"tcode/internal/lsp"
 	"tcode/internal/mcp"
 	"tcode/internal/telemetry"
 
@@ -284,6 +285,27 @@ func (a *App) SaveMCP(cfg config.MCPServerConfig) error {
 		}()
 	}
 	return nil
+}
+
+// DeleteMCP 从磁盘删除 MCP 配置并停止运行中的实例
+func (a *App) DeleteMCP(id string) error {
+	if a.extraStore == nil {
+		return fmt.Errorf("extra store not initialized")
+	}
+	if err := a.extraStore.DeleteMCP(id); err != nil {
+		return err
+	}
+	if a.mcpManager != nil {
+		go func() {
+			_ = a.mcpManager.StopServer(context.Background(), id)
+		}()
+	}
+	return nil
+}
+
+// DiagnoseFile 触发指定文件的毫秒级轻量编译器语法诊断
+func (a *App) DiagnoseFile(relPath string) (*lsp.DiagnosticReport, error) {
+	return lsp.DiagnoseFile(a.workspace, relPath)
 }
 
 // TestMCPServer 对指定 MCP 服务执行标准 JSON-RPC 2.0 握手与工具探活
@@ -742,6 +764,18 @@ func (a *App) SendMessage(req ChatRequest) error {
 							"session_id": req.SessionID,
 							"file":       argsObj.RelPath,
 						})
+
+						// 触发毫秒级轻量 LSP 编译器语法诊断自愈守卫
+						if diagReport, err := lsp.DiagnoseFile(a.workspace, argsObj.RelPath); err == nil && diagReport != nil && diagReport.HasErrors {
+							feedback := lsp.FormatDiagnosticFeedback(diagReport)
+							output += feedback
+							runtime.EventsEmit(a.ctx, "lsp:diagnostic", map[string]any{
+								"session_id": req.SessionID,
+								"file":       argsObj.RelPath,
+								"has_errors": true,
+								"errors":     diagReport.Errors,
+							})
+						}
 					}
 
 				case "read_file":
