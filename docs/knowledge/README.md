@@ -30,6 +30,7 @@
 | **20** | **跨语言工作区技术栈自适应探测与多轮自主 ReAct 自然收敛自愈状态机** | Agent 认知架构 / 技术栈感知 / 状态机 | 多语言工程特征自动识别（Node/Rust/Py/Go/Java）、Zero Tool Calls 自然收敛准则与前端时序流动执行卡片 | [20-language-agnostic-stack-detection-and-natural-react-loop.md](./20-language-agnostic-stack-detection-and-natural-react-loop.md) |
 | **21** | **Windows 纯 Go 单文件安装向导自定义安装目录解析、系统原生文件夹选取与卸载器自适应清理闭环** | 桌面端分发 / 原生交互 / 自动化闭环 | 命令行 `-dir` / `/D=` 参数统一解析、WinForms 原生文件夹选择无黑框唤起、卸载器自身物理寻址与自清理闭环 | [21-installer-custom-directory-and-folder-picker.md](./21-installer-custom-directory-and-folder-picker.md) |
 | **22** | **桌面端纯净零假数据 (Zero Demo & Clean Empty State) 治理与模板级渲染性能优化** | 前端架构 / UI性能优化 / 铁律 0.5 实践 | 全域假数据清空、纯净真实空状态设计、LRU Map Markdown 解析防雪崩与非阻塞即时按钮交互 | [22-zero-demo-empty-states-and-ui-performance-optimization.md](./22-zero-demo-empty-states-and-ui-performance-optimization.md) |
+| **23** | **后端持久化假数据根除、前端硬编码彻底清理与 Go 原生单文件安装包全链路构建** | 数据治理 / 原生安装器 / 纯净空状态 | 铲除 NewStore 自愈式假数据投毒、动态标签与真实模型对齐、嵌入式 Windows 单文件安装向导编译闭环 | [23-elimination-of-persisted-mock-sessions-and-native-installer-pipeline.md](./23-elimination-of-persisted-mock-sessions-and-native-installer-pipeline.md) |
 
 
 

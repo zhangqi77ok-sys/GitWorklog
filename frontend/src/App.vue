@@ -137,7 +137,7 @@
           <div class="px-3 pt-2 pb-1 border-b border-black/[0.04]">
             <div class="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5 text-[10px]">
               <button
-                v-for="tag in ['全部', '核心架构', '单测自愈', '网关调度', '安全防护']"
+                v-for="tag in availableTags"
                 :key="tag"
                 @click="activeTag = tag"
                 :class="[
@@ -177,10 +177,11 @@
                 <button @click.stop="deleteSession(sess.id)" class="text-[#A1A1AA] hover:text-red-500 text-[11px] p-0.5 cursor-pointer" title="删除会话">🗑️</button>
               </div>
               <div class="flex items-center justify-between text-[10px] text-[#71717A] mt-0.5">
-                <span class="bg-[#D96B27]/10 text-[#D96B27] px-1.5 py-0.2 rounded font-medium">#{{ sess.tag || '核心架构' }}</span>
+                <span v-if="sess.tag" class="bg-[#D96B27]/10 text-[#D96B27] px-1.5 py-0.2 rounded font-medium">#{{ sess.tag }}</span>
+                <span v-else class="text-[#A1A1AA]">未分类</span>
                 <span class="font-mono text-[#A1A1AA]">{{ sess.time }}</span>
               </div>
-              <div class="text-[11px] text-[#71717A] truncate mt-0.5">{{ sess.desc }}</div>
+              <div v-if="sess.desc" class="text-[11px] text-[#71717A] truncate mt-0.5">{{ sess.desc }}</div>
             </div>
           </div>
         </div>
@@ -289,10 +290,10 @@
               v-model="selectedModel"
               class="bg-white border border-black/[0.1] rounded-lg px-2 py-0.8 text-xs font-mono font-medium text-[#10A37F] focus:outline-none focus:border-[#D96B27] cursor-pointer shadow-2xs"
             >
-              <option value="deepseek-v4-flash">⚡ deepseek-v4-flash (深度心智思考)</option>
-              <option value="gpt-5.6-sol">🧠 gpt-5.6-sol (OpenAI 架构旗舰)</option>
-              <option value="claude-opus-4-8">👑 claude-opus-4-8 (Claude 顶级推理)</option>
-              <option value="glm-5.3">🌐 glm-5.3 (多语言通用模型)</option>
+              <option value="deepseek-chat">⚡ deepseek-chat (DeepSeek-V3)</option>
+              <option value="deepseek-reasoner">🧠 deepseek-reasoner (DeepSeek-R1 深度思考)</option>
+              <option value="gpt-4o">👑 gpt-4o (OpenAI 旗舰多模态)</option>
+              <option value="claude-3-7-sonnet">👑 claude-3-7-sonnet (Claude 顶级推理)</option>
             </select>
           </div>
 
@@ -367,37 +368,6 @@
                 </div>
               </div>
 
-              <!-- Sub-Agent 协同委派展示 -->
-              <div v-if="msg.id === 'msg_2'" class="w-full rounded-2xl border border-black/[0.08] bg-white shadow-2xs p-3 space-y-2">
-                <div class="flex items-center justify-between text-xs font-bold text-[#18181B]">
-                  <div class="flex items-center gap-1.5">
-                    <span>🔬</span><span>Sub-Agent 子智能体多代理协同委派</span>
-                  </div>
-                  <span class="text-[10px] font-mono text-[#10A37F] bg-[#10A37F]/10 px-2 py-0.5 rounded-full font-bold">2 智能体在线</span>
-                </div>
-                <div class="grid grid-cols-2 gap-2 text-xs">
-                  <div class="p-2 rounded-xl bg-[#FAF8F5] border border-black/[0.06] flex items-center justify-between">
-                    <div class="flex items-center gap-2">
-                      <span>🧪</span>
-                      <div>
-                        <div class="font-bold text-[11px]">TDD 单测自愈智能体</div>
-                        <div class="text-[10px] text-[#71717A]">测试驱动闭环</div>
-                      </div>
-                    </div>
-                    <span class="text-[9px] text-[#10A37F] font-mono font-bold">就绪</span>
-                  </div>
-                  <div class="p-2 rounded-xl bg-[#FAF8F5] border border-black/[0.06] flex items-center justify-between">
-                    <div class="flex items-center gap-2">
-                      <span>🛡️</span>
-                      <div>
-                        <div class="font-bold text-[11px]">安全沙箱审查智能体</div>
-                        <div class="text-[10px] text-[#71717A]">高危指令拦截</div>
-                      </div>
-                    </div>
-                    <span class="text-[9px] text-[#10A37F] font-mono font-bold">已守护</span>
-                  </div>
-                </div>
-              </div>
 
               <!-- 优雅 Markdown 正文 -->
               <div
@@ -1121,16 +1091,24 @@ function showToast(msg: string) {
 const sessions = ref<SessionMeta[]>([])
 const activeTag = ref('全部')
 const currentSessionId = ref('')
-const selectedModel = ref('deepseek-v4-flash')
+const selectedModel = ref('deepseek-chat')
 
 const currentSession = ref<ChatSession>({
   id: '',
-  title: '新会话',
-  model: 'deepseek-v4-flash',
-  tag: '全部',
+  title: '新工程对话',
+  model: 'deepseek-chat',
+  tag: '',
   created_at: Date.now(),
   updated_at: Date.now(),
   messages: []
+})
+
+const availableTags = computed(() => {
+  const set = new Set<string>()
+  sessions.value.forEach(s => {
+    if (s.tag && s.tag.trim()) set.add(s.tag.trim())
+  })
+  return ['全部', ...Array.from(set)]
 })
 
 const filteredSessions = computed(() => {
@@ -1141,11 +1119,10 @@ const filteredSessions = computed(() => {
 async function loadSessionsList() {
   try {
     const list = await wailsBridge.listSessions()
-    if (list && list.length > 0) {
-      sessions.value = list
-    }
+    sessions.value = list || []
   } catch (err) {
     console.error('Failed to load sessions:', err)
+    sessions.value = []
   }
 }
 
@@ -1167,9 +1144,9 @@ async function createNewSession() {
   const newId = 'sess_' + Date.now()
   const newSess: ChatSession = {
     id: newId,
-    title: '新建工程探索会话',
-    model: selectedModel.value,
-    tag: '核心架构',
+    title: '新工程对话',
+    model: selectedModel.value || 'deepseek-chat',
+    tag: '',
     created_at: Date.now(),
     updated_at: Date.now(),
     messages: []
@@ -1461,8 +1438,8 @@ async function saveChannelAction() {
     auth_type: 'bearer_token',
     endpoint: channelForm.endpoint,
     api_key: channelForm.api_key,
-    model: 'deepseek-v4-flash',
-    latency: '82ms',
+    model: selectedModel.value || 'deepseek-chat',
+    latency: '未测速',
     updated_at: Date.now()
   })
   isChannelModalOpen.value = false

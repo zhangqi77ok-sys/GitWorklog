@@ -66,45 +66,7 @@ func NewStore() (*Store, error) {
 	}
 
 	s := &Store{baseDir: dir}
-	// 初始化默认演示会话（若为空）
-	metas := s.List()
-	if len(metas) == 0 {
-		s.initDefaults()
-	}
-
 	return s, nil
-}
-
-func (s *Store) initDefaults() {
-	defaultSess := ChatSession{
-		ID:        "sess1",
-		Title:     "架构重构与执行流设计",
-		Model:     "deepseek-v4-flash",
-		Tag:       "核心架构",
-		CreatedAt: time.Now().Unix(),
-		UpdatedAt: time.Now().Unix(),
-		Messages: []SessionMessage{
-			{
-				ID:      "msg_1",
-				Role:    "user",
-				Content: "1. 原型设计上，厂商不仅支持自动获取模型，还要支持手动添加。\n2. 还缺skill管理、MCP管理、软件规则管理。\n3. 主页面应该还要有一个最左侧的活动导航栏。",
-				Time:    "14:20",
-			},
-			{
-				ID:       "msg_2",
-				Role:     "assistant",
-				Thinking: "1. 引入 48px 最左侧活动栏，支持工作台秒切；\n2. 补齐自动抓取与手动模型录入；\n3. 落地 MCP、Skill、Rules 设置管理。",
-				Content:  "已成功按照原型与技术规范重构为纯原生 Go 1.22 + Wails v2 + Vue 3.4 架构。\n所有 Python 与旧 React 遗留已全部清理，系统已接通原生 IPC 通信管道与 ReAct 自主算子循环。",
-				Tool: &ToolExecution{
-					Name:   "exec_command",
-					Args:   map[string]string{"command": "go test -v ./..."},
-					Output: "PASS ok tcode/internal/core/sandbox (0.01s)\nWails v2.9.2 Compiler Packaged bin/tcode.exe",
-				},
-				Time: "14:21",
-			},
-		},
-	}
-	_ = s.Save(defaultSess)
 }
 
 // List 列出所有已保存会话的轻量摘要

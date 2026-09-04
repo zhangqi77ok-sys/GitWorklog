@@ -152,20 +152,17 @@ const fileTree = ref<FileNode[]>([])
 const expandedFolders = reactive<Record<string, boolean>>({ 'frontend': true })
 const gitStatus = ref<any>({ branch: 'main' })
 
-const sessions = ref([
-  { id: 'sess1', icon: '📌', title: '架构重构与执行流设计', time: '刚刚', tag: '核心架构', tagClass: 'bg-[#D96B27]/10 text-[#D96B27]', desc: 'Wails v2 原生闭环' },
-  { id: 'sess2', icon: '🧪', title: 'TDD测试自愈与并发防漏', time: '5分钟前', tag: '单测自愈', tagClass: 'bg-teal-50 text-teal-700', desc: '失败自动修复' },
-  { id: 'sess3', icon: '🌐', title: 'AgentRouter 多模型中转流', time: '10分钟前', tag: '网关调度', tagClass: 'bg-blue-50 text-blue-700', desc: '4 模型支持' },
-  { id: 'sess4', icon: '🛡️', title: '高危系统指令沙箱拦截', time: '1小时前', tag: '安全防护', tagClass: 'bg-amber-50 text-amber-700', desc: '危险命令阻断' },
-  { id: 'sess5', icon: '🎨', title: 'Monaco行级Diff与暖色规范', time: '昨天', tag: '前端开发', tagClass: 'bg-purple-50 text-purple-700', desc: '60-30-10设计' }
-])
+const sessions = ref<any[]>([])
 
 const filteredSessions = computed(() => {
   if (activeTag.value === '全部') return sessions.value
   return sessions.value.filter(s => s.tag === activeTag.value)
 })
 
-onMounted(() => {
+onMounted(async () => {
+  try {
+    sessions.value = await wailsBridge.listSessions() || []
+  } catch {}
   loadFileTree()
   loadGitStatus()
 })

@@ -452,69 +452,11 @@ export const wailsBridge = {
       return
     }
 
-    // 浏览器开发环境降级：直连 AgentRouter 测试中转站
-    try {
-      const response = await fetch('https://agentrouter.org/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer sk-gKTbHfCZqgyDVf3TaXWpXT5TXW9qIZdAFVMOsY49ZKFssyFZ',
-          'User-Agent': 'codex_cli_rs/0.101.0 (Mac OS 26.0.1; arm64) Apple_Terminal/464',
-          'Originator': 'codex_cli_rs',
-          'Version': '0.101.0'
-        },
-        body: JSON.stringify({
-          model: req.model || 'deepseek-v4-flash',
-          messages: [
-            { role: 'system', content: 'You are Tcode Agent, an autonomous software engineering assistant.' },
-            { role: 'user', content: req.prompt }
-          ],
-          stream: true
-        })
-      })
-
-      if (!response.ok) {
-        const errText = await response.text()
-        if (callbacks.onChunk) callbacks.onChunk(`\n[上游响应异常: ${errText}]`)
-        if (callbacks.onDone) callbacks.onDone()
-        return
-      }
-
-      const reader = response.body?.getReader()
-      const decoder = new TextDecoder()
-      if (!reader) return
-
-      let buffer = ''
-      while (true) {
-        const { value, done } = await reader.read()
-        if (done) break
-
-        buffer += decoder.decode(value, { stream: true })
-        const lines = buffer.split('\n')
-        buffer = lines.pop() || ''
-
-        for (const line of lines) {
-          const trimmed = line.trim()
-          if (!trimmed.startsWith('data:')) continue
-          const dataStr = trimmed.replace('data:', '').trim()
-          if (dataStr === '[DONE]') break
-
-          try {
-            const parsed = JSON.parse(dataStr)
-            const delta = parsed.choices?.[0]?.delta
-            if (delta?.reasoning_content && callbacks.onThinking) {
-              callbacks.onThinking(delta.reasoning_content)
-            }
-            if (delta?.content && callbacks.onChunk) {
-              callbacks.onChunk(delta.content)
-            }
-          } catch {}
-        }
-      }
-    } catch (err: any) {
-      if (callbacks.onChunk) callbacks.onChunk(`\n[网络错误: ${err.message}]`)
-    } finally {
-      if (callbacks.onDone) callbacks.onDone()
+    // 纯前端或非 Wails 环境：Fail-Closed 提示
+    if (callbacks.onChunk) {
+      callbacks.onChunk('\n[提示] 当前运行于非 Wails 原生桌面端环境或后端微内核未连接，请在 Tcode 桌面端中运行并配置真实模型渠道。')
     }
+    if (callbacks.onDone) callbacks.onDone()
+    return
   }
 }

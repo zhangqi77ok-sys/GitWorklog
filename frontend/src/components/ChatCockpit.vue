@@ -279,12 +279,12 @@ import { renderMarkdown } from '../core/markdown'
 
 const store = useChatStore()
 const inputPrompt = ref('')
-const selectedModel = ref('deepseek-v4-flash')
+const selectedModel = ref('deepseek-chat')
 const messageListRef = ref<HTMLDivElement | null>(null)
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const isToolLogOpen = ref(true)
 const attachedFiles = ref<string[]>([])
-const currentSessionTitle = ref('架构重构与执行流设计')
+const currentSessionTitle = ref('新工程对话')
 const dynamicallyModifiedFiles = ref<any[]>([])
 
 const isDraggingOver = ref(false)
@@ -318,10 +318,7 @@ function toggleToolCard(id: string) {
   }
 }
 
-const baseModifiedFiles = [
-  { name: 'main.go', short: 'main.go', type: '~M (修改)', desc: '接入 Wails v2 原生启动绑定并清理遗留代理', diff: '+4 / -2 行', iconColor: 'text-[#D96B27]', badgeBg: 'bg-amber-100 text-amber-700' },
-  { name: 'app.go', short: 'app.go', type: '+A (新增)', desc: '封装 Wails 原生事件桥接与操作系统级文件操作', diff: '+64 / -0 行', iconColor: 'text-[#10A37F]', badgeBg: 'bg-emerald-100 text-emerald-700' }
-]
+const baseModifiedFiles: any[] = []
 
 const allModifiedFiles = computed(() => {
   return [...baseModifiedFiles, ...dynamicallyModifiedFiles.value]
