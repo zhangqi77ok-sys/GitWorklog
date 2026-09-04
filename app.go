@@ -83,6 +83,8 @@ func NewApp() *App {
 	exStore, _ := config.NewExtraStore()
 	sessStore, _ := session.NewStore()
 
+	mcpMgr := mcp.NewManager(wd)
+
 	return &App{
 		workspace:    wd,
 		sandbox:      sb,
@@ -95,6 +97,7 @@ func NewApp() *App {
 		channelStore: chStore,
 		extraStore:   exStore,
 		sessionStore: sessStore,
+		mcpManager:   mcpMgr,
 	}
 }
 
@@ -102,10 +105,19 @@ func NewApp() *App {
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	runtime.LogInfo(ctx, "[Tcode] Wails Native App initialized successfully")
+	// 异步预热并拉起已启用的外部 MCP 协议服务
+	if a.mcpManager != nil && a.extraStore != nil {
+		go func() {
+			a.mcpManager.SyncFromConfig(context.Background(), a.extraStore.ListMCPs())
+		}()
+	}
 }
 
 // shutdown 窗口退出清理生命周期
 func (a *App) shutdown(ctx context.Context) {
+	if a.mcpManager != nil {
+		a.mcpManager.StopAll()
+	}
 }
 
 // MinimizeWindow 最小化无边框窗口
@@ -258,7 +270,20 @@ func (a *App) SaveMCP(cfg config.MCPServerConfig) error {
 	if a.extraStore == nil {
 		return fmt.Errorf("extra store not initialized")
 	}
-	return a.extraStore.SaveMCP(cfg)
+	if err := a.extraStore.SaveMCP(cfg); err != nil {
+		return err
+	}
+	// 动态联动启停 MCP 进程实例
+	if a.mcpManager != nil {
+		go func() {
+			if cfg.Enabled {
+				_ = a.mcpManager.StartServer(context.Background(), cfg)
+			} else {
+				_ = a.mcpManager.StopServer(context.Background(), cfg.ID)
+			}
+		}()
+	}
+	return nil
 }
 
 // TestMCPServer 对指定 MCP 服务执行标准 JSON-RPC 2.0 握手与工具探活
@@ -638,13 +663,20 @@ func (a *App) SendMessage(req ChatRequest) error {
 		var assistantContent strings.Builder
 		var lastToolExec *session.ToolExecution
 
-		// 5. 第一轮流式调用（携带工作区算子定义）
+		// 5. 第一轮流式调用（合并工作区内置沙箱算子与外部已激活 MCP 协议算子）
+		workspaceTools := llm.DefaultWorkspaceTools()
+		if a.mcpManager != nil {
+			if mcpTools, err := a.mcpManager.GetAllTools(context.Background()); err == nil && len(mcpTools) > 0 {
+				workspaceTools = append(workspaceTools, mcpTools...)
+			}
+		}
+
 		llmReq := llm.Request{
 			Endpoint: endpoint,
 			APIKey:   apiKey,
 			Model:    model,
 			Messages: conversation,
-			Tools:    llm.DefaultWorkspaceTools(),
+			Tools:    workspaceTools,
 		}
 
 		toolCalls, err := llm.StreamChat(context.Background(), llmReq, llm.StreamHandlers{
@@ -733,7 +765,23 @@ func (a *App) SendMessage(req ChatRequest) error {
 						output = string(b)
 					}
 				default:
-					output = fmt.Sprintf("未知算子: %s", toolName)
+					if a.mcpManager != nil {
+						var mcpArgs map[string]any
+						if len(toolArgs) > 0 {
+							_ = json.Unmarshal([]byte(toolArgs), &mcpArgs)
+						}
+						if mcpArgs == nil {
+							mcpArgs = make(map[string]any)
+						}
+						mcpRes, err := a.mcpManager.CallTool(context.Background(), toolName, mcpArgs)
+						if err != nil {
+							output = fmt.Sprintf("MCP 算子 [%s] 执行失败: %v", toolName, err)
+						} else {
+							output = mcpRes
+						}
+					} else {
+						output = fmt.Sprintf("未知算子: %s", toolName)
+					}
 				}
 
 				lastToolExec = &session.ToolExecution{

@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
+	"runtime"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 )
 
@@ -60,6 +62,13 @@ func (c *StdioClient) Start(ctx context.Context) error {
 	if err != nil {
 		c.mu.Unlock()
 		return fmt.Errorf("stdout pipe error: %w", err)
+	}
+
+	if runtime.GOOS == "windows" {
+		cmd.SysProcAttr = &syscall.SysProcAttr{
+			CreationFlags: 0x08000000,
+			HideWindow:    true,
+		}
 	}
 
 	if err := cmd.Start(); err != nil {

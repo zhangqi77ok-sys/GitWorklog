@@ -83,6 +83,108 @@ func (m *Manager) TestServer(ctx context.Context, cfg config.MCPServerConfig) (M
 	}, nil
 }
 
+// StartServer 启动单个 MCP 服务，完成握手并注册算子路由
+func (m *Manager) StartServer(ctx context.Context, cfg config.MCPServerConfig) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	// 若已存在且在运行，先停止旧实例
+	if oldClient, ok := m.clients[cfg.ID]; ok {
+		_ = oldClient.Stop()
+		delete(m.clients, cfg.ID)
+		for tName, sID := range m.toolRouting {
+			if sID == cfg.ID {
+				delete(m.toolRouting, tName)
+			}
+		}
+	}
+
+	var client Client
+	if cfg.Type == "stdio" || cfg.Type == "" {
+		client = NewStdioClient(cfg.Command, cfg.Args, m.workspace)
+	} else {
+		return fmt.Errorf("unsupported transport: %s", cfg.Type)
+	}
+
+	startCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	if err := client.Start(startCtx); err != nil {
+		return fmt.Errorf("failed to start mcp server [%s]: %w", cfg.Name, err)
+	}
+
+	tools, err := client.ListTools(startCtx)
+	if err != nil {
+		_ = client.Stop()
+		return fmt.Errorf("failed to list tools for [%s]: %w", cfg.Name, err)
+	}
+
+	for _, t := range tools {
+		m.toolRouting[t.Name] = cfg.ID
+	}
+	m.clients[cfg.ID] = client
+	return nil
+}
+
+// StopServer 安全停止指定 MCP 服务并清理路由
+func (m *Manager) StopServer(ctx context.Context, srvID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	client, ok := m.clients[srvID]
+	if !ok {
+		return nil
+	}
+
+	_ = client.Stop()
+	delete(m.clients, srvID)
+	for tName, sID := range m.toolRouting {
+		if sID == srvID {
+			delete(m.toolRouting, tName)
+		}
+	}
+	return nil
+}
+
+// StopAll 停止所有运行中的 MCP 服务
+func (m *Manager) StopAll() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for srvID, client := range m.clients {
+		_ = client.Stop()
+		delete(m.clients, srvID)
+	}
+	m.toolRouting = make(map[string]string)
+}
+
+// RegisterClient 注册指定客户端 (用于测试治具或自定义插件)
+func (m *Manager) RegisterClient(srvID string, client Client, tools []Tool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.clients[srvID] = client
+	for _, t := range tools {
+		m.toolRouting[t.Name] = srvID
+	}
+}
+
+// SyncFromConfig 根据配置同步启动/关闭 MCP 服务
+func (m *Manager) SyncFromConfig(ctx context.Context, cfgs []config.MCPServerConfig) {
+	for _, cfg := range cfgs {
+		if cfg.Enabled {
+			m.mu.RLock()
+			_, running := m.clients[cfg.ID]
+			m.mu.RUnlock()
+			if !running {
+				_ = m.StartServer(ctx, cfg)
+			}
+		} else {
+			_ = m.StopServer(ctx, cfg.ID)
+		}
+	}
+}
+
 // GetAllTools 获取所有已启用服务的算子定义，并转换为 OpenAI LLM 工具格式
 func (m *Manager) GetAllTools(ctx context.Context) ([]llm.ToolDef, error) {
 	m.mu.RLock()

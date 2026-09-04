@@ -303,6 +303,17 @@ Tcode 打破了单体硬编码调度逻辑，将 Agent 的执行循环、能力�
 * **铁律 1.5 物理闭环自动化验证体系**：
   * 物理安装验证 ➔ 真实进程生命周期探活 ➔ AgentRouter WAF 穿透流式推理 ➔ 真实工作区工具调用端到端回归，全链路保障高可靠交付。
 
+### 28. MCP 跨进程 Stdio 工具注册与 ReAct 动态自主调度 (MCP Protocol Stdio & ReAct Dispatch Loop)
+* **Anthropic MCP 标准协议支持**：
+  * 基于标准输入输出（Stdio）管道与 JSON-RPC 2.0 报文，无缝支持第三方生态（如 `@modelcontextprotocol/server-filesystem`、PostgreSQL、GitHub API 等）的免侵入式挂载；
+  * 实现完整的初始化握手协议（`initialize` ➔ `notifications/initialized`）、实时探活（`ping`）与工具动态探测（`tools/list`）；
+* **Windows 零黑框外部进程管控 (`0x08000000`)**：
+  * 在拉起任何外部 Node/Python 工具服务进程时，强制通过 `SysProcAttr.CreationFlags` 注入 `CREATE_NO_WINDOW = 0x08000000` 与 `HideWindow: true`，杜绝任何黑色 CMD 控制台窗口弹出打扰；
+* **Manager 算子全局路由树与 ReAct 调度闭环**：
+  * 管理器在内存中并发安全维护 `clients` 与 `toolRouting` 映射，启动时根据配置自动拉起已启用的服务；
+  * 在大模型发起第一轮流式推理前，将本地沙箱工具（`exec_command`, `write_file`, `read_file`, `git_status`）与所有在线 MCP 算子合并生成工具集；
+  * 当模型发起算子调用时，微内核在 $O(1)$ 时间内精准路由派发到对应子进程，执行后结果返回 ReAct 上下文驱动后续自愈推理，完成全自主端到端闭环。
+
 ---
 
 ## 🎨 四、视觉与人机工程学规范

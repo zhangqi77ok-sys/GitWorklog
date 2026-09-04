@@ -25,6 +25,7 @@
 | **15** | **Wails v2 生产级 Desktop 标签编译、Frameless 沉浸式窗体与纯 Go 原生安装向导封装** | 桌面端内核 / 原生分发 / 自动化测试 | `-tags "desktop,production"` 标签编译、Frameless 无边框窗口对接、纯 Go 嵌入式单文件安装向导（`MessageBoxW`/快捷方式/注册表）与物理闭环 | [15-wails-v2-production-build-and-frameless-installer.md](./15-wails-v2-production-build-and-frameless-installer.md) |
 | **16** | **Git 行级 Unified Diff 结构化解析、Hunk 分块与单块 Cherry-Pick 采纳/逆向丢弃实现机制** | 代码审查 / GitOps / 细粒度控制 | Unified Diff 状态机分块提取、`git apply --cached` 精准暂存、`git apply --reverse` 逆向无损丢弃与状态强同步 | [16-monaco-unified-diff-and-hunk-cherry-pick.md](./16-monaco-unified-diff-and-hunk-cherry-pick.md) |
 | **17** | **Windows CREATE_NO_WINDOW 受控流式终端管道、命令中断与前后端双向事件流设计** | 进程控制 / 终端交互 / 实时推流 | `CREATE_NO_WINDOW = 0x08000000` 零黑框弹窗、双管道并发非阻塞流式输出、`context.WithCancel` 进程可控取消与 `Ctrl+\`` 快捷键集成 | [17-controlled-streaming-terminal-and-no-window-pty.md](./17-controlled-streaming-terminal-and-no-window-pty.md) |
+| **18** | **MCP 跨进程 Stdio 协议传输、生命周期管理与 ReAct 算子动态调度机制** | 扩展生态 / MCP 协议 / ReAct 调度 | Anthropic MCP JSON-RPC 2.0 管道握手、Windows 零黑框进程管控、Manager 全局算子路由树与 ReAct 自动派发闭环 | [18-mcp-protocol-stdio-lifecycle-and-react-dispatch.md](./18-mcp-protocol-stdio-lifecycle-and-react-dispatch.md) |
 
 
 
