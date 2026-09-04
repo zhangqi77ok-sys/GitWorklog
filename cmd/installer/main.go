@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"unsafe"
 
@@ -24,11 +25,17 @@ var (
 )
 
 const (
-	MB_YESNO        = 0x00000004
-	MB_ICONQUESTION  = 0x00000020
-	MB_ICONINFO      = 0x00000040
-	MB_ICONERROR     = 0x00000010
-	IDYES            = 6
+	MB_OK          = 0x00000000
+	MB_OKCANCEL    = 0x00000001
+	MB_YESNOCANCEL = 0x00000003
+	MB_YESNO       = 0x00000004
+	MB_ICONQUESTION = 0x00000020
+	MB_ICONINFO     = 0x00000040
+	MB_ICONERROR    = 0x00000010
+	IDOK           = 1
+	IDCANCEL       = 2
+	IDYES          = 6
+	IDNO           = 7
 )
 
 func messageBox(title, text string, style uint) int {
@@ -38,6 +45,33 @@ func messageBox(title, text string, style uint) int {
 	return int(r)
 }
 
+// chooseFolderDialog 调用系统原生资源管理器文件夹选择框 (通过 WinForms 唤起，注入 CREATE_NO_WINDOW 无黑框)
+func chooseFolderDialog(initialDir string) (string, error) {
+	psScript := fmt.Sprintf(`
+Add-Type -AssemblyName System.Windows.Forms
+$f = New-Object System.Windows.Forms.FolderBrowserDialog
+$f.Description = "请选择 Tcode Agentic Studio 的安装目标目录"
+$f.ShowNewFolderButton = $true
+if (Test-Path "%s") { $f.SelectedPath = "%s" }
+$res = $f.ShowDialog()
+if ($res -eq [System.Windows.Forms.DialogResult]::OK) {
+	[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+	Write-Output $f.SelectedPath
+}
+`, initialDir, initialDir)
+
+	cmd := exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-Command", psScript)
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		CreationFlags: 0x08000000, // CREATE_NO_WINDOW
+	}
+	out, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	selected := strings.TrimSpace(string(out))
+	return selected, nil
+}
+
 func main() {
 	localAppData := os.Getenv("LOCALAPPDATA")
 	if localAppData == "" {
@@ -45,33 +79,87 @@ func main() {
 		localAppData = filepath.Join(home, "AppData", "Local")
 	}
 
-	installDir := filepath.Join(localAppData, "Programs", "TcodeStudio")
-	targetExe := filepath.Join(installDir, "tcode.exe")
-	uninstallExe := filepath.Join(installDir, "uninstall.exe")
-
+	defaultInstallDir := filepath.Join(localAppData, "Programs", "TcodeStudio")
+	customDir := ""
 	isSilent := false
-	for _, arg := range os.Args[1:] {
+
+	// 解析命令行参数: 支持 -silent, /S, -dir <path>, --dir <path>, /D=<path>, -dir=<path>
+	for i := 1; i < len(os.Args); i++ {
+		arg := os.Args[i]
 		if arg == "-silent" || arg == "/S" || arg == "/s" || arg == "--silent" {
 			isSilent = true
+		} else if arg == "-dir" || arg == "--dir" || arg == "-d" {
+			if i+1 < len(os.Args) {
+				customDir = os.Args[i+1]
+				i++
+			}
+		} else if strings.HasPrefix(arg, "/D=") {
+			customDir = strings.TrimPrefix(arg, "/D=")
+		} else if strings.HasPrefix(arg, "-dir=") {
+			customDir = strings.TrimPrefix(arg, "-dir=")
+		} else if strings.HasPrefix(arg, "--dir=") {
+			customDir = strings.TrimPrefix(arg, "--dir=")
 		}
+	}
+
+	installDir := defaultInstallDir
+	if customDir != "" {
+		installDir = filepath.Clean(customDir)
 	}
 
 	if !isSilent {
-		welcomeText := fmt.Sprintf(
-			"欢迎使用 Tcode Agentic Studio 安装向导！\n\n"+
-				"系统将自动为您安装 Tcode Studio v2.0.0 到：\n%s\n\n"+
-				"• 自动创建桌面与开始菜单快捷方式\n"+
-				"• 内置完整 Go 微内核 + 纯净桌面渲染环境\n"+
-				"• 注册系统控制面板安全卸载项\n\n"+
-				"是否立即开始安装？",
-			installDir,
-		)
+		// 若命令行未指定自定义路径，提供选择默认路径与自定义浏览选项
+		if customDir == "" {
+			welcomeText := fmt.Sprintf(
+				"欢迎使用 Tcode Agentic Studio 安装向导！\n\n"+
+					"系统推荐默认安装位置：\n%s\n\n"+
+					"• 点击【是 (Y)】：直接使用推荐默认路径快速安装\n"+
+					"• 点击【否 (N)】：自定义浏览选择安装文件夹\n"+
+					"• 点击【取消】：退出安装向导\n\n"+
+					"安装程序将自动创建桌面快捷方式并注册系统卸载项。",
+				defaultInstallDir,
+			)
 
-		ans := messageBox("Tcode Studio v2.0 安装向导", welcomeText, MB_YESNO|MB_ICONQUESTION)
-		if ans != IDYES {
-			return
+			ans := messageBox("Tcode Studio v2.0 安装向导", welcomeText, MB_YESNOCANCEL|MB_ICONQUESTION)
+			if ans == IDCANCEL {
+				return
+			} else if ans == IDNO {
+				// 用户选择自定义文件夹
+				selected, err := chooseFolderDialog(defaultInstallDir)
+				if err != nil || selected == "" {
+					// 用户未选择或取消，直接退出
+					return
+				}
+
+				// 若选中的文件夹尾部未包含 TcodeStudio，自动创建专用子目录
+				if !strings.EqualFold(filepath.Base(selected), "TcodeStudio") {
+					installDir = filepath.Join(selected, "TcodeStudio")
+				} else {
+					installDir = selected
+				}
+
+				confirmText := fmt.Sprintf(
+					"您已选定自定义安装目录：\n%s\n\n是否立即开始安装？",
+					installDir,
+				)
+				if messageBox("确认安装目录", confirmText, MB_YESNO|MB_ICONQUESTION) != IDYES {
+					return
+				}
+			}
+		} else {
+			// 命令行已传入 customDir 且为交互模式，弹窗确认即可
+			confirmText := fmt.Sprintf(
+				"Tcode Studio 安装向导将安装至指定目录：\n%s\n\n是否立即开始安装？",
+				installDir,
+			)
+			if messageBox("确认安装目录", confirmText, MB_YESNO|MB_ICONQUESTION) != IDYES {
+				return
+			}
 		}
 	}
+
+	targetExe := filepath.Join(installDir, "tcode.exe")
+	uninstallExe := filepath.Join(installDir, "uninstall.exe")
 
 	// 1. 终止旧进程
 	_ = exec.Command("taskkill", "/F", "/IM", "tcode.exe").Run()
@@ -120,7 +208,7 @@ func main() {
 	if !isSilent {
 		launchAns := messageBox(
 			"安装成功",
-			"✓ Tcode Studio v2.0.0 已成功安装到您的计算机！\n\n桌面与开始菜单已生成快捷方式。\n\n是否立即启动应用程序？",
+			fmt.Sprintf("✓ Tcode Studio v2.0.0 已成功安装到：\n%s\n\n桌面与开始菜单已生成快捷方式。\n\n是否立即启动应用程序？", installDir),
 			MB_YESNO|MB_ICONINFO,
 		)
 
@@ -137,5 +225,9 @@ func createShortcut(lnkPath, targetPath, workDir string) {
 		`$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut('%s'); $s.TargetPath = '%s'; $s.WorkingDirectory = '%s'; $s.IconLocation = '%s,0'; $s.Save()`,
 		lnkPath, targetPath, workDir, targetPath,
 	)
-	_ = exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-Command", psScript).Run()
+	cmd := exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-Command", psScript)
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		CreationFlags: 0x08000000, // CREATE_NO_WINDOW
+	}
+	_ = cmd.Run()
 }

@@ -383,9 +383,15 @@ go build -ldflags="-H windowsgui -s -w" -o bin/TcodeStudio_Setup_v2.0.0.exe ./cm
 
 ### 4. 真实端到端安装与启动验证 (铁律 1.5)
 ```powershell
-# 静默安装至本地环境
+# 方式 A: 默认路径快速静默安装 (安装至 %LOCALAPPDATA%\Programs\TcodeStudio)
 Start-Process -FilePath ".\bin\TcodeStudio_Setup_v2.0.0.exe" -ArgumentList "-silent" -Wait
 
-# 启动并检查进程
+# 方式 B: 指定自定义路径静默安装 (支持 -dir, --dir, /D= 等业界标准参数)
+Start-Process -FilePath ".\bin\TcodeStudio_Setup_v2.0.0.exe" -ArgumentList "-silent -dir ""D:\Custom\TcodeStudio""" -Wait
+
+# 方式 C: 交互式向导安装 (双击直接运行)
+# 弹窗提示默认路径与自定义选择；点击【否】自动唤起 Windows 系统原生资源管理器文件夹浏览选择，无黑框闪烁
+
+# 启动并检查进程探活
 Start-Process -FilePath "$env:LOCALAPPDATA\Programs\TcodeStudio\tcode.exe"
 ```

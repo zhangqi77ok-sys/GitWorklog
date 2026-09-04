@@ -47,16 +47,32 @@ func main() {
 	_ = os.Remove(desktop)
 	_ = os.Remove(startMenu)
 
-	// 3. 删除注册表卸载项
-	_ = registry.DeleteKey(registry.CURRENT_USER, `Software\Microsoft\Windows\CurrentVersion\Uninstall\TcodeStudio`)
+	// 3. 读取注册表卸载项获取可能的原始安装路径，然后删除注册表项
+	regPath := `Software\Microsoft\Windows\CurrentVersion\Uninstall\TcodeStudio`
+	var regInstallDir string
+	k, err := registry.OpenKey(registry.CURRENT_USER, regPath, registry.QUERY_VALUE)
+	if err == nil {
+		regInstallDir, _, _ = k.GetStringValue("InstallLocation")
+		k.Close()
+	}
+	_ = registry.DeleteKey(registry.CURRENT_USER, regPath)
 
-	installDir, _ := os.UserCacheDir()
-	appDir := filepath.Join(os.Getenv("LOCALAPPDATA"), "Programs", "TcodeStudio")
+	// 4. 获取当前真实安装目录（优先以卸载程序自身所在目录为准）
+	appDir := ""
+	exePath, err := os.Executable()
+	if err == nil {
+		appDir = filepath.Dir(exePath)
+	}
+	if appDir == "" || appDir == "." {
+		appDir = regInstallDir
+	}
+	if appDir == "" {
+		appDir = filepath.Join(os.Getenv("LOCALAPPDATA"), "Programs", "TcodeStudio")
+	}
 
-	// 4. 延迟自删除目录
+	// 5. 延迟自删除实际安装目录
 	cmdStr := fmt.Sprintf("timeout /t 1 /nobreak >nul & rmdir /s /q \"%s\"", appDir)
 	_ = exec.Command("cmd.exe", "/c", cmdStr).Start()
 
-	_ = installDir
 	messageBox("卸载完成", "Tcode Studio 已成功从您的计算机移除。", MB_ICONINFO)
 }
