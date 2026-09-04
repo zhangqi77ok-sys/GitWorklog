@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -53,8 +54,10 @@ type App struct {
 	engine       *loop.ExecutionEngine
 	channelStore *config.ChannelStore
 	extraStore   *config.ExtraStore
-	sessionStore *session.Store
-	mcpManager   *mcp.Manager
+	sessionStore   *session.Store
+	mcpManager     *mcp.Manager
+	terminalCancel context.CancelFunc
+	terminalMu     sync.Mutex
 }
 
 // NewApp 构造生产级 Wails 宿主
@@ -400,6 +403,68 @@ func (a *App) ExecCommand(command string) (string, error) {
 		return "", err
 	}
 	return res.Content, nil
+}
+
+// ExecTerminalStream 异步执行终端命令，通过 Wails 事件实时推送流式输出与退出码
+func (a *App) ExecTerminalStream(command string) error {
+	if a.ctx == nil {
+		return fmt.Errorf("context not initialized")
+	}
+	if a.termTool == nil {
+		return fmt.Errorf("terminal tool not initialized")
+	}
+
+	a.terminalMu.Lock()
+	if a.terminalCancel != nil {
+		a.terminalCancel()
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	a.terminalCancel = cancel
+	a.terminalMu.Unlock()
+
+	go func() {
+		startTime := time.Now()
+		runtime.EventsEmit(a.ctx, "terminal:start", map[string]any{
+			"command":    command,
+			"start_time": startTime.UnixMilli(),
+		})
+
+		exitCode, err := a.termTool.ExecuteStream(ctx, command, func(chunk string) {
+			runtime.EventsEmit(a.ctx, "terminal:data", chunk)
+		})
+
+		elapsed := time.Since(startTime).Milliseconds()
+		errMsg := ""
+		if err != nil {
+			errMsg = err.Error()
+		}
+
+		runtime.EventsEmit(a.ctx, "terminal:exit", map[string]any{
+			"command":     command,
+			"exit_code":   exitCode,
+			"duration_ms": elapsed,
+			"error":       errMsg,
+		})
+
+		a.terminalMu.Lock()
+		a.terminalCancel = nil
+		a.terminalMu.Unlock()
+	}()
+
+	return nil
+}
+
+// CancelTerminalCommand 中断当前正在执行的终端命令
+func (a *App) CancelTerminalCommand() {
+	a.terminalMu.Lock()
+	defer a.terminalMu.Unlock()
+	if a.terminalCancel != nil {
+		a.terminalCancel()
+		a.terminalCancel = nil
+		if a.ctx != nil {
+			runtime.EventsEmit(a.ctx, "terminal:data", "\n[Process interrupted by user]\n")
+		}
+	}
 }
 
 type ChatRequest struct {

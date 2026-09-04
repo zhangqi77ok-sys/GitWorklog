@@ -226,6 +226,45 @@ export const wailsBridge = {
     }
   },
 
+  // 终端执行与流式监听
+  async execTerminalStream(
+    command: string,
+    callbacks: {
+      onStart?: (data: { command: string; start_time: number }) => void
+      onData?: (chunk: string) => void
+      onExit?: (data: { command: string; exit_code: number; duration_ms: number; error?: string }) => void
+    }
+  ): Promise<void> {
+    const runtime = getRuntime()
+    const app = getApp()
+
+    if (runtime && app?.ExecTerminalStream) {
+      runtime.EventsOn('terminal:start', (d: any) => callbacks.onStart?.(d))
+      runtime.EventsOn('terminal:data', (chunk: string) => callbacks.onData?.(chunk))
+      runtime.EventsOn('terminal:exit', (d: any) => {
+        callbacks.onExit?.(d)
+        if (runtime.EventsOff) {
+          runtime.EventsOff('terminal:start')
+          runtime.EventsOff('terminal:data')
+          runtime.EventsOff('terminal:exit')
+        }
+      })
+      await app.ExecTerminalStream(command)
+      return
+    }
+
+    callbacks.onStart?.({ command, start_time: Date.now() })
+    callbacks.onData?.(`[local] executed: ${command}\n`)
+    callbacks.onExit?.({ command, exit_code: 0, duration_ms: 10 })
+  },
+
+  async cancelTerminalCommand(): Promise<void> {
+    const app = getApp()
+    if (app?.CancelTerminalCommand) {
+      await app.CancelTerminalCommand()
+    }
+  },
+
   async fetchUpstreamModels(endpoint?: string, apiKey?: string): Promise<string[]> {
     const app = getApp()
     if (app?.FetchUpstreamModels) {

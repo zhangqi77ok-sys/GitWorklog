@@ -31,6 +31,13 @@
           <span class="text-[#D96B27]">🕸️</span><span>项目知识图谱</span>
         </button>
         <button
+          @click="toggleTerminalDrawer()"
+          class="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium text-[#18181B] bg-white border border-black/[0.08] shadow-2xs hover:bg-black/[0.03] transition-all cursor-pointer"
+          title="唤起/收起集成终端抽屉 (Ctrl+`)"
+        >
+          <span class="text-[#D96B27] font-mono font-bold">$_</span><span>终端</span>
+        </button>
+        <button
           @click="isSettingsOpen = true"
           class="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium text-[#18181B] bg-white border border-black/[0.08] shadow-2xs hover:bg-black/[0.03] transition-all cursor-pointer"
         >
@@ -85,6 +92,13 @@
             title="MCP 与技能扩展"
           >
             <span class="text-base">🧩</span>
+          </button>
+          <button
+            @click="toggleTerminalDrawer()"
+            :class="['w-9 h-9 rounded-xl flex items-center justify-center transition-all cursor-pointer font-mono font-bold text-xs', isTerminalOpen ? 'bg-white shadow-2xs text-[#D96B27] border border-black/[0.06]' : 'text-[#71717A] hover:bg-black/[0.04]']"
+            title="唤起/收起集成终端抽屉 (Ctrl+`)"
+          >
+            <span>$_</span>
           </button>
         </div>
 
@@ -239,8 +253,12 @@
         </div>
       </aside>
 
-      <!-- 对话工作舱 (Chat Cockpit) -->
-      <main class="flex-1 bg-[#FAF8F5] flex flex-col justify-between overflow-hidden relative font-sans">
+      <!-- 中央工作区 + 底部终端抽屉容器 -->
+      <div class="flex-1 flex flex-col overflow-hidden relative">
+        <!-- 上方：对话主舱与 Monaco Diff 并列区 -->
+        <div class="flex-1 flex overflow-hidden relative">
+          <!-- 对话工作舱 (Chat Cockpit) -->
+          <main class="flex-1 bg-[#FAF8F5] flex flex-col justify-between overflow-hidden relative font-sans">
         <!-- 顶栏: 场景标签、多模型切换器与收起代码按钮 -->
         <header class="h-10 min-h-[40px] bg-[#FAF8F5] border-b border-black/[0.08] px-3 flex items-center justify-between text-xs select-none z-10 shrink-0">
           <div class="flex items-center gap-2">
@@ -539,6 +557,134 @@
           <span class="text-emerald-700 font-bold">● Git 磁盘实时同步</span>
         </footer>
       </section>
+        </div>
+
+        <!-- 下方：集成式可折叠流式终端抽屉 (Terminal Drawer) -->
+        <div
+          v-show="isTerminalOpen"
+          :style="{ height: isTerminalMaximized ? '60vh' : `${terminalHeight}px` }"
+          class="min-h-[160px] max-h-[70vh] bg-[#161412] text-white flex flex-col border-t border-black/[0.3] shadow-2xl transition-all duration-150 z-30 shrink-0 select-none font-sans"
+        >
+          <!-- 终端控制顶栏 -->
+          <div class="h-8 bg-[#1E1C1A] border-b border-white/[0.08] px-3 flex items-center justify-between select-none shrink-0">
+            <div class="flex items-center gap-1.5 text-xs">
+              <button
+                @click="activeTerminalTab = 'shell'"
+                :class="['px-2.5 py-1 rounded font-mono font-medium flex items-center gap-1.5 transition-all cursor-pointer', activeTerminalTab === 'shell' ? 'bg-[#2A2724] text-white' : 'text-white/60 hover:text-white']"
+              >
+                <span class="text-[#D96B27] font-bold">$_</span><span>终端控制台</span>
+              </button>
+              <button
+                @click="activeTerminalTab = 'logs'"
+                :class="['px-2.5 py-1 rounded font-mono flex items-center gap-1.5 transition-all cursor-pointer', activeTerminalTab === 'logs' ? 'bg-[#2A2724] text-white' : 'text-white/60 hover:text-white']"
+              >
+                <span class="w-1.5 h-1.5 rounded-full bg-[#10A37F] animate-pulse"></span><span>Agent 执行链路</span>
+              </button>
+              <div v-if="isTerminalRunning" class="flex items-center gap-1 text-[11px] text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded-full font-mono">
+                <span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping"></span>
+                <span>进程执行中...</span>
+              </div>
+            </div>
+
+            <div class="flex items-center gap-1.5 text-white/50 text-xs">
+              <button
+                v-if="isTerminalRunning"
+                @click="cancelTerminalAction"
+                title="终止正在执行的命令 (Ctrl+C)"
+                class="px-2 py-0.5 rounded bg-red-500/20 text-red-300 hover:bg-red-500/30 text-[10px] font-mono font-bold cursor-pointer transition-all"
+              >
+                ■ 终止
+              </button>
+              <button
+                @click="clearTerminalLogs"
+                title="清空终端屏幕"
+                class="p-1 rounded hover:text-white hover:bg-white/10 cursor-pointer text-xs"
+              >
+                🗑️
+              </button>
+              <button
+                @click="isTerminalMaximized = !isTerminalMaximized"
+                :title="isTerminalMaximized ? '还原终端高度' : '最大化终端'"
+                class="p-1 rounded hover:text-white hover:bg-white/10 cursor-pointer text-xs font-mono"
+              >
+                {{ isTerminalMaximized ? '🗗' : '🗖' }}
+              </button>
+              <button
+                @click="isTerminalOpen = false"
+                title="收起终端抽屉 (Ctrl+`)"
+                class="p-1 rounded hover:text-white hover:bg-white/10 cursor-pointer text-xs"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+
+          <!-- 终端内容区 -->
+          <div class="flex-1 overflow-hidden relative font-mono text-xs select-text">
+            <!-- 视图 1: Shell 实时交互控制台 -->
+            <div
+              v-show="activeTerminalTab === 'shell'"
+              ref="terminalScrollRef"
+              class="h-full flex flex-col p-3 overflow-y-auto space-y-1.5 bg-[#161412]"
+            >
+              <div class="text-white/40 mb-1 text-[11px]">
+                Tcode Studio 受控静默终端 · 工作区: agent-learning [Windows 安全沙箱就绪]
+              </div>
+              
+              <!-- 历史流式输出块 -->
+              <div v-for="(log, idx) in terminalOutputs" :key="idx" class="space-y-0.5">
+                <div v-if="log.type === 'cmd'" class="text-white/60 flex items-center gap-1.5 font-bold">
+                  <span class="text-[#D96B27]">PS></span>
+                  <span class="text-white">{{ log.text }}</span>
+                </div>
+                <div
+                  v-else-if="log.type === 'output'"
+                  class="whitespace-pre-wrap leading-relaxed text-zinc-300 pl-4 border-l-2 border-white/10"
+                >{{ log.text }}</div>
+                <div
+                  v-else-if="log.type === 'exit'"
+                  :class="['text-[10px] pl-4', log.exitCode === 0 ? 'text-emerald-400' : 'text-rose-400']"
+                >
+                  ● 进程退出 · Exit Code: {{ log.exitCode }} (耗时 {{ log.durationMs }}ms)
+                </div>
+              </div>
+
+              <!-- 正在运行时的流式增量输出缓冲 -->
+              <div v-if="currentTerminalBuffer" class="whitespace-pre-wrap leading-relaxed text-zinc-300 pl-4 border-l-2 border-[#D96B27]">
+                {{ currentTerminalBuffer }}
+              </div>
+
+              <!-- 命令行输入提示符 -->
+              <div class="flex items-center gap-2 pt-2 border-t border-white/[0.06] mt-auto shrink-0">
+                <span class="text-[#D96B27] font-bold font-mono select-none">PS></span>
+                <input
+                  v-model="terminalInputCmd"
+                  @keydown.enter="submitTerminalCommand"
+                  @keydown.up.prevent="navigateCommandHistory(-1)"
+                  @keydown.down.prevent="navigateCommandHistory(1)"
+                  :disabled="isTerminalRunning"
+                  type="text"
+                  placeholder="输入工作区命令回车执行 (如: go test ./..., git status, go build, clear)..."
+                  class="flex-1 bg-transparent text-white font-mono text-xs focus:outline-none placeholder:text-white/20 disabled:opacity-50"
+                />
+              </div>
+            </div>
+
+            <!-- 视图 2: Agent 执行链路事件日志 -->
+            <div
+              v-show="activeTerminalTab === 'logs'"
+              class="h-full p-3 overflow-y-auto space-y-1.5 select-text bg-[#12100E] font-mono text-[11px]"
+            >
+              <div class="text-white/40 pb-1 border-b border-white/[0.06]">--- Tcode Microkernel Live Event Trace (SSE Active) ---</div>
+              <div v-for="(trace, tIdx) in agentTraceLogs" :key="tIdx" class="flex items-center gap-2">
+                <span class="text-white/30">[{{ trace.time }}]</span>
+                <span class="text-[#D96B27]">[{{ trace.phase }}]</span>
+                <span class="text-zinc-300">{{ trace.message }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- ========================================================================= -->
@@ -1289,13 +1435,137 @@ async function scanASTGraph() {
   }
 }
 
-function injectNodeToPrompt() {
-  if (!selectedAstNode.value) return
-  isKnowledgeGraphOpen.value = false
-  inputPrompt.value += `请参考代码拓扑中【${selectedAstNode.value.name}】(${selectedAstNode.value.file}) 的架构定义：`
+// =========================================================================
+// 6. 底部集成式可折叠流式终端抽屉 (Terminal Drawer)
+// =========================================================================
+interface TerminalOutputItem {
+  type: 'cmd' | 'output' | 'exit'
+  text?: string
+  exitCode?: number
+  durationMs?: number
+}
+
+const isTerminalOpen = ref(false)
+const isTerminalMaximized = ref(false)
+const terminalHeight = ref(240)
+const activeTerminalTab = ref<'shell' | 'logs'>('shell')
+const isTerminalRunning = ref(false)
+const terminalInputCmd = ref('')
+const currentTerminalBuffer = ref('')
+const terminalOutputs = ref<TerminalOutputItem[]>([
+  { type: 'cmd', text: 'go version' },
+  { type: 'output', text: 'go version go1.22.10 windows/amd64' }
+])
+const commandHistory = ref<string[]>(['go version'])
+const historyIndex = ref(-1)
+const terminalScrollRef = ref<HTMLDivElement | null>(null)
+
+const agentTraceLogs = ref<{ time: string; phase: string; message: string }[]>([
+  { time: '10:00:01', phase: 'core:init', message: 'Tcode Studio Wails Microkernel Ready' },
+  { time: '10:00:02', phase: 'sandbox', message: 'CREATE_NO_WINDOW protected execution pipeline mounted' }
+])
+
+function toggleTerminalDrawer(forceState?: boolean) {
+  isTerminalOpen.value = forceState !== undefined ? forceState : !isTerminalOpen.value
+  if (isTerminalOpen.value) {
+    scrollToBottomTerminal()
+  }
+}
+
+function clearTerminalLogs() {
+  terminalOutputs.value = []
+  currentTerminalBuffer.value = ''
+}
+
+function scrollToBottomTerminal() {
+  nextTick(() => {
+    if (terminalScrollRef.value) {
+      terminalScrollRef.value.scrollTop = terminalScrollRef.value.scrollHeight
+    }
+  })
+}
+
+function navigateCommandHistory(direction: number) {
+  if (commandHistory.value.length === 0) return
+  if (historyIndex.value === -1) {
+    historyIndex.value = commandHistory.value.length
+  }
+  historyIndex.value += direction
+  if (historyIndex.value < 0) {
+    historyIndex.value = 0
+  } else if (historyIndex.value >= commandHistory.value.length) {
+    historyIndex.value = commandHistory.value.length
+    terminalInputCmd.value = ''
+    return
+  }
+  terminalInputCmd.value = commandHistory.value[historyIndex.value] || ''
+}
+
+async function submitTerminalCommand() {
+  const cmd = terminalInputCmd.value.trim()
+  if (!cmd || isTerminalRunning.value) return
+
+  if (cmd === 'clear' || cmd === 'cls') {
+    clearTerminalLogs()
+    terminalInputCmd.value = ''
+    return
+  }
+
+  if (!commandHistory.value.includes(cmd)) {
+    commandHistory.value.push(cmd)
+  }
+  historyIndex.value = -1
+
+  terminalOutputs.value.push({ type: 'cmd', text: cmd })
+  terminalInputCmd.value = ''
+  currentTerminalBuffer.value = ''
+  isTerminalRunning.value = true
+  scrollToBottomTerminal()
+
+  try {
+    await wailsBridge.execTerminalStream(cmd, {
+      onData: (chunk: string) => {
+        currentTerminalBuffer.value += chunk
+        scrollToBottomTerminal()
+      },
+      onExit: (data) => {
+        if (currentTerminalBuffer.value) {
+          terminalOutputs.value.push({ type: 'output', text: currentTerminalBuffer.value })
+          currentTerminalBuffer.value = ''
+        }
+        terminalOutputs.value.push({
+          type: 'exit',
+          exitCode: data.exit_code,
+          durationMs: data.duration_ms
+        })
+        isTerminalRunning.value = false
+        scrollToBottomTerminal()
+      }
+    })
+  } catch (err) {
+    terminalOutputs.value.push({ type: 'output', text: `[Execution Error]: ${err}` })
+    isTerminalRunning.value = false
+    scrollToBottomTerminal()
+  }
+}
+
+async function cancelTerminalAction() {
+  try {
+    await wailsBridge.cancelTerminalCommand()
+    isTerminalRunning.value = false
+  } catch (err) {
+    console.error('Cancel terminal error:', err)
+  }
 }
 
 onMounted(async () => {
+  window.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && (e.key === '`' || e.key === '~')) {
+      e.preventDefault()
+      toggleTerminalDrawer()
+    }
+  })
+
   await Promise.all([
     loadSessionsList(),
     loadFileTree(),

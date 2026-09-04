@@ -24,6 +24,8 @@
 | **14** | **Windows 单文件安装向导构建、PyInstaller 资源内嵌与铁律 1.5 验证闭环** | 桌面端分发 / 构建运维 / 自动化测试 | 双阶段安装包架构、`sys._MEIPASS` 静态资源自愈挂载、`--silent-install-dir` 静默安装与运行时物理探活闭环 | [14-windows-standalone-installer-and-e2e-verification-pipeline.md](./14-windows-standalone-installer-and-e2e-verification-pipeline.md) |
 | **15** | **Wails v2 生产级 Desktop 标签编译、Frameless 沉浸式窗体与纯 Go 原生安装向导封装** | 桌面端内核 / 原生分发 / 自动化测试 | `-tags "desktop,production"` 标签编译、Frameless 无边框窗口对接、纯 Go 嵌入式单文件安装向导（`MessageBoxW`/快捷方式/注册表）与物理闭环 | [15-wails-v2-production-build-and-frameless-installer.md](./15-wails-v2-production-build-and-frameless-installer.md) |
 | **16** | **Git 行级 Unified Diff 结构化解析、Hunk 分块与单块 Cherry-Pick 采纳/逆向丢弃实现机制** | 代码审查 / GitOps / 细粒度控制 | Unified Diff 状态机分块提取、`git apply --cached` 精准暂存、`git apply --reverse` 逆向无损丢弃与状态强同步 | [16-monaco-unified-diff-and-hunk-cherry-pick.md](./16-monaco-unified-diff-and-hunk-cherry-pick.md) |
+| **17** | **Windows CREATE_NO_WINDOW 受控流式终端管道、命令中断与前后端双向事件流设计** | 进程控制 / 终端交互 / 实时推流 | `CREATE_NO_WINDOW = 0x08000000` 零黑框弹窗、双管道并发非阻塞流式输出、`context.WithCancel` 进程可控取消与 `Ctrl+\`` 快捷键集成 | [17-controlled-streaming-terminal-and-no-window-pty.md](./17-controlled-streaming-terminal-and-no-window-pty.md) |
+
 
 
 

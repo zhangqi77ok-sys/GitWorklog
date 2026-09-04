@@ -5,8 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os/exec"
 	"runtime"
+	"sync"
 	"syscall"
 	"time"
 
@@ -122,4 +124,74 @@ func (t *Tool) Execute(ctx context.Context, rawArgs json.RawMessage) (*v1.ToolRe
 		Content: output,
 		IsError: false,
 	}, nil
+}
+
+// StreamChunkHandler 流式输出回调
+type StreamChunkHandler func(chunk string)
+
+// ExecuteStream 实时流式执行终端指令，边读边回调 onChunk，并在命令结束时返回 exitCode
+func (t *Tool) ExecuteStream(ctx context.Context, command string, onChunk StreamChunkHandler) (int, error) {
+	if command == "" {
+		return -1, fmt.Errorf("command is required")
+	}
+
+	var cmd *exec.Cmd
+	if runtime.GOOS == "windows" {
+		cmd = exec.CommandContext(ctx, "cmd", "/d", "/s", "/c", command)
+		// 关键铁律: 注入 CREATE_NO_WINDOW = 0x08000000 杜绝 Windows 黑色控制台弹窗
+		cmd.SysProcAttr = &syscall.SysProcAttr{
+			CreationFlags: 0x08000000,
+			HideWindow:    true,
+		}
+	} else {
+		cmd = exec.CommandContext(ctx, "sh", "-c", command)
+	}
+
+	cmd.Dir = t.workspaceRoot
+
+	stdoutPipe, err := cmd.StdoutPipe()
+	if err != nil {
+		return -1, fmt.Errorf("stdout pipe error: %w", err)
+	}
+	stderrPipe, err := cmd.StderrPipe()
+	if err != nil {
+		return -1, fmt.Errorf("stderr pipe error: %w", err)
+	}
+
+	if err := cmd.Start(); err != nil {
+		return -1, fmt.Errorf("cmd start error: %w", err)
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	readerFunc := func(r io.Reader) {
+		defer wg.Done()
+		buf := make([]byte, 1024)
+		for {
+			n, err := r.Read(buf)
+			if n > 0 && onChunk != nil {
+				onChunk(string(buf[:n]))
+			}
+			if err != nil {
+				break
+			}
+		}
+	}
+
+	go readerFunc(stdoutPipe)
+	go readerFunc(stderrPipe)
+
+	wg.Wait()
+	err = cmd.Wait()
+
+	exitCode := 0
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			exitCode = exitErr.ExitCode()
+		} else {
+			exitCode = -1
+		}
+	}
+	return exitCode, err
 }

@@ -200,16 +200,16 @@ Tcode 打破了单体硬编码调度逻辑，将 Agent 的执行循环、能力�
 * **持久化安全状态机 (`core/store/settingsStore.ts`)**：
   * 自动无感持久化至 `localStorage`，支持全局快捷键 `Ctrl + ,` 或侧边栏齿轮一键唤起。
 
-### 15. 受控集成终端与静默无弹窗 Shell 算子 (Integrated Terminal & Silent Shell Executor)
-* **Xterm.js 现代虚拟终端 (`frontend/src/app/terminal/TerminalDrawer.tsx`)**：
-  * 深度定制 Warm Dark 暖炭黑界面（`#1E1C1A` 底色、`#FAF8F5` 字体、`#D96B27` 陶土暖橙呼吸光标）；
-  * 支持键盘自由键入、命令历史记录、ANSI 彩色高亮流式渲染与 `@xterm/addon-fit` 视口自适应；
-  * 顶部控制栏集成常用快捷胶囊（`git status`、`git log`、`npm test`）、快捷清屏与平滑高度伸缩；
-* **Windows 平台零弹窗铁律 (`backend/plugins/tool/terminal/terminal_tool.go` & `daemon.js`)**：
-  * 后端启动子进程时严格注入 `CREATE_NO_WINDOW = 0x08000000`（Node.js `windowsHide: true`），**彻底杜绝任何 Windows CMD 黑色黑框弹出打扰用户**；
-  * 执行目录物理锁定于工作区根目录，支持超时保护与安全防穿越；
-* **Agent 自主构建与验证算子 (`exec_command`)**：
-  * 注册进微内核执行引擎，赋予 ReAct 智能体修改代码后自主执行单测（`npm test`）与编译构建（`go build`）的自愈闭环能力。
+### 15. 受控集成终端与静默流式 Shell 管道 (Controlled Streaming Terminal & Silent Shell Executor)
+* **底部集成式可折叠终端抽屉 (`frontend/src/App.vue` & `core/wailsBridge.ts`)**：
+  * 深度定制 Warm Dark 暖炭黑界面（`#161412` 底色、`#F4F4F5` 字体、`#D96B27` 陶土暖橙高亮与提示符）；
+  * 全局快捷键 **`Ctrl + \``**（或顶栏/活动栏终端按钮）瞬间唤起/隐藏抽屉，支持 `🗖` 高度平滑切换与清屏；
+  * 双 Tab 架构：`$_ 终端控制台`（命令行交互与命令历史上下键回溯）+ `Agent 执行链路`（SSE 事件流实时 Trace）；
+* **Windows 平台零弹窗与双通道流式管道 (`plugins/tool/terminal/terminal_tool.go` & `app.go`)**：
+  * 后端启动子进程时严格注入 `CREATE_NO_WINDOW = 0x08000000` 与 `HideWindow: true`，**彻底杜绝任何 Windows CMD 黑色黑框弹出打扰用户**；
+  * 基于 `StdoutPipe` 与 `StderrPipe` 双 Goroutine 并发读取，通过 Wails 事件系统（`terminal:data`）毫秒级打字机流式推送到前端，长命令无需等待全量阻塞；
+  * 基于 `context.WithCancel` 支持用户一键 `[■ 终止]` 取消正在执行的进程，杜绝孤儿进程与句柄泄漏；
+  * 执行目录物理锁定于工作区根目录，具备安全防穿越防护。
 
 ### 16. 高保真原型架构 100% 像素级对齐 (High-Fidelity Prototype Architecture Alignment)
 * **顶层沉浸式标题栏 (`Titlebar.tsx`)**：
