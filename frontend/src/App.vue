@@ -8,10 +8,16 @@
         <div class="w-5 h-5 rounded-md bg-[#18181B] text-white flex items-center justify-center font-bold text-xs shadow-xs">T</div>
         <span class="text-xs font-semibold tracking-tight text-[#18181B]">Tcode Studio</span>
         <span class="text-[#A1A1AA] text-xs">/</span>
-        <span class="text-xs font-medium text-[#27272A] flex items-center gap-1.5">
-          agent-learning
+        <button
+          @click="chooseWorkspace"
+          style="--wails-draggable:no-drag"
+          class="flex items-center gap-1.5 px-2 py-0.5 rounded-md hover:bg-black/[0.05] transition-all cursor-pointer group text-xs font-medium text-[#27272A]"
+          title="点击切换工作区文件夹 (系统原生文件夹对话框)"
+        >
+          <span class="text-[#D96B27]">📁</span>
+          <span class="group-hover:text-[#D96B27] max-w-[160px] truncate">{{ workspaceName }}</span>
           <span class="text-[10px] text-[#71717A] bg-black/[0.04] px-1.5 py-0.2 rounded-full font-mono">{{ gitStatus.branch || 'main' }}</span>
-        </span>
+        </button>
         <div class="h-3 w-[1px] bg-black/[0.08] mx-1"></div>
         <div class="flex items-center gap-1.5 text-[11px] text-[#10A37F] font-medium bg-[#10A37F]/10 px-2 py-0.5 rounded-full">
           <span class="w-1.5 h-1.5 rounded-full bg-[#10A37F]" :class="{ 'animate-pulse': isStreaming }"></span>
@@ -189,10 +195,13 @@
         <!-- 抽屉视图 2: 真实工程文件树 (File Explorer) -->
         <div v-else-if="activeActivity === 'files'" class="flex flex-col h-full overflow-hidden">
           <div class="p-3 border-b border-black/[0.06] flex items-center justify-between">
-            <span class="font-bold text-xs text-[#18181B] flex items-center gap-1.5">
-              <span>📁</span><span>工程资源管理器</span>
+            <span class="font-bold text-xs text-[#18181B] flex items-center gap-1.5 truncate mr-2" :title="workspacePath">
+              <span>📁</span><span class="truncate">{{ workspaceName }}</span>
             </span>
-            <button @click="loadFileTree" class="text-xs text-[#71717A] hover:text-[#D96B27] cursor-pointer" title="刷新文件树">🔄</button>
+            <div class="flex items-center gap-1.5 shrink-0">
+              <button @click="chooseWorkspace" class="text-xs text-[#71717A] hover:text-[#D96B27] cursor-pointer" title="打开/切换工程文件夹 (原生对话框)">📂</button>
+              <button @click="loadFileTree" class="text-xs text-[#71717A] hover:text-[#D96B27] cursor-pointer" title="刷新文件树">🔄</button>
+            </div>
           </div>
 
           <div class="flex-1 overflow-y-auto p-2 text-xs space-y-1 font-mono">
@@ -1311,7 +1320,33 @@ async function deleteSession(id: string) {
   showToast('✓ 会话已从本地磁盘移除')
 }
 
-// 3. 真实文件树与 Git 状态
+// 3. 真实工作区、文件树与 Git 状态
+const workspacePath = ref('')
+const workspaceName = computed(() => {
+  if (!workspacePath.value) return 'Tcode Studio'
+  const normalized = workspacePath.value.replace(/\\/g, '/')
+  const parts = normalized.split('/').filter(Boolean)
+  return parts[parts.length - 1] || 'Workspace'
+})
+
+async function chooseWorkspace() {
+  try {
+    const selected = await wailsBridge.openDirectoryDialog()
+    if (selected && selected !== workspacePath.value) {
+      await wailsBridge.setWorkspace(selected)
+      workspacePath.value = selected
+      await Promise.all([
+        loadFileTree(),
+        loadGitStatus(),
+        scanASTGraph()
+      ])
+      showToast(`✓ 已成功切换至工作区: ${workspaceName.value}`)
+    }
+  } catch (err: any) {
+    showToast(`切换工作区失败: ${err}`)
+  }
+}
+
 const fileTree = ref<FileNode[]>([])
 const expandedFolders = reactive<Record<string, boolean>>({ 'frontend': true })
 const gitStatus = ref<any>({ branch: 'main', working: [], staged: [] })
@@ -1918,6 +1953,13 @@ onMounted(async () => {
   // 异步非阻塞平滑载入真实持久化数据
   loadSessionsList()
   loadSettingsData()
+  wailsBridge.getWorkspace().then(ws => {
+    if (ws) {
+      workspacePath.value = ws
+      loadFileTree()
+      loadGitStatus()
+    }
+  })
 })
 </script>
 

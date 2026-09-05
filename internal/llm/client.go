@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 )
@@ -281,9 +282,15 @@ func StreamChat(ctx context.Context, req Request, handlers StreamHandlers) ([]To
 		handlers.OnDone()
 	}
 
-	resultToolCalls := make([]ToolCall, 0, len(toolCallsMap))
-	for i := 0; i < len(toolCallsMap); i++ {
-		if tc, ok := toolCallsMap[i]; ok {
+	keys := make([]int, 0, len(toolCallsMap))
+	for k := range toolCallsMap {
+		keys = append(keys, k)
+	}
+	sort.Ints(keys)
+
+	resultToolCalls := make([]ToolCall, 0, len(keys))
+	for _, k := range keys {
+		if tc, ok := toolCallsMap[k]; ok {
 			resultToolCalls = append(resultToolCalls, *tc)
 		}
 	}

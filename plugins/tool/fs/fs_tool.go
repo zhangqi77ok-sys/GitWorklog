@@ -69,6 +69,10 @@ func (t *Tool) Definition() v1.ToolDefinition {
 }
 
 func (t *Tool) Execute(ctx context.Context, rawArgs json.RawMessage) (*v1.ToolResult, error) {
+	if t.sandbox == nil {
+		return &v1.ToolResult{Content: "error: filesystem sandbox not initialized", IsError: true}, nil
+	}
+
 	var args struct {
 		Action  string `json:"action"`
 		Path    string `json:"path"`

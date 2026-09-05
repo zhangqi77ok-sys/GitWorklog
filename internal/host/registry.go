@@ -66,6 +66,11 @@ func (r *Registry) Register(p v1.Plugin) error {
 		}
 		r.railMu.Lock()
 		defer r.railMu.Unlock()
+		for _, existing := range r.rails {
+			if existing.ID() == p.ID() {
+				return fmt.Errorf("rail plugin already registered: %s", p.ID())
+			}
+		}
 		r.rails = append(r.rails, rl)
 		// 按照 Priority 降序排序 (数值最高优先执行)
 		slices.SortFunc(r.rails, func(a, b v1.RailPlugin) int {
@@ -77,6 +82,35 @@ func (r *Registry) Register(p v1.Plugin) error {
 	}
 
 	return nil
+}
+
+// Unregister 根据插件 ID 安全注销插件
+func (r *Registry) Unregister(id string) bool {
+	r.providerMu.Lock()
+	if _, ok := r.providers[id]; ok {
+		delete(r.providers, id)
+		r.providerMu.Unlock()
+		return true
+	}
+	r.providerMu.Unlock()
+
+	r.toolMu.Lock()
+	if _, ok := r.tools[id]; ok {
+		delete(r.tools, id)
+		r.toolMu.Unlock()
+		return true
+	}
+	r.toolMu.Unlock()
+
+	r.railMu.Lock()
+	defer r.railMu.Unlock()
+	for i, rl := range r.rails {
+		if rl.ID() == id {
+			r.rails = append(r.rails[:i], r.rails[i+1:]...)
+			return true
+		}
+	}
+	return false
 }
 
 // GetProvider 获取指定 ID 的模型驱动插件

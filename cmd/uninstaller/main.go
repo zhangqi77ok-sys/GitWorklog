@@ -16,6 +16,8 @@ import (
 var (
 	user32           = syscall.NewLazyDLL("user32.dll")
 	procMessageBoxW  = user32.NewProc("MessageBoxW")
+	shell32          = syscall.NewLazyDLL("shell32.dll")
+	procShellExecute = shell32.NewProc("ShellExecuteW")
 )
 
 const (
@@ -49,8 +51,8 @@ func main() {
 		}
 	}
 
-	// 1. 尝试结束可能正在运行的进程 (注入 0x08000000 杜绝黑框)
-	killCmd := exec.Command("taskkill", "/F", "/IM", "tcode.exe")
+	// 1. 尝试结束可能正在运行的进程 (注入 /T 树杀与 0x08000000 杜绝黑框)
+	killCmd := exec.Command("taskkill", "/F", "/T", "/IM", "tcode.exe")
 	killCmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: 0x08000000, HideWindow: true}
 	_ = killCmd.Run()
 
@@ -108,19 +110,17 @@ func main() {
 	batPath := filepath.Join(tempDir, fmt.Sprintf("tcode_uninstall_%d.bat", time.Now().UnixNano()))
 	var batContent string
 	if isSafeToDelete {
-		batContent = fmt.Sprintf("@echo off\r\nping 127.0.0.1 -n 3 >nul\r\nrmdir /s /q \"%s\"\r\ndel /f /q \"%%~f0\"\r\n", appDir)
+		batContent = fmt.Sprintf("@echo off\r\nping 127.0.0.1 -n 3 >nul\r\nrmdir /s /q \"%s\"\r\n(goto) 2>nul & del /f /q \"%%~f0\"\r\n", appDir)
 	} else {
-		batContent = fmt.Sprintf("@echo off\r\nping 127.0.0.1 -n 3 >nul\r\ndel /f /q \"%s\\tcode.exe\" \"%s\\uninstall.exe\" \"%s\\tcode.ico\"\r\ndel /f /q \"%%~f0\"\r\n", appDir, appDir, appDir)
+		batContent = fmt.Sprintf("@echo off\r\nping 127.0.0.1 -n 3 >nul\r\ndel /f /q \"%s\\tcode.exe\" \"%s\\uninstall.exe\" \"%s\\tcode.ico\"\r\n(goto) 2>nul & del /f /q \"%%~f0\"\r\n", appDir, appDir, appDir)
 	}
 	_ = os.WriteFile(batPath, []byte(batContent), 0755)
 
-	cmd := exec.Command("cmd.exe", "/c", batPath)
-	cmd.Dir = tempDir
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		CreationFlags: syscall.CREATE_NEW_PROCESS_GROUP | 0x08000000,
-		HideWindow:    true,
-	}
-	_ = cmd.Start()
+	op, _ := syscall.UTF16PtrFromString("open")
+	file, _ := syscall.UTF16PtrFromString("cmd.exe")
+	params, _ := syscall.UTF16PtrFromString(fmt.Sprintf("/c \"%s\"", batPath))
+	dir, _ := syscall.UTF16PtrFromString(tempDir)
+	procShellExecute.Call(0, uintptr(unsafe.Pointer(op)), uintptr(unsafe.Pointer(file)), uintptr(unsafe.Pointer(params)), uintptr(unsafe.Pointer(dir)), 0)
 
 	if !silent {
 		messageBox("卸载完成", "Tcode Studio 已成功从您的计算机移除。", MB_ICONINFO)

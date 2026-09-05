@@ -1,10 +1,13 @@
 package agent
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -27,11 +30,38 @@ type AuditReport struct {
 	Timestamp   int64    `json:"timestamp"`
 }
 
-// RunTDDValidation 运行自动化 TDD 测试驱动红绿灯验证
+// RunTDDValidation 运行自动化 TDD 测试驱动红绿灯验证 (带 60s 硬超时与 Windows 零黑框)
 func RunTDDValidation(workspace string) (TestReport, error) {
 	start := time.Now()
-	cmd := exec.Command("go", "test", "-v", "./...")
+
+	// 检查工程是否包含 go.mod
+	hasGoMod := false
+	if fi, err := os.Stat(filepath.Join(workspace, "go.mod")); err == nil && !fi.IsDir() {
+		hasGoMod = true
+	}
+
+	if !hasGoMod {
+		return TestReport{
+			Status:    "PASS",
+			Passed:    0,
+			Failed:    0,
+			Duration:  "0ms",
+			Output:    "当前工作区未检测到 go.mod，跳过 Go 原生测试套件",
+			Timestamp: time.Now().Unix(),
+		}, nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "go", "test", "-v", "./...")
 	cmd.Dir = workspace
+	if runtime.GOOS == "windows" {
+		cmd.SysProcAttr = &syscall.SysProcAttr{
+			CreationFlags: 0x08000000,
+			HideWindow:    true,
+		}
+	}
 	out, err := cmd.CombinedOutput()
 	duration := time.Since(start).Round(time.Millisecond).String()
 

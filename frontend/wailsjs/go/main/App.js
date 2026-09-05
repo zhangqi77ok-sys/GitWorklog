@@ -74,6 +74,10 @@ export function GetUsageMetrics() {
   return window['go']['main']['App']['GetUsageMetrics']();
 }
 
+export function GetWorkspace() {
+  return window['go']['main']['App']['GetWorkspace']();
+}
+
 export function GitCheckoutBranch(arg1) {
   return window['go']['main']['App']['GitCheckoutBranch'](arg1);
 }
@@ -130,6 +134,10 @@ export function MinimizeWindow() {
   return window['go']['main']['App']['MinimizeWindow']();
 }
 
+export function OpenDirectoryDialog() {
+  return window['go']['main']['App']['OpenDirectoryDialog']();
+}
+
 export function OpenFileDialog() {
   return window['go']['main']['App']['OpenFileDialog']();
 }
@@ -176,6 +184,10 @@ export function SaveSkill(arg1) {
 
 export function SendMessage(arg1) {
   return window['go']['main']['App']['SendMessage'](arg1);
+}
+
+export function SetWorkspace(arg1) {
+  return window['go']['main']['App']['SetWorkspace'](arg1);
 }
 
 export function TestMCPServer(arg1) {

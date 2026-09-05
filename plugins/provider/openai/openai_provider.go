@@ -275,8 +275,10 @@ func (p *Provider) StreamChat(ctx context.Context, req *v1.ChatRequest) (<-chan 
 			return
 		}
 
-		// SSE 逐行扫描解析器
+		// SSE 逐行扫描解析器，配置 10MB 缓冲区防止长思考分片爆栈截断
 		scanner := bufio.NewScanner(resp.Body)
+		buf := make([]byte, 64*1024)
+		scanner.Buffer(buf, 10*1024*1024)
 		inThinking := false
 
 		for scanner.Scan() {
@@ -301,6 +303,7 @@ func (p *Provider) StreamChat(ctx context.Context, req *v1.ChatRequest) (<-chan 
 					Delta struct {
 						Content          string `json:"content"`
 						ReasoningContent string `json:"reasoning_content"` // DeepSeek R1 专有字段
+						Reasoning        string `json:"reasoning"`          // 网关思考流别名字段
 						ToolCalls        []struct {
 							Index    int    `json:"index"`
 							ID       string `json:"id"`
@@ -330,9 +333,11 @@ func (p *Provider) StreamChat(ctx context.Context, req *v1.ChatRequest) (<-chan 
 				choice := sseChunk.Choices[0]
 				chunk.FinishReason = choice.FinishReason
 
-				// 1. 处理 DeepSeek 原生 reasoning_content
+				// 1. 处理 DeepSeek 原生 reasoning_content 或 reasoning 别名字段
 				if choice.Delta.ReasoningContent != "" {
 					chunk.Thinking = choice.Delta.ReasoningContent
+				} else if choice.Delta.Reasoning != "" {
+					chunk.Thinking = choice.Delta.Reasoning
 				}
 
 				// 2. 处理 <think> 标签式思考流
@@ -381,6 +386,13 @@ func (p *Provider) StreamChat(ctx context.Context, req *v1.ChatRequest) (<-chan 
 
 			if chunk.DeltaContent != "" || chunk.Thinking != "" || len(chunk.ToolCalls) > 0 || chunk.Usage != nil || chunk.FinishReason != "" {
 				outChan <- chunk
+			}
+		}
+
+		// 检查扫描器是否存在截断或网络异常
+		if err := scanner.Err(); err != nil && ctx.Err() == nil {
+			outChan <- v1.StreamChunk{
+				Error: fmt.Errorf("stream scanner error: %w", err),
 			}
 		}
 	}()

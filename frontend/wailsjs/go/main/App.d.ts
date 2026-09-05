@@ -47,6 +47,8 @@ export function GetStructuredDiff(arg1:string):Promise<diff.DiffReport>;
 
 export function GetUsageMetrics():Promise<telemetry.UsageMetrics>;
 
+export function GetWorkspace():Promise<string>;
+
 export function GitCheckoutBranch(arg1:string):Promise<void>;
 
 export function GitCommit(arg1:string):Promise<string>;
@@ -75,6 +77,8 @@ export function ListSkills():Promise<Array<config.SkillConfig>>;
 
 export function MinimizeWindow():Promise<void>;
 
+export function OpenDirectoryDialog():Promise<string>;
+
 export function OpenFileDialog():Promise<Array<string>>;
 
 export function PingChannel(arg1:string):Promise<string>;
@@ -98,6 +102,8 @@ export function SaveSession(arg1:session.ChatSession):Promise<void>;
 export function SaveSkill(arg1:config.SkillConfig):Promise<void>;
 
 export function SendMessage(arg1:main.ChatRequest):Promise<void>;
+
+export function SetWorkspace(arg1:string):Promise<void>;
 
 export function TestMCPServer(arg1:string):Promise<mcp.MCPTestResult>;
 

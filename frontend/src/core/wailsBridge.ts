@@ -183,6 +183,30 @@ export const wailsBridge = {
     })
   },
 
+  // 1.1 调起操作系统真实文件夹选择对话框 (系统原生文件夹选择)
+  async openDirectoryDialog(): Promise<string> {
+    const app = getApp()
+    if (app?.OpenDirectoryDialog) {
+      return await app.OpenDirectoryDialog()
+    }
+    return ''
+  },
+
+  async getWorkspace(): Promise<string> {
+    const app = getApp()
+    if (app?.GetWorkspace) {
+      return await app.GetWorkspace()
+    }
+    return ''
+  },
+
+  async setWorkspace(dir: string): Promise<void> {
+    const app = getApp()
+    if (app?.SetWorkspace) {
+      await app.SetWorkspace(dir)
+    }
+  },
+
   // 2. 会话历史管理 (真实读写 ~/.tcode/sessions/)
   async listSessions(): Promise<SessionMeta[]> {
     const app = getApp()

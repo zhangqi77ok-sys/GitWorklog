@@ -170,6 +170,76 @@ func (a *App) OpenFileDialog() ([]string, error) {
 	return relFiles, nil
 }
 
+// OpenDirectoryDialog 弹出系统原生选择文件夹窗口 (符合铁律 5)
+func (a *App) OpenDirectoryDialog() (string, error) {
+	if a.ctx == nil {
+		return "", fmt.Errorf("app context not initialized")
+	}
+	dir, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
+		Title:            "选择项目工作区文件夹",
+		DefaultDirectory: a.workspace,
+	})
+	if err != nil {
+		return "", err
+	}
+	return filepath.ToSlash(dir), nil
+}
+
+// GetWorkspace 获取当前活动工作区绝对路径
+func (a *App) GetWorkspace() string {
+	return filepath.ToSlash(a.workspace)
+}
+
+// SetWorkspace 动态切换项目工作区，热更新沙箱、Git 工具与插件执行链
+func (a *App) SetWorkspace(dir string) error {
+	if dir == "" {
+		return fmt.Errorf("workspace directory cannot be empty")
+	}
+	absDir, err := filepath.Abs(dir)
+	if err != nil {
+		return fmt.Errorf("invalid workspace directory: %w", err)
+	}
+	info, err := os.Stat(absDir)
+	if err != nil || !info.IsDir() {
+		return fmt.Errorf("workspace directory does not exist or is not a directory: %s", absDir)
+	}
+
+	a.workspace = absDir
+	sb, _ := sandbox.NewSandbox(absDir)
+	a.sandbox = sb
+	a.snapshotMgr = sandbox.NewSnapshotManager(absDir)
+
+	gt := gittool.NewTool(absDir)
+	a.gitTool = gt
+	if a.registry != nil {
+		_ = a.registry.Register(gt)
+	}
+
+	fs := fstool.NewTool(sb, a.snapshotMgr)
+	a.fsTool = fs
+	if a.registry != nil {
+		_ = a.registry.Register(fs)
+	}
+
+	term := terminaltool.NewTool(absDir)
+	a.termTool = term
+	if a.registry != nil {
+		_ = a.registry.Register(term)
+	}
+
+	if a.mcpManager != nil {
+		a.mcpManager.StopAll()
+	}
+	a.mcpManager = mcp.NewManager(absDir)
+	if a.extraStore != nil {
+		go func() {
+			a.mcpManager.SyncFromConfig(context.Background(), a.extraStore.ListMCPs())
+		}()
+	}
+
+	return nil
+}
+
 // --- 会话历史持久化 (Sessions) ---
 
 func (a *App) ListSessions() []session.SessionMeta {

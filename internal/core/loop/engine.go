@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
 	"tcode/internal/host"
@@ -165,9 +166,16 @@ func (e *ExecutionEngine) Execute(ctx context.Context, req *EngineRequest, event
 			"role":    "assistant",
 			"content": asstContent.String(),
 		}
-		rawToolCalls := make([]map[string]any, 0, len(toolReassembler))
-		for i := 0; i < len(toolReassembler); i++ {
-			atc := toolReassembler[i]
+		// 收集排序后的所有 tool call 索引，兼容非 0 开始与稀疏索引
+		tcIndices := make([]int, 0, len(toolReassembler))
+		for idx := range toolReassembler {
+			tcIndices = append(tcIndices, idx)
+		}
+		sort.Ints(tcIndices)
+
+		rawToolCalls := make([]map[string]any, 0, len(tcIndices))
+		for _, idx := range tcIndices {
+			atc := toolReassembler[idx]
 			if atc == nil {
 				continue
 			}
@@ -184,8 +192,8 @@ func (e *ExecutionEngine) Execute(ctx context.Context, req *EngineRequest, event
 		messages = append(messages, assistantMsg)
 
 		// 依次安全调度物理算子
-		for i := 0; i < len(toolReassembler); i++ {
-			atc := toolReassembler[i]
+		for _, idx := range tcIndices {
+			atc := toolReassembler[idx]
 			if atc == nil {
 				continue
 			}

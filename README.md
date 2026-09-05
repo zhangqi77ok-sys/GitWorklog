@@ -392,6 +392,22 @@ Tcode 打破了单体硬编码调度逻辑，将 Agent 的执行循环、能力�
 * **流式生成中删除会话防幽灵复活**：
   - 前端删除当前正在生成的会话前先主动触发 `stopGenerationAction()` 中断底层流式上下文，杜绝异步落盘导致已删除会话在磁盘上重新复活。
 
+### 34. 动态工作区热切换、稀疏工具调用治理与脱机卸载自毁 (Workspace Hot-Swap, Sparse Tool Indexing & Detached Uninstaller)
+* **动态工作区热切换与原生目录拾取器 (`OpenDirectoryDialog` & `SetWorkspace`)**：
+  - 彻底铲除顶栏项目名硬编码 `agent-learning` 缺陷，标题栏与工程资源管理器同步展示当前活动目录，支持点击调起系统原生文件管理器原生拾取文件夹（`runtime.OpenDirectoryDialog`，符合铁律 5）；
+  - 微内核实现 `SetWorkspace` 动态热更新机制，无缝重载受控沙箱、快照管理器、Git 状态检测、受控终端与 MCP 管理进程，并即时联动刷新前端文件树与 AST 代码拓扑；
+* **多工具调用稀疏索引数学陷阱根治**：
+  - 针对大模型返回的 `tool_calls` 切片可能带有稀疏或非零 index 的协议特征，摒弃危险的 `0..len-1` 连续下标假设，重构为 key 收集与 `sort.Ints` 升序遍历，确保所有高位索引工具调用 100% 完整捕获与并发调度；
+* **SSE 思考流 10MB 动态缓冲与长文本容灾**：
+  - 将 Go `bufio.Scanner` 默认 64KB 缓冲区扩容至 10MB 动态上限，全面防御 DeepSeek-R1、Claude 3.7 Sonnet 等超长心智思维链导致的 `bufio.ErrTooLong` 溢出截断，并显式拦截 `scanner.Err()` 抛出结构化网络错误；
+* **受控文件工具 Sandbox 空指针 Panic 拦截**：
+  - 在 `fstool.Execute` 顶部引入前置防御，未就绪或未初始化时优雅报错，严禁空指针解引用崩溃；
+* **Swarm 算子化验证 60s 硬超时与 Windows 零黑框**：
+  - `RunTDDValidation` 引入 60 秒绝对上下文超时控制与 `0x08000000` 零黑框标志位，根除测试子进程永久挂起与弹窗闪烁；
+* **ShellExecuteW 异步脱机批处理与进程树自毁安全**：
+  - 安装器与卸载器 `taskkill` 注入 `/T` 递归树杀，杜绝残留孤儿工具链进程；
+  - 卸载器采用 Win32 API `ShellExecuteW` 异步脱机拉起延时清理批处理（`SW_HIDE`），彻底脱离父进程控制台管道生命周期，配合 `(goto) 2>nul & del "%~f0"` 实现干净彻底的无残留静默卸载自清理。
+
 ---
 
 ## 🎨 四、视觉与人机工程学规范
