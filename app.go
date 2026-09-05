@@ -318,6 +318,9 @@ func (a *App) DiagnoseFile(relPath string) (*lsp.DiagnosticReport, error) {
 
 // TestMCPServer 对指定 MCP 服务执行标准 JSON-RPC 2.0 握手与工具探活
 func (a *App) TestMCPServer(id string) (mcp.MCPTestResult, error) {
+	if a.mcpManager == nil {
+		return mcp.MCPTestResult{Status: "ERROR", Error: "mcp manager not initialized"}, fmt.Errorf("mcp manager not initialized")
+	}
 	if a.extraStore != nil {
 		mcps := a.extraStore.ListMCPs()
 		for _, srv := range mcps {
@@ -326,16 +329,11 @@ func (a *App) TestMCPServer(id string) (mcp.MCPTestResult, error) {
 			}
 		}
 	}
-	// 默认提供 node/npx 预设探活
-	defaultCfg := config.MCPServerConfig{
-		ID:      id,
-		Name:    id,
-		Type:    "stdio",
-		Command: "npx",
-		Args:    []string{"-y", "@modelcontextprotocol/server-filesystem", a.workspace},
-		Enabled: true,
-	}
-	return a.mcpManager.TestServer(context.Background(), defaultCfg)
+	return mcp.MCPTestResult{
+		ID:     id,
+		Status: "ERROR",
+		Error:  fmt.Sprintf("未找到指定的 MCP 服务配置: [%s]", id),
+	}, fmt.Errorf("mcp server [%s] not found", id)
 }
 
 func (a *App) ListSkills() []config.SkillConfig {
@@ -389,7 +387,15 @@ func (a *App) GetGitStatus() (map[string]any, error) {
 func (a *App) GetFileTree(dir string) ([]FileNode, error) {
 	targetDir := a.workspace
 	if dir != "" {
-		targetDir = filepath.Join(a.workspace, dir)
+		if a.sandbox != nil {
+			validated, err := a.sandbox.ValidatePath(dir)
+			if err != nil {
+				return nil, fmt.Errorf("invalid path access: %w", err)
+			}
+			targetDir = validated
+		} else {
+			targetDir = filepath.Join(a.workspace, dir)
+		}
 	}
 	return a.buildFileTree(targetDir, 0, 4)
 }
@@ -455,6 +461,10 @@ func (a *App) ExecCommand(command string) (string, error) {
 
 // ExecTerminalStream 异步执行终端命令，通过 Wails 事件实时推送流式输出与退出码
 func (a *App) ExecTerminalStream(command string) error {
+	trimmed := strings.TrimSpace(command)
+	if trimmed == "" {
+		return fmt.Errorf("command cannot be empty")
+	}
 	if a.ctx == nil {
 		return fmt.Errorf("context not initialized")
 	}
@@ -596,7 +606,7 @@ func (a *App) GitCommit(msg string) (string, error) {
 
 // GitStage 真实暂存单个文件
 func (a *App) GitStage(filePath string) error {
-	cmd := exec.Command("git", "add", filePath)
+	cmd := exec.Command("git", "add", "--", filePath)
 	cmd.Dir = a.workspace
 	return cmd.Run()
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -82,14 +83,15 @@ func (s *Store) List() []SessionMeta {
 
 	metas := make([]SessionMeta, 0, len(entries))
 	for _, entry := range entries {
-		if entry.IsDir() || !filepath.HasPrefix(entry.Name(), "sess_") && !filepath.HasPrefix(entry.Name(), "sess") {
+		name := entry.Name()
+		if entry.IsDir() || (!strings.HasPrefix(name, "sess_") && !strings.HasPrefix(name, "sess")) {
 			continue
 		}
-		if filepath.Ext(entry.Name()) != ".json" {
+		if filepath.Ext(name) != ".json" {
 			continue
 		}
 
-		filePath := filepath.Join(s.baseDir, entry.Name())
+		filePath := filepath.Join(s.baseDir, name)
 		data, err := os.ReadFile(filePath)
 		if err != nil {
 			continue
@@ -123,15 +125,33 @@ func (s *Store) List() []SessionMeta {
 	return metas
 }
 
+// sanitizeID 防御会话 ID 路径穿越 (Path Traversal)，只允许合法基名
+func sanitizeID(id string) (string, error) {
+	trimmed := strings.TrimSpace(id)
+	if trimmed == "" {
+		return "", fmt.Errorf("session id cannot be empty")
+	}
+	clean := filepath.Base(filepath.Clean(trimmed))
+	if clean == "." || clean == "/" || clean == "\\" || clean != trimmed {
+		return "", fmt.Errorf("invalid session id format: %s", id)
+	}
+	return clean, nil
+}
+
 // Get 获取单条会话完整历史
 func (s *Store) Get(id string) (*ChatSession, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	filePath := filepath.Join(s.baseDir, fmt.Sprintf("%s.json", id))
+	safeID, err := sanitizeID(id)
+	if err != nil {
+		return nil, err
+	}
+
+	filePath := filepath.Join(s.baseDir, fmt.Sprintf("%s.json", safeID))
 	data, err := os.ReadFile(filePath)
 	if err != nil {
-		return nil, fmt.Errorf("session [%s] not found: %w", id, err)
+		return nil, fmt.Errorf("session [%s] not found: %w", safeID, err)
 	}
 
 	var sess ChatSession
@@ -146,12 +166,18 @@ func (s *Store) Save(sess ChatSession) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	safeID, err := sanitizeID(sess.ID)
+	if err != nil {
+		return err
+	}
+	sess.ID = safeID
+
 	sess.UpdatedAt = time.Now().Unix()
 	if sess.CreatedAt == 0 {
 		sess.CreatedAt = sess.UpdatedAt
 	}
 	if sess.Tag == "" {
-		sess.Tag = "核心架构"
+		sess.Tag = "默认"
 	}
 
 	data, err := json.MarshalIndent(sess, "", "  ")
@@ -159,7 +185,7 @@ func (s *Store) Save(sess ChatSession) error {
 		return err
 	}
 
-	filePath := filepath.Join(s.baseDir, fmt.Sprintf("%s.json", sess.ID))
+	filePath := filepath.Join(s.baseDir, fmt.Sprintf("%s.json", safeID))
 	return os.WriteFile(filePath, data, 0644)
 }
 
@@ -168,6 +194,11 @@ func (s *Store) Delete(id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	filePath := filepath.Join(s.baseDir, fmt.Sprintf("%s.json", id))
+	safeID, err := sanitizeID(id)
+	if err != nil {
+		return err
+	}
+
+	filePath := filepath.Join(s.baseDir, fmt.Sprintf("%s.json", safeID))
 	return os.Remove(filePath)
 }

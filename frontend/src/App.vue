@@ -352,15 +352,19 @@
                 </div>
               </div>
 
-              <!-- Tool Call 算子执行卡片 -->
-              <div v-if="msg.tool" class="w-full space-y-2">
-                <div class="rounded-xl border border-black/[0.08] bg-white shadow-2xs overflow-hidden">
+              <!-- Tool Call 算子执行卡片列表 (多轮自主执行时序链路) -->
+              <div v-if="(msg.tools && msg.tools.length > 0) || msg.tool" class="w-full space-y-2">
+                <div
+                  v-for="(tItem, tIdx) in (msg.tools && msg.tools.length > 0 ? msg.tools : [msg.tool!])"
+                  :key="tItem.id || tIdx"
+                  class="rounded-xl border border-black/[0.08] bg-white shadow-2xs overflow-hidden"
+                >
                   <div class="p-2 flex items-center justify-between bg-black/[0.02] text-xs font-mono">
-                    <span class="font-bold text-[#18181B]">$_ {{ msg.tool.name }} {{ typeof msg.tool.args === 'string' ? msg.tool.args : JSON.stringify(msg.tool.args) }}</span>
+                    <span class="font-bold text-[#18181B]">$_ {{ tItem.name }} {{ typeof tItem.args === 'string' ? tItem.args : JSON.stringify(tItem.args) }}</span>
                     <span class="text-[10px] text-[#10A37F]">● 执行成功</span>
                   </div>
                   <div class="p-2.5 bg-[#18181B] text-emerald-400 font-mono text-[11px] whitespace-pre-wrap">
-                    {{ msg.tool.output }}
+                    {{ tItem.output }}
                   </div>
                 </div>
               </div>
@@ -1274,8 +1278,21 @@ async function createNewSession() {
 async function deleteSession(id: string) {
   await wailsBridge.deleteSession(id)
   await loadSessionsList()
-  if (currentSessionId.value === id && sessions.value.length > 0) {
-    await selectSession(sessions.value[0].id)
+  if (currentSessionId.value === id) {
+    if (sessions.value.length > 0) {
+      await selectSession(sessions.value[0].id)
+    } else {
+      currentSessionId.value = ''
+      currentSession.value = {
+        id: '',
+        title: '新工程对话',
+        model: selectedModel.value || 'deepseek-chat',
+        tag: '',
+        created_at: Date.now(),
+        updated_at: Date.now(),
+        messages: []
+      }
+    }
   }
   showToast('✓ 会话已从本地磁盘移除')
 }
@@ -1417,6 +1434,16 @@ async function handleSend() {
     attachedFiles.value = []
   }
 
+  // 保证会话 ID 绝对非空，避免向后端传入空 session_id 生成畸形文件
+  if (!currentSessionId.value) {
+    const newId = 'sess_' + Date.now()
+    currentSessionId.value = newId
+    currentSession.value.id = newId
+    currentSession.value.title = prompt.slice(0, 15)
+    await wailsBridge.saveSession(currentSession.value)
+    await loadSessionsList()
+  }
+
   inputPrompt.value = ''
   isStreaming.value = true
 
@@ -1461,7 +1488,7 @@ async function handleSend() {
           if (target) target.content += delta
           if (messagesContainerRef.value) messagesContainerRef.value.scrollTop = messagesContainerRef.value.scrollHeight
         },
-        onToolStart(tool, args) {
+        onToolStart(tool, args, tcId) {
           const target = currentSession.value.messages.find(m => m.id === asstMsgId)
           let parsedArgs = args
           if (typeof args === 'string') {
@@ -1471,11 +1498,24 @@ async function handleSend() {
               parsedArgs = args
             }
           }
-          if (target) target.tool = { name: tool, args: parsedArgs, output: '正在执行...' }
+          if (target) {
+            const toolRecord = { id: tcId || 'tool_' + Date.now(), name: tool, args: parsedArgs, output: '正在执行...' }
+            target.tool = toolRecord
+            if (!target.tools) target.tools = []
+            target.tools.push(toolRecord)
+          }
         },
-        onToolEnd(tool, output) {
+        onToolEnd(tool, output, tcId) {
           const target = currentSession.value.messages.find(m => m.id === asstMsgId)
-          if (target && target.tool) target.tool.output = output
+          if (target) {
+            if (target.tool && target.tool.name === tool) {
+              target.tool.output = output
+            }
+            if (target.tools && target.tools.length > 0) {
+              const matched = tcId ? target.tools.find(t => t.id === tcId) : target.tools[target.tools.length - 1]
+              if (matched) matched.output = output
+            }
+          }
         },
         onDone() {
           isStreaming.value = false

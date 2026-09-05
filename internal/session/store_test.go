@@ -1,4 +1,4 @@
-﻿package session
+package session
 
 import (
 	"os"
@@ -58,3 +58,35 @@ func TestStore_ZeroDemo_CleanEmptyState(t *testing.T) {
 		t.Fatalf("expected 0 sessions after deletion, got %d", len(metas))
 	}
 }
+
+func TestStore_PathTraversalDefense(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "tcode_test_sessions_*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	s := &Store{baseDir: tempDir}
+
+	maliciousIDs := []string{
+		"../escape",
+		"../../etc/passwd",
+		"..\\escape",
+		"sub/folder/id",
+		"",
+		"   ",
+	}
+
+	for _, id := range maliciousIDs {
+		if _, err := s.Get(id); err == nil {
+			t.Errorf("expected Get error for malicious id [%s], but got nil", id)
+		}
+		if err := s.Delete(id); err == nil {
+			t.Errorf("expected Delete error for malicious id [%s], but got nil", id)
+		}
+		if err := s.Save(ChatSession{ID: id}); err == nil {
+			t.Errorf("expected Save error for malicious id [%s], but got nil", id)
+		}
+	}
+}
+

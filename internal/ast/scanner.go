@@ -29,17 +29,22 @@ func ScanWorkspaceAST(rootDir string) ([]GraphNode, error) {
 		if err != nil {
 			return nil
 		}
-		// 忽略隐藏目录与 node_modules / dist / .git
+		// 忽略隐藏目录与大型依赖产物目录
 		if info.IsDir() {
-			base := info.Name()
-			if strings.HasPrefix(base, ".") || base == "node_modules" || base == "dist" || base == "bin" {
+			base := strings.ToLower(info.Name())
+			if strings.HasPrefix(base, ".") || base == "node_modules" || base == "dist" || base == "bin" || base == "build" || base == "vendor" || base == "target" || base == "release" {
 				return filepath.SkipDir
 			}
 			return nil
 		}
 
-		// 仅分析 .go 源码
-		if !strings.HasSuffix(path, ".go") {
+		// 熔断保护: 达到 300 个拓扑节点即刻自然收敛，防止 DOM 渲染雪崩
+		if len(nodes) >= 300 {
+			return filepath.SkipAll
+		}
+
+		// 仅分析 .go 源码，且跳过单文件超过 512KB 的巨型文件
+		if !strings.HasSuffix(path, ".go") || info.Size() > 512*1024 {
 			return nil
 		}
 

@@ -130,8 +130,8 @@ func runGoDiagnostics(ctx context.Context, workspace string, relPath string) str
 }
 
 func runTSDiagnostics(ctx context.Context, workspace string, relPath string) string {
-	// 若存在 npx tsc，针对当前文件进行轻量检查
-	cmd := exec.CommandContext(ctx, "npx", "tsc", "--noEmit", "--skipLibCheck", relPath)
+	// 关键防护: 注入 --no-install 标志，若本地未安装 tsc 立即退出，严禁进入网络交互挂起
+	cmd := exec.CommandContext(ctx, "npx", "--no-install", "tsc", "--noEmit", "--skipLibCheck", relPath)
 	cmd.Dir = workspace
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		HideWindow:    true,
