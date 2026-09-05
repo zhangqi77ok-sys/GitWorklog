@@ -46,52 +46,8 @@ func NewChannelStore() (*ChannelStore, error) {
 		channels: make([]ChannelConfig, 0),
 	}
 
-	if err := store.load(); err != nil {
-		// 如果文件不存在，初始化默认通道
-		store.initDefaults()
-		_ = store.save()
-	}
-
+	_ = store.load()
 	return store, nil
-}
-
-func (s *ChannelStore) initDefaults() {
-	s.channels = []ChannelConfig{
-		{
-			ID:        "ch_agentrouter",
-			Name:      "AgentRouter 聚合中转站 (测试主通道)",
-			Primary:   true,
-			Status:    "online",
-			AuthType:  "bearer_token",
-			Endpoint:  "https://agentrouter.org/v1",
-			APIKey:    "sk-gKTbHfCZqgyDVf3TaXWpXT5TXW9qIZdAFVMOsY49ZKFssyFZ",
-			Model:     "deepseek-v4-flash",
-			Latency:   "82ms",
-			UpdatedAt: time.Now().Unix(),
-		},
-		{
-			ID:        "ch_openai_cap",
-			Name:      "OpenAI 官方通道 (CAP Codex 认证)",
-			Primary:   false,
-			Status:    "online",
-			AuthType:  "codex_session",
-			Endpoint:  "https://api.openai.com/v1",
-			Model:     "gpt-5.6-sol",
-			Latency:   "135ms",
-			UpdatedAt: time.Now().Unix(),
-		},
-		{
-			ID:        "ch_sub2api",
-			Name:      "Sub2API 聚合网关 (sub2_ 订阅透传)",
-			Primary:   false,
-			Status:    "standby",
-			AuthType:  "sub2_relay",
-			Endpoint:  "https://api.sub2api.com/v1",
-			Model:     "claude-opus-4-8",
-			Latency:   "158ms",
-			UpdatedAt: time.Now().Unix(),
-		},
-	}
 }
 
 func (s *ChannelStore) load() error {

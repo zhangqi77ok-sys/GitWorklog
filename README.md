@@ -340,6 +340,21 @@ Tcode 打破了单体硬编码调度逻辑，将 Agent 的执行循环、能力�
   - 弹窗与选项卡切换全面解耦阻塞性数据扫描，0ms 瞬间唤起并搭配优雅加载指示器；
   - 注入 `:active` 物理微触感反馈，全面提升交互操作响应速度与顺滑度。
 
+### 31. 全域关键缺陷治理与桌面微内核工程加固 (Top 10 Critical Bug Eradication & Hardening)
+* **凭据硬编码彻底拔除与 Fail-Closed 防御**：
+  - 彻底清理后端配置中心与对话推理流中任何硬编码的测试 Token 与假模型 `deepseek-v4-flash`；
+  - 遵循严格的 Fail-Closed 原则：当未配置模型渠道 API Key 时，立即向前端抛出结构化配置指引并终止推理，严禁静默回退；
+* **OpenAI / DeepSeek 协议合规加固 (`Message.Content`)**：
+  - 针对工具消息 (`role: "tool"`)，移除 Go 结构体 `Content` 字段的 `omitempty` 标签，确保即便工具执行标准输出为空字符串也严格序列化传输 `"content": ""`，100% 消除上游网关 400 Bad Request 校验拒绝；
+* **Wails IPC 全局事件监听器泄漏根治**：
+  - 在 `wailsBridge.sendMessage` 中引入自动化解绑生命周期守护，在流式连接建立前与完成时调用 `runtime.EventsOff` 注销全局总线监听器，根治多轮会话导致的 Chunk 翻倍打印与内存雪崩；
+* **深层递归文件树与沉浸式无边框窗体控制**：
+  - 重构 `GetFileTree` 为支持 4 层深度递归扫描并自动过滤构建依赖目录（`.git`, `node_modules`, `bin`, `dist` 等）；
+  - 标题栏注入 `--wails-draggable:drag` 原生拖拽，右上角无边框控制按钮完整打通最小化、最大化/还原与安全退出；
+* **安装包自定义路径隔离与卸载器全盘防误杀守卫**：
+  - 单文件安装程序全面支持 `--dir=`, `-dir=`, `/D=`, `--silent-install-dir=`，自动对自定义目录校验并补齐 `TcodeStudio` 隔离子目录；
+  - 卸载程序引入物理路径多重安全断言（禁止系统根目录、禁止非 `TcodeStudio` 目录整体 `rmdir`），并采用 `CREATE_NO_WINDOW` 隐蔽控制台执行自清理。
+
 ---
 
 ## 🎨 四、视觉与人机工程学规范

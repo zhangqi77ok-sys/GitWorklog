@@ -30,10 +30,10 @@
             v-model="selectedModel"
             class="bg-white border border-black/[0.1] rounded-lg px-2 py-0.8 text-xs font-mono font-medium text-[#10A37F] focus:outline-none focus:border-[#D96B27] cursor-pointer shadow-2xs"
           >
-            <option value="deepseek-v4-flash">⚡ deepseek-v4-flash (深度心智思考)</option>
-            <option value="gpt-5.6-sol">🧠 gpt-5.6-sol (OpenAI 架构旗舰)</option>
-            <option value="claude-opus-4-8">👑 claude-opus-4-8 (Claude 顶级推理)</option>
-            <option value="glm-5.3">🌐 glm-5.3 (多语言通用模型)</option>
+            <option value="deepseek-chat">⚡ deepseek-chat (DeepSeek-V3)</option>
+            <option value="deepseek-reasoner">🧠 deepseek-reasoner (DeepSeek-R1 深度思考)</option>
+            <option value="gpt-4o">👑 gpt-4o (OpenAI 旗舰多模态)</option>
+            <option value="claude-3-7-sonnet">👑 claude-3-7-sonnet (Claude 顶级推理)</option>
           </select>
         </div>
       </div>

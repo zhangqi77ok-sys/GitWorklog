@@ -383,8 +383,11 @@ func (a *App) GetFileTree(dir string) ([]FileNode, error) {
 	if dir != "" {
 		targetDir = filepath.Join(a.workspace, dir)
 	}
+	return a.buildFileTree(targetDir, 0, 4)
+}
 
-	entries, err := os.ReadDir(targetDir)
+func (a *App) buildFileTree(currentDir string, currentDepth, maxDepth int) ([]FileNode, error) {
+	entries, err := os.ReadDir(currentDir)
 	if err != nil {
 		return nil, err
 	}
@@ -392,10 +395,10 @@ func (a *App) GetFileTree(dir string) ([]FileNode, error) {
 	nodes := make([]FileNode, 0, len(entries))
 	for _, entry := range entries {
 		name := entry.Name()
-		if strings.HasPrefix(name, ".") || name == "node_modules" || name == "bin" {
+		if strings.HasPrefix(name, ".") || name == "node_modules" || name == "bin" || name == "dist" || name == "build" {
 			continue
 		}
-		rel, _ := filepath.Rel(a.workspace, filepath.Join(targetDir, name))
+		rel, _ := filepath.Rel(a.workspace, filepath.Join(currentDir, name))
 		rel = filepath.ToSlash(rel)
 
 		node := FileNode{
@@ -403,19 +406,9 @@ func (a *App) GetFileTree(dir string) ([]FileNode, error) {
 			Path:  rel,
 			IsDir: entry.IsDir(),
 		}
-		if entry.IsDir() {
-			subEntries, _ := os.ReadDir(filepath.Join(targetDir, name))
-			for _, sub := range subEntries {
-				subName := sub.Name()
-				if !strings.HasPrefix(subName, ".") && subName != "node_modules" {
-					subRel, _ := filepath.Rel(a.workspace, filepath.Join(targetDir, name, subName))
-					node.Children = append(node.Children, FileNode{
-						Name:  subName,
-						Path:  filepath.ToSlash(subRel),
-						IsDir: sub.IsDir(),
-					})
-				}
-			}
+		if entry.IsDir() && currentDepth < maxDepth {
+			subNodes, _ := a.buildFileTree(filepath.Join(currentDir, name), currentDepth+1, maxDepth)
+			node.Children = subNodes
 		}
 		nodes = append(nodes, node)
 	}
@@ -529,7 +522,15 @@ func (a *App) FetchUpstreamModels(endpoint, apiKey string) ([]string, error) {
 		endpoint = "https://agentrouter.org/v1"
 	}
 	if apiKey == "" {
-		apiKey = "sk-gKTbHfCZqgyDVf3TaXWpXT5TXW9qIZdAFVMOsY49ZKFssyFZ"
+		if primary := a.channelStore.GetPrimary(); primary != nil && primary.APIKey != "" {
+			apiKey = primary.APIKey
+			if endpoint == "https://agentrouter.org/v1" && primary.Endpoint != "" {
+				endpoint = primary.Endpoint
+			}
+		}
+	}
+	if apiKey == "" {
+		return nil, fmt.Errorf("未配置有效 API Key，请先在渠道配置中填写模型 API Key")
 	}
 	url := strings.TrimRight(endpoint, "/") + "/models"
 
@@ -600,22 +601,40 @@ func (a *App) SendMessage(req ChatRequest) error {
 	go func() {
 		// 1. 获取主用渠道凭据
 		primary := a.channelStore.GetPrimary()
-		endpoint := "https://agentrouter.org/v1"
-		apiKey := "sk-gKTbHfCZqgyDVf3TaXWpXT5TXW9qIZdAFVMOsY49ZKFssyFZ"
+		var endpoint string
+		var apiKey string
 		model := req.Model
-		if model == "" {
-			model = "deepseek-v4-flash"
-		}
+
 		if primary != nil {
-			if primary.Endpoint != "" {
-				endpoint = primary.Endpoint
-			}
-			if primary.APIKey != "" {
-				apiKey = primary.APIKey
-			}
-			if req.Model == "" && primary.Model != "" {
+			endpoint = primary.Endpoint
+			apiKey = primary.APIKey
+			if model == "" {
 				model = primary.Model
 			}
+		}
+		if endpoint == "" {
+			endpoint = "https://api.openai.com/v1"
+		}
+		if model == "" {
+			model = "deepseek-chat"
+		}
+
+		if apiKey == "" {
+			errMsg := "\n\n[配置错误] 未检测到有效的模型渠道凭据 (API Key)。请在右侧「渠道配置」面板添加并激活您的真实模型服务渠道。"
+			runtime.EventsEmit(a.ctx, "agent:start", map[string]any{
+				"session_id": req.SessionID,
+				"model":      model,
+			})
+			runtime.EventsEmit(a.ctx, "agent:chunk", map[string]any{
+				"session_id": req.SessionID,
+				"delta":      errMsg,
+				"turn":       1,
+			})
+			runtime.EventsEmit(a.ctx, "agent:complete", map[string]any{
+				"session_id": req.SessionID,
+				"error":      "missing_api_key",
+			})
+			return
 		}
 
 		// 2. 加载已有会话历史，若不存在则新建

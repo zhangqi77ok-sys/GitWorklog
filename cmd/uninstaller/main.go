@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"unsafe"
 
@@ -69,10 +70,37 @@ func main() {
 	if appDir == "" {
 		appDir = filepath.Join(os.Getenv("LOCALAPPDATA"), "Programs", "TcodeStudio")
 	}
+	appDir = filepath.Clean(appDir)
 
-	// 5. 延迟自删除实际安装目录
-	cmdStr := fmt.Sprintf("timeout /t 1 /nobreak >nul & rmdir /s /q \"%s\"", appDir)
-	_ = exec.Command("cmd.exe", "/c", cmdStr).Start()
+	// 安全防线：防止误删驱动器根目录、系统目录或用户家目录
+	isSafeToDelete := false
+	winDir := os.Getenv("WINDIR")
+	sysRoot := os.Getenv("SYSTEMROOT")
+	userProfile := os.Getenv("USERPROFILE")
+
+	if len(appDir) > 5 &&
+		!strings.EqualFold(appDir, winDir) &&
+		!strings.EqualFold(appDir, sysRoot) &&
+		!strings.EqualFold(appDir, userProfile) &&
+		!strings.EqualFold(appDir, homeDir) {
+		baseName := filepath.Base(appDir)
+		if strings.EqualFold(baseName, "TcodeStudio") {
+			isSafeToDelete = true
+		}
+	}
+
+	// 5. 延迟自删除实际安装目录（隐藏黑框）
+	if isSafeToDelete {
+		cmdStr := fmt.Sprintf("timeout /t 1 /nobreak >nul & rmdir /s /q \"%s\"", appDir)
+		cmd := exec.Command("cmd.exe", "/c", cmdStr)
+		cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+		_ = cmd.Start()
+	} else {
+		cmdStr := fmt.Sprintf("timeout /t 1 /nobreak >nul & del /f /q \"%s\\tcode.exe\" \"%s\\uninstall.exe\" \"%s\\tcode.ico\"", appDir, appDir, appDir)
+		cmd := exec.Command("cmd.exe", "/c", cmdStr)
+		cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+		_ = cmd.Start()
+	}
 
 	messageBox("卸载完成", "Tcode Studio 已成功从您的计算机移除。", MB_ICONINFO)
 }

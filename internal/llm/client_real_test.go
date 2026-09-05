@@ -1,18 +1,28 @@
-﻿package llm
+package llm
 
 import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"os"
 	"strings"
 	"testing"
 	"time"
 )
 
 func TestRealAgentRouter_StreamChat(t *testing.T) {
-	endpoint := "https://agentrouter.org/v1"
-	apiKey := "sk-gKTbHfCZqgyDVf3TaXWpXT5TXW9qIZdAFVMOsY49ZKFssyFZ"
-	model := "deepseek-v4-flash"
+	endpoint := os.Getenv("AGENTROUTER_ENDPOINT")
+	if endpoint == "" {
+		endpoint = "https://agentrouter.org/v1"
+	}
+	apiKey := os.Getenv("AGENTROUTER_API_KEY")
+	if apiKey == "" {
+		t.Skip("Skipping live stream test: AGENTROUTER_API_KEY not set in environment")
+	}
+	model := os.Getenv("AGENTROUTER_MODEL")
+	if model == "" {
+		model = "deepseek-chat"
+	}
 
 	req := Request{
 		Endpoint: endpoint,
@@ -56,9 +66,18 @@ func TestRealAgentRouter_StreamChat(t *testing.T) {
 }
 
 func TestRealAgentRouter_ToolCalling(t *testing.T) {
-	endpoint := "https://agentrouter.org/v1"
-	apiKey := "sk-gKTbHfCZqgyDVf3TaXWpXT5TXW9qIZdAFVMOsY49ZKFssyFZ"
-	model := "deepseek-v4-flash"
+	endpoint := os.Getenv("AGENTROUTER_ENDPOINT")
+	if endpoint == "" {
+		endpoint = "https://agentrouter.org/v1"
+	}
+	apiKey := os.Getenv("AGENTROUTER_API_KEY")
+	if apiKey == "" {
+		t.Skip("Skipping live tool test: AGENTROUTER_API_KEY not set in environment")
+	}
+	model := os.Getenv("AGENTROUTER_MODEL")
+	if model == "" {
+		model = "deepseek-chat"
+	}
 
 	req := Request{
 		Endpoint: endpoint,
@@ -100,10 +119,17 @@ func TestRealAgentRouter_ToolCalling(t *testing.T) {
 }
 
 func TestRealAgentRouter_FetchModels(t *testing.T) {
-	endpoint := "https://agentrouter.org/v1/models"
-	apiKey := "sk-gKTbHfCZqgyDVf3TaXWpXT5TXW9qIZdAFVMOsY49ZKFssyFZ"
+	endpoint := os.Getenv("AGENTROUTER_ENDPOINT")
+	if endpoint == "" {
+		endpoint = "https://agentrouter.org/v1"
+	}
+	apiKey := os.Getenv("AGENTROUTER_API_KEY")
+	if apiKey == "" {
+		t.Skip("Skipping live models test: AGENTROUTER_API_KEY not set in environment")
+	}
+	fetchURL := strings.TrimRight(endpoint, "/") + "/models"
 
-	req, err := http.NewRequest("GET", endpoint, nil)
+	req, err := http.NewRequest("GET", fetchURL, nil)
 	if err != nil {
 		t.Fatalf("Create request failed: %v", err)
 	}
@@ -138,5 +164,39 @@ func TestRealAgentRouter_FetchModels(t *testing.T) {
 	}
 	for i := 0; i < len(data.Data) && i < 5; i++ {
 		t.Logf("Model[%d]: %s", i, data.Data[i].ID)
+	}
+}
+
+// TestMessageSerialization_ContentNotOmitted 验证 Bug 8: Message.Content 即使为空也不能被 omitempty 过滤
+func TestMessageSerialization_ContentNotOmitted(t *testing.T) {
+	msg := Message{
+		Role:       "tool",
+		Content:    "",
+		ToolCallID: "call_12345",
+	}
+
+	data, err := json.Marshal(msg)
+	if err != nil {
+		t.Fatalf("Marshal failed: %v", err)
+	}
+
+	jsonStr := string(data)
+	if !strings.Contains(jsonStr, `"content":""`) {
+		t.Errorf("Expected json to contain '\"content\":\"\"', got: %s", jsonStr)
+	}
+
+	req := Request{
+		Model: "deepseek-chat",
+		Messages: []Message{
+			{Role: "user", Content: "hello"},
+			msg,
+		},
+	}
+	reqData, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("Marshal request failed: %v", err)
+	}
+	if !strings.Contains(string(reqData), `"content":""`) {
+		t.Errorf("Expected request to contain '\"content\":\"\"', got: %s", string(reqData))
 	}
 }

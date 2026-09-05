@@ -422,6 +422,31 @@ export const wailsBridge = {
     const app = getApp()
 
     if (runtime && app?.SendMessage) {
+      // 治理内存泄漏与 Chunk 重复打印：清理残留监听器
+      try {
+        if (runtime.EventsOff) {
+          runtime.EventsOff('agent:thinking')
+          runtime.EventsOff('agent:chunk')
+          runtime.EventsOff('agent:tool_start')
+          runtime.EventsOff('agent:tool_end')
+          runtime.EventsOff('agent:done')
+          runtime.EventsOff('agent:complete')
+        }
+      } catch (_) {}
+
+      const cleanAll = () => {
+        try {
+          if (runtime.EventsOff) {
+            runtime.EventsOff('agent:thinking')
+            runtime.EventsOff('agent:chunk')
+            runtime.EventsOff('agent:tool_start')
+            runtime.EventsOff('agent:tool_end')
+            runtime.EventsOff('agent:done')
+            runtime.EventsOff('agent:complete')
+          }
+        } catch (_) {}
+      }
+
       runtime.EventsOn('agent:thinking', (data: any) => {
         if (data.session_id === req.session_id && callbacks.onThinking) {
           callbacks.onThinking(data.thinking)
@@ -442,11 +467,14 @@ export const wailsBridge = {
           callbacks.onToolEnd(data.tool, data.output, data.id, data.turn)
         }
       })
-      runtime.EventsOn('agent:done', (data: any) => {
-        if (data.session_id === req.session_id && callbacks.onDone) {
-          callbacks.onDone()
+      const handleFinish = (data: any) => {
+        if (data?.session_id === req.session_id) {
+          cleanAll()
+          if (callbacks.onDone) callbacks.onDone()
         }
-      })
+      }
+      runtime.EventsOn('agent:done', handleFinish)
+      runtime.EventsOn('agent:complete', handleFinish)
 
       await app.SendMessage(req)
       return
@@ -458,5 +486,27 @@ export const wailsBridge = {
     }
     if (callbacks.onDone) callbacks.onDone()
     return
+  },
+
+  // 6. 沉浸式无边框窗口原生控制
+  windowMinimise(): void {
+    const runtime = getRuntime()
+    if (runtime?.WindowMinimise) {
+      runtime.WindowMinimise()
+    }
+  },
+  windowToggleMaximise(): void {
+    const runtime = getRuntime()
+    if (runtime?.WindowToggleMaximise) {
+      runtime.WindowToggleMaximise()
+    }
+  },
+  windowClose(): void {
+    const runtime = getRuntime()
+    if (runtime?.Quit) {
+      runtime.Quit()
+    } else if (runtime?.WindowClose) {
+      runtime.WindowClose()
+    }
   }
 }

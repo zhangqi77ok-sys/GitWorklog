@@ -134,7 +134,7 @@
                 </div>
                 <div>
                   <label class="block font-medium text-[#71717A] mb-1">默认模型标识</label>
-                  <input v-model="form.model" type="text" placeholder="deepseek-v4-flash / gpt-5.6-sol" class="w-full px-2.5 py-1.5 rounded-lg border border-black/[0.1] text-xs focus:outline-none focus:border-[#D96B27]">
+                  <input v-model="form.model" type="text" placeholder="deepseek-chat / gpt-4o" class="w-full px-2.5 py-1.5 rounded-lg border border-black/[0.1] text-xs focus:outline-none focus:border-[#D96B27]">
                 </div>
               </div>
 
@@ -386,8 +386,8 @@ const form = reactive<ChannelConfig>({
   auth_type: 'bearer_token',
   endpoint: 'https://agentrouter.org/v1',
   api_key: '',
-  model: 'deepseek-v4-flash',
-  latency: '82ms',
+  model: 'deepseek-chat',
+  latency: '未测速',
   updated_at: 0
 })
 
@@ -469,7 +469,7 @@ function openAddChannel() {
   form.auth_type = 'bearer_token'
   form.endpoint = 'https://agentrouter.org/v1'
   form.api_key = ''
-  form.model = 'deepseek-v4-flash'
+  form.model = 'deepseek-chat'
   form.latency = '未测速'
   isEditing.value = true
 }

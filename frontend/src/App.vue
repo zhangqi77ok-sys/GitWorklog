@@ -3,8 +3,8 @@
     <!-- ========================================================================= -->
     <!-- 1. 沉浸式无边框标题栏 (Titlebar) -->
     <!-- ========================================================================= -->
-    <header class="h-[38px] min-h-[38px] bg-[#FAF8F5] border-b border-black/[0.08] flex items-center justify-between px-3 z-30 select-none">
-      <div class="flex items-center gap-2">
+    <header style="--wails-draggable:drag" class="h-[38px] min-h-[38px] bg-[#FAF8F5] border-b border-black/[0.08] flex items-center justify-between px-3 z-30 select-none">
+      <div style="--wails-draggable:no-drag" class="flex items-center gap-2">
         <div class="w-5 h-5 rounded-md bg-[#18181B] text-white flex items-center justify-center font-bold text-xs shadow-xs">T</div>
         <span class="text-xs font-semibold tracking-tight text-[#18181B]">Tcode Studio</span>
         <span class="text-[#A1A1AA] text-xs">/</span>
@@ -23,7 +23,7 @@
         <span>按 <kbd class="px-1.5 py-0.5 rounded bg-black/[0.04] border border-black/[0.08] font-mono text-[10px] text-[#52525B]">Ctrl+K</kbd> 快速检索分支、文件与算子</span>
       </div>
 
-      <div class="flex items-center gap-2">
+      <div style="--wails-draggable:no-drag" class="flex items-center gap-2">
         <button
           @click="openKnowledgeGraphModal"
           class="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium text-[#18181B] bg-white border border-black/[0.08] shadow-2xs hover:bg-black/[0.03] transition-all cursor-pointer"
@@ -44,9 +44,9 @@
           <span class="text-[#D96B27]">⚙️</span><span>设置</span>
         </button>
         <div class="flex items-center gap-1 border-l border-black/[0.08] pl-2">
-          <button class="w-6 h-6 rounded flex items-center justify-center hover:bg-black/[0.05] text-[#71717A]">-</button>
-          <button class="w-6 h-6 rounded flex items-center justify-center hover:bg-black/[0.05] text-[#71717A]">□</button>
-          <button class="w-6 h-6 rounded flex items-center justify-center hover:bg-red-500 hover:text-white text-[#71717A]">✕</button>
+          <button @click="wailsBridge.windowMinimise()" class="w-6 h-6 rounded flex items-center justify-center hover:bg-black/[0.05] text-[#71717A] cursor-pointer" title="最小化">-</button>
+          <button @click="wailsBridge.windowToggleMaximise()" class="w-6 h-6 rounded flex items-center justify-center hover:bg-black/[0.05] text-[#71717A] cursor-pointer" title="最大化/还原">□</button>
+          <button @click="wailsBridge.windowClose()" class="w-6 h-6 rounded flex items-center justify-center hover:bg-red-500 hover:text-white text-[#71717A] cursor-pointer" title="关闭">✕</button>
         </div>
       </div>
     </header>
@@ -290,10 +290,7 @@
               v-model="selectedModel"
               class="bg-white border border-black/[0.1] rounded-lg px-2 py-0.8 text-xs font-mono font-medium text-[#10A37F] focus:outline-none focus:border-[#D96B27] cursor-pointer shadow-2xs"
             >
-              <option value="deepseek-chat">⚡ deepseek-chat (DeepSeek-V3)</option>
-              <option value="deepseek-reasoner">🧠 deepseek-reasoner (DeepSeek-R1 深度思考)</option>
-              <option value="gpt-4o">👑 gpt-4o (OpenAI 旗舰多模态)</option>
-              <option value="claude-3-7-sonnet">👑 claude-3-7-sonnet (Claude 顶级推理)</option>
+              <option v-for="m in availableModels" :key="m" :value="m">⚡ {{ m }}</option>
             </select>
           </div>
 
@@ -1116,6 +1113,15 @@ const filteredSessions = computed(() => {
   return sessions.value.filter(s => (s.tag || '') === activeTag.value)
 })
 
+const availableModels = computed(() => {
+  const set = new Set<string>()
+  channels.value.forEach(c => {
+    if (c.model && c.model.trim()) set.add(c.model.trim())
+  })
+  if (set.size > 0) return Array.from(set)
+  return ['deepseek-chat', 'deepseek-reasoner', 'gpt-4o', 'claude-3-7-sonnet']
+})
+
 async function loadSessionsList() {
   try {
     const list = await wailsBridge.listSessions()
@@ -1284,6 +1290,12 @@ async function handleSend() {
   const prompt = inputPrompt.value.trim()
   if (!prompt || isStreaming.value) return
 
+  let fullPrompt = prompt
+  if (attachedFiles.value.length > 0) {
+    fullPrompt = `[附加关联文件]\n${attachedFiles.value.map(f => `- ${f}`).join('\n')}\n\n${prompt}`
+    attachedFiles.value = []
+  }
+
   inputPrompt.value = ''
   isStreaming.value = true
 
@@ -1291,7 +1303,7 @@ async function handleSend() {
   currentSession.value.messages.push({
     id: userMsgId,
     role: 'user',
-    content: prompt,
+    content: fullPrompt,
     time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
   })
 
@@ -1313,7 +1325,7 @@ async function handleSend() {
     await wailsBridge.sendMessage(
       {
         session_id: currentSessionId.value,
-        prompt: prompt,
+        prompt: fullPrompt,
         model: selectedModel.value,
         is_full_auto: isFullAuto.value
       },
@@ -1330,7 +1342,15 @@ async function handleSend() {
         },
         onToolStart(tool, args) {
           const target = currentSession.value.messages.find(m => m.id === asstMsgId)
-          if (target) target.tool = { name: tool, args: typeof args === 'string' ? JSON.parse(args) : args, output: '正在执行...' }
+          let parsedArgs = args
+          if (typeof args === 'string') {
+            try {
+              parsedArgs = JSON.parse(args)
+            } catch (_) {
+              parsedArgs = args
+            }
+          }
+          if (target) target.tool = { name: tool, args: parsedArgs, output: '正在执行...' }
         },
         onToolEnd(tool, output) {
           const target = currentSession.value.messages.find(m => m.id === asstMsgId)
@@ -1367,6 +1387,11 @@ async function loadSettingsData() {
   mcps.value = await wailsBridge.listMCPs()
   skills.value = await wailsBridge.listSkills()
   rules.value = await wailsBridge.listRules()
+
+  const primary = channels.value.find(c => c.primary)
+  if (primary && primary.model) {
+    selectedModel.value = primary.model
+  }
 }
 
 function openSettingsTab(tab: string) {

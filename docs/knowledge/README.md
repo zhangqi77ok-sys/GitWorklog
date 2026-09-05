@@ -31,6 +31,7 @@
 | **21** | **Windows 纯 Go 单文件安装向导自定义安装目录解析、系统原生文件夹选取与卸载器自适应清理闭环** | 桌面端分发 / 原生交互 / 自动化闭环 | 命令行 `-dir` / `/D=` 参数统一解析、WinForms 原生文件夹选择无黑框唤起、卸载器自身物理寻址与自清理闭环 | [21-installer-custom-directory-and-folder-picker.md](./21-installer-custom-directory-and-folder-picker.md) |
 | **22** | **桌面端纯净零假数据 (Zero Demo & Clean Empty State) 治理与模板级渲染性能优化** | 前端架构 / UI性能优化 / 铁律 0.5 实践 | 全域假数据清空、纯净真实空状态设计、LRU Map Markdown 解析防雪崩与非阻塞即时按钮交互 | [22-zero-demo-empty-states-and-ui-performance-optimization.md](./22-zero-demo-empty-states-and-ui-performance-optimization.md) |
 | **23** | **后端持久化假数据根除、前端硬编码彻底清理与 Go 原生单文件安装包全链路构建** | 数据治理 / 原生安装器 / 纯净空状态 | 铲除 NewStore 自愈式假数据投毒、动态标签与真实模型对齐、嵌入式 Windows 单文件安装向导编译闭环 | [23-elimination-of-persisted-mock-sessions-and-native-installer-pipeline.md](./23-elimination-of-persisted-mock-sessions-and-native-installer-pipeline.md) |
+| **24** | **核心系统前十大关键缺陷全域歼灭与桌面微内核工程加固指南** | 架构加固 / 缺陷治理 / 协议合规 | 凭据泄漏零容忍、Fail-Closed 契约防御、无边框窗体控制、深层递归文件树、IPC 监听器防泄漏、空 Content 协议修复与安装卸载防误杀 | [24-top-10-critical-bugs-eradication-and-architecture-hardening.md](./24-top-10-critical-bugs-eradication-and-architecture-hardening.md) |
 
 
 

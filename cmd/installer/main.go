@@ -83,12 +83,12 @@ func main() {
 	customDir := ""
 	isSilent := false
 
-	// 解析命令行参数: 支持 -silent, /S, -dir <path>, --dir <path>, /D=<path>, -dir=<path>
+	// 解析命令行参数: 支持 -silent, /S, -dir <path>, --dir <path>, /D=<path>, -dir=<path>, --silent-install-dir
 	for i := 1; i < len(os.Args); i++ {
 		arg := os.Args[i]
 		if arg == "-silent" || arg == "/S" || arg == "/s" || arg == "--silent" {
 			isSilent = true
-		} else if arg == "-dir" || arg == "--dir" || arg == "-d" {
+		} else if arg == "-dir" || arg == "--dir" || arg == "-d" || arg == "--silent-install-dir" {
 			if i+1 < len(os.Args) {
 				customDir = os.Args[i+1]
 				i++
@@ -99,12 +99,19 @@ func main() {
 			customDir = strings.TrimPrefix(arg, "-dir=")
 		} else if strings.HasPrefix(arg, "--dir=") {
 			customDir = strings.TrimPrefix(arg, "--dir=")
+		} else if strings.HasPrefix(arg, "--silent-install-dir=") {
+			customDir = strings.TrimPrefix(arg, "--silent-install-dir=")
 		}
 	}
 
 	installDir := defaultInstallDir
 	if customDir != "" {
-		installDir = filepath.Clean(customDir)
+		cleaned := filepath.Clean(customDir)
+		if !strings.EqualFold(filepath.Base(cleaned), "TcodeStudio") {
+			installDir = filepath.Join(cleaned, "TcodeStudio")
+		} else {
+			installDir = cleaned
+		}
 	}
 
 	if !isSilent {
@@ -132,10 +139,11 @@ func main() {
 				}
 
 				// 若选中的文件夹尾部未包含 TcodeStudio，自动创建专用子目录
-				if !strings.EqualFold(filepath.Base(selected), "TcodeStudio") {
-					installDir = filepath.Join(selected, "TcodeStudio")
+				selectedClean := filepath.Clean(selected)
+				if !strings.EqualFold(filepath.Base(selectedClean), "TcodeStudio") {
+					installDir = filepath.Join(selectedClean, "TcodeStudio")
 				} else {
-					installDir = selected
+					installDir = selectedClean
 				}
 
 				confirmText := fmt.Sprintf(
