@@ -8,6 +8,7 @@ import (
 	"io"
 	"os/exec"
 	"runtime"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -309,11 +310,24 @@ func (c *StdioClient) readLoop() {
 				reqID = int64(v)
 			case int64:
 				reqID = v
+			case int:
+				reqID = int64(v)
+			case json.Number:
+				if n, err := v.Int64(); err == nil {
+					reqID = n
+				}
+			case string:
+				if n, err := strconv.ParseInt(v, 10, 64); err == nil {
+					reqID = n
+				}
 			}
 
 			if chVal, ok := c.pending.Load(reqID); ok {
 				if ch, ok := chVal.(chan *JSONRPCMessage); ok {
-					ch <- &msg
+					select {
+					case ch <- &msg:
+					default:
+					}
 				}
 			}
 		}

@@ -1287,6 +1287,9 @@ async function createNewSession() {
 }
 
 async function deleteSession(id: string) {
+  if (currentSessionId.value === id && isStreaming.value) {
+    await stopGenerationAction()
+  }
   await wailsBridge.deleteSession(id)
   await loadSessionsList()
   if (currentSessionId.value === id) {

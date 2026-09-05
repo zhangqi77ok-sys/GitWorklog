@@ -377,14 +377,20 @@ Tcode 打破了单体硬编码调度逻辑，将 Agent 的执行循环、能力�
 * **会话 ID 白名单清洗与越界删除安全守卫**：
   - `Store.Get` / `Save` / `Delete` 引入 `sanitizeID` 白名单校验，彻底阻断利用 `../../` 遍历、覆盖或删除会话目录外任意物理文件的路径穿越攻击；
   - 根除遗留硬编码默认标签 `核心架构`，遵循数据洁净原则设为 `默认`；
-* **文件树受控沙箱绝对路径校验**：
-  - `GetFileTree` 接口强制先经由受控沙箱 `ValidatePath` 校验，杜绝通过相对路径越界遍历整个系统盘任意敏感目录；
-* **LSP 编译器诊断离线网络交互防挂起**：
-  - `runTSDiagnostics` 注入 `--no-install` 核心防护，若目标环境未安装 `tsc` 立即安全退出，杜绝控制台阻塞在网络包下载确认与 4 秒超时挂起；
-* **AST 语法树扫描资源阈值与熔断保护**：
-  - 自动跳过 `vendor`/`build`/`target` 目录与超过 512KB 的超大源码，设置 300 节点数量硬顶熔断，杜绝巨型项目导致客户端 DOM 渲染雪崩；
-* **前端会话全清脏状态残留清除与空 ID 防御**：
-  - `deleteSession` 删除最后一个会话后自动重置状态指针与视图，杜绝复活旧 ID；`handleSend` 自动补齐新建会话 ID，彻底消除磁盘 `.json` 畸形文件。
+* **文件树受控沙箱绝对路径校验与 500 节点防环熔断**：
+  - `GetFileTree` 与 `buildFileTree` 强制经由受控沙箱 `ValidatePath` 校验并利用 `EvalSymlinks` 阻断软链接循环递归，设定 500 节点全局上限，杜绝超大目录导致客户端 DOM 渲染卡死；
+* **文件回滚物理删除沙箱校验隔离 (`RevertFile`)**：
+  - 严格校验相对路径是否越出工作区，彻底消除 `git checkout` 失败回退删除未追踪文件时的越权任意文件删除漏洞；
+* **会话数据原子写隔离 (`atomicWriteSession`)**：
+  - 会话磁盘存储全量采用“临时文件写入 + 磁盘同步 + 原子重命名”机制，杜绝断电或高频流式交互时的 JSON 数据撕裂与空文件损坏；
+* **大模型用量遥测成本精准核算**：
+  - 彻底铲除遥测模块中误用 `time.Now().Format` 导致成本输出系统时间的 Bug，基于 Token 吞吐真实核算并格式化精准美元开销；
+* **Windows 全链路外部进程零黑框防护规约**：
+  - 全局封装 `windowsSysProcAttr()`，为微内核调用的所有 Git、Npx、Python 进程强制注入 `0x08000000` (`CREATE_NO_WINDOW`) 与 `HideWindow: true`，杜绝一切黑框弹窗闪烁；
+* **JSON-RPC ID 宽容解析与非阻塞投递**：
+  - MCP Stdio 客户端完整支持 `string`、`int`、`float64` 与 `json.Number` 多类型 Request ID 解析，并在 channel 投递处增加 non-blocking `select` 保护，防止 reader 协程永久挂起；
+* **流式生成中删除会话防幽灵复活**：
+  - 前端删除当前正在生成的会话前先主动触发 `stopGenerationAction()` 中断底层流式上下文，杜绝异步落盘导致已删除会话在磁盘上重新复活。
 
 ---
 

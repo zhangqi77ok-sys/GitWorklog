@@ -1,6 +1,7 @@
 package telemetry
 
 import (
+	"fmt"
 	"sync"
 	"time"
 )
@@ -30,8 +31,12 @@ type Tracker struct {
 	perModel map[string]*ModelUsage
 }
 
-var globalTracker = &Tracker{
-	perModel: make(map[string]*ModelUsage),
+var globalTracker = NewTracker()
+
+func NewTracker() *Tracker {
+	return &Tracker{
+		perModel: make(map[string]*ModelUsage),
+	}
 }
 
 func GetTracker() *Tracker {
@@ -75,11 +80,7 @@ func (t *Tracker) GetMetrics(activeSessions int) UsageMetrics {
 
 	// 预估成本估算 (平均 $0.002 / 1k tokens)
 	cost := float64(totalTokens) * 0.000002
-	costStr := "$" + time.Now().Format("0.000")
-	if totalTokens > 0 {
-		costStr = "$" + time.Now().Format("0.0") // 简短表示
-		_ = cost
-	}
+	costStr := fmt.Sprintf("$%.4f", cost)
 
 	return UsageMetrics{
 		TotalTokens:     totalTokens,

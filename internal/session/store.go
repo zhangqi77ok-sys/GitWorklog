@@ -186,7 +186,22 @@ func (s *Store) Save(sess ChatSession) error {
 	}
 
 	filePath := filepath.Join(s.baseDir, fmt.Sprintf("%s.json", safeID))
-	return os.WriteFile(filePath, data, 0644)
+	return atomicWriteSession(filePath, data)
+}
+
+func atomicWriteSession(filePath string, data []byte) error {
+	tmpPath := fmt.Sprintf("%s.tmp.%d", filePath, time.Now().UnixNano())
+	if err := os.WriteFile(tmpPath, data, 0644); err != nil {
+		return err
+	}
+	if err := os.Rename(tmpPath, filePath); err != nil {
+		_ = os.Remove(filePath)
+		if renameErr := os.Rename(tmpPath, filePath); renameErr != nil {
+			_ = os.Remove(tmpPath)
+			return os.WriteFile(filePath, data, 0644)
+		}
+	}
+	return nil
 }
 
 // Delete 删除指定会话

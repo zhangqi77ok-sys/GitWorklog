@@ -6,8 +6,42 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"syscall"
 )
+
+func gitCmd(dir string, args ...string) *exec.Cmd {
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	if runtime.GOOS == "windows" {
+		cmd.SysProcAttr = &syscall.SysProcAttr{
+			CreationFlags: 0x08000000,
+			HideWindow:    true,
+		}
+	}
+	return cmd
+}
+
+func validateRelPath(workspaceRoot, relPath string) (string, error) {
+	if relPath == "" {
+		return "", fmt.Errorf("empty file path")
+	}
+	absPath := filepath.Join(workspaceRoot, relPath)
+	cleanAbs, err := filepath.Abs(absPath)
+	if err != nil {
+		return "", fmt.Errorf("invalid path: %w", err)
+	}
+	cleanWorkspace, err := filepath.Abs(workspaceRoot)
+	if err != nil {
+		return "", fmt.Errorf("invalid workspace: %w", err)
+	}
+	rel, err := filepath.Rel(cleanWorkspace, cleanAbs)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		return "", fmt.Errorf("path escapes workspace sandbox: %s", relPath)
+	}
+	return cleanAbs, nil
+}
 
 type DiffLine struct {
 	Type  string `json:"type"` // "add" | "del" | "ctx"
@@ -44,13 +78,15 @@ func ComputeFileDiff(workspaceRoot, relPath string) (DiffReport, error) {
 		Hunks:    make([]DiffHunk, 0),
 	}
 
-	absPath := filepath.Join(workspaceRoot, relPath)
+	absPath, err := validateRelPath(workspaceRoot, relPath)
+	if err != nil {
+		return report, err
+	}
 	if _, err := os.Stat(absPath); os.IsNotExist(err) {
 		return report, fmt.Errorf("file [%s] does not exist", relPath)
 	}
 
-	cmd := exec.Command("git", "diff", "HEAD", "--", relPath)
-	cmd.Dir = workspaceRoot
+	cmd := gitCmd(workspaceRoot, "diff", "HEAD", "--", relPath)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -59,8 +95,7 @@ func ComputeFileDiff(workspaceRoot, relPath string) (DiffReport, error) {
 	diffOut := strings.TrimSpace(stdout.String())
 	if diffOut == "" {
 		// 检查是否为未追踪新文件或暂存区新文件 (Untracked / Added)
-		statusCmd := exec.Command("git", "status", "--porcelain", "--", relPath)
-		statusCmd.Dir = workspaceRoot
+		statusCmd := gitCmd(workspaceRoot, "status", "--porcelain", "--", relPath)
 		var statusOut bytes.Buffer
 		statusCmd.Stdout = &statusOut
 		_ = statusCmd.Run()
@@ -206,8 +241,7 @@ func ApplyHunkPatch(workspaceRoot, relPath string, hunkIndex int, stageOnly bool
 	}
 	args = append(args, "-")
 
-	cmd := exec.Command("git", args...)
-	cmd.Dir = workspaceRoot
+	cmd := gitCmd(workspaceRoot, args...)
 	cmd.Stdin = strings.NewReader(patch)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -227,8 +261,7 @@ func DiscardHunkPatch(workspaceRoot, relPath string, hunkIndex int) error {
 	}
 
 	patch := report.Hunks[hunkIndex].RawPatch
-	cmd := exec.Command("git", "apply", "--reverse", "--whitespace=nowarn", "-")
-	cmd.Dir = workspaceRoot
+	cmd := gitCmd(workspaceRoot, "apply", "--reverse", "--whitespace=nowarn", "-")
 	cmd.Stdin = strings.NewReader(patch)
 	out, err := cmd.CombinedOutput()
 	if err != nil {

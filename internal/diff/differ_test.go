@@ -88,3 +88,22 @@ func TestComputeFileDiff_UntrackedFile(t *testing.T) {
 	}
 }
 
+func TestComputeFileDiff_PathTraversal(t *testing.T) {
+	wd, _ := os.Getwd()
+	repoRoot := filepath.Dir(filepath.Dir(wd))
+
+	maliciousPaths := []string{
+		"../outside.txt",
+		"../../windows/system32/cmd.exe",
+		"..\\outside.txt",
+		"",
+	}
+
+	for _, p := range maliciousPaths {
+		_, err := ComputeFileDiff(repoRoot, p)
+		if err == nil {
+			t.Errorf("expected path traversal error for [%s], but got nil", p)
+		}
+	}
+}
+

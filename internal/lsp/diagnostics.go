@@ -45,8 +45,24 @@ var (
 
 // DiagnoseFile 对指定工作区内的文件进行毫秒级轻量编译器语法诊断
 func DiagnoseFile(workspace string, relPath string) (*DiagnosticReport, error) {
+	if relPath == "" {
+		return nil, fmt.Errorf("empty file path")
+	}
 	absPath := filepath.Join(workspace, relPath)
-	if _, err := os.Stat(absPath); os.IsNotExist(err) {
+	cleanAbs, err := filepath.Abs(absPath)
+	if err != nil {
+		return nil, fmt.Errorf("invalid path: %w", err)
+	}
+	cleanWorkspace, err := filepath.Abs(workspace)
+	if err != nil {
+		return nil, fmt.Errorf("invalid workspace: %w", err)
+	}
+	rel, err := filepath.Rel(cleanWorkspace, cleanAbs)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		return nil, fmt.Errorf("path escapes workspace sandbox: %s", relPath)
+	}
+
+	if _, err := os.Stat(cleanAbs); os.IsNotExist(err) {
 		return nil, fmt.Errorf("file not found: %s", relPath)
 	}
 
@@ -130,8 +146,8 @@ func runGoDiagnostics(ctx context.Context, workspace string, relPath string) str
 }
 
 func runTSDiagnostics(ctx context.Context, workspace string, relPath string) string {
-	// 关键防护: 注入 --no-install 标志，若本地未安装 tsc 立即退出，严禁进入网络交互挂起
-	cmd := exec.CommandContext(ctx, "npx", "--no-install", "tsc", "--noEmit", "--skipLibCheck", relPath)
+	// 关键防护: 注入 --no-install 标志，若本地未安装 tsc 立即退出，严禁进入网络交互挂起；注入 -- 隔离参数
+	cmd := exec.CommandContext(ctx, "npx", "--no-install", "tsc", "--noEmit", "--skipLibCheck", "--", relPath)
 	cmd.Dir = workspace
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		HideWindow:    true,

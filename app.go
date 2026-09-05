@@ -14,8 +14,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	goruntime "runtime"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -198,20 +200,49 @@ func (a *App) DeleteSession(id string) error {
 	return a.sessionStore.Delete(id)
 }
 
+// windowsSysProcAttr 返回 Windows 平台隐藏黑框与无窗口标志
+func windowsSysProcAttr() *syscall.SysProcAttr {
+	if goruntime.GOOS == "windows" {
+		return &syscall.SysProcAttr{
+			CreationFlags: 0x08000000,
+			HideWindow:    true,
+		}
+	}
+	return nil
+}
+
 // --- 代码行级 Diff 审查 ---
 
 func (a *App) GetStructuredDiff(filePath string) (diff.DiffReport, error) {
+	if a.sandbox != nil {
+		if _, err := a.sandbox.ValidatePath(filePath); err != nil {
+			return diff.DiffReport{}, fmt.Errorf("security violation: %w", err)
+		}
+	}
 	return diff.ComputeFileDiff(a.workspace, filePath)
 }
 
 func (a *App) RevertFile(filePath string) error {
+	var validPath string
+	var err error
+	if a.sandbox != nil {
+		validPath, err = a.sandbox.ValidatePath(filePath)
+		if err != nil {
+			return fmt.Errorf("security violation: %w", err)
+		}
+	} else {
+		validPath = filepath.Join(a.workspace, filePath)
+	}
+
 	cmd := exec.Command("git", "checkout", "HEAD", "--", filePath)
 	cmd.Dir = a.workspace
+	if attr := windowsSysProcAttr(); attr != nil {
+		cmd.SysProcAttr = attr
+	}
 	if err := cmd.Run(); err != nil {
 		// 若 git checkout 失败 (例如该文件为未追踪 Untracked 新文件)，安全从磁盘中删除
-		absPath := filepath.Join(a.workspace, filePath)
-		if fi, statErr := os.Stat(absPath); statErr == nil && !fi.IsDir() {
-			return os.Remove(absPath)
+		if fi, statErr := os.Stat(validPath); statErr == nil && !fi.IsDir() {
+			return os.Remove(validPath)
 		}
 		return err
 	}
@@ -220,11 +251,21 @@ func (a *App) RevertFile(filePath string) error {
 
 // ApplyDiffHunk 采纳指定代码块 (Hunk) 变更
 func (a *App) ApplyDiffHunk(filePath string, hunkIndex int, stageOnly bool) error {
+	if a.sandbox != nil {
+		if _, err := a.sandbox.ValidatePath(filePath); err != nil {
+			return fmt.Errorf("security violation: %w", err)
+		}
+	}
 	return diff.ApplyHunkPatch(a.workspace, filePath, hunkIndex, stageOnly)
 }
 
 // DiscardDiffHunk 丢弃指定代码块 (Hunk) 变更
 func (a *App) DiscardDiffHunk(filePath string, hunkIndex int) error {
+	if a.sandbox != nil {
+		if _, err := a.sandbox.ValidatePath(filePath); err != nil {
+			return fmt.Errorf("security violation: %w", err)
+		}
+	}
 	return diff.DiscardHunkPatch(a.workspace, filePath, hunkIndex)
 }
 
@@ -403,6 +444,37 @@ func (a *App) GetFileTree(dir string) ([]FileNode, error) {
 }
 
 func (a *App) buildFileTree(currentDir string, currentDepth, maxDepth int) ([]FileNode, error) {
+	nodeCount := 0
+	visited := make(map[string]bool)
+	return a.buildFileTreeInternal(currentDir, currentDepth, maxDepth, &nodeCount, visited)
+}
+
+func (a *App) buildFileTreeInternal(currentDir string, currentDepth, maxDepth int, nodeCount *int, visited map[string]bool) ([]FileNode, error) {
+	if *nodeCount >= 500 {
+		return nil, nil
+	}
+
+	realDir, err := filepath.EvalSymlinks(currentDir)
+	if err != nil {
+		realDir = currentDir
+	}
+	if visited[realDir] {
+		return nil, nil // 避免软链接循环递归
+	}
+	visited[realDir] = true
+
+	// 确保没有越出工作区
+	cleanReal, err := filepath.Abs(realDir)
+	if err == nil {
+		cleanWs, err := filepath.Abs(a.workspace)
+		if err == nil {
+			relWs, err := filepath.Rel(cleanWs, cleanReal)
+			if err != nil || strings.HasPrefix(relWs, "..") {
+				return nil, nil // 软链接指向工作区外部，阻断
+			}
+		}
+	}
+
 	entries, err := os.ReadDir(currentDir)
 	if err != nil {
 		return nil, err
@@ -410,6 +482,9 @@ func (a *App) buildFileTree(currentDir string, currentDepth, maxDepth int) ([]Fi
 
 	nodes := make([]FileNode, 0, len(entries))
 	for _, entry := range entries {
+		if *nodeCount >= 500 {
+			break
+		}
 		name := entry.Name()
 		if strings.HasPrefix(name, ".") || name == "node_modules" || name == "bin" || name == "dist" || name == "build" {
 			continue
@@ -417,13 +492,14 @@ func (a *App) buildFileTree(currentDir string, currentDepth, maxDepth int) ([]Fi
 		rel, _ := filepath.Rel(a.workspace, filepath.Join(currentDir, name))
 		rel = filepath.ToSlash(rel)
 
+		*nodeCount++
 		node := FileNode{
 			Name:  name,
 			Path:  rel,
 			IsDir: entry.IsDir(),
 		}
 		if entry.IsDir() && currentDepth < maxDepth {
-			subNodes, _ := a.buildFileTree(filepath.Join(currentDir, name), currentDepth+1, maxDepth)
+			subNodes, _ := a.buildFileTreeInternal(filepath.Join(currentDir, name), currentDepth+1, maxDepth, nodeCount, visited)
 			node.Children = subNodes
 		}
 		nodes = append(nodes, node)
@@ -621,23 +697,42 @@ func (a *App) GitCommit(msg string) (string, error) {
 	}
 	cmdAdd := exec.Command("git", "add", "-A")
 	cmdAdd.Dir = a.workspace
+	if attr := windowsSysProcAttr(); attr != nil {
+		cmdAdd.SysProcAttr = attr
+	}
 	if err := cmdAdd.Run(); err != nil {
 		return "", err
 	}
 
 	cmdCommit := exec.Command("git", "commit", "-m", msg)
 	cmdCommit.Dir = a.workspace
-	out, err := cmdCommit.CombinedOutput()
-	if err != nil {
-		return string(out), err
+	if attr := windowsSysProcAttr(); attr != nil {
+		cmdCommit.SysProcAttr = attr
 	}
-	return string(out), nil
+	out, err := cmdCommit.CombinedOutput()
+	outStr := string(out)
+	if err != nil {
+		// 当工作区没有发生任何变更时，git commit 会返回 exit status 1 伴随 nothing to commit
+		if strings.Contains(outStr, "nothing to commit") || strings.Contains(outStr, "无文件要提交") {
+			return outStr, nil
+		}
+		return outStr, err
+	}
+	return outStr, nil
 }
 
 // GitStage 真实暂存单个文件
 func (a *App) GitStage(filePath string) error {
+	if a.sandbox != nil {
+		if _, err := a.sandbox.ValidatePath(filePath); err != nil {
+			return fmt.Errorf("security violation: %w", err)
+		}
+	}
 	cmd := exec.Command("git", "add", "--", filePath)
 	cmd.Dir = a.workspace
+	if attr := windowsSysProcAttr(); attr != nil {
+		cmd.SysProcAttr = attr
+	}
 	return cmd.Run()
 }
 

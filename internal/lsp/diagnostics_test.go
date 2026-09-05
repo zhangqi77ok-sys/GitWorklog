@@ -88,3 +88,24 @@ func TestDiagnoseFile_CleanFile(t *testing.T) {
 		t.Fatalf("expected 0 errors for clean file, got %d: %v", report.ErrorCount, report.Errors)
 	}
 }
+
+func TestDiagnoseFile_PathTraversal(t *testing.T) {
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Skip("cannot get working dir")
+	}
+
+	malicious := []string{
+		"../../windows/system32/notepad.exe",
+		"../escape.go",
+		"..\\escape.go",
+		"",
+	}
+
+	for _, p := range malicious {
+		_, err := DiagnoseFile(wd, p)
+		if err == nil {
+			t.Errorf("expected traversal error for [%s], got nil", p)
+		}
+	}
+}

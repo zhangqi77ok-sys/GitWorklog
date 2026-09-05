@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
+	"runtime"
 	"strings"
+	"syscall"
 	v1 "tcode/pkg/plugin/v1"
 )
 
@@ -65,6 +67,12 @@ func (t *Tool) Definition() v1.ToolDefinition {
 func (t *Tool) execGit(args ...string) (string, error) {
 	cmd := exec.Command("git", args...)
 	cmd.Dir = t.rootDir
+	if runtime.GOOS == "windows" {
+		cmd.SysProcAttr = &syscall.SysProcAttr{
+			CreationFlags: 0x08000000,
+			HideWindow:    true,
+		}
+	}
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout

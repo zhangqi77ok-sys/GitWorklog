@@ -90,3 +90,34 @@ func TestStore_PathTraversalDefense(t *testing.T) {
 	}
 }
 
+func TestStore_AtomicWriteUpdate(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "tcode_test_sessions_*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	s := &Store{baseDir: tempDir}
+	sess := ChatSession{
+		ID:    "sess_atomic_1",
+		Title: "版本 1",
+	}
+	if err := s.Save(sess); err != nil {
+		t.Fatalf("initial save failed: %v", err)
+	}
+
+	// 覆写更新
+	sess.Title = "版本 2"
+	if err := s.Save(sess); err != nil {
+		t.Fatalf("overwrite save failed: %v", err)
+	}
+
+	loaded, err := s.Get("sess_atomic_1")
+	if err != nil {
+		t.Fatalf("failed to get session: %v", err)
+	}
+	if loaded.Title != "版本 2" {
+		t.Errorf("expected updated title '版本 2', got '%s'", loaded.Title)
+	}
+}
+
