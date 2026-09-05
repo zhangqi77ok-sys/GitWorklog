@@ -58,9 +58,46 @@ func ComputeFileDiff(workspaceRoot, relPath string) (DiffReport, error) {
 
 	diffOut := strings.TrimSpace(stdout.String())
 	if diffOut == "" {
+		// 检查是否为未追踪新文件或暂存区新文件 (Untracked / Added)
+		statusCmd := exec.Command("git", "status", "--porcelain", "--", relPath)
+		statusCmd.Dir = workspaceRoot
+		var statusOut bytes.Buffer
+		statusCmd.Stdout = &statusOut
+		_ = statusCmd.Run()
+		statusStr := strings.TrimSpace(statusOut.String())
+
 		content, err := os.ReadFile(absPath)
 		if err == nil {
 			lines := strings.Split(string(content), "\n")
+			// 如果是未追踪新文件 (??) 或新增暂存文件 (A )
+			if strings.HasPrefix(statusStr, "??") || strings.HasPrefix(statusStr, "A ") {
+				for _, line := range lines {
+					report.Lines = append(report.Lines, DiffLine{
+						Type: "add",
+						Text: line,
+					})
+				}
+				report.Stats = fmt.Sprintf("+%d 行 (新文件)", len(lines))
+				report.Header = fmt.Sprintf("@@ 新增文件 +1,%d @@", len(lines))
+
+				rawHunkLines := make([]string, 0, len(lines))
+				for _, line := range lines {
+					rawHunkLines = append(rawHunkLines, "+"+line)
+				}
+				cleanRelPath := filepath.ToSlash(relPath)
+				rawPatch := fmt.Sprintf("--- /dev/null\n+++ b/%s\n@@ -0,0 +1,%d @@\n%s\n", cleanRelPath, len(lines), strings.Join(rawHunkLines, "\n"))
+				report.Hunks = append(report.Hunks, DiffHunk{
+					Index:    0,
+					Header:   fmt.Sprintf("@@ -0,0 +1,%d @@", len(lines)),
+					Lines:    report.Lines,
+					AddCount: len(lines),
+					DelCount: 0,
+					RawPatch: rawPatch,
+				})
+				return report, nil
+			}
+
+			// 否则为纯净未修改文件
 			for i, line := range lines {
 				if i > 200 {
 					break

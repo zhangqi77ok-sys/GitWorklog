@@ -88,7 +88,13 @@ func main() {
 		arg := os.Args[i]
 		if arg == "-silent" || arg == "/S" || arg == "/s" || arg == "--silent" {
 			isSilent = true
-		} else if arg == "-dir" || arg == "--dir" || arg == "-d" || arg == "--silent-install-dir" {
+		} else if arg == "--silent-install-dir" {
+			isSilent = true
+			if i+1 < len(os.Args) {
+				customDir = os.Args[i+1]
+				i++
+			}
+		} else if arg == "-dir" || arg == "--dir" || arg == "-d" {
 			if i+1 < len(os.Args) {
 				customDir = os.Args[i+1]
 				i++
@@ -100,6 +106,7 @@ func main() {
 		} else if strings.HasPrefix(arg, "--dir=") {
 			customDir = strings.TrimPrefix(arg, "--dir=")
 		} else if strings.HasPrefix(arg, "--silent-install-dir=") {
+			isSilent = true
 			customDir = strings.TrimPrefix(arg, "--silent-install-dir=")
 		}
 	}

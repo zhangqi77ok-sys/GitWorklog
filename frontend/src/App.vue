@@ -477,9 +477,9 @@
               <span>✕</span><span>放弃</span>
             </button>
             <button
-              @click="isDiffOpen = false"
+              @click="stageFileAction"
               class="flex items-center gap-1 px-2.5 py-0.8 rounded-md bg-[#10A37F] hover:bg-[#0D8C6D] text-white text-xs font-semibold shadow-xs transition-all cursor-pointer"
-              title="确认采纳文件修改"
+              title="确认采纳文件修改并提交暂存区 (Git Stage)"
             >
               <span>✓</span><span>采纳变更</span>
             </button>
@@ -1032,6 +1032,114 @@
       </div>
     </div>
 
+    <!-- MCP 导入配置弹窗 -->
+    <div
+      v-if="isMcpModalOpen"
+      @keydown.esc="isMcpModalOpen = false"
+      tabindex="-1"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/45 backdrop-blur-xs font-sans"
+    >
+      <div class="w-full max-w-md bg-white rounded-2xl shadow-2xl border border-black/[0.1] p-5 space-y-4">
+        <div class="flex items-center justify-between pb-2 border-b border-black/[0.06]">
+          <h4 class="text-sm font-bold text-[#18181B] flex items-center gap-1.5">
+            <span>🧩</span><span>导入 MCP 服务配置</span>
+          </h4>
+          <button @click="isMcpModalOpen = false" class="text-[#71717A] hover:text-[#18181B] p-1 rounded-md cursor-pointer" title="关闭弹窗 (Esc)">✕</button>
+        </div>
+        <div class="space-y-3 text-xs">
+          <div>
+            <label class="block font-medium text-[#71717A] mb-1">服务名称</label>
+            <input v-model="mcpForm.name" placeholder="如 fetch-mcp 或 filesystem" type="text" class="w-full px-2.5 py-1.5 rounded-lg border border-black/[0.1] focus:outline-none focus:border-[#D96B27]">
+          </div>
+          <div>
+            <label class="block font-medium text-[#71717A] mb-1">通信类型</label>
+            <select v-model="mcpForm.type" class="w-full px-2.5 py-1.5 rounded-lg border border-black/[0.1] focus:outline-none focus:border-[#D96B27]">
+              <option value="stdio">stdio (标准子进程管道)</option>
+              <option value="sse">sse (HTTP Server-Sent Events)</option>
+            </select>
+          </div>
+          <div>
+            <label class="block font-medium text-[#71717A] mb-1">启动命令 (Command)</label>
+            <input v-model="mcpForm.command" placeholder="如 npx 或 python" type="text" class="w-full px-2.5 py-1.5 rounded-lg border border-black/[0.1] focus:outline-none focus:border-[#D96B27]">
+          </div>
+          <div>
+            <label class="block font-medium text-[#71717A] mb-1">启动参数 (以空格隔开)</label>
+            <input v-model="mcpArgsInput" placeholder="-y @modelcontextprotocol/server-filesystem D:/workspace" type="text" class="w-full px-2.5 py-1.5 rounded-lg border border-black/[0.1] focus:outline-none focus:border-[#D96B27]">
+          </div>
+        </div>
+        <div class="flex justify-end gap-2 pt-2 border-t border-black/[0.06]">
+          <button @click="isMcpModalOpen = false" class="px-3 py-1 rounded-lg border border-black/[0.1] text-xs cursor-pointer">取消</button>
+          <button @click="saveMcpAction" class="px-4 py-1 rounded-lg bg-[#D96B27] text-white text-xs font-semibold hover:bg-[#B8551B] cursor-pointer">保存 MCP 服务</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Skill 新增弹窗 -->
+    <div
+      v-if="isSkillModalOpen"
+      @keydown.esc="isSkillModalOpen = false"
+      tabindex="-1"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/45 backdrop-blur-xs font-sans"
+    >
+      <div class="w-full max-w-md bg-white rounded-2xl shadow-2xl border border-black/[0.1] p-5 space-y-4">
+        <div class="flex items-center justify-between pb-2 border-b border-black/[0.06]">
+          <h4 class="text-sm font-bold text-[#18181B] flex items-center gap-1.5">
+            <span>🛠️</span><span>创建 Agent 技能 (Skill)</span>
+          </h4>
+          <button @click="isSkillModalOpen = false" class="text-[#71717A] hover:text-[#18181B] p-1 rounded-md cursor-pointer" title="关闭弹窗 (Esc)">✕</button>
+        </div>
+        <div class="space-y-3 text-xs">
+          <div>
+            <label class="block font-medium text-[#71717A] mb-1">技能名称</label>
+            <input v-model="skillForm.name" placeholder="如 vue3-expert 或 rust-analyzer" type="text" class="w-full px-2.5 py-1.5 rounded-lg border border-black/[0.1] focus:outline-none focus:border-[#D96B27]">
+          </div>
+          <div>
+            <label class="block font-medium text-[#71717A] mb-1">描述与职责说明</label>
+            <input v-model="skillForm.description" placeholder="专有技术栈模式、规约与实现导向" type="text" class="w-full px-2.5 py-1.5 rounded-lg border border-black/[0.1] focus:outline-none focus:border-[#D96B27]">
+          </div>
+          <div>
+            <label class="block font-medium text-[#71717A] mb-1">提示词与技能正文</label>
+            <textarea v-model="skillForm.content" rows="4" placeholder="在此输入注入大模型系统指令的专业技能提示词..." class="w-full px-2.5 py-1.5 rounded-lg border border-black/[0.1] focus:outline-none focus:border-[#D96B27] resize-none"></textarea>
+          </div>
+        </div>
+        <div class="flex justify-end gap-2 pt-2 border-t border-black/[0.06]">
+          <button @click="isSkillModalOpen = false" class="px-3 py-1 rounded-lg border border-black/[0.1] text-xs cursor-pointer">取消</button>
+          <button @click="saveSkillAction" class="px-4 py-1 rounded-lg bg-[#D96B27] text-white text-xs font-semibold hover:bg-[#B8551B] cursor-pointer">保存技能</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Rule 新增弹窗 -->
+    <div
+      v-if="isRuleModalOpen"
+      @keydown.esc="isRuleModalOpen = false"
+      tabindex="-1"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/45 backdrop-blur-xs font-sans"
+    >
+      <div class="w-full max-w-md bg-white rounded-2xl shadow-2xl border border-black/[0.1] p-5 space-y-4">
+        <div class="flex items-center justify-between pb-2 border-b border-black/[0.06]">
+          <h4 class="text-sm font-bold text-[#18181B] flex items-center gap-1.5">
+            <span>📜</span><span>添加工程规约与规则 (Rule)</span>
+          </h4>
+          <button @click="isRuleModalOpen = false" class="text-[#71717A] hover:text-[#18181B] p-1 rounded-md cursor-pointer" title="关闭弹窗 (Esc)">✕</button>
+        </div>
+        <div class="space-y-3 text-xs">
+          <div>
+            <label class="block font-medium text-[#71717A] mb-1">规则名称</label>
+            <input v-model="ruleForm.name" placeholder="如 铁律 0.5 严禁假数据" type="text" class="w-full px-2.5 py-1.5 rounded-lg border border-black/[0.1] focus:outline-none focus:border-[#D96B27]">
+          </div>
+          <div>
+            <label class="block font-medium text-[#71717A] mb-1">规则内容</label>
+            <textarea v-model="ruleForm.content" rows="4" placeholder="在此输入强制约束与守卫提示词..." class="w-full px-2.5 py-1.5 rounded-lg border border-black/[0.1] focus:outline-none focus:border-[#D96B27] resize-none"></textarea>
+          </div>
+        </div>
+        <div class="flex justify-end gap-2 pt-2 border-t border-black/[0.06]">
+          <button @click="isRuleModalOpen = false" class="px-3 py-1 rounded-lg border border-black/[0.1] text-xs cursor-pointer">取消</button>
+          <button @click="saveRuleAction" class="px-4 py-1 rounded-lg bg-[#D96B27] text-white text-xs font-semibold hover:bg-[#B8551B] cursor-pointer">保存规则</button>
+        </div>
+      </div>
+    </div>
+
     <!-- 全局 Toast 提示 -->
     <div
       v-if="toastMessage"
@@ -1241,6 +1349,19 @@ async function revertFileAction() {
     showToast(`✓ 已物理撤回 ${activeDiffFile.value} 磁盘改动 (Git Checkout)`)
   } catch (err) {
     showToast('撤回异常: ' + err)
+  }
+}
+
+async function stageFileAction() {
+  try {
+    if (!activeDiffFile.value) return
+    await wailsBridge.gitStage(activeDiffFile.value)
+    showToast(`✓ 已成功采纳并暂存变更: ${activeDiffFile.value}`)
+    await loadDiff()
+    await loadGitStatus()
+    isDiffOpen.value = false
+  } catch (err) {
+    showToast(`采纳文件变更异常: ${err}`)
   }
 }
 
@@ -1484,6 +1605,88 @@ async function toggleRule(rule: RuleConfig) {
   await wailsBridge.saveRule(rule)
 }
 
+const mcpForm = reactive({
+  name: '',
+  type: 'stdio',
+  command: '',
+  args: [] as string[]
+})
+const mcpArgsInput = ref('')
+
+const skillForm = reactive({
+  name: '',
+  description: '',
+  content: ''
+})
+
+const ruleForm = reactive({
+  name: '',
+  content: ''
+})
+
+async function saveMcpAction() {
+  if (!mcpForm.name.trim() || !mcpForm.command.trim()) {
+    showToast('请完整填写 MCP 服务名称与启动命令')
+    return
+  }
+  const args = mcpArgsInput.value.trim() ? mcpArgsInput.value.trim().split(/\s+/) : []
+  await wailsBridge.saveMCP({
+    id: 'mcp_' + Date.now(),
+    name: mcpForm.name.trim(),
+    type: mcpForm.type,
+    command: mcpForm.command.trim(),
+    args: args,
+    enabled: true,
+    updated_at: Date.now()
+  })
+  isMcpModalOpen.value = false
+  mcpForm.name = ''
+  mcpForm.command = ''
+  mcpArgsInput.value = ''
+  await loadSettingsData()
+  showToast('✓ MCP 服务已成功注册并保存')
+}
+
+async function saveSkillAction() {
+  if (!skillForm.name.trim()) {
+    showToast('请填写技能名称')
+    return
+  }
+  await wailsBridge.saveSkill({
+    id: 'skill_' + Date.now(),
+    name: skillForm.name.trim(),
+    description: skillForm.description.trim(),
+    content: skillForm.content.trim(),
+    enabled: true,
+    updated_at: Date.now()
+  })
+  isSkillModalOpen.value = false
+  skillForm.name = ''
+  skillForm.description = ''
+  skillForm.content = ''
+  await loadSettingsData()
+  showToast('✓ 技能已成功添加至本地技能库')
+}
+
+async function saveRuleAction() {
+  if (!ruleForm.name.trim() || !ruleForm.content.trim()) {
+    showToast('请完整填写规则名称与规则内容')
+    return
+  }
+  await wailsBridge.saveRule({
+    id: 'rule_' + Date.now(),
+    name: ruleForm.name.trim(),
+    content: ruleForm.content.trim(),
+    enabled: true,
+    updated_at: Date.now()
+  })
+  isRuleModalOpen.value = false
+  ruleForm.name = ''
+  ruleForm.content = ''
+  await loadSettingsData()
+  showToast('✓ 工程规约已成功添加')
+}
+
 // 7. 真实 AST 代码拓扑知识图谱
 const astNodes = ref<GraphNode[]>([])
 const selectedAstNode = ref<GraphNode | null>(null)
@@ -1506,6 +1709,15 @@ async function scanASTGraph() {
   } finally {
     isGraphLoading.value = false
   }
+}
+
+function injectNodeToPrompt() {
+  if (!selectedAstNode.value) return
+  const node = selectedAstNode.value
+  const quoteText = `\n> 架构拓扑实体引用: \`${node.name}\` [${node.type}]\n> 声明路径: \`${node.file}\`\n> 关联说明: ${node.details}\n`
+  inputPrompt.value = inputPrompt.value ? inputPrompt.value + quoteText : quoteText
+  isKnowledgeGraphOpen.value = false
+  showToast(`✓ 已引用 AST 节点 [${node.name}] 架构约束至输入框`)
 }
 
 // =========================================================================

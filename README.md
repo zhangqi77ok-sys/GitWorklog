@@ -355,6 +355,20 @@ Tcode 打破了单体硬编码调度逻辑，将 Agent 的执行循环、能力�
   - 单文件安装程序全面支持 `--dir=`, `-dir=`, `/D=`, `--silent-install-dir=`，自动对自定义目录校验并补齐 `TcodeStudio` 隔离子目录；
   - 卸载程序引入物理路径多重安全断言（禁止系统根目录、禁止非 `TcodeStudio` 目录整体 `rmdir`），并采用 `CREATE_NO_WINDOW` 隐蔽控制台执行自清理。
 
+### 32. 进程树生命周期隔离、Untracked Diff 适配与全模态窗完整性治理 (Process Tree Isolation & UI Modal Completeness)
+* **Windows 孤儿进程树安全治理 (`KillProcessTree`)**：
+  - 针对外部 MCP Stdio 协议与流式长耗时命令，在用户中止或上下文超时时，注入 `CREATE_NO_WINDOW`（`0x08000000`）执行 `taskkill /F /T /PID <pid>` 强杀完整子进程树，彻底根除 Windows 控制台黑框弹窗与管道读写永久锁死挂死；
+* **Git Porcelain 全维度差异与 Untracked 物理撤销**：
+  - 打破传统 `git diff` 无法计算工作区未追踪（Untracked）新文件的盲区，结合 `git status --porcelain` 自动识别 `??` 与 `A ` 文件并生成行级全量绿字新增块（`+N 行`）；
+  - `RevertFile` 在 `git checkout` 失败时智能回退物理安全清理（`os.Remove`），杜绝撤销新文件时的崩溃；
+* **沙箱盘符大小写归一化与原子写抗争机制**：
+  - 对 Windows 盘符进行小写归一化规约，杜绝跨大小写（如 `d:` vs `D:`）导致的路径越界误报拦截；并在目标文件被外部读取句柄锁定时提供覆写重试与容灾回退；
+* **多轮自主 ReAct 算子执行全时序链路持久化**：
+  - 在会话持久化实体中扩展 `Tools []ToolExecution` 切片，支持单条消息中多次算子调用的完整持久化存储与时序动态展开；
+* **前端全模态窗闭环与人机工学规约补齐**：
+  - 完整补齐 MCP 导入、Agent 技能创建、工程规约新增等全套居中暖色模态窗，提供显式 `[X]`、`Esc` 退出与键盘监听；
+  - 补齐 AST 架构拓扑实体至主输入框的一键引用注入（`injectNodeToPrompt`）与代码变更真实物理暂存（`stageFileAction`）。
+
 ---
 
 ## 🎨 四、视觉与人机工程学规范

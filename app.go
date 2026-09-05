@@ -205,7 +205,15 @@ func (a *App) GetStructuredDiff(filePath string) (diff.DiffReport, error) {
 func (a *App) RevertFile(filePath string) error {
 	cmd := exec.Command("git", "checkout", "HEAD", "--", filePath)
 	cmd.Dir = a.workspace
-	return cmd.Run()
+	if err := cmd.Run(); err != nil {
+		// 若 git checkout 失败 (例如该文件为未追踪 Untracked 新文件)，安全从磁盘中删除
+		absPath := filepath.Join(a.workspace, filePath)
+		if fi, statErr := os.Stat(absPath); statErr == nil && !fi.IsDir() {
+			return os.Remove(absPath)
+		}
+		return err
+	}
+	return nil
 }
 
 // ApplyDiffHunk 采纳指定代码块 (Hunk) 变更
@@ -708,6 +716,7 @@ func (a *App) SendMessage(req ChatRequest) error {
 		var assistantThinking strings.Builder
 		var assistantContent strings.Builder
 		var lastToolExec *session.ToolExecution
+		allToolExecs := make([]session.ToolExecution, 0)
 
 		// 5. 准备工作区内置沙箱算子与外部已激活 MCP 协议算子
 		workspaceTools := llm.DefaultWorkspaceTools()
@@ -862,11 +871,13 @@ func (a *App) SendMessage(req ChatRequest) error {
 					}
 				}
 
-				lastToolExec = &session.ToolExecution{
+				tExec := session.ToolExecution{
 					Name:   toolName,
 					Args:   toolArgs,
 					Output: output,
 				}
+				allToolExecs = append(allToolExecs, tExec)
+				lastToolExec = &tExec
 
 				runtime.EventsEmit(a.ctx, "agent:tool_end", map[string]any{
 					"session_id": req.SessionID,
@@ -892,6 +903,7 @@ func (a *App) SendMessage(req ChatRequest) error {
 			Content:  assistantContent.String(),
 			Thinking: assistantThinking.String(),
 			Tool:     lastToolExec,
+			Tools:    allToolExecs,
 			Time:     time.Now().Format("15:04"),
 		}
 		currentSession.Messages = append(currentSession.Messages, asstMsg)

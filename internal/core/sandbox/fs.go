@@ -27,6 +27,14 @@ func (s *Sandbox) Root() string {
 	return s.rootDir
 }
 
+func normalizeWindowsPath(p string) string {
+	vol := filepath.VolumeName(p)
+	if len(vol) > 0 {
+		return strings.ToUpper(vol) + p[len(vol):]
+	}
+	return p
+}
+
 // ValidatePath 严格校验目标路径是否越界
 func (s *Sandbox) ValidatePath(targetPath string) (string, error) {
 	var fullPath string
@@ -36,8 +44,10 @@ func (s *Sandbox) ValidatePath(targetPath string) (string, error) {
 		fullPath = filepath.Clean(filepath.Join(s.rootDir, targetPath))
 	}
 
-	// 统一转为大写比较 Windows 盘符
-	rel, err := filepath.Rel(s.rootDir, fullPath)
+	normRoot := normalizeWindowsPath(s.rootDir)
+	normFull := normalizeWindowsPath(fullPath)
+
+	rel, err := filepath.Rel(normRoot, normFull)
 	if err != nil || strings.HasPrefix(rel, "..") || rel == ".." {
 		return "", fmt.Errorf("SECURITY: path [%s] escapes sandbox root [%s]", targetPath, s.rootDir)
 	}
@@ -98,7 +108,14 @@ func (s *Sandbox) AtomicWriteFile(path string, content []byte) error {
 
 	// 原子重命名替换原文件
 	if err := os.Rename(tmpName, validated); err != nil {
-		return fmt.Errorf("atomic rename failed: %w", err)
+		// Windows 特殊兼容：尝试先清除已有文件句柄，若重命名依然失败则回退安全覆写
+		_ = os.Remove(validated)
+		if retryErr := os.Rename(tmpName, validated); retryErr != nil {
+			if writeErr := os.WriteFile(validated, content, 0644); writeErr != nil {
+				return fmt.Errorf("atomic rename failed: %w (fallback write: %v)", err, writeErr)
+			}
+			_ = os.Remove(tmpName)
+		}
 	}
 
 	return nil

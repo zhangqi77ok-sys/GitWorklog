@@ -57,3 +57,34 @@ func TestBuildUnifiedPatch(t *testing.T) {
 		t.Errorf("patch missing added line")
 	}
 }
+
+func TestComputeFileDiff_UntrackedFile(t *testing.T) {
+	wd, _ := os.Getwd()
+	repoRoot := filepath.Dir(filepath.Dir(wd))
+
+	tempFileName := "temp_untracked_test_file.txt"
+	absPath := filepath.Join(repoRoot, tempFileName)
+	_ = os.WriteFile(absPath, []byte("line1\nline2\nline3"), 0644)
+	defer os.Remove(absPath)
+
+	report, err := ComputeFileDiff(repoRoot, tempFileName)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(report.Lines) != 3 {
+		t.Errorf("expected 3 lines, got %d", len(report.Lines))
+	}
+	if len(report.Hunks) != 1 {
+		t.Errorf("expected 1 hunk, got %d", len(report.Hunks))
+	}
+	for i, l := range report.Lines {
+		if l.Type != "add" {
+			t.Errorf("line %d expected type add, got %s", i, l.Type)
+		}
+	}
+	if !strings.Contains(report.Stats, "新文件") {
+		t.Errorf("expected stats to contain 新文件, got %s", report.Stats)
+	}
+}
+

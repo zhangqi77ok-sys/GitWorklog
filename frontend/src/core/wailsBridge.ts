@@ -108,6 +108,12 @@ export interface SessionMessage {
     args: any
     output: string
   }
+  tools?: Array<{
+    id?: string
+    name: string
+    args: any
+    output: string
+  }>
   time: string
 }
 

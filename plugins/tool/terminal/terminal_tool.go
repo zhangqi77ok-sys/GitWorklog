@@ -162,6 +162,20 @@ func (t *Tool) ExecuteStream(ctx context.Context, command string, onChunk Stream
 		return -1, fmt.Errorf("cmd start error: %w", err)
 	}
 
+	// 注入 context 取消守护：防止进程树孤儿与管道锁死
+	go func() {
+		<-ctx.Done()
+		if cmd.Process != nil {
+			if runtime.GOOS == "windows" {
+				killCmd := exec.Command("taskkill", "/F", "/T", "/PID", fmt.Sprintf("%d", cmd.Process.Pid))
+				killCmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: 0x08000000, HideWindow: true}
+				_ = killCmd.Run()
+			} else {
+				_ = cmd.Process.Kill()
+			}
+		}
+	}()
+
 	var wg sync.WaitGroup
 	wg.Add(2)
 

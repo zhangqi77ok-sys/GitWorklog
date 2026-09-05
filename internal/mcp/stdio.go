@@ -124,20 +124,37 @@ func (c *StdioClient) Stop() error {
 		return nil
 	}
 
-	close(c.stopChan)
+	select {
+	case <-c.stopChan:
+	default:
+		close(c.stopChan)
+	}
+
 	if c.stdin != nil {
 		_ = c.stdin.Close()
 	}
 
 	done := make(chan error, 1)
 	go func() {
-		done <- c.cmd.Wait()
+		if c.cmd != nil {
+			done <- c.cmd.Wait()
+		} else {
+			done <- nil
+		}
 	}()
 
 	select {
 	case <-done:
 	case <-time.After(1 * time.Second):
-		_ = c.cmd.Process.Kill()
+		if c.cmd != nil && c.cmd.Process != nil {
+			if runtime.GOOS == "windows" {
+				killCmd := exec.Command("taskkill", "/F", "/T", "/PID", fmt.Sprintf("%d", c.cmd.Process.Pid))
+				killCmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: 0x08000000, HideWindow: true}
+				_ = killCmd.Run()
+			} else {
+				_ = c.cmd.Process.Kill()
+			}
+		}
 	}
 
 	c.started = false

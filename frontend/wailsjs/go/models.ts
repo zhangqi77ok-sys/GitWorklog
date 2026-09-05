@@ -487,6 +487,7 @@ export namespace session {
 	    content: string;
 	    thinking?: string;
 	    tool?: ToolExecution;
+	    tools?: ToolExecution[];
 	    time: string;
 	
 	    static createFrom(source: any = {}) {
@@ -500,6 +501,7 @@ export namespace session {
 	        this.content = source["content"];
 	        this.thinking = source["thinking"];
 	        this.tool = this.convertValues(source["tool"], ToolExecution);
+	        this.tools = this.convertValues(source["tools"], ToolExecution);
 	        this.time = source["time"];
 	    }
 	

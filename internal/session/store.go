@@ -15,8 +15,9 @@ type SessionMessage struct {
 	Role     string         `json:"role"` // "user" | "assistant"
 	Content  string         `json:"content"`
 	Thinking string         `json:"thinking,omitempty"`
-	Tool     *ToolExecution `json:"tool,omitempty"`
-	Time     string         `json:"time"`
+	Tool     *ToolExecution  `json:"tool,omitempty"`
+	Tools    []ToolExecution `json:"tools,omitempty"`
+	Time     string          `json:"time"`
 }
 
 // ToolExecution 算子执行历史

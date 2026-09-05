@@ -57,18 +57,35 @@ export const useChatStore = defineStore('chat', () => {
     try {
       const sess = await wailsBridge.getSession(id)
       if (sess && sess.messages && sess.messages.length > 0) {
-        messages.value = sess.messages.map(m => ({
-          id: m.id,
-          role: m.role as 'user' | 'assistant',
-          content: m.content,
-          thinking: m.thinking,
-          tool: m.tool ? {
-            name: m.tool.name,
-            args: m.tool.args,
-            output: m.tool.output
-          } : undefined,
-          time: m.time
-        }))
+        messages.value = sess.messages.map(m => {
+          const mappedTools = (m.tools && m.tools.length > 0)
+            ? m.tools.map((t, idx) => ({
+                id: t.id || `hist_tool_${m.id}_${idx}`,
+                name: t.name,
+                args: t.args,
+                output: t.output
+              }))
+            : (m.tool ? [{
+                id: `hist_tool_${m.id}_0`,
+                name: m.tool.name,
+                args: m.tool.args,
+                output: m.tool.output
+              }] : undefined)
+
+          return {
+            id: m.id,
+            role: m.role as 'user' | 'assistant',
+            content: m.content,
+            thinking: m.thinking,
+            tool: m.tool ? {
+              name: m.tool.name,
+              args: m.tool.args,
+              output: m.tool.output
+            } : undefined,
+            tools: mappedTools,
+            time: m.time
+          }
+        })
       }
     } catch (err) {
       console.error('Failed to load session history:', err)
