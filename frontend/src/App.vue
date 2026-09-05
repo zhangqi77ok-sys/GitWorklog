@@ -872,10 +872,13 @@
                     <span class="text-xs font-bold text-[#18181B]">{{ skill.name }}</span>
                     <div class="text-[11px] text-[#71717A] mt-0.5">{{ skill.description }}</div>
                   </div>
-                  <label class="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" v-model="skill.enabled" @change="toggleSkill(skill)" class="sr-only peer">
-                    <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#10A37F]"></div>
-                  </label>
+                  <div class="flex items-center gap-2">
+                    <label class="relative inline-flex items-center cursor-pointer">
+                      <input type="checkbox" v-model="skill.enabled" @change="toggleSkill(skill)" class="sr-only peer">
+                      <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#10A37F]"></div>
+                    </label>
+                    <button @click="deleteSkillAction(skill.id)" class="p-1 rounded text-red-500 hover:bg-red-50 cursor-pointer text-xs" title="删除技能">🗑️</button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -901,10 +904,13 @@
                 <div v-for="rule in rules" :key="rule.id" class="p-3 rounded-xl border border-black/[0.08] bg-[#FAF8F5] space-y-1 shadow-2xs">
                   <div class="flex items-center justify-between">
                     <span class="text-xs font-bold text-[#18181B]">{{ rule.title }}</span>
-                    <label class="relative inline-flex items-center cursor-pointer">
-                      <input type="checkbox" v-model="rule.enabled" @change="toggleRule(rule)" class="sr-only peer">
-                      <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#10A37F]"></div>
-                    </label>
+                    <div class="flex items-center gap-2">
+                      <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" v-model="rule.enabled" @change="toggleRule(rule)" class="sr-only peer">
+                        <div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#10A37F]"></div>
+                      </label>
+                      <button @click="deleteRuleAction(rule.id)" class="p-1 rounded text-red-500 hover:bg-red-50 cursor-pointer text-xs" title="删除规则">🗑️</button>
+                    </div>
                   </div>
                   <div class="text-[11px] text-[#52525B] font-mono bg-white p-2 rounded border border-black/[0.04]">{{ rule.content }}</div>
                 </div>
@@ -1170,7 +1176,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, nextTick } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import {
   wailsBridge,
   type SessionMeta,
@@ -1773,6 +1779,12 @@ async function saveSkillAction() {
   showToast('✓ 技能已成功添加至本地技能库')
 }
 
+async function deleteSkillAction(id: string) {
+  await wailsBridge.deleteSkill(id)
+  await loadSettingsData()
+  showToast('✓ 技能已从本地技能库移除')
+}
+
 async function saveRuleAction() {
   if (!ruleForm.name.trim() || !ruleForm.content.trim()) {
     showToast('请完整填写规则名称与规则内容')
@@ -1790,6 +1802,12 @@ async function saveRuleAction() {
   ruleForm.content = ''
   await loadSettingsData()
   showToast('✓ 工程规约已成功添加')
+}
+
+async function deleteRuleAction(id: string) {
+  await wailsBridge.deleteRule(id)
+  await loadSettingsData()
+  showToast('✓ 工程规约已删除')
 }
 
 // 7. 真实 AST 代码拓扑知识图谱
@@ -1942,13 +1960,15 @@ async function cancelTerminalAction() {
   }
 }
 
+function handleGlobalKeydown(e: KeyboardEvent) {
+  if (e.ctrlKey && (e.key === '`' || e.key === '~')) {
+    e.preventDefault()
+    toggleTerminalDrawer()
+  }
+}
+
 onMounted(async () => {
-  window.addEventListener('keydown', (e) => {
-    if (e.ctrlKey && (e.key === '`' || e.key === '~')) {
-      e.preventDefault()
-      toggleTerminalDrawer()
-    }
-  })
+  window.addEventListener('keydown', handleGlobalKeydown)
 
   // 异步非阻塞平滑载入真实持久化数据
   loadSessionsList()
@@ -1960,6 +1980,10 @@ onMounted(async () => {
       loadGitStatus()
     }
   })
+})
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleGlobalKeydown)
 })
 </script>
 

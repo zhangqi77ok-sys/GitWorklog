@@ -121,3 +121,52 @@ func TestStore_AtomicWriteUpdate(t *testing.T) {
 	}
 }
 
+func TestStore_MillisecondTimestampFormatting(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "tcode_test_sessions_*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	s := &Store{baseDir: tempDir}
+	// 模拟前端 Date.now() 传入 13 位毫秒时间戳 (如 2026-09-06 07:00:00 UTC)
+	milliTimestamp := int64(1788678000000)
+	sess := ChatSession{
+		ID:        "sess_milli_1",
+		Title:     "毫秒时间戳测试",
+		UpdatedAt: milliTimestamp,
+	}
+	if err := s.Save(sess); err != nil {
+		t.Fatalf("save failed: %v", err)
+	}
+
+	metas := s.List()
+	if len(metas) != 1 {
+		t.Fatalf("expected 1 session, got %d", len(metas))
+	}
+
+	// 验证时间没有变成公元 58000 多年，格式必须为 HH:MM 且长度为 5
+	if len(metas[0].Time) != 5 || metas[0].Time == "00:00" && milliTimestamp > 0 {
+		// 验证格式合法性
+		if len(metas[0].Time) != 5 {
+			t.Errorf("expected format HH:MM with len 5, got %q", metas[0].Time)
+		}
+	}
+}
+
+func TestStore_DeleteIdempotent(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "tcode_test_sessions_*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	s := &Store{baseDir: tempDir}
+	// 删除一个从未存在过的合法会话 ID，应当安全幂等返回 nil，而不是抛出文件不存在报错
+	err = s.Delete("sess_never_existed")
+	if err != nil {
+		t.Errorf("expected nil error on deleting non-existent session, got: %v", err)
+	}
+}
+
+

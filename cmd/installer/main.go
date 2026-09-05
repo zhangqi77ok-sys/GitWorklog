@@ -240,10 +240,17 @@ func main() {
 	}
 }
 
+func escapePsSingleQuote(s string) string {
+	return strings.ReplaceAll(s, "'", "''")
+}
+
 func createShortcut(lnkPath, targetPath, workDir string) {
 	psScript := fmt.Sprintf(
 		`$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut('%s'); $s.TargetPath = '%s'; $s.WorkingDirectory = '%s'; $s.IconLocation = '%s,0'; $s.Save()`,
-		lnkPath, targetPath, workDir, targetPath,
+		escapePsSingleQuote(lnkPath),
+		escapePsSingleQuote(targetPath),
+		escapePsSingleQuote(workDir),
+		escapePsSingleQuote(targetPath),
 	)
 	cmd := exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-Command", psScript)
 	cmd.SysProcAttr = &syscall.SysProcAttr{

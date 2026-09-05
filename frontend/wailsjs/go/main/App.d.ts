@@ -23,7 +23,11 @@ export function DeleteChannel(arg1:string):Promise<void>;
 
 export function DeleteMCP(arg1:string):Promise<void>;
 
+export function DeleteRule(arg1:string):Promise<void>;
+
 export function DeleteSession(arg1:string):Promise<void>;
+
+export function DeleteSkill(arg1:string):Promise<void>;
 
 export function DiagnoseFile(arg1:string):Promise<lsp.DiagnosticReport>;
 

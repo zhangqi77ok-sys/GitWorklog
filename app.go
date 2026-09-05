@@ -463,6 +463,13 @@ func (a *App) SaveSkill(cfg config.SkillConfig) error {
 	return a.extraStore.SaveSkill(cfg)
 }
 
+func (a *App) DeleteSkill(id string) error {
+	if a.extraStore == nil {
+		return fmt.Errorf("extra store not initialized")
+	}
+	return a.extraStore.DeleteSkill(id)
+}
+
 func (a *App) ListRules() []config.RuleConfig {
 	if a.extraStore == nil {
 		return nil
@@ -475,6 +482,13 @@ func (a *App) SaveRule(cfg config.RuleConfig) error {
 		return fmt.Errorf("extra store not initialized")
 	}
 	return a.extraStore.SaveRule(cfg)
+}
+
+func (a *App) DeleteRule(id string) error {
+	if a.extraStore == nil {
+		return fmt.Errorf("extra store not initialized")
+	}
+	return a.extraStore.DeleteRule(id)
 }
 
 func (a *App) GetProjectASTGraph() ([]ast.GraphNode, error) {
@@ -874,7 +888,7 @@ func (a *App) SendMessage(req ChatRequest) error {
 				ID:        req.SessionID,
 				Title:     req.Prompt,
 				Model:     model,
-				Tag:       "核心架构",
+				Tag:       "默认",
 				CreatedAt: time.Now().Unix(),
 				UpdatedAt: time.Now().Unix(),
 				Messages:  make([]session.SessionMessage, 0),

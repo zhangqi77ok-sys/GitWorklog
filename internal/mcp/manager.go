@@ -83,22 +83,8 @@ func (m *Manager) TestServer(ctx context.Context, cfg config.MCPServerConfig) (M
 	}, nil
 }
 
-// StartServer 启动单个 MCP 服务，完成握手并注册算子路由
+// StartServer 启动单个 MCP 服务，完成握手并注册算子路由 (优化锁粒度)
 func (m *Manager) StartServer(ctx context.Context, cfg config.MCPServerConfig) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	// 若已存在且在运行，先停止旧实例
-	if oldClient, ok := m.clients[cfg.ID]; ok {
-		_ = oldClient.Stop()
-		delete(m.clients, cfg.ID)
-		for tName, sID := range m.toolRouting {
-			if sID == cfg.ID {
-				delete(m.toolRouting, tName)
-			}
-		}
-	}
-
 	var client Client
 	if cfg.Type == "stdio" || cfg.Type == "" {
 		client = NewStdioClient(cfg.Command, cfg.Args, m.workspace)
@@ -109,6 +95,7 @@ func (m *Manager) StartServer(ctx context.Context, cfg config.MCPServerConfig) e
 	startCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
+	// 锁外执行耗时的外部子进程启动与工具探测，避免阻塞全局并发查询
 	if err := client.Start(startCtx); err != nil {
 		return fmt.Errorf("failed to start mcp server [%s]: %w", cfg.Name, err)
 	}
@@ -119,10 +106,27 @@ func (m *Manager) StartServer(ctx context.Context, cfg config.MCPServerConfig) e
 		return fmt.Errorf("failed to list tools for [%s]: %w", cfg.Name, err)
 	}
 
+	m.mu.Lock()
+	var oldClient Client
+	if old, ok := m.clients[cfg.ID]; ok {
+		oldClient = old
+		delete(m.clients, cfg.ID)
+		for tName, sID := range m.toolRouting {
+			if sID == cfg.ID {
+				delete(m.toolRouting, tName)
+			}
+		}
+	}
+
 	for _, t := range tools {
 		m.toolRouting[t.Name] = cfg.ID
 	}
 	m.clients[cfg.ID] = client
+	m.mu.Unlock()
+
+	if oldClient != nil {
+		_ = oldClient.Stop()
+	}
 	return nil
 }
 

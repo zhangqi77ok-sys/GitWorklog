@@ -189,15 +189,19 @@ func (t *Tool) ExecuteStream(ctx context.Context, command string, onChunk Stream
 	}
 
 	// 注入 context 取消守护：防止进程树孤儿与管道锁死
+	done := make(chan struct{})
 	go func() {
-		<-ctx.Done()
-		if cmd.Process != nil {
-			if runtime.GOOS == "windows" {
-				killCmd := exec.Command("taskkill", "/F", "/T", "/PID", fmt.Sprintf("%d", cmd.Process.Pid))
-				killCmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: 0x08000000, HideWindow: true}
-				_ = killCmd.Run()
-			} else {
-				_ = cmd.Process.Kill()
+		select {
+		case <-done:
+		case <-ctx.Done():
+			if cmd.Process != nil {
+				if runtime.GOOS == "windows" {
+					killCmd := exec.Command("taskkill", "/F", "/T", "/PID", fmt.Sprintf("%d", cmd.Process.Pid))
+					killCmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: 0x08000000, HideWindow: true}
+					_ = killCmd.Run()
+				} else {
+					_ = cmd.Process.Kill()
+				}
 			}
 		}
 	}()
@@ -224,6 +228,7 @@ func (t *Tool) ExecuteStream(ctx context.Context, command string, onChunk Stream
 
 	wg.Wait()
 	err = cmd.Wait()
+	close(done)
 
 	exitCode := 0
 	if err != nil {

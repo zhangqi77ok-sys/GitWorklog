@@ -37,6 +37,7 @@
 | **27** | **推理流中断、无头静默卸载、假数据彻底净化与配置原子写** | 智能体控制 / 桌面端分发 / 并发数据安全 | 全链路大模型推理取消上下文、无头静默卸载自删除、初始化默认假数据清空、配置临时文件原子写与孤儿进程树递归终结 | [27-stream-cancellation-silent-uninstall-and-extra-stores-purging.md](./27-stream-cancellation-silent-uninstall-and-extra-stores-purging.md) |
 | **28** | **任意文件删除防御、会话原子落盘、大模型用量成本核算与文件树循环防御** | 安全防御 / 会话持久化 / 遥测核算 / 架构稳健 | 文件回滚防沙箱逃逸删除、会话文件原子写防数据撕裂、Token 真实成本格式化修复、文件树防环截断与进程零黑框规范 | [28-arbitrary-file-deletion-guard-session-atomic-write-and-telemetry-accuracy.md](./28-arbitrary-file-deletion-guard-session-atomic-write-and-telemetry-accuracy.md) |
 | **29** | **动态工作区热切换、稀疏工具调用索引治理、SSE长思考流扩容与进程树脱机自毁安全** | 架构扩展 / 协议防御 / 智能体流式推理 / 进程控制 | 工作区热切换与原生目录拾取、稀疏 tool_calls 排序遍历防丢失、10MB 长思考流防爆栈、ShellExecuteW 异步脱机批处理自删除 | [29-workspace-switching-sparse-tool-calls-and-process-tree-safety.md](./29-workspace-switching-sparse-tool-calls-and-process-tree-safety.md) |
+| **30** | **MCP 外部握手并发锁粒度优化、终端守护协程防泄漏、Git 状态路径空格防御与时间戳量级校验** | 协议并发 / 协程生命周期 / CLI边界 / 数据一致性 | 外部进程握手移出全局写锁防雪崩、终端执行守护协程通道退出、Git Porcelain v2 空格路径保护与 13 位毫秒时间戳归一化 | [30-mcp-concurrency-goroutine-leak-and-status-path-hygiene.md](./30-mcp-concurrency-goroutine-leak-and-status-path-hygiene.md) |
 
 
 

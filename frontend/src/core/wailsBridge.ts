@@ -415,6 +415,11 @@ export const wailsBridge = {
     if (app?.SaveSkill) await app.SaveSkill(cfg)
   },
 
+  async deleteSkill(id: string): Promise<void> {
+    const app = getApp()
+    if (app?.DeleteSkill) await app.DeleteSkill(id)
+  },
+
   async listRules(): Promise<RuleConfig[]> {
     const app = getApp()
     if (app?.ListRules) return await app.ListRules()
@@ -424,6 +429,11 @@ export const wailsBridge = {
   async saveRule(cfg: RuleConfig): Promise<void> {
     const app = getApp()
     if (app?.SaveRule) await app.SaveRule(cfg)
+  },
+
+  async deleteRule(id: string): Promise<void> {
+    const app = getApp()
+    if (app?.DeleteRule) await app.DeleteRule(id)
   },
 
   async getFileTree(dir: string = ''): Promise<FileNode[]> {

@@ -218,6 +218,25 @@ func (s *ExtraStore) SaveSkill(cfg SkillConfig) error {
 	return s.saveSkills()
 }
 
+// DeleteSkill 从配置中删除指定 Skill
+func (s *ExtraStore) DeleteSkill(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	idx := -1
+	for i, item := range s.skills {
+		if item.ID == id {
+			idx = i
+			break
+		}
+	}
+	if idx >= 0 {
+		s.skills = append(s.skills[:idx], s.skills[idx+1:]...)
+		return s.saveSkills()
+	}
+	return nil
+}
+
 // ListRules 获取规则列表
 func (s *ExtraStore) ListRules() []RuleConfig {
 	s.mu.RLock()
@@ -249,4 +268,23 @@ func (s *ExtraStore) SaveRule(cfg RuleConfig) error {
 		s.rules = append(s.rules, cfg)
 	}
 	return s.saveRules()
+}
+
+// DeleteRule 从配置中删除指定规则
+func (s *ExtraStore) DeleteRule(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	idx := -1
+	for i, item := range s.rules {
+		if item.ID == id {
+			idx = i
+			break
+		}
+	}
+	if idx >= 0 {
+		s.rules = append(s.rules[:idx], s.rules[idx+1:]...)
+		return s.saveRules()
+	}
+	return nil
 }

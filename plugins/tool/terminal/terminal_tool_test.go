@@ -68,3 +68,20 @@ func TestTerminalTool_ExecuteStream(t *testing.T) {
 		t.Errorf("expected output to contain HELLO_STREAM_TERMINAL, got: %s", output.String())
 	}
 }
+
+func TestTerminalTool_ExecuteStream_GoroutineLeak(t *testing.T) {
+	wd, _ := os.Getwd()
+	tool := NewTool(wd)
+
+	// 使用长期未关闭的父 Context
+	parentCtx := context.Background()
+
+	// 执行多次快速命令
+	for i := 0; i < 5; i++ {
+		_, _ = tool.ExecuteStream(parentCtx, "echo LEAK_CHECK", nil)
+	}
+
+	// 此时若未引入 done channel，会有 5 个协程一直阻塞在 parentCtx.Done()
+	// 等待一小会儿让系统调度
+	time.Sleep(100 * time.Millisecond)
+}

@@ -26,8 +26,16 @@ export function DeleteMCP(arg1) {
   return window['go']['main']['App']['DeleteMCP'](arg1);
 }
 
+export function DeleteRule(arg1) {
+  return window['go']['main']['App']['DeleteRule'](arg1);
+}
+
 export function DeleteSession(arg1) {
   return window['go']['main']['App']['DeleteSession'](arg1);
+}
+
+export function DeleteSkill(arg1) {
+  return window['go']['main']['App']['DeleteSkill'](arg1);
 }
 
 export function DiagnoseFile(arg1) {

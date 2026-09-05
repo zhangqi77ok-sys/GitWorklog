@@ -50,6 +50,13 @@ func (c *StdioClient) Start(ctx context.Context) error {
 		return nil
 	}
 
+	// 重新初始化 stopChan 保证客户端可安全重启
+	select {
+	case <-c.stopChan:
+		c.stopChan = make(chan struct{})
+	default:
+	}
+
 	cmd := exec.Command(c.command, c.args...)
 	cmd.Dir = c.workspace
 
@@ -133,7 +140,24 @@ func (c *StdioClient) Stop() error {
 
 	if c.stdin != nil {
 		_ = c.stdin.Close()
+		c.stdin = nil
 	}
+	if c.stdout != nil {
+		_ = c.stdout.Close()
+		c.stdout = nil
+	}
+
+	// 唤醒并清空所有悬挂的等待请求
+	c.pending.Range(func(key, value any) bool {
+		c.pending.Delete(key)
+		if ch, ok := value.(chan *JSONRPCMessage); ok {
+			select {
+			case ch <- nil:
+			default:
+			}
+		}
+		return true
+	})
 
 	done := make(chan error, 1)
 	go func() {

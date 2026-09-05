@@ -115,7 +115,12 @@ func (s *Store) List() []SessionMeta {
 				Title:     sess.Title,
 				Model:     sess.Model,
 				Tag:       sess.Tag,
-				Time:      time.Unix(sess.UpdatedAt, 0).Format("15:04"),
+				Time: func() string {
+					if sess.UpdatedAt > 1e11 {
+						return time.UnixMilli(sess.UpdatedAt).Format("15:04")
+					}
+					return time.Unix(sess.UpdatedAt, 0).Format("15:04")
+				}(),
 				Desc:      desc,
 				UpdatedAt: sess.UpdatedAt,
 			})
@@ -215,5 +220,8 @@ func (s *Store) Delete(id string) error {
 	}
 
 	filePath := filepath.Join(s.baseDir, fmt.Sprintf("%s.json", safeID))
-	return os.Remove(filePath)
+	if err := os.Remove(filePath); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
 }

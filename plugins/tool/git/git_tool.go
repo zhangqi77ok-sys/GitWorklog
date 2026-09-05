@@ -97,6 +97,11 @@ func (t *Tool) GetStatus() (*GitStatusReport, error) {
 		return nil, err
 	}
 
+	return parsePorcelainV2(rawStatus, branch), nil
+}
+
+// parsePorcelainV2 解析 git status --porcelain=v2 格式输出并防御带空格的文件路径
+func parsePorcelainV2(rawStatus, branch string) *GitStatusReport {
 	report := &GitStatusReport{
 		Branch:    branch,
 		Staged:    make([]GitFileStatus, 0),
@@ -117,11 +122,12 @@ func (t *Tool) GetStatus() (*GitStatusReport, error) {
 		}
 
 		switch parts[0] {
-		case "1": // 普通更改
+		case "1": // 普通更改: 1 <XY> <sub> <mH> <mI> <mW> <hH> <hI> <path...>
 			if len(parts) >= 9 {
 				stagedCode := string(parts[1][0])
 				workCode := string(parts[1][1])
-				filePath := parts[8]
+				// 防御文件名含空格: 将索引 8 之后全部字段拼接恢复真实路径
+				filePath := strings.Join(parts[8:], " ")
 
 				if stagedCode != "." {
 					report.Staged = append(report.Staged, GitFileStatus{
@@ -136,12 +142,18 @@ func (t *Tool) GetStatus() (*GitStatusReport, error) {
 					})
 				}
 			}
-		case "2": // 重命名文件
+		case "2": // 重命名文件: 2 <XY> <sub> <mH> <mI> <mW> <hH> <hI> <X><score> <path><TAB><origPath>
 			if len(parts) >= 10 {
 				stagedCode := string(parts[1][0])
 				workCode := string(parts[1][1])
-				filePath := parts[9]
+				pathPart := strings.Join(parts[8:], " ")
+				subParts := strings.Split(pathPart, "\t")
 				origPath := parts[8]
+				filePath := parts[9]
+				if len(subParts) >= 2 {
+					origPath = subParts[0]
+					filePath = subParts[1]
+				}
 
 				if stagedCode != "." {
 					report.Staged = append(report.Staged, GitFileStatus{
@@ -157,18 +169,19 @@ func (t *Tool) GetStatus() (*GitStatusReport, error) {
 					})
 				}
 			}
-		case "?": // 未跟踪文件
+		case "?": // 未跟踪文件: ? <path...>
 			if len(parts) >= 2 {
-				report.Untracked = append(report.Untracked, parts[1])
+				filePath := strings.Join(parts[1:], " ")
+				report.Untracked = append(report.Untracked, filePath)
 				report.Working = append(report.Working, GitFileStatus{
-					Path:     parts[1],
+					Path:     filePath,
 					WorkCode: "U",
 				})
 			}
 		}
 	}
 
-	return report, nil
+	return report
 }
 
 // StageFile 暂存单个文件
