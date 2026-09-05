@@ -1,6 +1,7 @@
 package ast
 
 import (
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -51,9 +52,22 @@ func ScanWorkspaceAST(rootDir string) ([]GraphNode, error) {
 		rel, _ := filepath.Rel(rootDir, path)
 		rel = filepath.ToSlash(rel)
 
-		node, err := parser.ParseFile(fset, path, nil, parser.ParseComments)
-		if err != nil {
+		safeParse := func() (n *ast.File, err error) {
+			defer func() {
+				if r := recover(); r != nil {
+					err = fmt.Errorf("ast parse panic: %v", r)
+				}
+			}()
+			return parser.ParseFile(fset, path, nil, parser.ParseComments)
+		}
+		node, err := safeParse()
+		if err != nil || node == nil {
 			return nil
+		}
+
+		pkgName := "unknown"
+		if node.Name != nil {
+			pkgName = node.Name.Name
 		}
 
 		// 记录文件节点
@@ -63,7 +77,7 @@ func ScanWorkspaceAST(rootDir string) ([]GraphNode, error) {
 			Type:    "file",
 			File:    rel,
 			Changes: 1,
-			Details: "Package: " + node.Name.Name,
+			Details: "Package: " + pkgName,
 		}
 
 		// 提取结构体与接口

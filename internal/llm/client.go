@@ -226,6 +226,7 @@ func StreamChat(ctx context.Context, req Request, handlers StreamHandlers) ([]To
 					Delta struct {
 						Content          string `json:"content"`
 						ReasoningContent string `json:"reasoning_content"`
+						Reasoning        string `json:"reasoning"`
 						ToolCalls        []struct {
 							Index    int    `json:"index"`
 							ID       string `json:"id"`
@@ -241,8 +242,12 @@ func StreamChat(ctx context.Context, req Request, handlers StreamHandlers) ([]To
 
 			if err := json.Unmarshal([]byte(dataStr), &chunk); err == nil && len(chunk.Choices) > 0 {
 				delta := chunk.Choices[0].Delta
-				if delta.ReasoningContent != "" && handlers.OnThinking != nil {
-					handlers.OnThinking(delta.ReasoningContent)
+				thinking := delta.ReasoningContent
+				if thinking == "" {
+					thinking = delta.Reasoning
+				}
+				if thinking != "" && handlers.OnThinking != nil {
+					handlers.OnThinking(thinking)
 				}
 				if delta.Content != "" && handlers.OnContent != nil {
 					handlers.OnContent(delta.Content)

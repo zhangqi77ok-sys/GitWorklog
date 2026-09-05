@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 	"unsafe"
 
 	"golang.org/x/sys/windows/registry"
@@ -32,13 +33,26 @@ func messageBox(title, text string, style uint) int {
 }
 
 func main() {
-	ans := messageBox("卸载 Tcode Studio", "您确定要从这台计算机上完全卸载 Tcode Studio 及其所有快捷方式吗？", MB_YESNO|MB_ICONQUESTION)
-	if ans != IDYES {
-		return
+	silent := false
+	for _, arg := range os.Args[1:] {
+		lower := strings.ToLower(arg)
+		if lower == "/s" || lower == "-s" || lower == "--silent" || lower == "-silent" || lower == "/silent" {
+			silent = true
+			break
+		}
 	}
 
-	// 1. 尝试结束可能正在运行的进程
-	_ = exec.Command("taskkill", "/F", "/IM", "tcode.exe").Run()
+	if !silent {
+		ans := messageBox("卸载 Tcode Studio", "您确定要从这台计算机上完全卸载 Tcode Studio 及其所有快捷方式吗？", MB_YESNO|MB_ICONQUESTION)
+		if ans != IDYES {
+			return
+		}
+	}
+
+	// 1. 尝试结束可能正在运行的进程 (注入 0x08000000 杜绝黑框)
+	killCmd := exec.Command("taskkill", "/F", "/IM", "tcode.exe")
+	killCmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: 0x08000000, HideWindow: true}
+	_ = killCmd.Run()
 
 	homeDir, _ := os.UserHomeDir()
 	desktop := filepath.Join(homeDir, "Desktop", "Tcode Studio.lnk")
@@ -89,18 +103,26 @@ func main() {
 		}
 	}
 
-	// 5. 延迟自删除实际安装目录（隐藏黑框）
+	// 5. 延迟自删除实际安装目录 (在临时目录生成独立 batch 脚本执行异步延时清理并自删除)
+	tempDir := os.TempDir()
+	batPath := filepath.Join(tempDir, fmt.Sprintf("tcode_uninstall_%d.bat", time.Now().UnixNano()))
+	var batContent string
 	if isSafeToDelete {
-		cmdStr := fmt.Sprintf("timeout /t 1 /nobreak >nul & rmdir /s /q \"%s\"", appDir)
-		cmd := exec.Command("cmd.exe", "/c", cmdStr)
-		cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-		_ = cmd.Start()
+		batContent = fmt.Sprintf("@echo off\r\nping 127.0.0.1 -n 3 >nul\r\nrmdir /s /q \"%s\"\r\ndel /f /q \"%%~f0\"\r\n", appDir)
 	} else {
-		cmdStr := fmt.Sprintf("timeout /t 1 /nobreak >nul & del /f /q \"%s\\tcode.exe\" \"%s\\uninstall.exe\" \"%s\\tcode.ico\"", appDir, appDir, appDir)
-		cmd := exec.Command("cmd.exe", "/c", cmdStr)
-		cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-		_ = cmd.Start()
+		batContent = fmt.Sprintf("@echo off\r\nping 127.0.0.1 -n 3 >nul\r\ndel /f /q \"%s\\tcode.exe\" \"%s\\uninstall.exe\" \"%s\\tcode.ico\"\r\ndel /f /q \"%%~f0\"\r\n", appDir, appDir, appDir)
 	}
+	_ = os.WriteFile(batPath, []byte(batContent), 0755)
 
-	messageBox("卸载完成", "Tcode Studio 已成功从您的计算机移除。", MB_ICONINFO)
+	cmd := exec.Command("cmd.exe", "/c", batPath)
+	cmd.Dir = tempDir
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		CreationFlags: syscall.CREATE_NEW_PROCESS_GROUP | 0x08000000,
+		HideWindow:    true,
+	}
+	_ = cmd.Start()
+
+	if !silent {
+		messageBox("卸载完成", "Tcode Studio 已成功从您的计算机移除。", MB_ICONINFO)
+	}
 }

@@ -4,13 +4,20 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 )
 
 // PingTarget 真实发起 HTTP 网络探活并测量往返毫秒延迟
 func PingTarget(targetURL string) (string, error) {
-	if targetURL == "" {
+	trimmed := strings.TrimSpace(targetURL)
+	if trimmed == "" {
 		return "", fmt.Errorf("empty url")
+	}
+
+	// 自动补齐缺失的 HTTP/HTTPS 协议前缀，防止 unsupported protocol scheme 错误
+	if !strings.HasPrefix(trimmed, "http://") && !strings.HasPrefix(trimmed, "https://") {
+		trimmed = "https://" + trimmed
 	}
 
 	client := &http.Client{
@@ -21,7 +28,7 @@ func PingTarget(targetURL string) (string, error) {
 	}
 
 	start := time.Now()
-	req, err := http.NewRequest("GET", targetURL, nil)
+	req, err := http.NewRequest("GET", trimmed, nil)
 	if err != nil {
 		return "", err
 	}

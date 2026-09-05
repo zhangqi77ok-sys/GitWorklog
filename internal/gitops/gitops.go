@@ -1,10 +1,34 @@
 package gitops
 
 import (
+	"fmt"
 	"os/exec"
+	"runtime"
 	"strings"
+	"syscall"
 	"time"
 )
+
+// gitCmd 创建配置好工作目录与隐蔽窗口参数的 git 命令
+func gitCmd(workspace string, args ...string) *exec.Cmd {
+	cmd := exec.Command("git", args...)
+	cmd.Dir = workspace
+	if runtime.GOOS == "windows" {
+		cmd.SysProcAttr = &syscall.SysProcAttr{
+			CreationFlags: 0x08000000,
+			HideWindow:    true,
+		}
+	}
+	return cmd
+}
+
+// isValidBranchName 严格校验分支名合法性，防止注入参数或非法字符
+func isValidBranchName(name string) bool {
+	if name == "" || strings.HasPrefix(name, "-") || strings.ContainsAny(name, " \t\r\n~^:?*[\\]") {
+		return false
+	}
+	return true
+}
 
 // Snapshot Git 临时快照实体 (基于 git stash)
 type Snapshot struct {
@@ -17,8 +41,7 @@ type Snapshot struct {
 
 // ListBranches 枚举全部本地 Git 分支，并返回当前活跃分支
 func ListBranches(workspace string) ([]string, string, error) {
-	cmd := exec.Command("git", "branch", "--list")
-	cmd.Dir = workspace
+	cmd := gitCmd(workspace, "branch", "--list")
 	out, err := cmd.Output()
 	if err != nil {
 		return []string{"main"}, "main", nil
@@ -49,24 +72,29 @@ func ListBranches(workspace string) ([]string, string, error) {
 	return branches, current, nil
 }
 
-// CheckoutBranch 真实检出指定分支
+// CheckoutBranch 真实检出指定分支 (严格参数隔离与合法性校验)
 func CheckoutBranch(workspace, name string) error {
-	cmd := exec.Command("git", "checkout", name)
-	cmd.Dir = workspace
+	name = strings.TrimSpace(name)
+	if !isValidBranchName(name) {
+		return fmt.Errorf("invalid branch name: %q", name)
+	}
+	cmd := gitCmd(workspace, "checkout", name)
 	return cmd.Run()
 }
 
 // CreateBranch 基于当前 HEAD 创建并切换到新分支
 func CreateBranch(workspace, name string) error {
-	cmd := exec.Command("git", "checkout", "-b", name)
-	cmd.Dir = workspace
+	name = strings.TrimSpace(name)
+	if !isValidBranchName(name) {
+		return fmt.Errorf("invalid branch name: %q", name)
+	}
+	cmd := gitCmd(workspace, "checkout", "-b", name)
 	return cmd.Run()
 }
 
 // ListSnapshots 枚举历史检查点快照 (git stash)
 func ListSnapshots(workspace string) ([]Snapshot, error) {
-	cmd := exec.Command("git", "stash", "list")
-	cmd.Dir = workspace
+	cmd := gitCmd(workspace, "stash", "list")
 	out, err := cmd.Output()
 	if err != nil {
 		return []Snapshot{}, nil
@@ -109,17 +137,20 @@ func CreateSnapshot(workspace, msg string) error {
 	if msg == "" {
 		msg = "tcode_auto_checkpoint_" + time.Now().Format("20060102_150405")
 	}
-	cmd := exec.Command("git", "stash", "push", "-m", msg, "--include-untracked")
-	cmd.Dir = workspace
+	msg = strings.ReplaceAll(msg, "\n", " ")
+	cmd := gitCmd(workspace, "stash", "push", "-m", msg, "--include-untracked")
 	return cmd.Run()
 }
 
 // RestoreSnapshot 应用并还原指定快照
 func RestoreSnapshot(workspace, stashID string) error {
+	stashID = strings.TrimSpace(stashID)
 	if stashID == "" {
 		stashID = "stash@{0}"
 	}
-	cmd := exec.Command("git", "stash", "apply", stashID)
-	cmd.Dir = workspace
+	if !strings.HasPrefix(stashID, "stash@{") || strings.ContainsAny(stashID, " \t\r\n;&|") {
+		return fmt.Errorf("invalid stash id: %q", stashID)
+	}
+	cmd := gitCmd(workspace, "stash", "apply", stashID)
 	return cmd.Run()
 }

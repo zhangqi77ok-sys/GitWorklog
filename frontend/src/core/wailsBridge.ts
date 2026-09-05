@@ -289,6 +289,13 @@ export const wailsBridge = {
     }
   },
 
+  async cancelAgentStream(): Promise<void> {
+    const app = getApp()
+    if (app?.CancelAgentStream) {
+      await app.CancelAgentStream()
+    }
+  },
+
   async fetchUpstreamModels(endpoint?: string, apiKey?: string): Promise<string[]> {
     const app = getApp()
     if (app?.FetchUpstreamModels) {

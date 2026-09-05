@@ -13,6 +13,8 @@ import {mcp} from '../models';
 
 export function ApplyDiffHunk(arg1:string,arg2:number,arg3:boolean):Promise<void>;
 
+export function CancelAgentStream():Promise<void>;
+
 export function CancelTerminalCommand():Promise<void>;
 
 export function CloseWindow():Promise<void>;

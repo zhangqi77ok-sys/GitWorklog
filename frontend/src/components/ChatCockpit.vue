@@ -255,12 +255,18 @@
           <div class="flex items-center gap-2">
             <span class="text-[10px] text-[#A1A1AA] font-mono">{{ store.isStreaming ? '正在流式推理...' : '就绪' }}</span>
             <button
+              v-if="store.isStreaming"
+              @click="store.stopGeneration"
+              title="中断本次生成 (Esc)"
+              class="w-7 h-7 rounded-xl flex items-center justify-center font-bold shadow-xs transition-all cursor-pointer bg-red-500 hover:bg-red-600 text-white animate-pulse"
+            >
+              ■
+            </button>
+            <button
+              v-else
               @click="handleSend"
-              :disabled="store.isStreaming"
-              :class="[
-                'w-7 h-7 rounded-xl flex items-center justify-center font-bold shadow-xs transition-all cursor-pointer',
-                store.isStreaming ? 'bg-[#A1A1AA] text-white cursor-not-allowed' : 'bg-[#D96B27] hover:bg-[#B8551B] text-white'
-              ]"
+              title="发送消息 (Enter)"
+              class="w-7 h-7 rounded-xl flex items-center justify-center font-bold shadow-xs transition-all cursor-pointer bg-[#D96B27] hover:bg-[#B8551B] text-white"
             >
               ↑
             </button>

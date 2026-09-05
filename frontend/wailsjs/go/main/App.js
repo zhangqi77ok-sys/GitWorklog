@@ -6,6 +6,10 @@ export function ApplyDiffHunk(arg1, arg2, arg3) {
   return window['go']['main']['App']['ApplyDiffHunk'](arg1, arg2, arg3);
 }
 
+export function CancelAgentStream() {
+  return window['go']['main']['App']['CancelAgentStream']();
+}
+
 export function CancelTerminalCommand() {
   return window['go']['main']['App']['CancelTerminalCommand']();
 }

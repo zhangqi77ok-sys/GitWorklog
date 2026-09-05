@@ -126,8 +126,9 @@ Tcode 打破了单体硬编码调度逻辑，将 Agent 的执行循环、能力�
 * **多行 Markdown 系统级指令**：支持舒适编辑系统提示词，规范角色契约、执行流、审查清单与输出格式；
 * **业界经典预设一键套用**：内置 Thermo-Nuclear 架构审查专家、TDD 红绿重构测试生成器、全维白盒安全守卫、性能与并发调优专家模版。
 
-### 8. 纯净零数据初始状态 (Zero Demo & Clean Empty State)
-* 严格执行无假数据铁律，初次启动呈现干净的 0 项目、0 会话状态，只有用户显式打开本地项目后才载入工作区。
+### 8. 纯净零数据初始状态与配置原子写 (Zero Demo, Clean Empty State & Atomic Store)
+* **根绝所有隐含假数据**：彻底清理系统首次启动对 MCP/Skill/Rule 默认预埋伪数据的潜藏逻辑，所有未配置项默认均严格为纯净空切片 `make([]T, 0)`；
+* **事务级原子配置持久化 (`atomicWriteConfig`)**：摒弃直接裸写 `os.WriteFile` 的竞态隐患，全面采用“临时文件写入 + 磁盘同步 + 原子重命名”的写入隔离机制，杜绝 Windows 下多协程并发写入导致的文件锁冲突与 JSON 撕裂。
 
 ### 9. 生产级前后端基础工程框架与原生双轨上游驱动 (Base Framework & Dual-Track Upstream Drivers)
 * **后端 Go 插件式微内核 (`backend/`)**：
@@ -140,14 +141,17 @@ Tcode 打破了单体硬编码调度逻辑，将 Agent 的执行循环、能力�
   * 完整落地 Warm Minimalist 调色盘（`#FAF8F5` / `#F4EFEA` / `#D96B27`）与 16:9 人机工学单焦点视口布局；
   * 顶栏单焦点切换胶囊（`💬 对话` / `◫ 双栏协同` / `📝 代码区`）、48px 侧边活动栏、生产级双层 Git 源码控制面板与集成终端抽屉（`Ctrl + \`` 全局快捷唤起）。
 
-### 10. 首条端到端流式推理闭环与深度思考卡片 (End-to-End Streaming Loop & Thinking Block)
-* **首个模型驱动插件落地 (`backend/plugins/provider/openai/`)**：
-  * 基于 `net/http` 原生实现 OpenAI / DeepSeek SSE 流式长连接；
-  * 自动识别并无损剥离 `<think>...</think>` 思考流与正文流，实时统计 Token 消耗；
-  * 提供轻量 `Ping()` 探针，毫秒级探测网络 TTFT 表现。
-* **本地环回 SSE 传输服务 (`backend/internal/transport/http/`)**：
-  * 监听 `127.0.0.1:8765`，暴露 `/api/health` 探活与 `/api/chat/stream` SSE 流式端点；
-  * **客户端断开级联取消**：当检测到前端断连时，立即中止向上游模型的拉取协程，杜绝 Token 浪费。
+### 10. 全链路推理流可控中断与进程树生命周期隔离 (Controllable Streaming & Process Tree Isolation)
+* **前端至底层无阻塞中断闭环 (`CancelAgentStream`)**：
+  * 前端输入区流式推理时自动呈现高亮脉冲的中断按钮 `■`（支持快捷键或一键点击）；
+  * Wails IPC 瞬态派发 `CancelAgentStream` 信号，后端原子取消 `agentCancel` 上下文，实时切断正在进行的大模型 SSE 网络请求与长循环；
+  * 同步广播 `agent:interrupted` 事件并记录当前轮已生成的思考与文本进度，优雅退回就绪态。
+* **Windows 孤儿子进程树递归强杀守卫**：
+  * 在受控沙箱与终端工具的同步/流式执行层，统一注入 `execCtx.Done()` 守护协程；
+  * 借助 `taskkill /F /T /PID <pid>` 深度强杀顶层 `cmd.exe` 下属整棵子进程树，彻底根除后台孤儿 node/test 进程挂死与 CPU 耗尽风险。
+* **Windows 原生单文件安装向导与异步自删除卸载器**：
+  * 单文件安装程序支持图形交互与 `/S` / `--silent-install-dir` 纯静默无头安装；
+  * 卸载器基于独立临时批处理脚本实现无残留异步延时文件解绑与目录自删除，全链路无控制台弹窗闪烁（`0x08000000`）。
 * **前端流式解码与人机交互 (`frontend/src/`)**：
   * **流式客户端 (`core/transport/sseClient.ts`)**：基于 `ReadableStream` 逐帧解析，解决 UTF-8 多字节分片乱码；
   * **深度思考折叠卡片 (`app/chat/ThinkingBlock.tsx`)**：思考中呼吸指示灯 + 思考完毕紧凑折叠，支持随时展开查阅思维链；

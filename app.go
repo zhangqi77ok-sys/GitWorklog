@@ -59,6 +59,8 @@ type App struct {
 	mcpManager     *mcp.Manager
 	terminalCancel context.CancelFunc
 	terminalMu     sync.Mutex
+	agentCancel    context.CancelFunc
+	agentMu        sync.Mutex
 }
 
 // NewApp 构造生产级 Wails 宿主
@@ -525,6 +527,21 @@ func (a *App) CancelTerminalCommand() {
 	}
 }
 
+// CancelAgentStream 中断当前正在进行的大模型流式推理与自主工具循环
+func (a *App) CancelAgentStream() {
+	a.agentMu.Lock()
+	defer a.agentMu.Unlock()
+	if a.agentCancel != nil {
+		a.agentCancel()
+		a.agentCancel = nil
+		if a.ctx != nil {
+			runtime.EventsEmit(a.ctx, "agent:interrupted", map[string]any{
+				"message": "用户手动中断了本次推理",
+			})
+		}
+	}
+}
+
 type ChatRequest struct {
 	SessionID  string `json:"session_id"`
 	Prompt     string `json:"prompt"`
@@ -536,8 +553,17 @@ type ChatRequest struct {
 
 // FetchUpstreamModels 从真实上游网关拉取真实可用模型列表 (Zero Demo)
 func (a *App) FetchUpstreamModels(endpoint, apiKey string) ([]string, error) {
+	endpoint = strings.TrimSpace(endpoint)
 	if endpoint == "" {
 		endpoint = "https://agentrouter.org/v1"
+	} else {
+		if !strings.HasPrefix(endpoint, "http://") && !strings.HasPrefix(endpoint, "https://") {
+			if strings.Contains(endpoint, "localhost") || strings.Contains(endpoint, "127.0.0.1") {
+				endpoint = "http://" + endpoint
+			} else {
+				endpoint = "https://" + endpoint
+			}
+		}
 	}
 	if apiKey == "" {
 		if primary := a.channelStore.GetPrimary(); primary != nil && primary.APIKey != "" {
@@ -550,7 +576,11 @@ func (a *App) FetchUpstreamModels(endpoint, apiKey string) ([]string, error) {
 	if apiKey == "" {
 		return nil, fmt.Errorf("未配置有效 API Key，请先在渠道配置中填写模型 API Key")
 	}
-	url := strings.TrimRight(endpoint, "/") + "/models"
+	cleanEndpoint := strings.TrimRight(endpoint, "/")
+	if strings.HasSuffix(cleanEndpoint, "/models") {
+		cleanEndpoint = strings.TrimSuffix(cleanEndpoint, "/models")
+	}
+	url := cleanEndpoint + "/models"
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -616,7 +646,21 @@ func (a *App) SendMessage(req ChatRequest) error {
 		return fmt.Errorf("context not initialized")
 	}
 
+	a.agentMu.Lock()
+	if a.agentCancel != nil {
+		a.agentCancel()
+	}
+	agentCtx, cancel := context.WithCancel(context.Background())
+	a.agentCancel = cancel
+	a.agentMu.Unlock()
+
 	go func() {
+		defer func() {
+			a.agentMu.Lock()
+			a.agentCancel = nil
+			a.agentMu.Unlock()
+		}()
+
 		// 1. 获取主用渠道凭据
 		primary := a.channelStore.GetPrimary()
 		var endpoint string
@@ -731,7 +775,7 @@ func (a *App) SendMessage(req ChatRequest) error {
 		// 5. 准备工作区内置沙箱算子与外部已激活 MCP 协议算子
 		workspaceTools := llm.DefaultWorkspaceTools()
 		if a.mcpManager != nil {
-			if mcpTools, err := a.mcpManager.GetAllTools(context.Background()); err == nil && len(mcpTools) > 0 {
+			if mcpTools, err := a.mcpManager.GetAllTools(agentCtx); err == nil && len(mcpTools) > 0 {
 				workspaceTools = append(workspaceTools, mcpTools...)
 			}
 		}
@@ -739,6 +783,10 @@ func (a *App) SendMessage(req ChatRequest) error {
 		// 6. 通用多轮自主自愈状态机 (以大模型不再调用工具或目标达成作为核心自然收敛依据)
 		const maxWatchdogTurns = 12
 		for turn := 1; turn <= maxWatchdogTurns; turn++ {
+			if agentCtx.Err() != nil {
+				break
+			}
+
 			llmReq := llm.Request{
 				Endpoint: endpoint,
 				APIKey:   apiKey,
@@ -748,7 +796,7 @@ func (a *App) SendMessage(req ChatRequest) error {
 			}
 
 			var roundContent strings.Builder
-			toolCalls, err := llm.StreamChat(context.Background(), llmReq, llm.StreamHandlers{
+			toolCalls, err := llm.StreamChat(agentCtx, llmReq, llm.StreamHandlers{
 				OnThinking: func(text string) {
 					assistantThinking.WriteString(text)
 					runtime.EventsEmit(a.ctx, "agent:thinking", map[string]any{
@@ -805,7 +853,7 @@ func (a *App) SendMessage(req ChatRequest) error {
 				var output string
 				switch toolName {
 				case "exec_command":
-					res, err := a.termTool.Execute(context.Background(), []byte(toolArgs))
+					res, err := a.termTool.Execute(agentCtx, []byte(toolArgs))
 					if err != nil {
 						output = fmt.Sprintf("执行失败: %v", err)
 					} else {
@@ -870,7 +918,7 @@ func (a *App) SendMessage(req ChatRequest) error {
 						if mcpArgs == nil {
 							mcpArgs = make(map[string]any)
 						}
-						mcpRes, err := a.mcpManager.CallTool(context.Background(), toolName, mcpArgs)
+						mcpRes, err := a.mcpManager.CallTool(agentCtx, toolName, mcpArgs)
 						if err != nil {
 							output = fmt.Sprintf("MCP 算子 [%s] 执行失败: %v", toolName, err)
 						} else {

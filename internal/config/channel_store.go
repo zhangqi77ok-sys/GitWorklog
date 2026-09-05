@@ -73,7 +73,7 @@ func (s *ChannelStore) save() error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(s.filePath, data, 0644)
+	return atomicWriteConfig(s.filePath, data)
 }
 
 // List 获取全部渠道列表

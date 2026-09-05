@@ -99,7 +99,33 @@ func (t *Tool) Execute(ctx context.Context, rawArgs json.RawMessage) (*v1.ToolRe
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
-	err := cmd.Run()
+	if err := cmd.Start(); err != nil {
+		return &v1.ToolResult{
+			Content: fmt.Sprintf("cmd start error: %v", err),
+			IsError: true,
+		}, nil
+	}
+
+	// 注入 context 取消守护：彻底杀死整棵孤儿子进程树，防止后台挂死
+	done := make(chan struct{})
+	go func() {
+		select {
+		case <-done:
+		case <-execCtx.Done():
+			if cmd.Process != nil {
+				if runtime.GOOS == "windows" {
+					killCmd := exec.Command("taskkill", "/F", "/T", "/PID", fmt.Sprintf("%d", cmd.Process.Pid))
+					killCmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: 0x08000000, HideWindow: true}
+					_ = killCmd.Run()
+				} else {
+					_ = cmd.Process.Kill()
+				}
+			}
+		}
+	}()
+
+	err := cmd.Wait()
+	close(done)
 	output := stdout.String()
 	if stderr.Len() > 0 {
 		if output != "" {

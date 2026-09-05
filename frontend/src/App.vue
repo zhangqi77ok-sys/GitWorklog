@@ -442,12 +442,18 @@
               <div class="flex items-center gap-2">
                 <span class="text-[10px] text-[#A1A1AA] font-mono">{{ isStreaming ? '正在流式推理...' : '就绪' }}</span>
                 <button
+                  v-if="isStreaming"
+                  @click="stopGenerationAction"
+                  title="中断本次生成 (Esc)"
+                  class="w-7 h-7 rounded-xl flex items-center justify-center font-bold shadow-xs transition-all cursor-pointer bg-red-500 hover:bg-red-600 text-white animate-pulse"
+                >
+                  ■
+                </button>
+                <button
+                  v-else
                   @click="handleSend"
-                  :disabled="isStreaming"
-                  :class="[
-                    'w-7 h-7 rounded-xl flex items-center justify-center font-bold shadow-xs transition-all cursor-pointer',
-                    isStreaming ? 'bg-[#A1A1AA] text-white cursor-not-allowed' : 'bg-[#D96B27] hover:bg-[#B8551B] text-white'
-                  ]"
+                  title="发送消息 (Enter)"
+                  class="w-7 h-7 rounded-xl flex items-center justify-center font-bold shadow-xs transition-all cursor-pointer bg-[#D96B27] hover:bg-[#B8551B] text-white"
                 >
                   ↑
                 </button>
@@ -1225,8 +1231,13 @@ const filteredSessions = computed(() => {
   return sessions.value.filter(s => (s.tag || '') === activeTag.value)
 })
 
+const upstreamFetchedModels = ref<string[]>([])
+
 const availableModels = computed(() => {
   const set = new Set<string>()
+  upstreamFetchedModels.value.forEach(m => {
+    if (m && m.trim()) set.add(m.trim())
+  })
   channels.value.forEach(c => {
     if (c.model && c.model.trim()) set.add(c.model.trim())
   })
@@ -1530,6 +1541,12 @@ async function handleSend() {
   }
 }
 
+async function stopGenerationAction() {
+  await wailsBridge.cancelAgentStream()
+  isStreaming.value = false
+  showToast('已中断本次推理')
+}
+
 // 6. 设置中枢 (渠道、MCP、Skill、Rule)
 const channels = ref<ChannelConfig[]>([])
 const mcps = ref<MCPServerConfig[]>([])
@@ -1608,8 +1625,18 @@ async function deleteChannel(id: string) {
 
 async function fetchModelsAction() {
   try {
+    let ep = channelForm.endpoint.trim()
+    if (ep && !ep.startsWith('http://') && !ep.startsWith('https://')) {
+      ep = (ep.includes('localhost') || ep.includes('127.0.0.1')) ? 'http://' + ep : 'https://' + ep
+      channelForm.endpoint = ep
+    }
     const models = await wailsBridge.fetchUpstreamModels(channelForm.endpoint, channelForm.api_key)
-    showToast(`✓ 成功从上游网关探测到 ${models.length} 个真实在线模型！`)
+    if (models && models.length > 0) {
+      upstreamFetchedModels.value = models
+      showToast(`✓ 成功从上游网关探测到 ${models.length} 个真实在线模型！`)
+    } else {
+      showToast('未探测到可用模型列表')
+    }
   } catch (err) {
     showToast('拉取模型异常: ' + err)
   }

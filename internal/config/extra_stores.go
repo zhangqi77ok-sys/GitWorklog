@@ -79,91 +79,58 @@ func (s *ExtraStore) loadAll() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// 1. MCP
+	// 1. MCP (严禁任何假数据预置，无配置时保持纯净空列表)
 	if data, err := os.ReadFile(s.mcpFile); err == nil {
 		_ = json.Unmarshal(data, &s.mcps)
 	} else {
-		s.mcps = []MCPServerConfig{
-			{
-				ID:        "mcp_filesystem",
-				Name:      "Filesystem Local Server",
-				Type:      "stdio",
-				Command:   "npx",
-				Args:      []string{"-y", "@modelcontextprotocol/server-filesystem", "."},
-				Enabled:   true,
-				UpdatedAt: time.Now().Unix(),
-			},
-			{
-				ID:        "mcp_git",
-				Name:      "Git Local Server",
-				Type:      "stdio",
-				Command:   "uvx",
-				Args:      []string{"mcp-server-git", "--repository", "."},
-				Enabled:   true,
-				UpdatedAt: time.Now().Unix(),
-			},
-		}
-		_ = s.saveMCPs()
+		s.mcps = make([]MCPServerConfig, 0)
 	}
 
-	// 2. Skills
+	// 2. Skills (纯净空状态)
 	if data, err := os.ReadFile(s.skillFile); err == nil {
 		_ = json.Unmarshal(data, &s.skills)
 	} else {
-		s.skills = []SkillConfig{
-			{
-				ID:          "skill_tdd",
-				Name:        "TDD 测试驱动自愈",
-				Description: "自动编写失败测试用例，驱动代码修改并通过单测检验闭环",
-				Prompt:      "在修改代码前，必须先编写针对该特性的单元测试，并验证测试红绿灯。",
-				Enabled:     true,
-				UpdatedAt:   time.Now().Unix(),
-			},
-			{
-				ID:          "skill_guardrail",
-				Name:        "安全沙箱与高危指令拦截",
-				Description: "严禁 rm -rf、格式化磁盘与跨工作区越权写入",
-				Prompt:      "禁止执行破坏性危险命令，所有文件写入必须限定在当前工作区沙箱内。",
-				Enabled:     true,
-				UpdatedAt:   time.Now().Unix(),
-			},
-		}
-		_ = s.saveSkills()
+		s.skills = make([]SkillConfig, 0)
 	}
 
-	// 3. Rules
+	// 3. Rules (纯净空状态)
 	if data, err := os.ReadFile(s.ruleFile); err == nil {
 		_ = json.Unmarshal(data, &s.rules)
 	} else {
-		s.rules = []RuleConfig{
-			{
-				ID:        "rule_clean_code",
-				Title:     "Go 与 Vue 编码工程原则",
-				Content:   "坚决遵守单一职责与插件化架构，禁止任何 Demo 伪代码和 fake alert。",
-				Scope:     "global",
-				Enabled:   true,
-				UpdatedAt: time.Now().Unix(),
-			},
-		}
-		_ = s.saveRules()
+		s.rules = make([]RuleConfig, 0)
 	}
 
 	return nil
 }
 
+func atomicWriteConfig(filePath string, data []byte) error {
+	tmpPath := fmt.Sprintf("%s.tmp.%d", filePath, time.Now().UnixNano())
+	if err := os.WriteFile(tmpPath, data, 0644); err != nil {
+		return err
+	}
+	if err := os.Rename(tmpPath, filePath); err != nil {
+		_ = os.Remove(filePath)
+		if renameErr := os.Rename(tmpPath, filePath); renameErr != nil {
+			_ = os.Remove(tmpPath)
+			return os.WriteFile(filePath, data, 0644)
+		}
+	}
+	return nil
+}
+
 func (s *ExtraStore) saveMCPs() error {
 	data, _ := json.MarshalIndent(s.mcps, "", "  ")
-	return os.WriteFile(s.mcpFile, data, 0644)
+	return atomicWriteConfig(s.mcpFile, data)
 }
 
 func (s *ExtraStore) saveSkills() error {
 	data, _ := json.MarshalIndent(s.skills, "", "  ")
-	return os.WriteFile(s.skillFile, data, 0644)
+	return atomicWriteConfig(s.skillFile, data)
 }
 
 func (s *ExtraStore) saveRules() error {
 	data, _ := json.MarshalIndent(s.rules, "", "  ")
-	return os.WriteFile(s.ruleFile, data, 0644)
+	return atomicWriteConfig(s.ruleFile, data)
 }
 
 // ListMCPs 获取 MCP 列表

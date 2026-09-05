@@ -92,6 +92,11 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
+  async function stopGeneration() {
+    await wailsBridge.cancelAgentStream()
+    isStreaming.value = false
+  }
+
   return {
     currentSessionId,
     isFullAuto,
@@ -107,6 +112,7 @@ export const useChatStore = defineStore('chat', () => {
     toggleDiffWorkspace,
     openDiff,
     appendMessage,
-    switchSession
+    switchSession,
+    stopGeneration
   }
 })

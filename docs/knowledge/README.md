@@ -34,6 +34,7 @@
 | **24** | **核心系统前十大关键缺陷全域歼灭与桌面微内核工程加固指南** | 架构加固 / 缺陷治理 / 协议合规 | 凭据泄漏零容忍、Fail-Closed 契约防御、无边框窗体控制、深层递归文件树、IPC 监听器防泄漏、空 Content 协议修复与安装卸载防误杀 | [24-top-10-critical-bugs-eradication-and-architecture-hardening.md](./24-top-10-critical-bugs-eradication-and-architecture-hardening.md) |
 | **25** | **Windows 进程树生命周期隔离、未追踪文件 Diff 适配与全模态窗完整性治理** | 进程控制 / GitOps / UI人机工程学 | `taskkill /F /T` 进程树强杀、Untracked 新文件 Diff 适配、沙箱盘符大小写归一化、多轮工具历史切片与全模态窗闭环 | [25-process-tree-isolation-untracked-diff-and-ui-modals.md](./25-process-tree-isolation-untracked-diff-and-ui-modals.md) |
 | **26** | **文件树与会话防穿越守卫、编译诊断无网络阻断与前端状态洁净性** | 访问控制 / 会话治理 / 性能防挂起 | 会话 ID 白名单清洗防越权删除、文件树沙箱前缀校验、npx `--no-install` 防网络阻塞与会话空状态对称重置 | [26-path-traversal-defense-and-session-state-hygiene.md](./26-path-traversal-defense-and-session-state-hygiene.md) |
+| **27** | **推理流中断、无头静默卸载、假数据彻底净化与配置原子写** | 智能体控制 / 桌面端分发 / 并发数据安全 | 全链路大模型推理取消上下文、无头静默卸载自删除、初始化默认假数据清空、配置临时文件原子写与孤儿进程树递归终结 | [27-stream-cancellation-silent-uninstall-and-extra-stores-purging.md](./27-stream-cancellation-silent-uninstall-and-extra-stores-purging.md) |
 
 
 
