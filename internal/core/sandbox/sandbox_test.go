@@ -59,4 +59,15 @@ func TestSandbox_ValidatePathAndAtomicWrite(t *testing.T) {
 	if string(readBack) != string(content) {
 		t.Errorf("content mismatch: got [%s], expected [%s]", string(readBack), string(content))
 	}
+
+	// 4. 前导斜杠路径测试
+	leadingSlashPath := "/src/foo.go"
+	fullSlash, err := sb.ValidatePath(leadingSlashPath)
+	if err != nil {
+		t.Fatalf("path with leading slash rejected: %v", err)
+	}
+	expectedSlash := filepath.Clean(filepath.Join(tmpDir, "src/foo.go"))
+	if fullSlash != expectedSlash {
+		t.Errorf("expected [%s], got [%s]", expectedSlash, fullSlash)
+	}
 }

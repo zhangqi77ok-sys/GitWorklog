@@ -1502,7 +1502,7 @@ async function handleSend() {
   inputPrompt.value = ''
   isStreaming.value = true
 
-  const userMsgId = 'msg_' + Date.now()
+  const userMsgId = 'msg_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7)
   currentSession.value.messages.push({
     id: userMsgId,
     role: 'user',
@@ -1510,7 +1510,7 @@ async function handleSend() {
     time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
   })
 
-  const asstMsgId = 'asst_' + Date.now()
+  const asstMsgId = 'asst_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7)
   currentSession.value.messages.push({
     id: asstMsgId,
     role: 'assistant',
@@ -1961,6 +1961,15 @@ async function cancelTerminalAction() {
 }
 
 function handleGlobalKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape') {
+    if (isMcpModalOpen.value) { isMcpModalOpen.value = false; return }
+    if (isSkillModalOpen.value) { isSkillModalOpen.value = false; return }
+    if (isRuleModalOpen.value) { isRuleModalOpen.value = false; return }
+    if (isKnowledgeGraphOpen.value) { isKnowledgeGraphOpen.value = false; return }
+    if (isSettingsOpen.value) { isSettingsOpen.value = false; return }
+    if (isTerminalOpen.value) { isTerminalOpen.value = false; return }
+  }
+
   if (e.ctrlKey && (e.key === '`' || e.key === '~')) {
     e.preventDefault()
     toggleTerminalDrawer()

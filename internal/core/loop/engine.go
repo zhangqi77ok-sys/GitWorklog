@@ -246,6 +246,13 @@ func (e *ExecutionEngine) Execute(ctx context.Context, req *EngineRequest, event
 		}
 	}
 
+	if step >= e.maxSteps {
+		eventChan <- EngineEvent{
+			Type:         EventChunk,
+			DeltaContent: "\n\n⚠️ 【系统提示】已达到智能体自主推理最大步数上限（15 步），执行已安全收敛终止。如需继续，请补充新指令。",
+		}
+	}
+
 	eventChan <- EngineEvent{Type: EventDone}
 	return nil
 }

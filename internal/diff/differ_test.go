@@ -107,3 +107,18 @@ func TestComputeFileDiff_PathTraversal(t *testing.T) {
 	}
 }
 
+func TestValidateRelPath_LeadingSlash(t *testing.T) {
+	wd, _ := os.Getwd()
+	repoRoot := filepath.Dir(filepath.Dir(wd))
+
+	// 带前导斜杠的文件路径应当能正常通过校验，不报逃逸
+	p, err := validateRelPath(repoRoot, "/app.go")
+	if err != nil {
+		t.Fatalf("expected /app.go to pass validation, got err: %v", err)
+	}
+	expected := filepath.Join(repoRoot, "app.go")
+	if !strings.EqualFold(p, expected) {
+		t.Errorf("expected %s, got %s", expected, p)
+	}
+}
+

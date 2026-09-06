@@ -23,7 +23,17 @@ func gitCmd(dir string, args ...string) *exec.Cmd {
 	return cmd
 }
 
+func normalizeWindowsPath(p string) string {
+	vol := filepath.VolumeName(p)
+	if len(vol) > 0 {
+		return strings.ToUpper(vol) + p[len(vol):]
+	}
+	return p
+}
+
 func validateRelPath(workspaceRoot, relPath string) (string, error) {
+	relPath = strings.TrimPrefix(relPath, "/")
+	relPath = strings.TrimPrefix(relPath, "\\")
 	if relPath == "" {
 		return "", fmt.Errorf("empty file path")
 	}
@@ -36,7 +46,9 @@ func validateRelPath(workspaceRoot, relPath string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("invalid workspace: %w", err)
 	}
-	rel, err := filepath.Rel(cleanWorkspace, cleanAbs)
+	normWorkspace := normalizeWindowsPath(cleanWorkspace)
+	normAbs := normalizeWindowsPath(cleanAbs)
+	rel, err := filepath.Rel(normWorkspace, normAbs)
 	if err != nil || strings.HasPrefix(rel, "..") {
 		return "", fmt.Errorf("path escapes workspace sandbox: %s", relPath)
 	}

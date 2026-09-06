@@ -37,11 +37,18 @@ func normalizeWindowsPath(p string) string {
 
 // ValidatePath 严格校验目标路径是否越界
 func (s *Sandbox) ValidatePath(targetPath string) (string, error) {
+	cleanTarget := targetPath
+	// 去除前导斜杠防止破坏 Join 或在 Windows 下跳回盘符根目录
+	if !filepath.IsAbs(cleanTarget) {
+		cleanTarget = strings.TrimPrefix(cleanTarget, "/")
+		cleanTarget = strings.TrimPrefix(cleanTarget, "\\")
+	}
+
 	var fullPath string
-	if filepath.IsAbs(targetPath) {
-		fullPath = filepath.Clean(targetPath)
+	if filepath.IsAbs(cleanTarget) {
+		fullPath = filepath.Clean(cleanTarget)
 	} else {
-		fullPath = filepath.Clean(filepath.Join(s.rootDir, targetPath))
+		fullPath = filepath.Clean(filepath.Join(s.rootDir, cleanTarget))
 	}
 
 	normRoot := normalizeWindowsPath(s.rootDir)
@@ -83,11 +90,14 @@ func (s *Sandbox) AtomicWriteFile(path string, content []byte) error {
 		return fmt.Errorf("failed to create atomic temp file: %w", err)
 	}
 	tmpName := tmpFile.Name()
+	isCleaned := false
 
-	// 确保发生错误时清理临时文件
+	// 确保发生任何异常退出时彻底清理临时文件，杜绝 .tmp 残留
 	defer func() {
-		if tmpFile != nil {
-			_ = tmpFile.Close()
+		if !isCleaned {
+			if tmpFile != nil {
+				_ = tmpFile.Close()
+			}
 			_ = os.Remove(tmpName)
 		}
 	}()
@@ -104,20 +114,23 @@ func (s *Sandbox) AtomicWriteFile(path string, content []byte) error {
 	if err := tmpFile.Close(); err != nil {
 		return fmt.Errorf("failed to close temp file: %w", err)
 	}
-	tmpFile = nil // 释放以便 Windows os.Rename 能获取文件独占权
+	tmpFile = nil // 句柄已关闭，但 isCleaned 为 false，发生重命名错误仍能清理
 
 	// 原子重命名替换原文件
 	if err := os.Rename(tmpName, validated); err != nil {
 		// Windows 特殊兼容：尝试先清除已有文件句柄，若重命名依然失败则回退安全覆写
 		_ = os.Remove(validated)
 		if retryErr := os.Rename(tmpName, validated); retryErr != nil {
+			_ = os.Remove(tmpName)
+			isCleaned = true
 			if writeErr := os.WriteFile(validated, content, 0644); writeErr != nil {
 				return fmt.Errorf("atomic rename failed: %w (fallback write: %v)", err, writeErr)
 			}
-			_ = os.Remove(tmpName)
+			return nil
 		}
 	}
 
+	isCleaned = true
 	return nil
 }
 

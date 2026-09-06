@@ -85,3 +85,69 @@ func TestExecutionEngine_SparseToolIndices(t *testing.T) {
 		t.Errorf("expected tool_start event for sparse index 1, but not received")
 	}
 }
+
+type loopInfiniteProvider struct{}
+
+func (m *loopInfiniteProvider) ID() string          { return "mock.loop" }
+func (m *loopInfiniteProvider) Name() string        { return "Loop Provider" }
+func (m *loopInfiniteProvider) Version() string     { return "1.0.0" }
+func (m *loopInfiniteProvider) Type() v1.PluginType { return v1.TypeProvider }
+func (m *loopInfiniteProvider) Init(ctx context.Context, cfg json.RawMessage) error { return nil }
+func (m *loopInfiniteProvider) Start(ctx context.Context) error { return nil }
+func (m *loopInfiniteProvider) Stop(ctx context.Context) error  { return nil }
+func (m *loopInfiniteProvider) Health(ctx context.Context) v1.HealthStatus {
+	return v1.HealthStatus{Healthy: true}
+}
+func (m *loopInfiniteProvider) Ping(ctx context.Context) (time.Duration, error) {
+	return 10 * time.Millisecond, nil
+}
+func (m *loopInfiniteProvider) ListModels(ctx context.Context) ([]v1.ModelDescriptor, error) {
+	return nil, nil
+}
+func (m *loopInfiniteProvider) StreamChat(ctx context.Context, req *v1.ChatRequest) (<-chan v1.StreamChunk, error) {
+	ch := make(chan v1.StreamChunk, 1)
+	ch <- v1.StreamChunk{
+		ToolCalls: []v1.ToolCallChunk{
+			{
+				Index:          0,
+				ID:             "call_infinite",
+				Name:           "tool.none",
+				ArgumentsDelta: "{}",
+			},
+		},
+	}
+	close(ch)
+	return ch, nil
+}
+
+func TestExecutionEngine_MaxStepsCutoff(t *testing.T) {
+	reg := host.NewRegistry()
+	prov := &loopInfiniteProvider{}
+	if err := reg.Register(prov); err != nil {
+		t.Fatalf("failed to register provider: %v", err)
+	}
+
+	engine := NewExecutionEngine(reg)
+	eventChan := make(chan EngineEvent, 50)
+
+	ctx := context.Background()
+	req := &EngineRequest{
+		Model:  "mock-model",
+		Prompt: "test loop",
+	}
+
+	go func() {
+		_ = engine.Execute(ctx, req, eventChan)
+	}()
+
+	receivedWarning := false
+	for ev := range eventChan {
+		if ev.Type == EventChunk && len(ev.DeltaContent) > 0 && ev.DeltaContent[0] == '\n' {
+			receivedWarning = true
+		}
+	}
+
+	if !receivedWarning {
+		t.Errorf("expected max steps cutoff warning chunk event, but not received")
+	}
+}

@@ -84,6 +84,60 @@ func (r *Registry) Register(p v1.Plugin) error {
 	return nil
 }
 
+// RegisterOrReplace 注册或替换已有插件 (用于工作区动态切换热重载)
+func (r *Registry) RegisterOrReplace(p v1.Plugin) error {
+	if p == nil {
+		return fmt.Errorf("cannot register nil plugin")
+	}
+
+	switch p.Type() {
+	case v1.TypeProvider:
+		prov, ok := p.(v1.ProviderPlugin)
+		if !ok {
+			return fmt.Errorf("plugin %s declared as provider but does not implement ProviderPlugin", p.ID())
+		}
+		r.providerMu.Lock()
+		r.providers[p.ID()] = prov
+		r.providerMu.Unlock()
+
+	case v1.TypeTool:
+		t, ok := p.(v1.ToolPlugin)
+		if !ok {
+			return fmt.Errorf("plugin %s declared as tool but does not implement ToolPlugin", p.ID())
+		}
+		r.toolMu.Lock()
+		r.tools[p.ID()] = t
+		r.toolMu.Unlock()
+
+	case v1.TypeRail:
+		rl, ok := p.(v1.RailPlugin)
+		if !ok {
+			return fmt.Errorf("plugin %s declared as rail but does not implement RailPlugin", p.ID())
+		}
+		r.railMu.Lock()
+		found := false
+		for i, existing := range r.rails {
+			if existing.ID() == p.ID() {
+				r.rails[i] = rl
+				found = true
+				break
+			}
+		}
+		if !found {
+			r.rails = append(r.rails, rl)
+		}
+		slices.SortFunc(r.rails, func(a, b v1.RailPlugin) int {
+			return b.Priority() - a.Priority()
+		})
+		r.railMu.Unlock()
+
+	default:
+		return fmt.Errorf("unsupported plugin type: %s", p.Type())
+	}
+
+	return nil
+}
+
 // Unregister 根据插件 ID 安全注销插件
 func (r *Registry) Unregister(id string) bool {
 	r.providerMu.Lock()

@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -36,6 +37,14 @@ import (
 	terminaltool "tcode/plugins/tool/terminal"
 )
 
+func normalizeWindowsPath(p string) string {
+	vol := filepath.VolumeName(p)
+	if len(vol) > 0 {
+		return strings.ToUpper(vol) + p[len(vol):]
+	}
+	return p
+}
+
 // FileNode 文件树节点
 type FileNode struct {
 	Name     string     `json:"name"`
@@ -61,8 +70,10 @@ type App struct {
 	mcpManager     *mcp.Manager
 	terminalCancel context.CancelFunc
 	terminalMu     sync.Mutex
+	termTaskID     int64
 	agentCancel    context.CancelFunc
 	agentMu        sync.Mutex
+	agentTaskID    int64
 }
 
 // NewApp 构造生产级 Wails 宿主
@@ -212,19 +223,24 @@ func (a *App) SetWorkspace(dir string) error {
 	gt := gittool.NewTool(absDir)
 	a.gitTool = gt
 	if a.registry != nil {
-		_ = a.registry.Register(gt)
+		_ = a.registry.RegisterOrReplace(gt)
 	}
 
 	fs := fstool.NewTool(sb, a.snapshotMgr)
 	a.fsTool = fs
 	if a.registry != nil {
-		_ = a.registry.Register(fs)
+		_ = a.registry.RegisterOrReplace(fs)
 	}
 
 	term := terminaltool.NewTool(absDir)
 	a.termTool = term
 	if a.registry != nil {
-		_ = a.registry.Register(term)
+		_ = a.registry.RegisterOrReplace(term)
+	}
+
+	// 重新初始化智能体自主执行引擎，绑定新工作区的插件执行链
+	if a.registry != nil {
+		a.engine = loop.NewExecutionEngine(a.registry)
 	}
 
 	if a.mcpManager != nil {
@@ -552,7 +568,9 @@ func (a *App) buildFileTreeInternal(currentDir string, currentDepth, maxDepth in
 	if err == nil {
 		cleanWs, err := filepath.Abs(a.workspace)
 		if err == nil {
-			relWs, err := filepath.Rel(cleanWs, cleanReal)
+			normWs := normalizeWindowsPath(cleanWs)
+			normReal := normalizeWindowsPath(cleanReal)
+			relWs, err := filepath.Rel(normWs, normReal)
 			if err != nil || strings.HasPrefix(relWs, "..") {
 				return nil, nil // 软链接指向工作区外部，阻断
 			}
@@ -639,6 +657,8 @@ func (a *App) ExecTerminalStream(command string) error {
 		a.terminalCancel()
 	}
 	ctx, cancel := context.WithCancel(context.Background())
+	a.termTaskID++
+	currentTaskID := a.termTaskID
 	a.terminalCancel = cancel
 	a.terminalMu.Unlock()
 
@@ -667,7 +687,9 @@ func (a *App) ExecTerminalStream(command string) error {
 		})
 
 		a.terminalMu.Lock()
-		a.terminalCancel = nil
+		if a.termTaskID == currentTaskID {
+			a.terminalCancel = nil
+		}
 		a.terminalMu.Unlock()
 	}()
 
@@ -758,6 +780,11 @@ func (a *App) FetchUpstreamModels(endpoint, apiKey string) ([]string, error) {
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("上游模型网关响应错误 (HTTP %d): %s", resp.StatusCode, strings.TrimSpace(string(bodyBytes)))
+	}
+
 	var data struct {
 		Data []struct {
 			ID string `json:"id"`
@@ -830,13 +857,17 @@ func (a *App) SendMessage(req ChatRequest) error {
 		a.agentCancel()
 	}
 	agentCtx, cancel := context.WithCancel(context.Background())
+	a.agentTaskID++
+	currentTaskID := a.agentTaskID
 	a.agentCancel = cancel
 	a.agentMu.Unlock()
 
 	go func() {
 		defer func() {
 			a.agentMu.Lock()
-			a.agentCancel = nil
+			if a.agentTaskID == currentTaskID {
+				a.agentCancel = nil
+			}
 			a.agentMu.Unlock()
 		}()
 
@@ -1041,27 +1072,37 @@ func (a *App) SendMessage(req ChatRequest) error {
 
 				case "write_file":
 					var argsObj struct {
-						RelPath string `json:"rel_path"`
-						Content string `json:"content"`
+						RelPath  string `json:"rel_path"`
+						Path     string `json:"path"`
+						FilePath string `json:"file_path"`
+						Content  string `json:"content"`
 					}
 					_ = json.Unmarshal([]byte(toolArgs), &argsObj)
-					err := a.sandbox.AtomicWriteFile(argsObj.RelPath, []byte(argsObj.Content))
+					targetRelPath := argsObj.RelPath
+					if targetRelPath == "" {
+						if argsObj.Path != "" {
+							targetRelPath = argsObj.Path
+						} else {
+							targetRelPath = argsObj.FilePath
+						}
+					}
+					err := a.sandbox.AtomicWriteFile(targetRelPath, []byte(argsObj.Content))
 					if err != nil {
 						output = fmt.Sprintf("写入文件失败: %v", err)
 					} else {
-						output = fmt.Sprintf("✓ 成功原子写入文件: %s (%d 字节)", argsObj.RelPath, len(argsObj.Content))
+						output = fmt.Sprintf("✓ 成功原子写入文件: %s (%d 字节)", targetRelPath, len(argsObj.Content))
 						runtime.EventsEmit(a.ctx, "agent:files_changed", map[string]any{
 							"session_id": req.SessionID,
-							"file":       argsObj.RelPath,
+							"file":       targetRelPath,
 						})
 
 						// 触发毫秒级轻量 LSP 编译器语法诊断自愈守卫
-						if diagReport, err := lsp.DiagnoseFile(a.workspace, argsObj.RelPath); err == nil && diagReport != nil && diagReport.HasErrors {
+						if diagReport, err := lsp.DiagnoseFile(a.workspace, targetRelPath); err == nil && diagReport != nil && diagReport.HasErrors {
 							feedback := lsp.FormatDiagnosticFeedback(diagReport)
 							output += feedback
 							runtime.EventsEmit(a.ctx, "lsp:diagnostic", map[string]any{
 								"session_id": req.SessionID,
-								"file":       argsObj.RelPath,
+								"file":       targetRelPath,
 								"has_errors": true,
 								"errors":     diagReport.Errors,
 							})
@@ -1070,10 +1111,20 @@ func (a *App) SendMessage(req ChatRequest) error {
 
 				case "read_file":
 					var argsObj struct {
-						RelPath string `json:"rel_path"`
+						RelPath  string `json:"rel_path"`
+						Path     string `json:"path"`
+						FilePath string `json:"file_path"`
 					}
 					_ = json.Unmarshal([]byte(toolArgs), &argsObj)
-					data, err := a.sandbox.SafeReadFile(argsObj.RelPath)
+					targetRelPath := argsObj.RelPath
+					if targetRelPath == "" {
+						if argsObj.Path != "" {
+							targetRelPath = argsObj.Path
+						} else {
+							targetRelPath = argsObj.FilePath
+						}
+					}
+					data, err := a.sandbox.SafeReadFile(targetRelPath)
 					if err != nil {
 						output = fmt.Sprintf("读取文件失败: %v", err)
 					} else {

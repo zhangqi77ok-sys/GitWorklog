@@ -61,3 +61,47 @@ func TestRegistry_RailDuplicateAndUnregister(t *testing.T) {
 		t.Errorf("expected 0 rails after unregister, got %d", len(railsAfter))
 	}
 }
+
+type mockTool struct {
+	id   string
+	desc string
+}
+
+func (m *mockTool) ID() string                              { return m.id }
+func (m *mockTool) Name() string                            { return m.id }
+func (m *mockTool) Version() string                         { return "1.0.0" }
+func (m *mockTool) Type() v1.PluginType                     { return v1.TypeTool }
+func (m *mockTool) Init(ctx context.Context, cfg json.RawMessage) error { return nil }
+func (m *mockTool) Start(ctx context.Context) error         { return nil }
+func (m *mockTool) Stop(ctx context.Context) error          { return nil }
+func (m *mockTool) Health(ctx context.Context) v1.HealthStatus {
+	return v1.HealthStatus{Healthy: true}
+}
+func (m *mockTool) Definition() v1.ToolDefinition {
+	return v1.ToolDefinition{Name: m.id, Description: m.desc}
+}
+func (m *mockTool) Execute(ctx context.Context, args json.RawMessage) (*v1.ToolResult, error) {
+	return &v1.ToolResult{Content: m.desc}, nil
+}
+
+func TestRegistry_RegisterOrReplace(t *testing.T) {
+	reg := NewRegistry()
+	tool1 := &mockTool{id: "tool.git", desc: "Workspace 1 Git"}
+	if err := reg.Register(tool1); err != nil {
+		t.Fatalf("first register failed: %v", err)
+	}
+
+	// 再次调用 RegisterOrReplace，应当成功覆盖原有工具
+	tool2 := &mockTool{id: "tool.git", desc: "Workspace 2 Git"}
+	if err := reg.RegisterOrReplace(tool2); err != nil {
+		t.Fatalf("RegisterOrReplace failed: %v", err)
+	}
+
+	retrieved, ok := reg.GetTool("tool.git")
+	if !ok {
+		t.Fatalf("tool.git not found after replace")
+	}
+	if retrieved.Definition().Description != "Workspace 2 Git" {
+		t.Errorf("expected replaced tool desc 'Workspace 2 Git', got '%s'", retrieved.Definition().Description)
+	}
+}
