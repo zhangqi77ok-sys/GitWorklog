@@ -474,6 +474,24 @@ Tcode 打破了单体硬编码调度逻辑，将 Agent 的执行循环、能力�
 * **深度思考抽屉空白渲染过滤与硬编码历史残留彻底根除**：
   - 在 `ChatCockpit.vue` 中为 `msg.thinking` 增加非空过滤（`msg.thinking.trim().length > 0`），杜绝空白思考框占位；彻底移除早期原型遗留的 `msg.id === 'msg_2'` 假条件，改动文件卡片完全基于真实的 `allModifiedFiles` 动态响应。
 
+### 39. 进程树主动取消机制、工具调用 ID 协议守卫与 Git 变更纯净状态治理 (Process Tree Cancellation, Tool Call ID Guard & Git Working Tree Hygiene)
+* **Windows 孤儿进程树级联终止 (`cmd.Cancel` 注入)**：
+  - 在受控终端算子 `plugins/tool/terminal/terminal_tool.go` 的同步执行 `Execute` 与流式执行 `ExecuteStream` 中利用 Go 1.19+ 的 `cmd.Cancel` 字段，注入 `taskkill /F /T /PID` 强杀整棵子进程树，彻底根除 context 超时或中断后后台测试/开发服务器孤儿僵死占用端口的高危隐患；
+* **大模型多轮推理工具调用 ID 与 Type 协议自愈保全**：
+  - 在 `internal/llm/client.go` 流式聚合与 `app.go` 主推理循环中，针对开源模型流式分片缺失或稀疏发送的 `ToolCall` 注入防空生成与 `type: "function"` 默认值，彻底防御回传时触发上游 `400 Bad Request: Invalid tool_call_id`；
+* **沙箱路径空字节截断攻击防御与空白字符修剪**：
+  - 在 `internal/core/sandbox/fs.go` 的 `ValidatePath` 中注入 `\x00` 空字节拦截，并进行 `strings.TrimSpace` 路径修剪，防止绕过沙箱扩展名检查与路径穿透；
+* **MCP Stdio 管道异常退出挂起通道安全唤醒**：
+  - 在 `internal/mcp/stdio.go` 的 `readLoop` 退出时唤醒所有 `c.pending` 中的等待通道，防止调用端永久死锁挂起直至上下文超时；
+* **Git 源码管理动态变更映射与纯净空状态治理 (铁律 0.5)**：
+  - 彻底铲除 `LeftDrawer.vue` 中写死的 `main.go`、`app.go`、`wailsBridge.ts` 假数据，无缝对接 `gitStatus.working` 与 `gitStatus.untracked`，在工作区干净时呈现纯净优雅的空状态；
+* **跨会话历史消息对称重置与切换时序响应**：
+  - 在 `chatStore.ts` 的 `switchSession` 首行执行 `messages.value = []`，将 `currentSessionId` 默认值从假会话 `'sess1'` 重置为空字符串，并在左侧历史会话卡片与新建会话点击时立即触发 `switchSession`；
+* **Diff 审查变更采纳物理暂存闭环 (`GitStage`)**：
+  - 在 `wailsBridge.ts` 与 `DiffWorkspace.vue` 中打通 `wailsBridge.gitStage`，用户点击“采纳变更”时真正将修改文件加入 Git 暂存区（`git add`）；
+* **流式终端与智能体 IPC 监听器生命周期防泄漏**：
+  - 在 `wailsBridge.ts` 的 `execTerminalStream` 与 `sendMessage` 中加入安全清理保护，确保底层网络异常或抛错时监听器不会无限泄漏累加。
+
 ---
 
 ## 🎨 四、视觉与人机工程学规范

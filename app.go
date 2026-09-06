@@ -1051,6 +1051,16 @@ func (a *App) SendMessage(req ChatRequest) error {
 				break
 			}
 
+			// 确保每个 ToolCall 都有有效唯一的 ID 与 Type，防止上游 400 Bad Request
+			for i := range toolCalls {
+				if toolCalls[i].ID == "" {
+					toolCalls[i].ID = fmt.Sprintf("call_%d_%d", i, time.Now().UnixNano())
+				}
+				if toolCalls[i].Type == "" {
+					toolCalls[i].Type = "function"
+				}
+			}
+
 			// 将模型本轮决策与工具调用注入上下文
 			conversation = append(conversation, llm.Message{
 				Role:      "assistant",

@@ -22,11 +22,11 @@ export interface ChatMessage {
 }
 
 export const useChatStore = defineStore('chat', () => {
-  const currentSessionId = ref('sess1')
+  const currentSessionId = ref('')
   const isFullAuto = ref(false)
   const isThinkingExpanded = ref(true)
-  const activeDiffFile = ref('app.go')
-  const isDiffWorkspaceOpen = ref(true)
+  const activeDiffFile = ref('')
+  const isDiffWorkspaceOpen = ref(false)
   const isKnowledgeGraphOpen = ref(false)
   const isSettingsOpen = ref(false)
   const activeActivity = ref('chat')
@@ -54,6 +54,8 @@ export const useChatStore = defineStore('chat', () => {
 
   async function switchSession(id: string) {
     currentSessionId.value = id
+    messages.value = []
+    if (!id) return
     try {
       const sess = await wailsBridge.getSession(id)
       if (sess && sess.messages && sess.messages.length > 0) {

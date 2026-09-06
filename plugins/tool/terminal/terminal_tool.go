@@ -89,6 +89,14 @@ func (t *Tool) Execute(ctx context.Context, rawArgs json.RawMessage) (*v1.ToolRe
 			CreationFlags: 0x08000000,
 			HideWindow:    true,
 		}
+		cmd.Cancel = func() error {
+			if cmd.Process != nil && cmd.Process.Pid > 0 {
+				killCmd := exec.Command("taskkill", "/F", "/T", "/PID", fmt.Sprintf("%d", cmd.Process.Pid))
+				killCmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: 0x08000000, HideWindow: true}
+				return killCmd.Run()
+			}
+			return nil
+		}
 	} else {
 		cmd = exec.CommandContext(execCtx, "sh", "-c", args.Command)
 	}
@@ -168,6 +176,14 @@ func (t *Tool) ExecuteStream(ctx context.Context, command string, onChunk Stream
 		cmd.SysProcAttr = &syscall.SysProcAttr{
 			CreationFlags: 0x08000000,
 			HideWindow:    true,
+		}
+		cmd.Cancel = func() error {
+			if cmd.Process != nil && cmd.Process.Pid > 0 {
+				killCmd := exec.Command("taskkill", "/F", "/T", "/PID", fmt.Sprintf("%d", cmd.Process.Pid))
+				killCmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: 0x08000000, HideWindow: true}
+				return killCmd.Run()
+			}
+			return nil
 		}
 	} else {
 		cmd = exec.CommandContext(ctx, "sh", "-c", command)

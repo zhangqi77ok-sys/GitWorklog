@@ -70,4 +70,29 @@ func TestSandbox_ValidatePathAndAtomicWrite(t *testing.T) {
 	if fullSlash != expectedSlash {
 		t.Errorf("expected [%s], got [%s]", expectedSlash, fullSlash)
 	}
+
+	// 5. 空字节攻击测试
+	nullBytePaths := []string{
+		"src/foo\x00.go",
+		"\x00/etc/passwd",
+	}
+	for _, p := range nullBytePaths {
+		_, err := sb.ValidatePath(p)
+		if err == nil {
+			t.Errorf("expected error for null byte in path [%s], but got nil", p)
+		} else if !strings.Contains(err.Error(), "null byte") {
+			t.Errorf("expected null byte error, got: %v", err)
+		}
+	}
+
+	// 6. 首尾空格自动修剪测试
+	trimmedPath := "   src/trimmed.go   "
+	fullTrimmed, err := sb.ValidatePath(trimmedPath)
+	if err != nil {
+		t.Fatalf("path with surrounding spaces rejected: %v", err)
+	}
+	expectedTrimmed := filepath.Clean(filepath.Join(tmpDir, "src/trimmed.go"))
+	if fullTrimmed != expectedTrimmed {
+		t.Errorf("expected [%s], got [%s]", expectedTrimmed, fullTrimmed)
+	}
 }

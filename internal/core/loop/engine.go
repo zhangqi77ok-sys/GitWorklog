@@ -179,6 +179,9 @@ func (e *ExecutionEngine) Execute(ctx context.Context, req *EngineRequest, event
 			if atc == nil {
 				continue
 			}
+			if atc.ID == "" {
+				atc.ID = fmt.Sprintf("call_%d_%d", step, idx)
+			}
 			rawToolCalls = append(rawToolCalls, map[string]any{
 				"id":   atc.ID,
 				"type": "function",

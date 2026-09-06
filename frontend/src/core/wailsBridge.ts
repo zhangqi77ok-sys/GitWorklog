@@ -287,17 +287,30 @@ export const wailsBridge = {
     const app = getApp()
 
     if (runtime && app?.ExecTerminalStream) {
-      runtime.EventsOn('terminal:start', (d: any) => callbacks.onStart?.(d))
-      runtime.EventsOn('terminal:data', (chunk: string) => callbacks.onData?.(chunk))
-      runtime.EventsOn('terminal:exit', (d: any) => {
-        callbacks.onExit?.(d)
+      let isCleaned = false
+      const cleanTerminalEvents = () => {
+        if (isCleaned) return
+        isCleaned = true
         if (runtime.EventsOff) {
           runtime.EventsOff('terminal:start')
           runtime.EventsOff('terminal:data')
           runtime.EventsOff('terminal:exit')
         }
+      }
+
+      runtime.EventsOn('terminal:start', (d: any) => callbacks.onStart?.(d))
+      runtime.EventsOn('terminal:data', (chunk: string) => callbacks.onData?.(chunk))
+      runtime.EventsOn('terminal:exit', (d: any) => {
+        callbacks.onExit?.(d)
+        cleanTerminalEvents()
       })
-      await app.ExecTerminalStream(command)
+
+      try {
+        await app.ExecTerminalStream(command)
+      } catch (err) {
+        cleanTerminalEvents()
+        throw err
+      }
       return
     }
 
@@ -448,6 +461,11 @@ export const wailsBridge = {
     return { branch: 'main', staged: [], working: [], untracked: [] }
   },
 
+  async gitStage(filePath: string): Promise<void> {
+    const app = getApp()
+    if (app?.GitStage) await app.GitStage(filePath)
+  },
+
   async getProjectASTGraph(): Promise<GraphNode[]> {
     const app = getApp()
     if (app?.GetProjectASTGraph) return await app.GetProjectASTGraph()
@@ -526,7 +544,12 @@ export const wailsBridge = {
       runtime.EventsOn('agent:complete', handleFinish)
       runtime.EventsOn('agent:interrupted', handleFinish)
 
-      await app.SendMessage(req)
+      try {
+        await app.SendMessage(req)
+      } catch (err) {
+        cleanAll()
+        throw err
+      }
       return
     }
 

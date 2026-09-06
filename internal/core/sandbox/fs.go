@@ -37,7 +37,10 @@ func normalizeWindowsPath(p string) string {
 
 // ValidatePath 严格校验目标路径是否越界
 func (s *Sandbox) ValidatePath(targetPath string) (string, error) {
-	cleanTarget := targetPath
+	cleanTarget := strings.TrimSpace(targetPath)
+	if strings.Contains(cleanTarget, "\x00") {
+		return "", fmt.Errorf("SECURITY: null byte in path [%s]", targetPath)
+	}
 	// 去除前导斜杠防止破坏 Join 或在 Windows 下跳回盘符根目录
 	if !filepath.IsAbs(cleanTarget) {
 		cleanTarget = strings.TrimPrefix(cleanTarget, "/")

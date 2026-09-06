@@ -67,3 +67,28 @@ func TestStdioClient_SendRequestNilResDefense(t *testing.T) {
 	}
 }
 
+func TestStdioClient_ReadLoopExitWakesPending(t *testing.T) {
+	// 启动一个立即退出的进程
+	client := NewStdioClient("powershell", []string{"-Command", "exit 0"}, ".")
+	ch := make(chan *JSONRPCMessage, 1)
+	client.pending.Store(int64(1001), ch)
+
+	// 模拟直接运行 readLoop
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	_ = client.Start(ctx)
+
+	// 等待 readLoop 退出并唤醒 ch
+	select {
+	case val := <-ch:
+		if val != nil {
+			t.Errorf("expected nil from pending channel on process exit, got: %v", val)
+		}
+	case <-time.After(1 * time.Second):
+		t.Errorf("readLoop failed to wake pending channel within timeout")
+	}
+	_ = client.Stop()
+}
+
+

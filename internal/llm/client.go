@@ -267,10 +267,23 @@ func StreamChat(ctx context.Context, req Request, handlers StreamHandlers) ([]To
 							ID:   tc.ID,
 							Type: tc.Type,
 						}
+						if call.Type == "" {
+							call.Type = "function"
+						}
 						call.Function.Name = tc.Function.Name
 						toolCallsMap[tc.Index] = call
 						if handlers.OnToolStart != nil {
 							handlers.OnToolStart(tc.ID, tc.Function.Name)
+						}
+					} else {
+						if tc.ID != "" && call.ID == "" {
+							call.ID = tc.ID
+						}
+						if tc.Type != "" && call.Type == "" {
+							call.Type = tc.Type
+						}
+						if tc.Function.Name != "" && call.Function.Name == "" {
+							call.Function.Name = tc.Function.Name
 						}
 					}
 					if tc.Function.Arguments != "" {
@@ -297,6 +310,12 @@ func StreamChat(ctx context.Context, req Request, handlers StreamHandlers) ([]To
 	resultToolCalls := make([]ToolCall, 0, len(keys))
 	for _, k := range keys {
 		if tc, ok := toolCallsMap[k]; ok {
+			if tc.ID == "" {
+				tc.ID = fmt.Sprintf("call_%d_%d", k, time.Now().UnixNano())
+			}
+			if tc.Type == "" {
+				tc.Type = "function"
+			}
 			resultToolCalls = append(resultToolCalls, *tc)
 		}
 	}

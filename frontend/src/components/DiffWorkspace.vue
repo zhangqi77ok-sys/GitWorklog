@@ -118,7 +118,14 @@ async function revertAction() {
   }
 }
 
-function acceptAction() {
+async function acceptAction() {
+  if (store.activeDiffFile) {
+    try {
+      await wailsBridge.gitStage(store.activeDiffFile)
+    } catch (err) {
+      console.error('Git stage error:', err)
+    }
+  }
   store.toggleDiffWorkspace()
 }
 </script>

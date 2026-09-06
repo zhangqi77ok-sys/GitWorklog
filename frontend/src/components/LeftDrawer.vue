@@ -113,13 +113,9 @@
       <div class="flex-1 overflow-y-auto p-3 space-y-3 text-xs">
         <div>
           <div class="text-[10px] font-bold text-[#71717A] uppercase mb-1">变更文件 (WORKING TREE)</div>
-          <div class="space-y-1">
+          <div v-if="workingFiles.length > 0" class="space-y-1">
             <div
-              v-for="file in [
-                { path: 'main.go', type: 'M', color: 'text-amber-600' },
-                { path: 'app.go', type: 'M', color: 'text-amber-600' },
-                { path: 'frontend/src/core/wailsBridge.ts', type: 'A', color: 'text-emerald-600' }
-              ]"
+              v-for="file in workingFiles"
               :key="file.path"
               @click="store.openDiff(file.path)"
               class="p-1.5 rounded hover:bg-black/[0.04] cursor-pointer flex items-center justify-between font-mono text-[11px]"
@@ -127,6 +123,10 @@
               <span class="truncate">{{ file.path }}</span>
               <span :class="file.color" class="font-bold">{{ file.type }}</span>
             </div>
+          </div>
+          <div v-else class="py-6 text-center text-[#71717A] text-[11px]">
+            <span class="block mb-1 text-sm">✨</span>
+            <span>工作区干净，无未提交变更</span>
           </div>
         </div>
 
@@ -153,6 +153,29 @@ const expandedFolders = reactive<Record<string, boolean>>({ 'frontend': true })
 const gitStatus = ref<any>({ branch: 'main' })
 
 const sessions = ref<any[]>([])
+
+const workingFiles = computed(() => {
+  const list: { path: string; type: string; color: string }[] = []
+  if (gitStatus.value?.working) {
+    for (const f of gitStatus.value.working) {
+      list.push({
+        path: f.path,
+        type: f.work_code || 'M',
+        color: f.work_code === 'D' ? 'text-red-500' : 'text-amber-600'
+      })
+    }
+  }
+  if (gitStatus.value?.untracked) {
+    for (const p of gitStatus.value.untracked) {
+      list.push({
+        path: typeof p === 'string' ? p : (p as any).path,
+        type: 'U',
+        color: 'text-emerald-600'
+      })
+    }
+  }
+  return list
+})
 
 const filteredSessions = computed(() => {
   if (activeTag.value === '全部') return sessions.value
@@ -202,7 +225,7 @@ function handleNodeClick(node: FileNode) {
   }
 }
 
-function createNewSession() {
+async function createNewSession() {
   const newId = 'sess_' + Date.now()
   sessions.value.unshift({
     id: newId,
@@ -213,10 +236,10 @@ function createNewSession() {
     tagClass: 'bg-[#D96B27]/10 text-[#D96B27]',
     desc: '已就绪'
   })
-  store.currentSessionId = newId
+  await store.switchSession(newId)
 }
 
-function selectSession(id: string) {
-  store.currentSessionId = id
+async function selectSession(id: string) {
+  await store.switchSession(id)
 }
 </script>
