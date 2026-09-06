@@ -133,9 +133,13 @@ func RunSecurityAudit(workspace string) (AuditReport, error) {
 			return nil
 		}
 		if info.IsDir() {
-			base := filepath.Base(path)
-			if base == ".git" || base == "node_modules" || base == "bin" || base == "dist" || base == "build" || base == ".idea" || base == ".vscode" {
-				return filepath.SkipDir
+			cleanPath := filepath.Clean(path)
+			cleanWs := filepath.Clean(workspace)
+			if cleanPath != cleanWs {
+				base := filepath.Base(path)
+				if base == ".git" || base == "node_modules" || base == "bin" || base == "dist" || base == "build" || base == ".idea" || base == ".vscode" {
+					return filepath.SkipDir
+				}
 			}
 			return nil
 		}
@@ -161,7 +165,7 @@ func RunSecurityAudit(workspace string) (AuditReport, error) {
 		str := string(content)
 
 		for _, kw := range highRiskKeywords {
-			if strings.Contains(strings.ToLower(str), kw) {
+			if strings.Contains(strings.ToLower(str), strings.ToLower(kw)) {
 				issues = append(issues, "文件 ["+rel+"] 发现高危破坏性指令特征: "+kw)
 			}
 		}

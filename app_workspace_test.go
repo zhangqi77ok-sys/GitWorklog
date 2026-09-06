@@ -186,3 +186,62 @@ func TestApp_RevertFile_NoHeadRepo(t *testing.T) {
 	}
 }
 
+func TestApp_GitUnstage_NoHeadRepo(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "tcode_unstage_nohead_*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	runCmd := func(name string, args ...string) {
+		cmd := exec.Command(name, args...)
+		cmd.Dir = tmpDir
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("command %s %v failed: %s", name, args, string(out))
+		}
+	}
+	runCmd("git", "init")
+	runCmd("git", "config", "user.name", "testuser")
+	runCmd("git", "config", "user.email", "test@test.com")
+
+	app := NewApp()
+	if err := app.SetWorkspace(tmpDir); err != nil {
+		t.Fatalf("SetWorkspace failed: %v", err)
+	}
+
+	testFile := filepath.Join(tmpDir, "unstage_test.txt")
+	if err := os.WriteFile(testFile, []byte("content to unstage\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := app.GitStage("unstage_test.txt"); err != nil {
+		t.Fatalf("GitStage failed: %v", err)
+	}
+
+	// 此时文件应处于已暂存状态 (A )
+	statusCmd := exec.Command("git", "status", "--porcelain")
+	statusCmd.Dir = tmpDir
+	out, _ := statusCmd.CombinedOutput()
+	if !strings.HasPrefix(string(out), "A") {
+		t.Fatalf("expected file to be staged, got: %s", string(out))
+	}
+
+	// 取消暂存
+	if err := app.GitUnstage("unstage_test.txt"); err != nil {
+		t.Fatalf("GitUnstage failed in repo without HEAD: %v", err)
+	}
+
+	// 验证：文件应回到未追踪状态 (??)，且物理文件必须依然存在
+	statusCmd2 := exec.Command("git", "status", "--porcelain")
+	statusCmd2.Dir = tmpDir
+	out2, _ := statusCmd2.CombinedOutput()
+	if !strings.HasPrefix(string(out2), "??") {
+		t.Errorf("expected file to be untracked (??) after unstage, got: %s", string(out2))
+	}
+	if _, err := os.Stat(testFile); err != nil {
+		t.Errorf("expected physical file to still exist after unstage, got err: %v", err)
+	}
+}
+
+

@@ -201,7 +201,11 @@ func main() {
 	}
 
 	// 4. 释放卸载程序 uninstall.exe
-	_ = os.WriteFile(uninstallExe, uninstallerBinary, 0755)
+	_ = os.Remove(uninstallExe)
+	if err := os.WriteFile(uninstallExe, uninstallerBinary, 0755); err != nil {
+		messageBox("安装失败", fmt.Sprintf("无法写入卸载程序文件: %v", err), MB_ICONERROR)
+		return
+	}
 
 	// 5. 创建快捷方式 (桌面 + 开始菜单) - 仅在非隔离测试模式下生成
 	if !isTestingMode {

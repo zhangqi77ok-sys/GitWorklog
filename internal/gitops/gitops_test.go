@@ -149,4 +149,17 @@ func TestListSnapshots_RealTimestamp(t *testing.T) {
 	}
 }
 
+func TestCreateSnapshot_NoHead(t *testing.T) {
+	tmpDir := t.TempDir()
+	_ = gitCmd(tmpDir, "init").Run()
+	err := CreateSnapshot(tmpDir, "snapshot on empty repo")
+	if err == nil {
+		t.Fatalf("expected error when creating snapshot on repo without HEAD, got nil")
+	}
+	if !strings.Contains(err.Error(), "initial commit") {
+		t.Errorf("expected error to mention 'initial commit', got: %v", err)
+	}
+}
+
+
 

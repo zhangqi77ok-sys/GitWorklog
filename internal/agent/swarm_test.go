@@ -87,3 +87,42 @@ func TestRunSecurityAudit_SkipLargeFiles(t *testing.T) {
 		t.Errorf("expected 0 issues due to file size > 5MB, got %d", len(report.Issues))
 	}
 }
+
+func TestRunSecurityAudit_DetectExecCommandKeyword(t *testing.T) {
+	tempDir := t.TempDir()
+	sampleFile := filepath.Join(tempDir, "danger.go")
+	content := []byte(`package main
+import "os/exec"
+func dangerous() {
+	exec.Command("cmd", "/c", "del /f /q *")
+}
+`)
+	_ = os.WriteFile(sampleFile, content, 0644)
+
+	report, err := RunSecurityAudit(tempDir)
+	if err != nil {
+		t.Fatalf("RunSecurityAudit failed: %v", err)
+	}
+	if len(report.Issues) == 0 {
+		t.Fatalf("expected to detect exec.Command keyword, but 0 issues found")
+	}
+}
+
+func TestRunSecurityAudit_WorkspaceNamedBuild(t *testing.T) {
+	tempDir := t.TempDir()
+	wsNamedBuild := filepath.Join(tempDir, "build")
+	if err := os.MkdirAll(wsNamedBuild, 0755); err != nil {
+		t.Fatalf("failed to create dir: %v", err)
+	}
+	sampleFile := filepath.Join(wsNamedBuild, "app.go")
+	_ = os.WriteFile(sampleFile, []byte("package main\nfunc main() {}\n"), 0644)
+
+	report, err := RunSecurityAudit(wsNamedBuild)
+	if err != nil {
+		t.Fatalf("RunSecurityAudit failed: %v", err)
+	}
+	if report.FilesScanned == 0 {
+		t.Fatalf("expected files scanned > 0 even when workspace is named 'build', got 0")
+	}
+}
+

@@ -103,3 +103,27 @@ func TestFSTool_CaseInsensitiveAction(t *testing.T) {
 		t.Errorf("expected 'case insensitive content', got: %s", resRead.Content)
 	}
 }
+
+func TestFSTool_ListEmptyPath(t *testing.T) {
+	tempDir := t.TempDir()
+	sb, err := sandbox.NewSandbox(tempDir)
+	if err != nil {
+		t.Fatalf("failed to create sandbox: %v", err)
+	}
+	sm := sandbox.NewSnapshotManager(tempDir)
+	tool := NewTool(sb, sm)
+
+	_ = sb.AtomicWriteFile("sample.txt", []byte("hello"))
+
+	listArgs, _ := json.Marshal(map[string]string{
+		"action": "list",
+	})
+	resList, err := tool.Execute(context.Background(), listArgs)
+	if err != nil || resList.IsError {
+		t.Fatalf("list with empty path failed: %v, content: %s", err, resList.Content)
+	}
+	if !strings.Contains(resList.Content, "sample.txt") {
+		t.Errorf("expected sample.txt in list output, got: %s", resList.Content)
+	}
+}
+

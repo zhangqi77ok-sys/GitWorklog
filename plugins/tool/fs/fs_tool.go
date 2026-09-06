@@ -51,14 +51,14 @@ func (t *Tool) Definition() v1.ToolDefinition {
 			},
 			"path": map[string]any{
 				"type": "string",
-				"description": "相对工作区的目标文件或目录路径",
+				"description": "相对工作区的目标文件或目录路径 (action=read/write 时必填；action=list 时可留空或传 '.' 表示工作区根目录)",
 			},
 			"content": map[string]any{
 				"type": "string",
 				"description": "写入的文件内容 (action=write 时必填)",
 			},
 		},
-		"required": []string{"action", "path"},
+		"required": []string{"action"},
 	}
 	schemaBytes, _ := json.Marshal(schema)
 
@@ -120,6 +120,9 @@ func (t *Tool) Execute(ctx context.Context, rawArgs json.RawMessage) (*v1.ToolRe
 		return &v1.ToolResult{Content: fmt.Sprintf("file [%s] written successfully (atomic sync)", targetPath), IsError: false}, nil
 
 	case "list":
+		if targetPath == "" {
+			targetPath = "."
+		}
 		entries, err := t.sandbox.ListDir(targetPath)
 		if err != nil {
 			return &v1.ToolResult{Content: fmt.Sprintf("list error: %v", err), IsError: true}, nil

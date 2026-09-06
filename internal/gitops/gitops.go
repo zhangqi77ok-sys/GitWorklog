@@ -203,8 +203,17 @@ func ListSnapshots(workspace string) ([]Snapshot, error) {
 	return res, nil
 }
 
+// HasGitHead 检查当前工作区是否拥有有效的 HEAD 提交
+func HasGitHead(workspace string) bool {
+	cmd := gitCmd(workspace, "rev-parse", "--verify", "HEAD")
+	return cmd.Run() == nil
+}
+
 // CreateSnapshot 创建当前状态快照并暂存
 func CreateSnapshot(workspace, msg string) error {
+	if !HasGitHead(workspace) {
+		return fmt.Errorf("cannot create snapshot on repository without initial commit")
+	}
 	if msg == "" {
 		msg = "tcode_auto_checkpoint_" + time.Now().Format("20060102_150405")
 	}

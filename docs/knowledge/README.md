@@ -48,6 +48,7 @@
 | **38** | **工具空输出防御、RevertFile 撤销防误删、真实快照时间戳与事件全量清理** | 协议安全 / 数据防丢 / 零假数据 / IPC生命周期 | 主循环工具空输出保全防上游 400 崩溃、RevertFile 状态精准识别防空仓库误删、沙箱合法双点文件放行、ListDir 根目录支持、git stash 真实历史时间戳提取、0 字节 Diff 修正与前端全量事件无残留注销 | [38-empty-tool-content-defense-revert-safety-and-event-cleanup.md](./38-empty-tool-content-defense-revert-safety-and-event-cleanup.md) |
 | **39** | **目录防覆盖防御、Git 暂存区感知提交、MCP 锁粒度优化与全链路无黑框防护** | 存储安全 / GitOps / 锁并发性能 / 进程无黑框 | AtomicWriteFile 覆盖目录前置拦截防误删空目录、GitCommit 暂存区感知提交防覆盖选择、GitUnstage 桥接补齐、SnapshotManager与FsOriginal无黑框注入、MCP StopServer互斥锁粒度瘦身防死锁挂起、AST相对路径清洗基准对齐与零时间戳清洗 | [39-directory-overwrite-defense-staged-git-commit-and-mcp-lock.md](./39-directory-overwrite-defense-staged-git-commit-and-mcp-lock.md) |
 | **40** | **Git Porcelain v2 重命名解析修复、无 HEAD 初始仓库安全撤回、MCP 并发 I/O 锁优化与暂存区前端闭环** | GitOps / 并发解耦 / 内存安全 / 前端闭环 | Git Porcelain v2 重命名偏移与新旧路径颠倒修复、RestoreFile 撤销防误删已追踪文件、无 HEAD 空仓库撤销已暂存降级支持、MCP GetAllTools 读锁外置慢 RPC 防挂起、HTTP 服务沙箱空指针与越界防御、前端展开目录 Diff 路径修复与暂存区交互闭环 | [40-git-rename-porcelain-no-head-revert-and-staged-drawer.md](./40-git-rename-porcelain-no-head-revert-and-staged-drawer.md) |
+| **41** | **无 HEAD 仓库增改 Diff 修正、大小写安全审计激活、取消暂存快速通道与终端进程取消** | GitOps / 安全审计 / 进程控制 / 契约守卫 | 无 HEAD 仓库 AM 状态 Diff 行级正确识别、GitUnstage 无 HEAD 快速通道、安全审计大小写归一化根治死规则、目录遍历根节点剪枝保护、文件树双点目录放行、终端跨平台 cmd.Cancel 进程杀灭与 IPC 严格 Fail-Closed | [41-nohead-diff-case-insensitive-audit-and-unstage-fastpath.md](./41-nohead-diff-case-insensitive-audit-and-unstage-fastpath.md) |
 
 ---
 

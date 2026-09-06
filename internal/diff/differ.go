@@ -140,8 +140,8 @@ func ComputeFileDiff(workspaceRoot, relPath string) (DiffReport, error) {
 				lines = []string{}
 			}
 
-			// 如果是未追踪新文件 (??) 或新增暂存文件 (A )
-			if strings.HasPrefix(statusStr, "??") || strings.HasPrefix(statusStr, "A ") {
+			// 如果是未追踪新文件 (??) 或新增暂存文件 (A / AM)
+			if strings.HasPrefix(statusStr, "??") || strings.HasPrefix(statusStr, "A") {
 				if len(lines) == 0 {
 					report.Stats = "+0 行 (新文件)"
 					report.Header = "@@ 新增空文件 @@"

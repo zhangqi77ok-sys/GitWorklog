@@ -624,7 +624,7 @@ func (a *App) buildFileTreeInternal(currentDir string, currentDepth, maxDepth in
 			normWs := normalizeWindowsPath(cleanWs)
 			normReal := normalizeWindowsPath(cleanReal)
 			relWs, err := filepath.Rel(normWs, normReal)
-			if err != nil || strings.HasPrefix(relWs, "..") {
+			if err != nil || relWs == ".." || strings.HasPrefix(relWs, ".."+string(filepath.Separator)) || strings.HasPrefix(relWs, "../") {
 				return nil, nil // 软链接指向工作区外部，阻断
 			}
 		}
@@ -921,6 +921,20 @@ func (a *App) GitUnstage(filePath string) error {
 			return fmt.Errorf("security violation: %w", err)
 		}
 	}
+
+	// 针对无 HEAD 仓库（刚 git init 尚未提交），git restore --staged 会失败 (could not resolve HEAD)
+	// 此时优先使用 git rm --cached -f
+	if !diff.HasGitHead(a.workspace) {
+		rmCmd := exec.Command("git", "rm", "--cached", "-f", "--", filePath)
+		rmCmd.Dir = a.workspace
+		if attr := windowsSysProcAttr(); attr != nil {
+			rmCmd.SysProcAttr = attr
+		}
+		if err := rmCmd.Run(); err == nil {
+			return nil
+		}
+	}
+
 	cmd := exec.Command("git", "restore", "--staged", "--", filePath)
 	cmd.Dir = a.workspace
 	if attr := windowsSysProcAttr(); attr != nil {

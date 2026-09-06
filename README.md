@@ -621,6 +621,30 @@ Tcode 打破了单体硬编码调度逻辑，将 Agent 的执行循环、能力�
 
 ---
 
+### 46. 无 HEAD 仓库 AM 状态 Diff 修正、安全审计大小写双向归一化、取消暂存平滑降级与跨平台进程自愈 (No-HEAD AM Diff Fix, Audit Case Normalization, Unstage Fast-Path & Process Self-Healing)
+* **无 HEAD 仓库暂存后修改（AM 状态）Diff 准确计算 (`internal/diff/differ.go`)**：
+  - 修复 `ComputeFileDiff` 在刚 `git init` 尚无 HEAD 提交的新仓库中，针对暂存后再次修改的文件（`AM` 状态），由于严格匹配 `strings.HasPrefix(statusStr, "A ")` 导致匹配失败、误判为“未修改干净文件”的分支漏洞；改为匹配 `strings.HasPrefix(statusStr, "A")`，确保新增并修改的文件完整生成有效行级比对与差异块；
+* **无 HEAD 仓库 `GitUnstage` 取消暂存安全降级 (`app.go`)**：
+  - 修复前端点击取消暂存按钮时，在无 HEAD 仓库直接执行 `git restore --staged` 或 `git reset HEAD` 报错 `fatal: could not resolve HEAD`（退出码 128）的问题；增加 `!diff.HasGitHead(a.workspace)` 探测，在无 HEAD 状态下平滑降级执行 `git rm --cached -f -- <path>`，使新创仓库暂存撤销顺畅可用；
+* **代码安全审计大写关键词双向小写规范化匹配 (`internal/agent/swarm.go`)**：
+  - 根除 `RunSecurityAudit` 中规则模式串（如 `exec.Command("cmd", "/c", "del"`）与输入字符串比较时仅对输入做 `strings.ToLower`、而对模式串未转小写导致大写规则永久无法命中的死逻辑漏洞；改为双向小写规范化比较 `strings.Contains(strings.ToLower(str), strings.ToLower(kw))`；
+* **工作区自身名称为敏感词时的遍历防御 (`internal/agent/swarm.go`)**：
+  - 修复安全审计在 `filepath.Walk` 检查跳过 `build`/`bin`/`dist` 目录时未排除工作区根目录自身的逻辑缺陷；当用户工作区根目录名恰好为 `build` 时，防止第 0 步自杀性中断导致 0 文件假扫描，补充 `cleanPath != cleanWs` 根节点保护；
+* **工程文件树合法双点目录名称放行 (`app.go`)**：
+  - 修复 `buildFileTreeInternal` 使用 `strings.HasPrefix(relWs, "..")` 误判类似 `..cache` 或 `..temp` 合法前缀目录为跨目录穿越的问题；规范化为 `relWs == ".." || strings.HasPrefix(relWs, ".."+Separator) || strings.HasPrefix(relWs, "../")`；
+* **无 HEAD 初始仓库安全快照防崩溃 (`internal/gitops/gitops.go`)**：
+  - 修复 `CreateSnapshot` 在刚初始化的仓库中直接执行 `git stash push` 导致报错 `fatal: You do not have the initial commit yet` 的问题；前置 `diff.HasGitHead` 探测，若尚无首个提交则安全返回友好错误，防止后续误判；
+* **前端 IPC 桥接层 Fail-Closed 真实反馈全面覆盖 (铁律 0.5) (`frontend/src/core/wailsBridge.ts`)**：
+  - 根除 `revertFile`、`applyDiffHunk`、`discardDiffHunk` 在桌面微内核未连接时静默吞掉异常的假成功隐患；当微内核未就绪时严格抛出 `microkernel not connected`，彻底阻断静默降级；
+* **文件系统工具 schema 与空路径容错 (`plugins/tool/fs/fs_tool.go`)**：
+  - 修复 `fs_control` schema 将 `path` 强制标注为必填导致大模型调用 `action="list"` 查看根目录时被校验拦截的问题；移出必填列表并补充注释，后端对于空路径自动缺省为当前目录 `.`；
+* **终端执行跨平台进程超时清理 (`plugins/tool/terminal/terminal_tool.go`)**：
+  - 为 Linux/macOS 非 Windows 环境下的 `Execute` 和 `ExecuteStream` 补充 `cmd.Cancel` 杀死进程函数，防止命令超时或上下文取消后产生僵死孤儿进程；
+* **安装程序卸载器更新原子性与错误提示 (`cmd/installer/main.go`)**：
+  - 修复安装器在覆写目标目录 `uninstall.exe` 时未先执行 `os.Remove` 且未捕获写入错误的问题；先清理残留，并在写入失败时弹出原生提示框中断安装，保障安装过程的原子完整性。
+
+---
+
 
 ## 🎨 四、视觉与人机工程学规范
 

@@ -257,21 +257,27 @@ export const wailsBridge = {
     const app = getApp()
     if (app?.RevertFile) {
       await app.RevertFile(filePath)
+      return
     }
+    throw new Error('microkernel not connected: RevertFile unavailable')
   },
 
   async applyDiffHunk(filePath: string, hunkIndex: number, stageOnly: boolean = true): Promise<void> {
     const app = getApp()
     if (app?.ApplyDiffHunk) {
       await app.ApplyDiffHunk(filePath, hunkIndex, stageOnly)
+      return
     }
+    throw new Error('microkernel not connected: ApplyDiffHunk unavailable')
   },
 
   async discardDiffHunk(filePath: string, hunkIndex: number): Promise<void> {
     const app = getApp()
     if (app?.DiscardDiffHunk) {
       await app.DiscardDiffHunk(filePath, hunkIndex)
+      return
     }
+    throw new Error('microkernel not connected: DiscardDiffHunk unavailable')
   },
 
   // 终端执行与流式监听

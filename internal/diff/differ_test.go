@@ -195,4 +195,37 @@ func TestComputeFileDiff_EmptyUntrackedFile(t *testing.T) {
 	}
 }
 
+func TestComputeFileDiff_NoHeadAddedAndModified(t *testing.T) {
+	tmpDir := t.TempDir()
+	cmdInit := gitCmd(tmpDir, "init")
+	if err := cmdInit.Run(); err != nil {
+		t.Fatalf("git init failed: %v", err)
+	}
+
+	testFile := "am_file.txt"
+	absPath := filepath.Join(tmpDir, testFile)
+	_ = os.WriteFile(absPath, []byte("line1\n"), 0644)
+
+	cmdAdd := gitCmd(tmpDir, "add", testFile)
+	if err := cmdAdd.Run(); err != nil {
+		t.Fatalf("git add failed: %v", err)
+	}
+
+	// Modify the file after adding it to stage
+	_ = os.WriteFile(absPath, []byte("line1\nline2"), 0644)
+
+	report, err := ComputeFileDiff(tmpDir, testFile)
+	if err != nil {
+		t.Fatalf("ComputeFileDiff failed on AM file: %v", err)
+	}
+
+	if len(report.Lines) != 2 {
+		t.Errorf("expected 2 lines in diff report for AM file, got %d", len(report.Lines))
+	}
+	if !strings.Contains(report.Stats, "新文件") {
+		t.Errorf("expected stats to indicate new file, got %s", report.Stats)
+	}
+}
+
+
 

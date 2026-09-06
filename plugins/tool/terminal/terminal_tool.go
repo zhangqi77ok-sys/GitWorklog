@@ -101,6 +101,12 @@ func (t *Tool) Execute(ctx context.Context, rawArgs json.RawMessage) (*v1.ToolRe
 		}
 	} else {
 		cmd = exec.CommandContext(execCtx, "sh", "-c", args.Command)
+		cmd.Cancel = func() error {
+			if cmd.Process != nil && cmd.Process.Pid > 0 {
+				return cmd.Process.Kill()
+			}
+			return nil
+		}
 	}
 
 	cmd.Dir = t.workspaceRoot
@@ -190,6 +196,12 @@ func (t *Tool) ExecuteStream(ctx context.Context, command string, onChunk Stream
 		}
 	} else {
 		cmd = exec.CommandContext(ctx, "sh", "-c", command)
+		cmd.Cancel = func() error {
+			if cmd.Process != nil && cmd.Process.Pid > 0 {
+				return cmd.Process.Kill()
+			}
+			return nil
+		}
 	}
 
 	cmd.Dir = t.workspaceRoot
