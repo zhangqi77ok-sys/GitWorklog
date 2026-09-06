@@ -1189,6 +1189,10 @@ func (a *App) SendMessage(req ChatRequest) error {
 				var output string
 				switch toolName {
 				case "exec_command":
+					if a.termTool == nil {
+						output = "执行失败: 终端工具未初始化"
+						break
+					}
 					res, err := a.termTool.Execute(agentCtx, []byte(toolArgs))
 					if err != nil {
 						output = fmt.Sprintf("执行失败: %v", err)
@@ -1197,6 +1201,10 @@ func (a *App) SendMessage(req ChatRequest) error {
 					}
 
 				case "write_file":
+					if a.sandbox == nil {
+						output = "写入文件失败: 沙箱环境未初始化"
+						break
+					}
 					var argsObj struct {
 						RelPath  string `json:"rel_path"`
 						Path     string `json:"path"`
@@ -1239,6 +1247,10 @@ func (a *App) SendMessage(req ChatRequest) error {
 					}
 
 				case "read_file":
+					if a.sandbox == nil {
+						output = "读取文件失败: 沙箱环境未初始化"
+						break
+					}
 					var argsObj struct {
 						RelPath  string `json:"rel_path"`
 						Path     string `json:"path"`
@@ -1261,6 +1273,10 @@ func (a *App) SendMessage(req ChatRequest) error {
 					}
 
 				case "git_status":
+					if a.gitTool == nil {
+						output = "查询 Git 失败: Git 工具未初始化"
+						break
+					}
 					status, err := a.gitTool.GetStatus()
 					if err != nil {
 						output = fmt.Sprintf("查询 Git 失败: %v", err)

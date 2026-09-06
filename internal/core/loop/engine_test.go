@@ -151,3 +151,30 @@ func TestExecutionEngine_MaxStepsCutoff(t *testing.T) {
 		t.Errorf("expected max steps cutoff warning chunk event, but not received")
 	}
 }
+
+func TestExecutionEngine_NilGuards(t *testing.T) {
+	// 1. nil engine
+	var nilEngine *ExecutionEngine
+	ch1 := make(chan EngineEvent, 10)
+	err1 := nilEngine.Execute(context.Background(), &EngineRequest{Prompt: "hi"}, ch1)
+	if err1 == nil {
+		t.Fatalf("expected error on nil engine, got nil")
+	}
+
+	// 2. nil registry
+	engineNoReg := NewExecutionEngine(nil)
+	ch2 := make(chan EngineEvent, 10)
+	err2 := engineNoReg.Execute(context.Background(), &EngineRequest{Prompt: "hi"}, ch2)
+	if err2 == nil {
+		t.Fatalf("expected error on engine with nil registry, got nil")
+	}
+
+	// 3. nil request
+	reg := host.NewRegistry()
+	engineOk := NewExecutionEngine(reg)
+	ch3 := make(chan EngineEvent, 10)
+	err3 := engineOk.Execute(context.Background(), nil, ch3)
+	if err3 == nil {
+		t.Fatalf("expected error on nil request, got nil")
+	}
+}

@@ -24,9 +24,11 @@ func gitCmd(workspace string, args ...string) *exec.Cmd {
 	return cmd
 }
 
-// isValidBranchName 严格校验分支名合法性，防止注入参数或非法字符
+// isValidBranchName 严格校验分支名合法性，防止注入参数、修订范围或非法控制字符
 func isValidBranchName(name string) bool {
-	if name == "" || strings.HasPrefix(name, "-") || strings.ContainsAny(name, " \t\r\n~^:?*[\\]") {
+	if name == "" || name == "@" || strings.HasPrefix(name, "-") || strings.HasPrefix(name, "/") || strings.HasSuffix(name, "/") ||
+		strings.HasSuffix(name, ".lock") || strings.Contains(name, "..") || strings.Contains(name, "//") ||
+		strings.Contains(name, "\x00") || strings.ContainsAny(name, " \t\r\n~^:?*[\\]") {
 		return false
 	}
 	return true

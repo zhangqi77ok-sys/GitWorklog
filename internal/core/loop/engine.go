@@ -67,6 +67,15 @@ func NewExecutionEngine(reg *host.Registry) *ExecutionEngine {
 func (e *ExecutionEngine) Execute(ctx context.Context, req *EngineRequest, eventChan chan<- EngineEvent) error {
 	defer close(eventChan)
 
+	if e == nil || e.registry == nil {
+		eventChan <- EngineEvent{Type: EventError, ErrorMessage: "engine or registry is not initialized"}
+		return fmt.Errorf("engine or registry is not initialized")
+	}
+	if req == nil {
+		eventChan <- EngineEvent{Type: EventError, ErrorMessage: "engine request cannot be nil"}
+		return fmt.Errorf("engine request cannot be nil")
+	}
+
 	// 1. 查找对应的 Provider
 	provList := e.registry.GetProviders()
 	if len(provList) == 0 {

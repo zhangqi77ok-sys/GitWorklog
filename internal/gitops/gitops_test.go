@@ -15,7 +15,10 @@ func TestIsValidBranchName(t *testing.T) {
 		}
 	}
 
-	invalid := []string{"", "-D", "--help", "main branch", "feature\nexploit", "foo~bar", "foo^1", "foo:bar", "foo?bar", "foo*bar", "foo[bar]"}
+	invalid := []string{
+		"", "-D", "--help", "main branch", "feature\nexploit", "foo~bar", "foo^1", "foo:bar", "foo?bar", "foo*bar", "foo[bar]",
+		"foo..bar", "/leading", "trailing/", "foo.lock", "branch\x00null", "@",
+	}
 	for _, b := range invalid {
 		if isValidBranchName(b) {
 			t.Errorf("expected branch %q to be invalid", b)

@@ -179,13 +179,15 @@ func main() {
 	targetExe := filepath.Join(installDir, "tcode.exe")
 	uninstallExe := filepath.Join(installDir, "uninstall.exe")
 
-	// 1. 终止旧进程 (带 /T 树杀与 0x08000000 零黑框防护)
-	killCmd := exec.Command("taskkill", "/F", "/T", "/IM", "tcode.exe")
-	killCmd.SysProcAttr = &syscall.SysProcAttr{
-		CreationFlags: 0x08000000,
-		HideWindow:    true,
+	// 1. 终止旧进程 (仅在非测试模式下执行，避免单元/探活测试误杀正常运行的 Tcode 实例；带 /T 树杀与 0x08000000 零黑框防护)
+	if !isTestingMode {
+		killCmd := exec.Command("taskkill", "/F", "/T", "/IM", "tcode.exe")
+		killCmd.SysProcAttr = &syscall.SysProcAttr{
+			CreationFlags: 0x08000000,
+			HideWindow:    true,
+		}
+		_ = killCmd.Run()
 	}
-	_ = killCmd.Run()
 
 	// 2. 创建安装目录
 	if err := os.MkdirAll(installDir, 0755); err != nil {

@@ -107,3 +107,20 @@ func TestManager_RegisterAndCallTool(t *testing.T) {
 		t.Fatalf("expected error after StopServer, got nil")
 	}
 }
+
+func TestManager_NilGuards(t *testing.T) {
+	var nilMgr *Manager
+	ctx := context.Background()
+
+	// 1. GetAllTools on nil manager
+	tools, err := nilMgr.GetAllTools(ctx)
+	if err != nil || len(tools) != 0 {
+		t.Errorf("expected empty tools and nil err on nil manager, got tools=%v err=%v", tools, err)
+	}
+
+	// 2. CallTool on nil manager
+	_, err = nilMgr.CallTool(ctx, "any_tool", nil)
+	if err == nil {
+		t.Errorf("expected error on nil manager CallTool, got nil")
+	}
+}

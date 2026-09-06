@@ -98,16 +98,24 @@ func ComputeFileDiff(workspaceRoot, relPath string) (DiffReport, error) {
 	hasHead := hasGitHead(workspaceRoot)
 
 	if _, err := os.Stat(absPath); os.IsNotExist(err) {
-		// 检查是否为 Git 已追踪但在工作区已被物理删除的文件
-		if !hasHead {
+		// 检查是否在 Git 状态中有删除或暂存记录
+		statusCmd := gitCmd(workspaceRoot, "status", "--porcelain", "--", relPath)
+		var statusOut bytes.Buffer
+		statusCmd.Stdout = &statusOut
+		_ = statusCmd.Run()
+		statusStr := strings.TrimSpace(statusOut.String())
+
+		if statusStr == "" {
 			return report, fmt.Errorf("file [%s] does not exist", relPath)
 		}
-		cmdCheck := gitCmd(workspaceRoot, "diff", "HEAD", "--", relPath)
-		var checkOut bytes.Buffer
-		cmdCheck.Stdout = &checkOut
-		if errCheck := cmdCheck.Run(); errCheck != nil || checkOut.Len() == 0 {
-			return report, fmt.Errorf("file [%s] does not exist", relPath)
+		// 若为已被删除或暂存后移除的文件，向前端清晰展示物理删除差异
+		report.Stats = "文件已被物理删除"
+		report.Header = "@@ 文件已从磁盘中移除 (Deleted) @@"
+		report.Lines = []DiffLine{
+			{Type: "del", Text: fmt.Sprintf("- [已删除] %s", relPath), Label: "删除"},
 		}
+		report.Hunks = []DiffHunk{}
+		return report, nil
 	}
 
 	diffOut := ""
@@ -310,10 +318,12 @@ func DiscardHunkPatch(workspaceRoot, relPath string, hunkIndex int) error {
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		// 如果是未追踪新文件 (--- /dev/null)，git apply --reverse 无法在 git index 中找到该文件
-		// 此时安全回退为物理移除该未追踪新文件
+		// 此时安全回退为清理暂存区索引并物理移除该未追踪新文件
 		if strings.HasPrefix(strings.TrimSpace(patch), "--- /dev/null") {
 			absPath, valErr := validateRelPath(workspaceRoot, relPath)
 			if valErr == nil {
+				rmCmd := gitCmd(workspaceRoot, "rm", "--cached", "-f", "--", relPath)
+				_ = rmCmd.Run()
 				if removeErr := os.Remove(absPath); removeErr == nil || os.IsNotExist(removeErr) {
 					return nil
 				}

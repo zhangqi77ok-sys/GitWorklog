@@ -28,6 +28,16 @@ func NewManager(workspace string) *Manager {
 
 // TestServer 对指定服务执行物理拉起与工具探活 (JSON-RPC)
 func (m *Manager) TestServer(ctx context.Context, cfg config.MCPServerConfig) (MCPTestResult, error) {
+	if m == nil {
+		return MCPTestResult{
+			ID:      cfg.ID,
+			Name:    cfg.Name,
+			Status:  "ERROR",
+			Error:   "mcp manager not initialized",
+			Latency: "0ms",
+		}, nil
+	}
+
 	var client Client
 	if cfg.Type == "stdio" || cfg.Type == "" {
 		client = NewStdioClient(cfg.Command, cfg.Args, m.workspace)
@@ -132,6 +142,10 @@ func (m *Manager) StartServer(ctx context.Context, cfg config.MCPServerConfig) e
 
 // StopServer 安全停止指定 MCP 服务并清理路由 (锁外执行进程退出，避免死锁)
 func (m *Manager) StopServer(ctx context.Context, srvID string) error {
+	if m == nil {
+		return nil
+	}
+
 	m.mu.Lock()
 	client, ok := m.clients[srvID]
 	if !ok {
@@ -152,6 +166,10 @@ func (m *Manager) StopServer(ctx context.Context, srvID string) error {
 
 // StopAll 停止所有运行中的 MCP 服务 (锁外批量停止)
 func (m *Manager) StopAll() {
+	if m == nil {
+		return
+	}
+
 	m.mu.Lock()
 	clientsToStop := make([]Client, 0, len(m.clients))
 	for _, client := range m.clients {
@@ -195,6 +213,10 @@ func (m *Manager) SyncFromConfig(ctx context.Context, cfgs []config.MCPServerCon
 
 // GetAllTools 获取所有已启用服务的算子定义，并转换为 OpenAI LLM 工具格式 (锁外请求各服务，避免长阻塞)
 func (m *Manager) GetAllTools(ctx context.Context) ([]llm.ToolDef, error) {
+	if m == nil {
+		return []llm.ToolDef{}, nil
+	}
+
 	m.mu.RLock()
 	clientMap := make(map[string]Client, len(m.clients))
 	for srvID, client := range m.clients {
@@ -236,6 +258,10 @@ func (m *Manager) GetAllTools(ctx context.Context) ([]llm.ToolDef, error) {
 
 // CallTool 派发算子调用到对应的 MCP Client 进程
 func (m *Manager) CallTool(ctx context.Context, name string, args map[string]any) (string, error) {
+	if m == nil {
+		return "", fmt.Errorf("mcp manager is not initialized")
+	}
+
 	m.mu.RLock()
 	srvID, exists := m.toolRouting[name]
 	if !exists {

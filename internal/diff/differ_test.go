@@ -227,5 +227,60 @@ func TestComputeFileDiff_NoHeadAddedAndModified(t *testing.T) {
 	}
 }
 
+func TestComputeFileDiff_DeletedFile(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "tcode_diff_del_*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	cmdInit := gitCmd(tmpDir, "init")
+	if err := cmdInit.Run(); err != nil {
+		t.Fatalf("git init failed: %v", err)
+	}
+
+	testFile := "to_delete.txt"
+	absPath := filepath.Join(tmpDir, testFile)
+	_ = os.WriteFile(absPath, []byte("content"), 0644)
+	_ = gitCmd(tmpDir, "add", testFile).Run()
+	_ = gitCmd(tmpDir, "-c", "user.name=test", "-c", "user.email=test@example.com", "commit", "-m", "init").Run()
+
+	// 现在从磁盘删除该文件产生 D 状态
+	_ = os.Remove(absPath)
+
+	report, err := ComputeFileDiff(tmpDir, testFile)
+	if err != nil {
+		t.Fatalf("ComputeFileDiff failed on deleted file: %v", err)
+	}
+	if report.Stats == "" || !strings.Contains(report.Stats, "删除") {
+		t.Errorf("expected stats to indicate deletion, got %q", report.Stats)
+	}
+
+	// 测试无 HEAD 仓库中暂存后被删除的文件 (diffOut 为空且 os.ReadFile 失败)
+	tmpDir2, err := os.MkdirTemp("", "tcode_diff_nohead_del_*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir2)
+
+	_ = gitCmd(tmpDir2, "init").Run()
+	testFile2 := "nohead_del.txt"
+	absPath2 := filepath.Join(tmpDir2, testFile2)
+	_ = os.WriteFile(absPath2, []byte("temp"), 0644)
+	_ = gitCmd(tmpDir2, "add", testFile2).Run()
+	_ = os.Remove(absPath2) // 删除了暂存的新增文件
+
+	report2, err := ComputeFileDiff(tmpDir2, testFile2)
+	if err != nil {
+		t.Fatalf("ComputeFileDiff failed on no-HEAD deleted file: %v", err)
+	}
+	if report2.Stats == "" || !strings.Contains(report2.Stats, "删除") {
+		t.Errorf("expected stats to indicate deletion for no-HEAD file, got %q", report2.Stats)
+	}
+	if len(report2.Lines) == 0 {
+		t.Errorf("expected non-empty lines for no-HEAD deleted file report")
+	}
+}
+
 
 

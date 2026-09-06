@@ -645,6 +645,30 @@ Tcode 打破了单体硬编码调度逻辑，将 Agent 的执行循环、能力�
 
 ---
 
+### 47. HTTP 引擎空指针熔断、Git 分支全字符注入防御、已删除文件 Diff 状态机与 MCP 插件空守卫 (HTTP Nil Engine Guard, Git Branch Sanitization, Deleted Diff State Machine & MCP Nil Guards)
+* **HTTP 网关未初始化前置熔断防 goroutine panic 崩溃 (`internal/transport/http/server.go`)**：
+  - 修复 `handleChatStream` 在未校验 `s.engine == nil` 的情况下派发异步子协程调用 `s.engine.Execute` 导致触发 SIGSEGV（信号 `0xc0000005`）崩溃退出的严重隐患；补齐 `s.engine == nil` 前置熔断；同时为 `handleGitStage`、`handleGitUnstage`、`handleGitRestore` 补齐 `s.gitTool == nil` 守卫，返回标准 500 错误而非进程崩溃；
+* **ReAct 自主推理引擎全域空指针防护 (`internal/core/loop/engine.go`)**：
+  - 在 `ExecutionEngine.Execute` 入口处全面补齐 `e == nil`、`e.registry == nil` 与 `req == nil` 防御，主动派发 `EventError` 并返回强类型错误，阻断底层解引用崩溃；
+* **Git 分支全量注入防御 (`internal/gitops/gitops.go`)**：
+  - 严格遵循 Git Revision 规约升级 `isValidBranchName`：严禁注入修订版本范围运算符 `..`（如 `main..feature`）、前导/后置斜杠 `/`、锁文件后缀 `.lock`、连续双斜杠 `//`、单独符号 `@` 以及空字节 `\x00`，杜绝命令行参数注入与文件系统非法 Ref 写入；
+* **已删除文件 Diff 状态机差异展示 (`internal/diff/differ.go`)**：
+  - 修复物理文件在磁盘删除（`os.IsNotExist`）但 Git 仍保留跟踪记录时，旧代码直接抛出 `file does not exist` 拒绝计算的逻辑缺陷；前置读取 `git status --porcelain` 识别已删除状态，准确输出包含 `文件已被物理删除` 与 `@@ 文件已从磁盘中移除 (Deleted) @@` 的行级 Diff，保障审查界面平滑可用；
+* **丢弃新增补丁时的 Git 暂存区索引同步 (`internal/diff/differ.go`)**：
+  - 修复 `DiscardHunkPatch` 在丢弃新增文件补丁（`--- /dev/null`）时仅物理删除了磁盘文件、遗留暂存区幽灵索引（`D `）的漏洞；在物理删除前自动执行 `git rm --cached -f -- <path>` 同步清理索引；
+* **Git 受控插件无 HEAD 仓库撤销及降级检出 (`plugins/tool/git/git_tool.go`)**：
+  - 为 `Tool.RestoreFile` 补齐 `!diff.HasGitHead` 探测与 `git rm --cached -f` 快速通道，解决新创仓库撤销暂存文件报错的问题，并在 `git restore` 失败时自动降级调用 `git checkout --`；
+* **MCP 全局管理器空指针守卫 (`internal/mcp/manager.go`)**：
+  - 为 `TestServer`、`StopServer`、`StopAll`、`GetAllTools` 与 `CallTool` 全量增加 `m == nil` 空值守卫，杜绝在管理器尚未初始化时读写读写锁或解引用字段引发的 panic；
+* **桌面端智能体工具调用链非空守卫 (`app.go`)**：
+  - 在 `SendMessage` 智能体执行流中，对 `a.termTool`、`a.sandbox`、`a.gitTool` 执行严格前置判空保护，避免因工作区加载延迟或工具未就绪导致后台协程异常；
+* **前端 IPC 桥接层配置变更方法严格 Fail-Closed (铁律 0.5) (`frontend/src/core/wailsBridge.ts`)**：
+  - 为 `setWorkspace`、`saveSession`、`deleteSession`、`saveChannel`、`deleteChannel`、`saveMCP`、`deleteMCP`、`saveSkill`、`deleteSkill`、`saveRule`、`deleteRule` 全量补齐微内核连接性校验，在微内核断开时强制抛出 `microkernel not connected` 错误，杜绝静默失败与假成功；
+* **单文件安装器测试模式安全隔离 (`cmd/installer/main.go`)**：
+  - 为安装器的旧进程清理命令注入 `!isTestingMode` 守卫，避免单元测试或临时目录探活时误杀用户正在正常运行的 Tcode 实例。
+
+---
+
 
 ## 🎨 四、视觉与人机工程学规范
 

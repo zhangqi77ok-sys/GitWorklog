@@ -137,6 +137,11 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if s.engine == nil {
+		http.Error(w, `{"error":"execution engine not configured"}`, http.StatusInternalServerError)
+		return
+	}
+
 	// 委托给 ReAct 自主执行引擎驱动 Inner Loop 循环
 	engineReq := &loop.EngineRequest{
 		Model:  req.Model,
@@ -212,6 +217,11 @@ func (s *Server) handleGitStage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if s.gitTool == nil {
+		http.Error(w, `{"error":"git tool not configured"}`, http.StatusInternalServerError)
+		return
+	}
+
 	var req struct {
 		Path string `json:"path"`
 	}
@@ -236,6 +246,11 @@ func (s *Server) handleGitUnstage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if s.gitTool == nil {
+		http.Error(w, `{"error":"git tool not configured"}`, http.StatusInternalServerError)
+		return
+	}
+
 	var req struct {
 		Path string `json:"path"`
 	}
@@ -257,6 +272,11 @@ func (s *Server) handleGitUnstage(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleGitRestore(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if s.gitTool == nil {
+		http.Error(w, `{"error":"git tool not configured"}`, http.StatusInternalServerError)
 		return
 	}
 
@@ -443,10 +463,17 @@ func (s *Server) handleFsOriginal(w http.ResponseWriter, r *http.Request) {
 
 	// 转换为斜杠格式让 git show HEAD:path 正确识别
 	slashPath := filepath.ToSlash(targetPath)
-	cmd := exec.Command("git", "show", fmt.Sprintf("HEAD:%s", slashPath))
+	cmd := exec.CommandContext(r.Context(), "git", "show", fmt.Sprintf("HEAD:%s", slashPath))
 	cmd.Dir = s.sandbox.Root()
 	if runtime.GOOS == "windows" {
 		cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: 0x08000000, HideWindow: true}
+	} else {
+		cmd.Cancel = func() error {
+			if cmd.Process != nil {
+				return cmd.Process.Kill()
+			}
+			return nil
+		}
 	}
 
 	var stdout, stderr bytes.Buffer

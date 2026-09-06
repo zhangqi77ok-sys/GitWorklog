@@ -2,9 +2,24 @@ package git
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
+	"syscall"
 	"testing"
 )
+
+func gitCmdDir(dir string, args ...string) *exec.Cmd {
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	if runtime.GOOS == "windows" {
+		cmd.SysProcAttr = &syscall.SysProcAttr{
+			CreationFlags: 0x08000000,
+			HideWindow:    true,
+		}
+	}
+	return cmd
+}
 
 func TestGitTool_GetStatus(t *testing.T) {
 	wd, err := os.Getwd()
@@ -94,6 +109,42 @@ func TestGitTool_ParsePorcelainRenameWithSpaces(t *testing.T) {
 	}
 	if staged.StagedCode != "R" {
 		t.Errorf("expected staged.StagedCode 'R', got %q", staged.StagedCode)
+	}
+}
+
+func TestGitTool_RestoreFile_NoHeadRepo(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "tcode_git_tool_nohead_*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// 初始化一个没有 HEAD 提交的空仓库
+	cmd := gitCmdDir(tempDir, "init")
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("git init failed: %v", err)
+	}
+
+	testFile := "nohead_staged.txt"
+	absTestFile := filepath.Join(tempDir, testFile)
+	if err := os.WriteFile(absTestFile, []byte("staged content in no-head repo"), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	// 暂存该文件
+	addCmd := gitCmdDir(tempDir, "add", testFile)
+	if err := addCmd.Run(); err != nil {
+		t.Fatalf("git add failed: %v", err)
+	}
+
+	tool := NewTool(tempDir)
+	// 期望在无 HEAD 仓库中恢复/撤销该已暂存文件不报错并成功清理
+	if err := tool.RestoreFile(testFile); err != nil {
+		t.Fatalf("RestoreFile failed on no-HEAD repo: %v", err)
+	}
+
+	if _, err := os.Stat(absTestFile); !os.IsNotExist(err) {
+		t.Errorf("expected file to be removed after RestoreFile in no-head repo, but still exists")
 	}
 }
 

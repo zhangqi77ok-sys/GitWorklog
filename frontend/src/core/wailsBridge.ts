@@ -204,7 +204,9 @@ export const wailsBridge = {
     const app = getApp()
     if (app?.SetWorkspace) {
       await app.SetWorkspace(dir)
+      return
     }
+    throw new Error('microkernel not connected: SetWorkspace unavailable')
   },
 
   // 2. 会话历史管理 (真实读写 ~/.tcode/sessions/)
@@ -228,14 +230,18 @@ export const wailsBridge = {
     const app = getApp()
     if (app?.SaveSession) {
       await app.SaveSession(sess)
+      return
     }
+    throw new Error('microkernel not connected: SaveSession unavailable')
   },
 
   async deleteSession(id: string): Promise<void> {
     const app = getApp()
     if (app?.DeleteSession) {
       await app.DeleteSession(id)
+      return
     }
+    throw new Error('microkernel not connected: DeleteSession unavailable')
   },
 
   // 3. 真实物理代码 Diff 计算与回滚
@@ -382,12 +388,20 @@ export const wailsBridge = {
 
   async saveChannel(cfg: ChannelConfig): Promise<void> {
     const app = getApp()
-    if (app?.SaveChannel) await app.SaveChannel(cfg)
+    if (app?.SaveChannel) {
+      await app.SaveChannel(cfg)
+      return
+    }
+    throw new Error('microkernel not connected: SaveChannel unavailable')
   },
 
   async deleteChannel(id: string): Promise<void> {
     const app = getApp()
-    if (app?.DeleteChannel) await app.DeleteChannel(id)
+    if (app?.DeleteChannel) {
+      await app.DeleteChannel(id)
+      return
+    }
+    throw new Error('microkernel not connected: DeleteChannel unavailable')
   },
 
   async pingChannel(id: string): Promise<string> {
@@ -404,12 +418,20 @@ export const wailsBridge = {
 
   async saveMCP(cfg: MCPServerConfig): Promise<void> {
     const app = getApp()
-    if (app?.SaveMCP) await app.SaveMCP(cfg)
+    if (app?.SaveMCP) {
+      await app.SaveMCP(cfg)
+      return
+    }
+    throw new Error('microkernel not connected: SaveMCP unavailable')
   },
 
   async deleteMCP(id: string): Promise<void> {
     const app = getApp()
-    if (app?.DeleteMCP) await app.DeleteMCP(id)
+    if (app?.DeleteMCP) {
+      await app.DeleteMCP(id)
+      return
+    }
+    throw new Error('microkernel not connected: DeleteMCP unavailable')
   },
 
   async testMCPServer(id: string): Promise<MCPTestResult> {
@@ -440,12 +462,20 @@ export const wailsBridge = {
 
   async saveSkill(cfg: SkillConfig): Promise<void> {
     const app = getApp()
-    if (app?.SaveSkill) await app.SaveSkill(cfg)
+    if (app?.SaveSkill) {
+      await app.SaveSkill(cfg)
+      return
+    }
+    throw new Error('microkernel not connected: SaveSkill unavailable')
   },
 
   async deleteSkill(id: string): Promise<void> {
     const app = getApp()
-    if (app?.DeleteSkill) await app.DeleteSkill(id)
+    if (app?.DeleteSkill) {
+      await app.DeleteSkill(id)
+      return
+    }
+    throw new Error('microkernel not connected: DeleteSkill unavailable')
   },
 
   async listRules(): Promise<RuleConfig[]> {
@@ -456,12 +486,20 @@ export const wailsBridge = {
 
   async saveRule(cfg: RuleConfig): Promise<void> {
     const app = getApp()
-    if (app?.SaveRule) await app.SaveRule(cfg)
+    if (app?.SaveRule) {
+      await app.SaveRule(cfg)
+      return
+    }
+    throw new Error('microkernel not connected: SaveRule unavailable')
   },
 
   async deleteRule(id: string): Promise<void> {
     const app = getApp()
-    if (app?.DeleteRule) await app.DeleteRule(id)
+    if (app?.DeleteRule) {
+      await app.DeleteRule(id)
+      return
+    }
+    throw new Error('microkernel not connected: DeleteRule unavailable')
   },
 
   async getFileTree(dir: string = ''): Promise<FileNode[]> {

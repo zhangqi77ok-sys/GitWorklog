@@ -212,46 +212,65 @@ func (t *Tool) UnstageFile(filePath string) error {
 	return rmErr
 }
 
-// RestoreFile 放弃工作区更改 (严格限制未追踪文件才回退删除)
+// RestoreFile 放弃工作区更改 (严格限制未追踪或无HEAD暂存文件才回退删除)
 func (t *Tool) RestoreFile(filePath string) error {
 	trimmed := strings.TrimSpace(filePath)
 	if trimmed == "" {
 		return fmt.Errorf("empty file path")
 	}
-	_, err := t.execGit("restore", "--", trimmed)
-	if err != nil {
-		// 检查是否为未追踪文件 (??)，严禁对已追踪文件误执行物理删除
-		statusCmd := exec.Command("git", "status", "--porcelain", "--", trimmed)
-		statusCmd.Dir = t.rootDir
-		if runtime.GOOS == "windows" {
-			statusCmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: 0x08000000, HideWindow: true}
-		}
-		statusOut, _ := statusCmd.Output()
-		statusStr := strings.TrimSpace(string(statusOut))
 
-		if strings.HasPrefix(statusStr, "??") {
-			absPath := filepath.Join(t.rootDir, trimmed)
-			cleanAbs, absErr := filepath.Abs(absPath)
-			cleanRepo, repoErr := filepath.Abs(t.rootDir)
-			if absErr == nil && repoErr == nil {
-				volRepo := filepath.VolumeName(cleanRepo)
-				normRepo := strings.ToUpper(volRepo) + cleanRepo[len(volRepo):]
-				volAbs := filepath.VolumeName(cleanAbs)
-				normAbs := strings.ToUpper(volAbs) + cleanAbs[len(volAbs):]
-				rel, relErr := filepath.Rel(normRepo, normAbs)
-				if relErr == nil && rel != "." && rel != "" && rel != ".." &&
-					!strings.HasPrefix(rel, ".."+string(filepath.Separator)) &&
-					!strings.HasPrefix(rel, "../") {
-					if fi, statErr := os.Stat(cleanAbs); statErr == nil && !fi.IsDir() {
-						if rmErr := os.Remove(cleanAbs); rmErr == nil || os.IsNotExist(rmErr) {
-							return nil
-						}
-					}
-				}
-			}
-		}
+	absPath := filepath.Join(t.rootDir, trimmed)
+	cleanAbs, absErr := filepath.Abs(absPath)
+	cleanRepo, repoErr := filepath.Abs(t.rootDir)
+	if absErr != nil || repoErr != nil {
+		return fmt.Errorf("invalid path resolution: %w", absErr)
 	}
-	return err
+
+	volRepo := filepath.VolumeName(cleanRepo)
+	normRepo := strings.ToUpper(volRepo) + cleanRepo[len(volRepo):]
+	volAbs := filepath.VolumeName(cleanAbs)
+	normAbs := strings.ToUpper(volAbs) + cleanAbs[len(volAbs):]
+	rel, relErr := filepath.Rel(normRepo, normAbs)
+	if relErr != nil || rel == "." || rel == "" || rel == ".." ||
+		strings.HasPrefix(rel, ".."+string(filepath.Separator)) ||
+		strings.HasPrefix(rel, "../") {
+		return fmt.Errorf("security violation: path escapes repo root: %s", filePath)
+	}
+
+	// 1. 查询当前文件的精确 Git 状态
+	statusOut, _ := t.execGit("status", "--porcelain", "--", trimmed)
+	statusStr := strings.TrimSpace(statusOut)
+
+	// 若确认为未追踪文件 (??)，撤销即删除该未追踪新文件
+	if strings.HasPrefix(statusStr, "??") {
+		if fi, statErr := os.Stat(cleanAbs); statErr == nil && !fi.IsDir() {
+			return os.Remove(cleanAbs)
+		}
+		return nil
+	}
+
+	// 针对无 HEAD 仓库（刚初始化尚未产生首次 commit）的暂存新增文件 (A / AM)
+	// git restore 与 git checkout HEAD 均会因无法解析 HEAD 而失败 (exit status 128)
+	// 此时安全解法：执行 git rm --cached -f 取消暂存并物理删除未提交的新文件
+	_, errHead := t.execGit("rev-parse", "--verify", "HEAD")
+	if errHead != nil && strings.HasPrefix(statusStr, "A") {
+		_, _ = t.execGit("rm", "--cached", "-f", "--", trimmed)
+		if fi, statErr := os.Stat(cleanAbs); statErr == nil && !fi.IsDir() {
+			return os.Remove(cleanAbs)
+		}
+		return nil
+	}
+
+	// 2. 对于已追踪文件，优先使用 git restore --staged --worktree
+	if _, err := t.execGit("restore", "--staged", "--worktree", "--", trimmed); err == nil {
+		return nil
+	}
+	if _, err := t.execGit("restore", "--", trimmed); err == nil {
+		return nil
+	}
+	// 降级使用 git checkout --
+	_, checkoutErr := t.execGit("checkout", "--", trimmed)
+	return checkoutErr
 }
 
 func (t *Tool) Execute(ctx context.Context, rawArgs json.RawMessage) (*v1.ToolResult, error) {
