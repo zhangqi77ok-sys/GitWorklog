@@ -47,11 +47,7 @@
 | **37** | **会话更新时序保序、Windows 设备保留名防御与零假凭据架构防线** | 数据一致性 / 操作系统兼容 / 安全边界 / 契约守卫 | 会话列表按 `UpdatedAt` 降序保序、Windows 设备保留字（CON/PRN/AUX/NUL）黑名单拦截、原子写入父目录创建保证、工具空输出回填防护与零假数据凭据全量清洗 | [37-session-sorting-windows-reserved-names-and-zero-demo-hardening.md](./37-session-sorting-windows-reserved-names-and-zero-demo-hardening.md) |
 | **38** | **工具空输出防御、RevertFile 撤销防误删、真实快照时间戳与事件全量清理** | 协议安全 / 数据防丢 / 零假数据 / IPC生命周期 | 主循环工具空输出保全防上游 400 崩溃、RevertFile 状态精准识别防空仓库误删、沙箱合法双点文件放行、ListDir 根目录支持、git stash 真实历史时间戳提取、0 字节 Diff 修正与前端全量事件无残留注销 | [38-empty-tool-content-defense-revert-safety-and-event-cleanup.md](./38-empty-tool-content-defense-revert-safety-and-event-cleanup.md) |
 | **39** | **目录防覆盖防御、Git 暂存区感知提交、MCP 锁粒度优化与全链路无黑框防护** | 存储安全 / GitOps / 锁并发性能 / 进程无黑框 | AtomicWriteFile 覆盖目录前置拦截防误删空目录、GitCommit 暂存区感知提交防覆盖选择、GitUnstage 桥接补齐、SnapshotManager与FsOriginal无黑框注入、MCP StopServer互斥锁粒度瘦身防死锁挂起、AST相对路径清洗基准对齐与零时间戳清洗 | [39-directory-overwrite-defense-staged-git-commit-and-mcp-lock.md](./39-directory-overwrite-defense-staged-git-commit-and-mcp-lock.md) |
-
-
-
-
-
+| **40** | **Git Porcelain v2 重命名解析修复、无 HEAD 初始仓库安全撤回、MCP 并发 I/O 锁优化与暂存区前端闭环** | GitOps / 并发解耦 / 内存安全 / 前端闭环 | Git Porcelain v2 重命名偏移与新旧路径颠倒修复、RestoreFile 撤销防误删已追踪文件、无 HEAD 空仓库撤销已暂存降级支持、MCP GetAllTools 读锁外置慢 RPC 防挂起、HTTP 服务沙箱空指针与越界防御、前端展开目录 Diff 路径修复与暂存区交互闭环 | [40-git-rename-porcelain-no-head-revert-and-staged-drawer.md](./40-git-rename-porcelain-no-head-revert-and-staged-drawer.md) |
 
 ---
 

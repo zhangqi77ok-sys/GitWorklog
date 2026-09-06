@@ -314,9 +314,7 @@ export const wailsBridge = {
       return
     }
 
-    callbacks.onStart?.({ command, start_time: Date.now() })
-    callbacks.onData?.(`[local] executed: ${command}\n`)
-    callbacks.onExit?.({ command, exit_code: 0, duration_ms: 10 })
+    throw new Error('microkernel not connected: ExecTerminalStream unavailable')
   },
 
   async cancelTerminalCommand(): Promise<void> {
@@ -353,14 +351,18 @@ export const wailsBridge = {
     const app = getApp()
     if (app?.GitStage) {
       await app.GitStage(filePath)
+      return
     }
+    throw new Error('microkernel not connected: GitStage unavailable')
   },
 
   async gitUnstage(filePath: string): Promise<void> {
     const app = getApp()
     if (app?.GitUnstage) {
       await app.GitUnstage(filePath)
+      return
     }
+    throw new Error('microkernel not connected: GitUnstage unavailable')
   },
 
   // 4. 渠道与设置管理

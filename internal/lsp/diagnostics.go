@@ -61,7 +61,7 @@ func DiagnoseFile(workspace string, relPath string) (*DiagnosticReport, error) {
 	normWorkspace := normalizeWindowsPath(cleanWorkspace)
 	normAbs := normalizeWindowsPath(cleanAbs)
 	rel, err := filepath.Rel(normWorkspace, normAbs)
-	if err != nil || strings.HasPrefix(rel, "..") {
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || strings.HasPrefix(rel, "../") {
 		return nil, fmt.Errorf("path escapes workspace sandbox: %s", relPath)
 	}
 
@@ -144,6 +144,13 @@ func setWindowsProcessAttr(cmd *exec.Cmd) {
 				killCmd := exec.Command("taskkill", "/F", "/T", "/PID", fmt.Sprintf("%d", cmd.Process.Pid))
 				killCmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: 0x08000000, HideWindow: true}
 				return killCmd.Run()
+			}
+			return nil
+		}
+	} else {
+		cmd.Cancel = func() error {
+			if cmd.Process != nil && cmd.Process.Pid > 0 {
+				return cmd.Process.Kill()
 			}
 			return nil
 		}

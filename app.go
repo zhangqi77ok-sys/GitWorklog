@@ -353,6 +353,22 @@ func (a *App) RevertFile(filePath string) error {
 		return nil
 	}
 
+	// 针对无 HEAD 仓库（刚初始化尚未产生首次 commit）的暂存新增文件 (A / AM)
+	// git restore 与 git checkout HEAD 均会因无法解析 HEAD 而失败 (exit status 128)
+	// 此时安全解法：执行 git rm --cached -f 取消暂存并删除未提交的新文件
+	if !diff.HasGitHead(a.workspace) && strings.HasPrefix(statusStr, "A") {
+		rmCmd := exec.Command("git", "rm", "--cached", "-f", "--", filePath)
+		rmCmd.Dir = a.workspace
+		if attr := windowsSysProcAttr(); attr != nil {
+			rmCmd.SysProcAttr = attr
+		}
+		_ = rmCmd.Run()
+		if fi, statErr := os.Stat(validPath); statErr == nil && !fi.IsDir() {
+			return os.Remove(validPath)
+		}
+		return nil
+	}
+
 	// 2. 对于已追踪文件，优先使用 git restore 撤销暂存区和工作区修改
 	restoreCmd := exec.Command("git", "restore", "--staged", "--worktree", "--", filePath)
 	restoreCmd.Dir = a.workspace

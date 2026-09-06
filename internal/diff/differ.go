@@ -344,9 +344,14 @@ func detectLanguage(filePath string) string {
 	}
 }
 
-// hasGitHead 检测当前工作区是否拥有有效的 HEAD 提交
-func hasGitHead(workspaceRoot string) bool {
+// HasGitHead 检测当前工作区是否拥有有效的 HEAD 提交
+func HasGitHead(workspaceRoot string) bool {
 	cmd := gitCmd(workspaceRoot, "rev-parse", "--verify", "HEAD")
 	return cmd.Run() == nil
 }
+
+func hasGitHead(workspaceRoot string) bool {
+	return HasGitHead(workspaceRoot)
+}
+
 

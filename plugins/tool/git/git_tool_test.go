@@ -77,3 +77,24 @@ func TestGitTool_RestoreUntrackedFile(t *testing.T) {
 	}
 }
 
+func TestGitTool_ParsePorcelainRenameWithSpaces(t *testing.T) {
+	// 2 <XY> <sub> <mH> <mI> <mW> <hH> <hI> <X><score> <path><TAB><origPath>
+	rawOutput := "2 R. N... 100644 100644 100644 a1b2c3d e4f5a6b R100 new folder/target file.go\told folder/source file.go"
+	report := parsePorcelainV2(rawOutput, "main")
+
+	if len(report.Staged) != 1 {
+		t.Fatalf("expected 1 staged file, got %d", len(report.Staged))
+	}
+	staged := report.Staged[0]
+	if staged.Path != "new folder/target file.go" {
+		t.Errorf("expected staged.Path 'new folder/target file.go', got %q", staged.Path)
+	}
+	if staged.OrigPath != "old folder/source file.go" {
+		t.Errorf("expected staged.OrigPath 'old folder/source file.go', got %q", staged.OrigPath)
+	}
+	if staged.StagedCode != "R" {
+		t.Errorf("expected staged.StagedCode 'R', got %q", staged.StagedCode)
+	}
+}
+
+

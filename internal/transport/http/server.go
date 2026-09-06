@@ -310,6 +310,18 @@ func (s *Server) handleRollbackSnapshot(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	if s.snapshotMgr == nil {
+		http.Error(w, `{"error":"snapshot manager not initialized"}`, http.StatusInternalServerError)
+		return
+	}
+
+	if s.sandbox != nil {
+		if _, err := s.sandbox.ValidatePath(req.Path); err != nil {
+			http.Error(w, fmt.Sprintf(`{"error":"security violation: %v"}`, err), http.StatusForbidden)
+			return
+		}
+	}
+
 	if err := s.snapshotMgr.RollbackFile(req.CommitSHA, req.Path); err != nil {
 		http.Error(w, fmt.Sprintf(`{"error":"%v"}`, err), http.StatusInternalServerError)
 		return
@@ -387,6 +399,11 @@ func (s *Server) handleFsTree(w http.ResponseWriter, r *http.Request) {
 
 // handleFsRead 安全读取文件内容
 func (s *Server) handleFsRead(w http.ResponseWriter, r *http.Request) {
+	if s.sandbox == nil {
+		http.Error(w, `{"error":"sandbox not initialized"}`, http.StatusInternalServerError)
+		return
+	}
+
 	targetPath := r.URL.Query().Get("path")
 	if targetPath == "" {
 		http.Error(w, `{"error":"path query required"}`, http.StatusBadRequest)
@@ -408,17 +425,20 @@ func (s *Server) handleFsRead(w http.ResponseWriter, r *http.Request) {
 
 // handleFsOriginal 获取文件的 Git 原始基准内容 (用于 Monaco Diff)
 func (s *Server) handleFsOriginal(w http.ResponseWriter, r *http.Request) {
+	if s.sandbox == nil {
+		http.Error(w, `{"error":"sandbox not initialized"}`, http.StatusInternalServerError)
+		return
+	}
+
 	targetPath := strings.TrimSpace(r.URL.Query().Get("path"))
 	if targetPath == "" {
 		http.Error(w, `{"error":"path query required"}`, http.StatusBadRequest)
 		return
 	}
 
-	if s.sandbox != nil {
-		if _, err := s.sandbox.ValidatePath(targetPath); err != nil {
-			http.Error(w, fmt.Sprintf(`{"error":"security violation: %v"}`, err), http.StatusForbidden)
-			return
-		}
+	if _, err := s.sandbox.ValidatePath(targetPath); err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":"security violation: %v"}`, err), http.StatusForbidden)
+		return
 	}
 
 	// 转换为斜杠格式让 git show HEAD:path 正确识别
@@ -449,6 +469,11 @@ func (s *Server) handleFsOriginal(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleFsWrite(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if s.sandbox == nil {
+		http.Error(w, `{"error":"sandbox not initialized"}`, http.StatusInternalServerError)
 		return
 	}
 

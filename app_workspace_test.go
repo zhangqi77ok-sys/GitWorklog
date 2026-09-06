@@ -143,3 +143,46 @@ func TestApp_GitStagingAndCommit(t *testing.T) {
 		t.Errorf("expected fileA.txt to be committed and clean, got status: %s", statusStr)
 	}
 }
+
+func TestApp_RevertFile_NoHeadRepo(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "tcode_no_head_*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	runCmd := func(name string, args ...string) {
+		cmd := exec.Command(name, args...)
+		cmd.Dir = tmpDir
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("command %s %v failed: %s", name, args, string(out))
+		}
+	}
+	runCmd("git", "init")
+	runCmd("git", "config", "user.name", "testuser")
+	runCmd("git", "config", "user.email", "test@test.com")
+
+	app := NewApp()
+	if err := app.SetWorkspace(tmpDir); err != nil {
+		t.Fatalf("SetWorkspace failed: %v", err)
+	}
+
+	// 新建文件并暂存 (status = "A  test.txt")
+	testFile := filepath.Join(tmpDir, "brand_new.txt")
+	if err := os.WriteFile(testFile, []byte("brand new uncommitted\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	runCmd("git", "add", "brand_new.txt")
+
+	// 撤销该暂存文件
+	if err := app.RevertFile("brand_new.txt"); err != nil {
+		t.Fatalf("RevertFile failed in repo without HEAD: %v", err)
+	}
+
+	// 验证文件已被清理
+	if _, err := os.Stat(testFile); !os.IsNotExist(err) {
+		t.Errorf("expected brand_new.txt to be removed after revert, but it still exists")
+	}
+}
+

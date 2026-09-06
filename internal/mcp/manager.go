@@ -193,13 +193,17 @@ func (m *Manager) SyncFromConfig(ctx context.Context, cfgs []config.MCPServerCon
 	}
 }
 
-// GetAllTools 获取所有已启用服务的算子定义，并转换为 OpenAI LLM 工具格式
+// GetAllTools 获取所有已启用服务的算子定义，并转换为 OpenAI LLM 工具格式 (锁外请求各服务，避免长阻塞)
 func (m *Manager) GetAllTools(ctx context.Context) ([]llm.ToolDef, error) {
 	m.mu.RLock()
-	defer m.mu.RUnlock()
+	clientMap := make(map[string]Client, len(m.clients))
+	for srvID, client := range m.clients {
+		clientMap[srvID] = client
+	}
+	m.mu.RUnlock()
 
 	defs := make([]llm.ToolDef, 0)
-	for srvID, client := range m.clients {
+	for srvID, client := range clientMap {
 		tools, err := client.ListTools(ctx)
 		if err != nil {
 			continue

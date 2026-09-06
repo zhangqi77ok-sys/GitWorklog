@@ -145,16 +145,15 @@ func parsePorcelainV2(rawStatus, branch string) *GitStatusReport {
 				}
 			}
 		case "2": // 重命名文件: 2 <XY> <sub> <mH> <mI> <mW> <hH> <hI> <X><score> <path><TAB><origPath>
-			if len(parts) >= 10 {
-				stagedCode := string(parts[1][0])
-				workCode := string(parts[1][1])
-				pathPart := strings.Join(parts[8:], " ")
-				subParts := strings.Split(pathPart, "\t")
-				origPath := parts[8]
-				filePath := parts[9]
-				if len(subParts) >= 2 {
-					origPath = subParts[0]
-					filePath = subParts[1]
+			tabParts := strings.Split(line, "\t")
+			fields := strings.Fields(tabParts[0])
+			if len(fields) >= 10 {
+				stagedCode := string(fields[1][0])
+				workCode := string(fields[1][1])
+				filePath := strings.Join(fields[9:], " ")
+				origPath := ""
+				if len(tabParts) >= 2 {
+					origPath = strings.TrimSpace(tabParts[1])
 				}
 
 				if stagedCode != "." {
@@ -196,17 +195,24 @@ func (t *Tool) StageFile(filePath string) error {
 	return err
 }
 
-// UnstageFile 取消暂存单个文件
+// UnstageFile 取消暂存单个文件 (优先 restore，降级 reset 与 rm --cached)
 func (t *Tool) UnstageFile(filePath string) error {
 	trimmed := strings.TrimSpace(filePath)
 	if trimmed == "" {
 		return fmt.Errorf("empty file path")
 	}
 	_, err := t.execGit("restore", "--staged", "--", trimmed)
-	return err
+	if err == nil {
+		return nil
+	}
+	if _, resetErr := t.execGit("reset", "HEAD", "--", trimmed); resetErr == nil {
+		return nil
+	}
+	_, rmErr := t.execGit("rm", "--cached", "-f", "--", trimmed)
+	return rmErr
 }
 
-// RestoreFile 放弃工作区更改
+// RestoreFile 放弃工作区更改 (严格限制未追踪文件才回退删除)
 func (t *Tool) RestoreFile(filePath string) error {
 	trimmed := strings.TrimSpace(filePath)
 	if trimmed == "" {
@@ -214,21 +220,32 @@ func (t *Tool) RestoreFile(filePath string) error {
 	}
 	_, err := t.execGit("restore", "--", trimmed)
 	if err != nil {
-		// 如果是未追踪新文件，git restore 会报错：error: pathspec '...' did not match any file(s) known to git
-		// 安全回退：如果在仓库沙箱内且属于未追踪文件，物理移除该文件
-		absPath := filepath.Join(t.rootDir, trimmed)
-		cleanAbs, absErr := filepath.Abs(absPath)
-		cleanRepo, repoErr := filepath.Abs(t.rootDir)
-		if absErr == nil && repoErr == nil {
-			volRepo := filepath.VolumeName(cleanRepo)
-			normRepo := strings.ToUpper(volRepo) + cleanRepo[len(volRepo):]
-			volAbs := filepath.VolumeName(cleanAbs)
-			normAbs := strings.ToUpper(volAbs) + cleanAbs[len(volAbs):]
-			rel, relErr := filepath.Rel(normRepo, normAbs)
-			if relErr == nil && rel != "." && rel != "" && !strings.HasPrefix(rel, "..") {
-				if fi, statErr := os.Stat(cleanAbs); statErr == nil && !fi.IsDir() {
-					if rmErr := os.Remove(cleanAbs); rmErr == nil || os.IsNotExist(rmErr) {
-						return nil
+		// 检查是否为未追踪文件 (??)，严禁对已追踪文件误执行物理删除
+		statusCmd := exec.Command("git", "status", "--porcelain", "--", trimmed)
+		statusCmd.Dir = t.rootDir
+		if runtime.GOOS == "windows" {
+			statusCmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: 0x08000000, HideWindow: true}
+		}
+		statusOut, _ := statusCmd.Output()
+		statusStr := strings.TrimSpace(string(statusOut))
+
+		if strings.HasPrefix(statusStr, "??") {
+			absPath := filepath.Join(t.rootDir, trimmed)
+			cleanAbs, absErr := filepath.Abs(absPath)
+			cleanRepo, repoErr := filepath.Abs(t.rootDir)
+			if absErr == nil && repoErr == nil {
+				volRepo := filepath.VolumeName(cleanRepo)
+				normRepo := strings.ToUpper(volRepo) + cleanRepo[len(volRepo):]
+				volAbs := filepath.VolumeName(cleanAbs)
+				normAbs := strings.ToUpper(volAbs) + cleanAbs[len(volAbs):]
+				rel, relErr := filepath.Rel(normRepo, normAbs)
+				if relErr == nil && rel != "." && rel != "" && rel != ".." &&
+					!strings.HasPrefix(rel, ".."+string(filepath.Separator)) &&
+					!strings.HasPrefix(rel, "../") {
+					if fi, statErr := os.Stat(cleanAbs); statErr == nil && !fi.IsDir() {
+						if rmErr := os.Remove(cleanAbs); rmErr == nil || os.IsNotExist(rmErr) {
+							return nil
+						}
 					}
 				}
 			}

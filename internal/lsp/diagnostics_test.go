@@ -136,3 +136,20 @@ func TestDiagnoseFile_WindowsDriveNormalization(t *testing.T) {
 		t.Fatalf("expected report, got nil")
 	}
 }
+
+func TestDiagnoseFile_DoubleDotFileName(t *testing.T) {
+	tempDir := t.TempDir()
+	// Create a valid file named ..sample.go inside tempDir
+	sampleFile := filepath.Join(tempDir, "..sample.go")
+	if err := os.WriteFile(sampleFile, []byte("package test\n"), 0644); err != nil {
+		t.Fatalf("failed to write sample file: %v", err)
+	}
+
+	report, err := DiagnoseFile(tempDir, "..sample.go")
+	if err != nil {
+		t.Fatalf("unexpected error for double-dot filename inside workspace: %v", err)
+	}
+	if report == nil {
+		t.Fatalf("expected report, got nil")
+	}
+}

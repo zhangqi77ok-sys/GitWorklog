@@ -599,6 +599,28 @@ Tcode 打破了单体硬编码调度逻辑，将 Agent 的执行循环、能力�
 
 ---
 
+### 45. Git Porcelain v2 重命名解析修复、无 HEAD 初始仓库安全撤回、MCP 并发 I/O 锁优化与暂存区前端闭环 (Git Porcelain v2 Rename Fix, No-HEAD Revert Safety, MCP Concurrent I/O Lock Optimization & Staged Drawer Integration)
+* **Git Porcelain v2 重命名字段偏移与路径颠倒彻底根除 (`plugins/tool/git/git_tool.go`)**：
+  - 修复 `parsePorcelainV2` 解析重命名行时将索引偏移第 8 项（`R100` 分数）误当成旧路径并将新旧路径颠倒的严重问题；严格按照制表符 `\t` 分割提取状态元数据、新路径与旧路径，保障包含空格及复杂文件名的重命名完整可识别；
+* **`RestoreFile` 撤销防误删机制 (`plugins/tool/git/git_tool.go`)**：
+  - 根除 `git restore` 失败时盲目调用 `os.Remove(cleanAbs)` 的数据毁灭风险；前置调用 `git status --porcelain`，仅在文件证据确凿属于未追踪文件（`??`）时才允许物理删除，防止误删用户已追踪的代码改动；
+* **初建无 HEAD 仓库（`git init`）已暂存文件安全回退 (`app.go` & `internal/diff/differ.go`)**：
+  - 导出 `HasGitHead` 探测方法；在尚未产生首个提交的新仓库中，针对已暂存（`A`）文件自动降级调用 `git rm --cached -f -- <path>` 并物理删除，解决 `fatal: could not resolve HEAD` 导致新工程无法撤销暂存新增文件的卡死问题；
+* **HTTP 微内核服务空指针崩溃与沙箱逃逸全面封堵 (`internal/transport/http/server.go`)**：
+  - 在 `handleFsRead`、`handleFsOriginal`、`handleFsWrite` 中补齐 `if s.sandbox == nil` 前置空指针防御，阻断早期访问时的 SIGSEGV；在 `handleSnapshotRollback` 补充 `s.snapshotMgr == nil` 判空与 `s.sandbox.ValidatePath(req.Path)` 沙箱逃逸防御；
+* **MCP 协议管理器 `GetAllTools` 读锁外置并发优化 (`internal/mcp/manager.go`)**：
+  - 将所有外部 MCP 进程的阻塞 `ListTools(ctx)` stdio I/O 移出 `m.mu.RLock()` 临界区，读锁内仅完成客户端映射浅拷贝，释放读锁后再并发查询工具列表，彻底消除写锁被长时间挂起的并发雪崩；
+* **前端 IPC 桥接层严格遵循 Fail-Closed (铁律 0.5) (`frontend/src/core/wailsBridge.ts`)**：
+  - 清退 `executeTerminalStream` 在后端微内核断开时伪造的 `[local] executed` 假数据，`gitStage` 与 `gitUnstage` 补齐微内核未就绪检查与异常抛出；
+* **工程文件树展开子节点 Diff 路径穿透修复 (`frontend/src/components/LeftDrawer.vue`)**：
+  - 修正点击子目录嵌套文件时调用 `store.openDiff(sub.name)` 仅传递纯文件名的问题，改为传递完整相对路径 `sub.path`，使多层级目录文件可正常打开 Diff 审查；
+* **Git 源码管理侧边栏暂存区（STAGED）展示与取消暂存闭环 (`frontend/src/components/LeftDrawer.vue` & `frontend/src/App.vue`)**：
+  - 在抽屉中完整补齐 `STAGED (已暂存)` 文件列表、变更类型标签与 `[-]` 取消暂存快捷按钮，并在 `<script setup>` 中注入 `stagedTreeFiles`、`unstageFileAction` 与 `revertFileAction` 空值保护，实现 Git 暂存区双向流转闭环；
+* **LSP 编译器诊断合法双点文件名放行与跨平台进程树清理 (`internal/lsp/diagnostics.go`)**：
+  - 修复 `strings.HasPrefix(rel, "..")` 误伤形如 `..sample.go` 合法文件的问题，规范化为 `rel == ".." || strings.HasPrefix(rel, ".." + Separator) || strings.HasPrefix(rel, "../")`；为非 Windows 系统补齐 `cmd.Cancel` 进程杀灭，防止语法诊断超时遗留孤儿进程。
+
+---
+
 
 ## 🎨 四、视觉与人机工程学规范
 

@@ -255,20 +255,51 @@
               <span class="animate-spin text-lg">⏳</span>
               <span>正在获取 Git 状态...</span>
             </div>
-            <div v-else>
-              <div class="text-[10px] font-bold text-[#71717A] uppercase mb-1">变更文件 (WORKING TREE)</div>
-              <div v-if="workingTreeFiles.length === 0" class="p-3 text-center text-[#A1A1AA] text-xs bg-black/[0.02] rounded-lg">
-                ✓ 工作区干净，无未暂存改动
+            <div v-else class="space-y-3">
+              <!-- 已暂存变更 -->
+              <div v-if="stagedTreeFiles.length > 0">
+                <div class="text-[10px] font-bold text-[#10A37F] uppercase mb-1 flex items-center justify-between">
+                  <span>暂存文件 (STAGED)</span>
+                  <span class="text-[10px] font-mono bg-[#10A37F]/10 px-1 rounded">{{ stagedTreeFiles.length }}</span>
+                </div>
+                <div class="space-y-1">
+                  <div
+                    v-for="file in stagedTreeFiles"
+                    :key="file.path"
+                    @click="openFileDiff(file.path)"
+                    class="p-1.5 rounded hover:bg-black/[0.04] cursor-pointer flex items-center justify-between font-mono text-[11px] group"
+                  >
+                    <span class="truncate flex-1">{{ file.path }}</span>
+                    <div class="flex items-center gap-1.5 shrink-0">
+                      <span :class="file.color" class="font-bold">{{ file.type }}</span>
+                      <button
+                        @click="unstageFileAction(file.path, $event)"
+                        class="opacity-0 group-hover:opacity-100 text-[#71717A] hover:text-red-500 px-1 rounded hover:bg-black/[0.05] transition-opacity cursor-pointer text-xs"
+                        title="取消暂存此文件"
+                      >
+                        −
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
-              <div v-else class="space-y-1">
-                <div
-                  v-for="file in workingTreeFiles"
-                  :key="file.path"
-                  @click="openFileDiff(file.path)"
-                  class="p-1.5 rounded hover:bg-black/[0.04] cursor-pointer flex items-center justify-between font-mono text-[11px]"
-                >
-                  <span class="truncate">{{ file.path }}</span>
-                  <span :class="file.color" class="font-bold">{{ file.type }}</span>
+
+              <!-- 工作区变更 -->
+              <div>
+                <div class="text-[10px] font-bold text-[#71717A] uppercase mb-1">变更文件 (WORKING TREE)</div>
+                <div v-if="workingTreeFiles.length === 0" class="p-3 text-center text-[#A1A1AA] text-xs bg-black/[0.02] rounded-lg">
+                  ✓ 工作区干净，无未暂存改动
+                </div>
+                <div v-else class="space-y-1">
+                  <div
+                    v-for="file in workingTreeFiles"
+                    :key="file.path"
+                    @click="openFileDiff(file.path)"
+                    class="p-1.5 rounded hover:bg-black/[0.04] cursor-pointer flex items-center justify-between font-mono text-[11px]"
+                  >
+                    <span class="truncate">{{ file.path }}</span>
+                    <span :class="file.color" class="font-bold">{{ file.type }}</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1358,6 +1389,25 @@ const expandedFolders = reactive<Record<string, boolean>>({ 'frontend': true })
 const gitStatus = ref<any>({ branch: 'main', working: [], staged: [] })
 const commitMessage = ref('')
 
+const stagedTreeFiles = computed(() => {
+  const list: { path: string; type: string; color: string }[] = []
+  if (gitStatus.value?.staged && Array.isArray(gitStatus.value.staged)) {
+    for (const f of gitStatus.value.staged) {
+      if (typeof f === 'string') {
+        list.push({ path: f, type: 'M', color: 'text-[#10A37F]' })
+      } else if (f && typeof f === 'object') {
+        const type = f.staged_code || f.index_code || 'M'
+        list.push({
+          path: f.path || '',
+          type: type,
+          color: type === 'D' ? 'text-red-500' : 'text-[#10A37F]'
+        })
+      }
+    }
+  }
+  return list
+})
+
 const workingTreeFiles = computed(() => {
   const list: { path: string; type: string; color: string }[] = []
   if (gitStatus.value?.working && Array.isArray(gitStatus.value.working)) {
@@ -1448,7 +1498,23 @@ async function loadDiff() {
   }
 }
 
+async function unstageFileAction(filePath: string, event?: MouseEvent) {
+  if (event) event.stopPropagation()
+  if (!filePath) return
+  try {
+    await wailsBridge.gitUnstage(filePath)
+    await loadGitStatus()
+    if (activeDiffFile.value === filePath) {
+      await loadDiff()
+    }
+    showToast(`✓ 已取消暂存: ${filePath}`)
+  } catch (err) {
+    showToast(`取消暂存异常: ${err}`)
+  }
+}
+
 async function revertFileAction() {
+  if (!activeDiffFile.value) return
   try {
     await wailsBridge.revertFile(activeDiffFile.value)
     await loadDiff()

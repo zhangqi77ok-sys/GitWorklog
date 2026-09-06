@@ -88,7 +88,7 @@
             <div
               v-for="sub in node.children"
               :key="sub.path"
-              @click="store.openDiff(sub.name)"
+              @click="store.openDiff(sub.path)"
               class="px-2 py-0.5 rounded hover:bg-black/[0.04] cursor-pointer flex items-center gap-1.5 text-[11px] text-[#52525B]"
             >
               <span>{{ sub.is_dir ? '📁' : '📄' }}</span>
@@ -111,6 +111,34 @@
       </div>
 
       <div class="flex-1 overflow-y-auto p-3 space-y-3 text-xs">
+        <!-- 暂存文件列表 (STAGED CHANGES) -->
+        <div v-if="stagedFiles.length > 0">
+          <div class="text-[10px] font-bold text-[#10A37F] uppercase mb-1 flex items-center justify-between">
+            <span>暂存文件 (STAGED CHANGES)</span>
+            <span class="text-[10px] font-mono bg-[#10A37F]/10 px-1.5 py-0.2 rounded">{{ stagedFiles.length }}</span>
+          </div>
+          <div class="space-y-1 mb-2">
+            <div
+              v-for="file in stagedFiles"
+              :key="file.path"
+              @click="store.openDiff(file.path)"
+              class="p-1.5 rounded hover:bg-black/[0.04] cursor-pointer flex items-center justify-between font-mono text-[11px] group"
+            >
+              <span class="truncate flex-1">{{ file.path }}</span>
+              <div class="flex items-center gap-1.5 shrink-0">
+                <span :class="file.color" class="font-bold">{{ file.type }}</span>
+                <button
+                  @click="handleUnstage(file.path, $event)"
+                  class="opacity-0 group-hover:opacity-100 text-[#71717A] hover:text-red-500 px-1 rounded hover:bg-black/[0.05] transition-opacity cursor-pointer text-xs"
+                  title="取消暂存 (Unstage)"
+                >
+                  −
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div>
           <div class="text-[10px] font-bold text-[#71717A] uppercase mb-1">变更文件 (WORKING TREE)</div>
           <div v-if="workingFiles.length > 0" class="space-y-1">
@@ -126,7 +154,7 @@
           </div>
           <div v-else class="py-6 text-center text-[#71717A] text-[11px]">
             <span class="block mb-1 text-sm">✨</span>
-            <span>工作区干净，无未提交变更</span>
+            <span>工作区干净，无未暂存变更</span>
           </div>
         </div>
 
@@ -153,6 +181,30 @@ const expandedFolders = reactive<Record<string, boolean>>({ 'frontend': true })
 const gitStatus = ref<any>({ branch: 'main' })
 
 const sessions = ref<any[]>([])
+
+const stagedFiles = computed(() => {
+  const list: { path: string; type: string; color: string }[] = []
+  if (gitStatus.value?.staged && Array.isArray(gitStatus.value.staged)) {
+    for (const f of gitStatus.value.staged) {
+      list.push({
+        path: f.path,
+        type: f.staged_code || 'A',
+        color: f.staged_code === 'D' ? 'text-red-500' : 'text-[#10A37F]'
+      })
+    }
+  }
+  return list
+})
+
+async function handleUnstage(filePath: string, event?: Event) {
+  if (event) event.stopPropagation()
+  try {
+    await wailsBridge.gitUnstage(filePath)
+    await loadGitStatus()
+  } catch (err) {
+    console.error('Failed to unstage file:', err)
+  }
+}
 
 const workingFiles = computed(() => {
   const list: { path: string; type: string; color: string }[] = []
