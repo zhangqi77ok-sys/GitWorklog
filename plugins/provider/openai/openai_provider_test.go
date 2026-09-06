@@ -54,3 +54,32 @@ func TestOpenAIProvider_ReasoningAliasAndBuffer(t *testing.T) {
 		t.Errorf("expected content '正文内容B', but not received")
 	}
 }
+
+func TestOpenAIProvider_ListModels_RealModelsOnly(t *testing.T) {
+	p := NewProvider()
+	models, err := p.ListModels(context.Background())
+	if err != nil {
+		t.Fatalf("ListModels failed: %v", err)
+	}
+
+	fakeKeywords := []string{"v4-flash", "5.6-sol", "opus-4-8", "glm-5.3"}
+	for _, m := range models {
+		for _, fk := range fakeKeywords {
+			if m.ID == fk || m.Name == fk {
+				t.Errorf("found fake demo model in ListModels: id=%s name=%s", m.ID, m.Name)
+			}
+		}
+	}
+
+	foundDeepSeek := false
+	for _, m := range models {
+		if m.ID == "deepseek-chat" || m.ID == "deepseek-reasoner" {
+			foundDeepSeek = true
+			break
+		}
+	}
+	if !foundDeepSeek {
+		t.Errorf("expected real deepseek model in ListModels, got none")
+	}
+}
+
