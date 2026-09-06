@@ -2,7 +2,9 @@ package main
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -54,5 +56,90 @@ func TestApp_GetUsageMetrics_NilSessionStore(t *testing.T) {
 	metrics := app.GetUsageMetrics()
 	if metrics.ActiveSessions != 0 {
 		t.Errorf("expected 0 active sessions when sessionStore is nil, got %d", metrics.ActiveSessions)
+	}
+}
+
+func TestApp_GitStagingAndCommit(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "tcode_git_test_*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	runCmd := func(name string, args ...string) {
+		cmd := exec.Command(name, args...)
+		cmd.Dir = tmpDir
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("command failed: %s %v: %s", name, args, string(out))
+		}
+	}
+	runCmd("git", "init")
+	runCmd("git", "config", "user.name", "testuser")
+	runCmd("git", "config", "user.email", "test@test.com")
+
+	fileA := filepath.Join(tmpDir, "fileA.txt")
+	fileB := filepath.Join(tmpDir, "fileB.txt")
+	if err := os.WriteFile(fileA, []byte("hello A\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(fileB, []byte("hello B\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	runCmd("git", "add", "-A")
+	runCmd("git", "commit", "-m", "init commit")
+
+	app := NewApp()
+	if err := app.SetWorkspace(tmpDir); err != nil {
+		t.Fatalf("SetWorkspace failed: %v", err)
+	}
+
+	// Modify fileA and fileB
+	if err := os.WriteFile(fileA, []byte("modified A\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(fileB, []byte("modified B\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// 1. Stage fileA using GitStage
+	if err := app.GitStage("fileA.txt"); err != nil {
+		t.Fatalf("GitStage fileA failed: %v", err)
+	}
+
+	// 2. Unstage fileA using GitUnstage, verify diff --cached is empty
+	if err := app.GitUnstage("fileA.txt"); err != nil {
+		t.Fatalf("GitUnstage fileA failed: %v", err)
+	}
+	diffCmd := exec.Command("git", "diff", "--cached", "--quiet")
+	diffCmd.Dir = tmpDir
+	if diffCmd.Run() != nil {
+		t.Fatalf("expected staging area to be empty after GitUnstage")
+	}
+
+	// 3. Stage fileA again
+	if err := app.GitStage("fileA.txt"); err != nil {
+		t.Fatalf("GitStage fileA failed: %v", err)
+	}
+
+	// 4. Call GitCommit. Since fileA is staged and fileB is not, GitCommit should ONLY commit fileA!
+	msg, err := app.GitCommit("feat: commit staged only")
+	if err != nil {
+		t.Fatalf("GitCommit failed: %v, output: %s", err, msg)
+	}
+
+	// Check git status: fileB should STILL be unstaged / modified in working tree!
+	statusCmd := exec.Command("git", "status", "--porcelain")
+	statusCmd.Dir = tmpDir
+	statusOut, err := statusCmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git status failed: %v", err)
+	}
+	statusStr := string(statusOut)
+	if !strings.Contains(statusStr, "fileB.txt") {
+		t.Errorf("expected fileB.txt to remain modified/unstaged in working tree, got status: %s", statusStr)
+	}
+	if strings.Contains(statusStr, "fileA.txt") {
+		t.Errorf("expected fileA.txt to be committed and clean, got status: %s", statusStr)
 	}
 }

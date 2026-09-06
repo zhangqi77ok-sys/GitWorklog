@@ -27,7 +27,8 @@ func ScanWorkspaceAST(rootDir string) ([]GraphNode, error) {
 	if trimmed == "" {
 		return nil, fmt.Errorf("workspace root directory cannot be empty")
 	}
-	stat, err := os.Stat(trimmed)
+	rootDir = trimmed
+	stat, err := os.Stat(rootDir)
 	if err != nil {
 		return nil, fmt.Errorf("workspace root [%s] does not exist: %w", trimmed, err)
 	}

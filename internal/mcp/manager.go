@@ -130,36 +130,40 @@ func (m *Manager) StartServer(ctx context.Context, cfg config.MCPServerConfig) e
 	return nil
 }
 
-// StopServer 安全停止指定 MCP 服务并清理路由
+// StopServer 安全停止指定 MCP 服务并清理路由 (锁外执行进程退出，避免死锁)
 func (m *Manager) StopServer(ctx context.Context, srvID string) error {
 	m.mu.Lock()
-	defer m.mu.Unlock()
-
 	client, ok := m.clients[srvID]
 	if !ok {
+		m.mu.Unlock()
 		return nil
 	}
 
-	_ = client.Stop()
 	delete(m.clients, srvID)
 	for tName, sID := range m.toolRouting {
 		if sID == srvID {
 			delete(m.toolRouting, tName)
 		}
 	}
-	return nil
+	m.mu.Unlock()
+
+	return client.Stop()
 }
 
-// StopAll 停止所有运行中的 MCP 服务
+// StopAll 停止所有运行中的 MCP 服务 (锁外批量停止)
 func (m *Manager) StopAll() {
 	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	for srvID, client := range m.clients {
-		_ = client.Stop()
-		delete(m.clients, srvID)
+	clientsToStop := make([]Client, 0, len(m.clients))
+	for _, client := range m.clients {
+		clientsToStop = append(clientsToStop, client)
 	}
+	m.clients = make(map[string]Client)
 	m.toolRouting = make(map[string]string)
+	m.mu.Unlock()
+
+	for _, client := range clientsToStop {
+		_ = client.Stop()
+	}
 }
 
 // RegisterClient 注册指定客户端 (用于测试治具或自定义插件)

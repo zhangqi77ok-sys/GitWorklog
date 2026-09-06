@@ -577,6 +577,26 @@ Tcode 打破了单体硬编码调度逻辑，将 Agent 的执行循环、能力�
 * **前端全局事件监听器统一声明式注销与零残留**：
   - 在 `frontend/src/core/wailsBridge.ts` 中以声明式数组统一注册与注销 `agent:start`、`agent:files_changed`、`lsp:diagnostic` 等全部事件，彻底根除长期运行中的监听器泄漏。
 
+### 44. 目录防覆盖防御、Git 暂存区感知提交、MCP 锁粒度优化与全链路无黑框防护 (Directory Overwrite Defense, Staged Git Commit, MCP Lock Granularity Optimization & Full-Link No-Window Protection)
+* **沙箱原子文件写入（`AtomicWriteFile`）覆盖目录前置拦截与防误删空目录 (`internal/core/sandbox/fs.go`)**：
+  - 彻底治理当目标路径已存在且为目录时，Windows 下 `os.Rename` 失败后回退触发 `os.Remove(validated)` 导致现有空目录被物理删除的致命缺陷；在写临时文件前显式增加 `os.Stat(validated).IsDir()` 前置防御拦截；
+* **`GitCommit` 暂存区状态感知提交与用户选择保护 (`app.go`)**：
+  - 消除无脑 `git add -A` 强行覆盖用户暂存区选择的缺陷；前置调用 `git diff --cached --quiet` 探测，若用户已在 Git 抽屉中手动暂存部分改动，则仅提交已暂存内容；仅在暂存区完全为空时才做全量暂存兜底；
+* **Wails 原生 IPC 桥接层补齐 `GitUnstage` 取消暂存接口 (`app.go` & `wailsBridge.ts`)**：
+  - 在微内核与前端桥接层暴露 `GitUnstage(filePath)` 接口，优先调用 `git restore --staged -- filePath` 并优雅降级至 `git reset HEAD`，实现 Git 暂存状态的双向自由流转；
+* **Git 快照管理器与 HTTP 差异服务注入 Windows 无黑框配置 (`internal/core/sandbox/snapshot.go` & `internal/transport/http/server.go`)**：
+  - 为 `SnapshotManager.execGit` 与 `handleFsOriginal` 注入 `SysProcAttr{HideWindow: true, CreationFlags: 0x08000000}`，消除用户切换分支或预览快照时的黑框弹窗闪烁；同时为 `handleFsOriginal` 补充沙箱路径越界校验；
+* **MCP 协议管理器停止服务互斥锁粒度优化 (`internal/mcp/manager.go`)**：
+  - 将 `StopServer` 与 `StopAll` 中包含最长 1 秒超时等待的 `client.Stop()` 移出 `m.mu.Lock()` 互斥临界区，避免高并发下大模型工具调用与探活请求被长时间阻塞死锁；
+* **AST 拓扑扫描器根路径规范化基准对齐 (`internal/ast/scanner.go`)**：
+  - 统一 `ScanWorkspaceAST` 入口与递归遍历闭包中的 `rootDir` 清洗基准（`filepath.Clean`），解决 Windows 下正反斜杠混用引发 `filepath.Rel` 频繁报错并退化为纯文件名的问题；
+* **会话元数据零时间戳东八区怪异 `"08:00"` 清洗 (`internal/session/store.go`)**：
+  - 针对新建尚未更新的会话（`UpdatedAt <= 0`），格式化时返回空字符串，彻底消除东八区时间换算后误显示为 `"08:00"` 的怪异表现；
+* **前端 IPC 桥接层 `gitCommit` 严格遵循 Fail-Closed (铁律 0.5)**：
+  - 清退微内核未就绪时伪造的 `'Committed successfully'` 假成功，改为抛出真实错误并由 UI 弹窗捕获提示；
+* **蜂群多智能体 TDD 验证非 Windows 环境进程清理保全 (`internal/agent/swarm.go`)**：
+  - 为非 Windows 操作系统补充 `cmd.Cancel = func() error { return cmd.Process.Kill() }`，确保超时或任务取消时测试子进程被彻底杀灭，杜绝孤儿僵死进程。
+
 ---
 
 

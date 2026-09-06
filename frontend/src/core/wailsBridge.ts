@@ -346,13 +346,20 @@ export const wailsBridge = {
     if (app?.GitCommit) {
       return await app.GitCommit(msg)
     }
-    return 'Committed successfully'
+    throw new Error('microkernel not connected: GitCommit unavailable')
   },
 
   async gitStage(filePath: string): Promise<void> {
     const app = getApp()
     if (app?.GitStage) {
       await app.GitStage(filePath)
+    }
+  },
+
+  async gitUnstage(filePath: string): Promise<void> {
+    const app = getApp()
+    if (app?.GitUnstage) {
+      await app.GitUnstage(filePath)
     }
   },
 

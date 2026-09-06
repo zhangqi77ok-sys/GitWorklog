@@ -87,6 +87,9 @@ func (s *Sandbox) AtomicWriteFile(path string, content []byte) error {
 	if validated == s.rootDir {
 		return fmt.Errorf("SECURITY: cannot overwrite workspace root directory [%s]", s.rootDir)
 	}
+	if fi, statErr := os.Stat(validated); statErr == nil && fi.IsDir() {
+		return fmt.Errorf("SECURITY: cannot overwrite existing directory [%s] with regular file", validated)
+	}
 
 	dir := filepath.Dir(validated)
 	if err := os.MkdirAll(dir, 0755); err != nil {

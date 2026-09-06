@@ -69,6 +69,8 @@ export function GitRestoreSnapshot(arg1:string):Promise<void>;
 
 export function GitStage(arg1:string):Promise<void>;
 
+export function GitUnstage(arg1:string):Promise<void>;
+
 export function ListChannels():Promise<Array<config.ChannelConfig>>;
 
 export function ListMCPs():Promise<Array<config.MCPServerConfig>>;

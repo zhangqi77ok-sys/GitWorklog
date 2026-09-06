@@ -81,6 +81,13 @@ func RunTDDValidation(workspace string) (TestReport, error) {
 			}
 			return nil
 		}
+	} else {
+		cmd.Cancel = func() error {
+			if cmd.Process != nil {
+				return cmd.Process.Kill()
+			}
+			return nil
+		}
 	}
 	out, err := cmd.CombinedOutput()
 	duration := time.Since(start).Round(time.Millisecond).String()

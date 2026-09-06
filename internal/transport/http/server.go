@@ -8,7 +8,9 @@ import (
 	"net/http"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"syscall"
 	"time"
 
 	"tcode/internal/core/loop"
@@ -406,16 +408,26 @@ func (s *Server) handleFsRead(w http.ResponseWriter, r *http.Request) {
 
 // handleFsOriginal 获取文件的 Git 原始基准内容 (用于 Monaco Diff)
 func (s *Server) handleFsOriginal(w http.ResponseWriter, r *http.Request) {
-	targetPath := r.URL.Query().Get("path")
+	targetPath := strings.TrimSpace(r.URL.Query().Get("path"))
 	if targetPath == "" {
 		http.Error(w, `{"error":"path query required"}`, http.StatusBadRequest)
 		return
+	}
+
+	if s.sandbox != nil {
+		if _, err := s.sandbox.ValidatePath(targetPath); err != nil {
+			http.Error(w, fmt.Sprintf(`{"error":"security violation: %v"}`, err), http.StatusForbidden)
+			return
+		}
 	}
 
 	// 转换为斜杠格式让 git show HEAD:path 正确识别
 	slashPath := filepath.ToSlash(targetPath)
 	cmd := exec.Command("git", "show", fmt.Sprintf("HEAD:%s", slashPath))
 	cmd.Dir = s.sandbox.Root()
+	if runtime.GOOS == "windows" {
+		cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: 0x08000000, HideWindow: true}
+	}
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout

@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"fmt"
 	"os/exec"
+	"runtime"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -31,6 +33,12 @@ func NewSnapshotManager(rootDir string) *SnapshotManager {
 func (m *SnapshotManager) execGit(args ...string) (string, error) {
 	cmd := exec.Command("git", args...)
 	cmd.Dir = m.rootDir
+	if runtime.GOOS == "windows" {
+		cmd.SysProcAttr = &syscall.SysProcAttr{
+			CreationFlags: 0x08000000, // CREATE_NO_WINDOW 杜绝控制台闪烁黑框
+			HideWindow:    true,
+		}
+	}
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout

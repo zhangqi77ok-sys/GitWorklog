@@ -279,6 +279,22 @@ func TestStore_AtomicWriteSession_CreatesParentDir(t *testing.T) {
 	}
 }
 
+func TestStore_List_ZeroUpdatedAtReturnsEmptyTime(t *testing.T) {
+	tempDir := t.TempDir()
+	s := &Store{baseDir: tempDir}
+	// 直接写入一个 UpdatedAt = 0 的 JSON 文件，模拟旧数据或异常数据
+	rawSess := `{"id":"sess_zero","title":"零时间戳","updated_at":0,"messages":[]}`
+	_ = os.WriteFile(filepath.Join(tempDir, "sess_zero.json"), []byte(rawSess), 0644)
+
+	metas := s.List()
+	if len(metas) != 1 {
+		t.Fatalf("expected 1 session, got %d", len(metas))
+	}
+	if metas[0].Time != "" {
+		t.Errorf("expected empty string for UpdatedAt <= 0, got %q", metas[0].Time)
+	}
+}
+
 
 
 

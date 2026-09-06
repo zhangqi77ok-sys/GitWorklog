@@ -132,5 +132,14 @@ func TestSandbox_ValidatePathAndAtomicWrite(t *testing.T) {
 	if len(entriesEmpty) != len(entriesDot) {
 		t.Errorf("entries count mismatch between empty and dot: %d vs %d", len(entriesEmpty), len(entriesDot))
 	}
+
+	// 11. 尝试覆盖已有目录拦截测试
+	subDir := filepath.Join(tmpDir, "existing_folder")
+	_ = os.MkdirAll(subDir, 0755)
+	if err := sb.AtomicWriteFile("existing_folder", []byte("evil overwrite")); err == nil {
+		t.Errorf("expected AtomicWriteFile to fail when targeting existing directory, got nil")
+	} else if !strings.Contains(err.Error(), "cannot overwrite existing directory") {
+		t.Errorf("unexpected error: %v", err)
+	}
 }
 

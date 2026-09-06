@@ -118,6 +118,10 @@ export function GitStage(arg1) {
   return window['go']['main']['App']['GitStage'](arg1);
 }
 
+export function GitUnstage(arg1) {
+  return window['go']['main']['App']['GitUnstage'](arg1);
+}
+
 export function ListChannels() {
   return window['go']['main']['App']['ListChannels']();
 }

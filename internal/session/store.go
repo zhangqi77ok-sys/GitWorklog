@@ -117,6 +117,9 @@ func (s *Store) List() []SessionMeta {
 				Model:     sess.Model,
 				Tag:       sess.Tag,
 				Time: func() string {
+					if sess.UpdatedAt <= 0 {
+						return ""
+					}
 					if sess.UpdatedAt > 1e11 {
 						return time.UnixMilli(sess.UpdatedAt).Format("15:04")
 					}

@@ -706,7 +706,7 @@ func (a *App) ExecTerminalStream(command string) error {
 			"start_time": startTime.UnixMilli(),
 		})
 
-		exitCode, err := a.termTool.ExecuteStream(ctx, command, func(chunk string) {
+		exitCode, err := a.termTool.ExecuteStream(ctx, trimmed, func(chunk string) {
 			runtime.EventsEmit(a.ctx, "terminal:data", chunk)
 		})
 
@@ -839,19 +839,31 @@ func (a *App) FetchUpstreamModels(endpoint, apiKey string) ([]string, error) {
 	return res, nil
 }
 
-// GitCommit 真实执行本地工作区提交
+// GitCommit 真实执行本地工作区提交 (优先提交暂存区改动，防止误覆盖用户选择)
 func (a *App) GitCommit(msg string) (string, error) {
 	cleanMsg := strings.TrimSpace(msg)
 	if cleanMsg == "" {
 		cleanMsg = "feat: update by tcode agent"
 	}
-	cmdAdd := exec.Command("git", "add", "-A")
-	cmdAdd.Dir = a.workspace
+
+	// 1. 先检查暂存区是否已有内容 (git diff --cached --quiet 退出码 1 代表有暂存变更)
+	diffCachedCmd := exec.Command("git", "diff", "--cached", "--quiet")
+	diffCachedCmd.Dir = a.workspace
 	if attr := windowsSysProcAttr(); attr != nil {
-		cmdAdd.SysProcAttr = attr
+		diffCachedCmd.SysProcAttr = attr
 	}
-	if err := cmdAdd.Run(); err != nil {
-		return "", err
+	hasStaged := diffCachedCmd.Run() != nil // 退出码非 0 说明已有暂存改动
+
+	// 2. 若暂存区完全为空，自动将工作区变动暂存
+	if !hasStaged {
+		cmdAdd := exec.Command("git", "add", "-A")
+		cmdAdd.Dir = a.workspace
+		if attr := windowsSysProcAttr(); attr != nil {
+			cmdAdd.SysProcAttr = attr
+		}
+		if err := cmdAdd.Run(); err != nil {
+			return "", err
+		}
 	}
 
 	cmdCommit := exec.Command("git", "commit", "-m", cleanMsg)
@@ -884,6 +896,30 @@ func (a *App) GitStage(filePath string) error {
 		cmd.SysProcAttr = attr
 	}
 	return cmd.Run()
+}
+
+// GitUnstage 真实取消暂存单个文件
+func (a *App) GitUnstage(filePath string) error {
+	if a.sandbox != nil {
+		if _, err := a.sandbox.ValidatePath(filePath); err != nil {
+			return fmt.Errorf("security violation: %w", err)
+		}
+	}
+	cmd := exec.Command("git", "restore", "--staged", "--", filePath)
+	cmd.Dir = a.workspace
+	if attr := windowsSysProcAttr(); attr != nil {
+		cmd.SysProcAttr = attr
+	}
+	if err := cmd.Run(); err == nil {
+		return nil
+	}
+	// 降级使用 git reset HEAD -- filePath
+	resetCmd := exec.Command("git", "reset", "HEAD", "--", filePath)
+	resetCmd.Dir = a.workspace
+	if attr := windowsSysProcAttr(); attr != nil {
+		resetCmd.SysProcAttr = attr
+	}
+	return resetCmd.Run()
 }
 
 func (a *App) SendMessage(req ChatRequest) error {
