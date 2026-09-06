@@ -31,6 +31,11 @@ export const useChatStore = defineStore('chat', () => {
   const isSettingsOpen = ref(false)
   const activeActivity = ref('chat')
   const isStreaming = ref(false)
+  const gitVersion = ref(0)
+
+  function notifyGitStatusChanged() {
+    gitVersion.value++
+  }
 
   // 动态对话消息队列 (纯净真实空状态)
   const messages = ref<ChatMessage[]>([])
@@ -109,12 +114,14 @@ export const useChatStore = defineStore('chat', () => {
     isSettingsOpen,
     activeActivity,
     isStreaming,
+    gitVersion,
     messages,
     toggleApprovalMode,
     toggleDiffWorkspace,
     openDiff,
     appendMessage,
     switchSession,
-    stopGeneration
+    stopGeneration,
+    notifyGitStatusChanged
   }
 })

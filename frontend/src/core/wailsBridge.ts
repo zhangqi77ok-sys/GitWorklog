@@ -530,7 +530,7 @@ export const wailsBridge = {
         }
       })
       const handleFinish = (data: any) => {
-        if (data?.session_id === req.session_id) {
+        if (!data?.session_id || data.session_id === req.session_id) {
           cleanAll()
           if (callbacks.onDone) callbacks.onDone()
         }

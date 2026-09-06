@@ -94,8 +94,14 @@ func ComputeFileDiff(workspaceRoot, relPath string) (DiffReport, error) {
 	if err != nil {
 		return report, err
 	}
+
+	hasHead := hasGitHead(workspaceRoot)
+
 	if _, err := os.Stat(absPath); os.IsNotExist(err) {
 		// 检查是否为 Git 已追踪但在工作区已被物理删除的文件
+		if !hasHead {
+			return report, fmt.Errorf("file [%s] does not exist", relPath)
+		}
 		cmdCheck := gitCmd(workspaceRoot, "diff", "HEAD", "--", relPath)
 		var checkOut bytes.Buffer
 		cmdCheck.Stdout = &checkOut
@@ -104,13 +110,15 @@ func ComputeFileDiff(workspaceRoot, relPath string) (DiffReport, error) {
 		}
 	}
 
-	cmd := gitCmd(workspaceRoot, "diff", "HEAD", "--", relPath)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	_ = cmd.Run()
-
-	diffOut := strings.TrimSpace(stdout.String())
+	diffOut := ""
+	if hasHead {
+		cmd := gitCmd(workspaceRoot, "diff", "HEAD", "--", relPath)
+		var stdout, stderr bytes.Buffer
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+		_ = cmd.Run()
+		diffOut = strings.TrimSpace(stdout.String())
+	}
 	if diffOut == "" {
 		// 检查是否为未追踪新文件或暂存区新文件 (Untracked / Added)
 		statusCmd := gitCmd(workspaceRoot, "status", "--porcelain", "--", relPath)
@@ -317,3 +325,10 @@ func detectLanguage(filePath string) string {
 		return "Plain Text · UTF-8"
 	}
 }
+
+// hasGitHead 检测当前工作区是否拥有有效的 HEAD 提交
+func hasGitHead(workspaceRoot string) bool {
+	cmd := gitCmd(workspaceRoot, "rev-parse", "--verify", "HEAD")
+	return cmd.Run() == nil
+}
+

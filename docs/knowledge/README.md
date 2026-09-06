@@ -43,6 +43,8 @@
 | **33** | **未追踪代码块安全丢弃、Windows 盘符归一化与网络探活连接池治理** | 代码审查 / GitOps / 跨平台路径 / 网络性能 | 未追踪单文件 Hunk 丢弃安全物理回退、全链路 Windows 盘符大小写归一化防沙箱误报、网络探活长连接池复用与本地地址协议自适应 | [33-untracked-hunk-discard-drive-letter-normalization-and-pinger-pooling.md](./33-untracked-hunk-discard-drive-letter-normalization-and-pinger-pooling.md) |
 | **34** | **进程树主动取消机制、大模型工具调用 ID 协议守卫与 Git 变更纯净状态治理** | 进程控制 / 协议合规 / 纯净空状态 / 会话隔离 | `cmd.Cancel` 树杀防孤儿僵死、`tool_call_id` 协议防空保全、Git Working Tree 真实动态映射与跨会话状态清空隔离 | [34-process-tree-cancel-tool-call-id-and-git-working-tree-hygiene.md](./34-process-tree-cancel-tool-call-id-and-git-working-tree-hygiene.md) |
 | **35** | **Git 源码管理闭环绑定、TDD 跨平台进程树熔断、文件物理删除 Diff 容错与卸载器自删除锁治理** | 交互闭环 / 进程生命周期 / GitOps / 卸载安全 | Git 抽屉真实提交与刷新全链路驱动、Working Tree 状态结构体映射、RunTDDValidation 超时孤儿进程树销毁、负向变更 Diff 容错与卸载器脱机批处理防文件锁定 | [35-git-source-control-binding-tdd-process-tree-and-differ-resilience.md](./35-git-source-control-binding-tdd-process-tree-and-differ-resilience.md) |
+| **36** | **Git 分支检出双横杠陷阱、MCP Stderr 管道死锁与流式中断隔离治理** | 命令行协议 / 进程IO生命周期 / IPC事件闭环 / 版本控制 | 移除 `git checkout --` 恢复分支切换、MCP 子进程 Stderr 异步非阻塞排水防管道死锁、中断事件注入 `session_id` 彻底清退监听器、空 Git 仓库 HEAD 探测容错与沙箱空路径越权拦截 | [36-git-checkout-double-dash-mcp-stderr-pipe-and-cancellation-isolation.md](./36-git-checkout-double-dash-mcp-stderr-pipe-and-cancellation-isolation.md) |
+
 
 
 

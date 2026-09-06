@@ -63,3 +63,46 @@ func TestIsValidStashID(t *testing.T) {
 	}
 }
 
+func TestCheckoutBranch_Execution(t *testing.T) {
+	tmpDir := t.TempDir()
+	// 初始化 git 仓库
+	cmdInit := gitCmd(tmpDir, "init")
+	if err := cmdInit.Run(); err != nil {
+		t.Fatalf("git init failed: %v", err)
+	}
+	_ = gitCmd(tmpDir, "config", "user.email", "test@tcode.local").Run()
+	_ = gitCmd(tmpDir, "config", "user.name", "TcodeTest").Run()
+
+	// 提交一个空文件以建立 HEAD
+	_ = gitCmd(tmpDir, "commit", "--allow-empty", "-m", "initial commit").Run()
+
+	// 创建新分支 test-feat
+	if err := CreateBranch(tmpDir, "test-feat"); err != nil {
+		t.Fatalf("CreateBranch failed: %v", err)
+	}
+
+	// 切换回主分支 (main 或 master)
+	branches, current, _ := ListBranches(tmpDir)
+	if current != "test-feat" {
+		t.Errorf("expected current branch to be test-feat, got %s", current)
+	}
+
+	mainBranch := "main"
+	for _, b := range branches {
+		if b == "master" {
+			mainBranch = "master"
+			break
+		}
+	}
+
+	if err := CheckoutBranch(tmpDir, mainBranch); err != nil {
+		t.Errorf("CheckoutBranch back to %s failed: %v", mainBranch, err)
+	}
+
+	// 再次检出 test-feat
+	if err := CheckoutBranch(tmpDir, "test-feat"); err != nil {
+		t.Errorf("CheckoutBranch to test-feat failed: %v", err)
+	}
+}
+
+

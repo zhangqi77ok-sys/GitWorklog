@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
@@ -132,15 +133,29 @@ func FormatDiagnosticFeedback(report *DiagnosticReport) string {
 	return sb.String()
 }
 
+func setWindowsProcessAttr(cmd *exec.Cmd) {
+	if runtime.GOOS == "windows" {
+		cmd.SysProcAttr = &syscall.SysProcAttr{
+			HideWindow:    true,
+			CreationFlags: 0x08000000, // 零黑框防护
+		}
+		cmd.Cancel = func() error {
+			if cmd.Process != nil && cmd.Process.Pid > 0 {
+				killCmd := exec.Command("taskkill", "/F", "/T", "/PID", fmt.Sprintf("%d", cmd.Process.Pid))
+				killCmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: 0x08000000, HideWindow: true}
+				return killCmd.Run()
+			}
+			return nil
+		}
+	}
+}
+
 func runGoDiagnostics(ctx context.Context, workspace string, relPath string) string {
 	dir := filepath.Dir(relPath)
 	// 优先在同目录下执行 go vet
 	cmd := exec.CommandContext(ctx, "go", "vet", "./"+filepath.ToSlash(dir))
 	cmd.Dir = workspace
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		HideWindow:    true,
-		CreationFlags: 0x08000000, // 零黑框防护
-	}
+	setWindowsProcessAttr(cmd)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	_ = cmd.Run()
@@ -151,10 +166,7 @@ func runTSDiagnostics(ctx context.Context, workspace string, relPath string) str
 	// 关键防护: 注入 --no-install 标志，若本地未安装 tsc 立即退出，严禁进入网络交互挂起；注入 -- 隔离参数
 	cmd := exec.CommandContext(ctx, "npx", "--no-install", "tsc", "--noEmit", "--skipLibCheck", "--", relPath)
 	cmd.Dir = workspace
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		HideWindow:    true,
-		CreationFlags: 0x08000000,
-	}
+	setWindowsProcessAttr(cmd)
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &out
@@ -165,10 +177,7 @@ func runTSDiagnostics(ctx context.Context, workspace string, relPath string) str
 func runPythonDiagnostics(ctx context.Context, workspace string, absPath string) string {
 	cmd := exec.CommandContext(ctx, "python", "-m", "py_compile", absPath)
 	cmd.Dir = workspace
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		HideWindow:    true,
-		CreationFlags: 0x08000000,
-	}
+	setWindowsProcessAttr(cmd)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	_ = cmd.Run()

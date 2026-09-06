@@ -71,9 +71,10 @@ type App struct {
 	terminalCancel context.CancelFunc
 	terminalMu     sync.Mutex
 	termTaskID     int64
-	agentCancel    context.CancelFunc
-	agentMu        sync.Mutex
-	agentTaskID    int64
+	agentCancel      context.CancelFunc
+	agentMu          sync.Mutex
+	agentTaskID      int64
+	currentSessionID string
 }
 
 // NewApp 构造生产级 Wails 宿主
@@ -733,7 +734,8 @@ func (a *App) CancelAgentStream() {
 		a.agentCancel = nil
 		if a.ctx != nil {
 			runtime.EventsEmit(a.ctx, "agent:interrupted", map[string]any{
-				"message": "用户手动中断了本次推理",
+				"session_id": a.currentSessionID,
+				"message":    "用户手动中断了本次推理",
 			})
 		}
 	}
@@ -876,6 +878,7 @@ func (a *App) SendMessage(req ChatRequest) error {
 	a.agentTaskID++
 	currentTaskID := a.agentTaskID
 	a.agentCancel = cancel
+	a.currentSessionID = req.SessionID
 	a.agentMu.Unlock()
 
 	go func() {
@@ -1224,6 +1227,13 @@ func (a *App) SendMessage(req ChatRequest) error {
 		}
 
 		// 7. 持久化 Assistant 回复至磁盘
+		if agentCtx.Err() != nil {
+			// 若已被用户中断且没有任何有效产出，跳过写入空 assistant 消息，避免污染历史
+			if assistantContent.Len() == 0 && assistantThinking.Len() == 0 && len(allToolExecs) == 0 {
+				return
+			}
+		}
+
 		asstMsg := session.SessionMessage{
 			ID:       fmt.Sprintf("msg_%d", time.Now().UnixNano()),
 			Role:     "assistant",
@@ -1237,7 +1247,9 @@ func (a *App) SendMessage(req ChatRequest) error {
 		currentSession.UpdatedAt = time.Now().Unix()
 		_ = a.sessionStore.Save(currentSession)
 
-		runtime.EventsEmit(a.ctx, "agent:done", map[string]any{"session_id": req.SessionID})
+		if agentCtx.Err() == nil {
+			runtime.EventsEmit(a.ctx, "agent:done", map[string]any{"session_id": req.SessionID})
+		}
 	}()
 
 	return nil

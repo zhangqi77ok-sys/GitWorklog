@@ -274,7 +274,7 @@
             </div>
 
             <div class="pt-2 border-t border-black/[0.06] space-y-2">
-              <input v-model="commitMessage" type="text" placeholder="提交信息 (Commit message)..." class="w-full px-2.5 py-1.5 rounded-lg border border-black/[0.1] text-xs focus:outline-none focus:border-[#D96B27]">
+              <input v-model="commitMessage" @keyup.enter="handleGitCommit" type="text" placeholder="提交信息 (Commit message)..." class="w-full px-2.5 py-1.5 rounded-lg border border-black/[0.1] text-xs focus:outline-none focus:border-[#D96B27]">
               <button @click="handleGitCommit" class="w-full py-1.5 rounded-lg bg-[#D96B27] text-white text-xs font-semibold shadow-xs hover:bg-[#B8551B] cursor-pointer">
                 ✓ 提交变更 (Commit & Push)
               </button>
@@ -1402,6 +1402,10 @@ function switchToGitActivity() {
   activeActivity.value = 'git'
   loadGitStatus()
 }
+
+watch(() => store.gitVersion, () => {
+  loadGitStatus()
+})
 
 function handleFileClick(node: FileNode) {
   if (node.is_dir) {

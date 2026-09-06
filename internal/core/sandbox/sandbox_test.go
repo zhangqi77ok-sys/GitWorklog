@@ -95,4 +95,18 @@ func TestSandbox_ValidatePathAndAtomicWrite(t *testing.T) {
 	if fullTrimmed != expectedTrimmed {
 		t.Errorf("expected [%s], got [%s]", expectedTrimmed, fullTrimmed)
 	}
+
+	// 7. 空路径拦截测试
+	if _, err := sb.ValidatePath(""); err == nil {
+		t.Errorf("expected empty path to be rejected, got nil")
+	}
+	if _, err := sb.ValidatePath("   "); err == nil {
+		t.Errorf("expected whitespace path to be rejected, got nil")
+	}
+
+	// 8. 写入根目录拦截测试
+	if err := sb.AtomicWriteFile("", []byte("evil")); err == nil {
+		t.Errorf("expected writing to empty path/root to be rejected, got nil")
+	}
 }
+

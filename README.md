@@ -509,7 +509,27 @@ Tcode 打破了单体硬编码调度逻辑，将 Agent 的执行循环、能力�
 * **快照编号自适应格式化与防注入守卫**：
   - 在 `internal/gitops/gitops.go` 的 `RestoreSnapshot` 中为纯数字 Stash 编号（如 `"0"`）自适应组装为 `stash@{0}`，兼顾灵活性与严格校验；
 * **Windows 单文件卸载器脱机批处理自删除锁机制治理**：
-  - 在 `cmd/uninstaller/main.go` 中重排执行时序，先向用户弹出确认完成提示，用户确认后异步触发脱机延时批处理并立即终结卸载主进程自身，彻底消除 Windows 独占 PE 句柄锁导致的卸载程序自残留。
+### 41. Git 分支检出双横杠陷阱、MCP 管道防死锁排水与流式中断隔离治理 (Git Branch Fix, MCP Stderr Drain & Cancel Isolation)
+* **Git 分支检出破坏性参数错误根治 (`git checkout <branch>`)**：
+  - 彻底移除 `internal/gitops/gitops.go` 中 `git checkout -- <name>` 错将分支当作路径解析导致的致命故障，结合前置参数过滤校验确保分支自由无损切换；
+* **MCP 外部进程 Stderr 异步非阻塞排水防死锁**：
+  - 在 `internal/mcp/stdio.go` 中为子进程挂载独立后台协程消费 `cmd.StderrPipe()`，彻底解决外部 Node/Python 插件日志写满管道缓冲区（4KB~64KB）引发的全局进程死锁；
+* **文件树点击相对路径精确传递 (`node.path`)**：
+  - 修复 `frontend/src/components/LeftDrawer.vue` 中点击文件错误传递 `node.name` 导致跨层级文件 Diff 全量报错的缺陷，确保代码工作区能够秒级加载任意子目录文件的物理 Diff；
+* **智能体流式推理中断事件注入会话标识与监听器彻底注销**：
+  - 在 `app.go` 的 `CancelAgentStream` 中显式回传 `session_id`，在前端 `wailsBridge.ts` 中建立鲁棒容错注销机制，彻底根治中断后监听器永久泄漏与流式状态挂死；
+* **推理中断空消息拦截与终结事件冲突治理**：
+  - 智能体循环在早期被中断且未产出任何实质内容时，自动跳过保存无意义的空 assistant 消息，且被中断时不派发 `agent:done`，防止状态撕裂；
+* **全新空 Git 仓库 (无 HEAD 提交) Diff 引擎自适应容错**：
+  - 在 `internal/diff/differ.go` 中引入 `hasGitHead` 探测，针对初次初始化的空仓库自动回退为新文件比对，杜绝抛出 `fatal: bad revision 'HEAD'` 崩溃；
+* **沙箱空路径越权与根目录覆盖拦截**：
+  - 在 `internal/core/sandbox/fs.go` 的 `ValidatePath` 中禁止空路径，并在 `AtomicWriteFile` 中拦截向工作区根目录自身的破坏性写入；
+* **Diff 视窗采纳与放弃改动全局 Working Tree 即时响应**：
+  - 在 `chatStore` 中引入 `gitVersion` 响应式信号并在 `DiffWorkspace.vue` 动作后广播，驱动 `LeftDrawer` 与主工作区变更文件列表即时刷新；
+* **单文件安装向导自动化测试沙箱纯净隔离**：
+  - 在 `cmd/installer/main.go` 中识别 `--silent-install-dir` 测试标志，跳过创建用户桌面快捷方式与写入全局注册表，彻底杜绝测试污染生产环境；
+* **编译器语法诊断子进程超时级联树杀 (`cmd.Cancel`)**：
+  - 在 `internal/lsp/diagnostics.go` 中为 Go、TypeScript 与 Python 诊断执行注入 Windows 递归树杀，杜绝 4s 超时后孤儿编译器进程僵死。
 
 ---
 

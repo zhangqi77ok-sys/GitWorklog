@@ -113,6 +113,7 @@ async function revertAction() {
   try {
     await wailsBridge.revertFile(store.activeDiffFile)
     await loadDiff()
+    store.notifyGitStatusChanged()
   } catch (err) {
     console.error('Revert error:', err)
   }
@@ -122,6 +123,7 @@ async function acceptAction() {
   if (store.activeDiffFile) {
     try {
       await wailsBridge.gitStage(store.activeDiffFile)
+      store.notifyGitStatusChanged()
     } catch (err) {
       console.error('Git stage error:', err)
     }

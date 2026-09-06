@@ -95,7 +95,7 @@ func CheckoutBranch(workspace, name string) error {
 	if !isValidBranchName(name) {
 		return fmt.Errorf("invalid branch name: %q", name)
 	}
-	cmd := gitCmd(workspace, "checkout", "--", name)
+	cmd := gitCmd(workspace, "checkout", name)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("git checkout failed: %s (%w)", strings.TrimSpace(string(out)), err)

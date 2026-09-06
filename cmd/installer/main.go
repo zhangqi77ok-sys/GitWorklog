@@ -82,6 +82,7 @@ func main() {
 	defaultInstallDir := filepath.Join(localAppData, "Programs", "TcodeStudio")
 	customDir := ""
 	isSilent := false
+	isTestingMode := false
 
 	// 解析命令行参数: 支持 -silent, /S, -dir <path>, --dir <path>, /D=<path>, -dir=<path>, --silent-install-dir
 	for i := 1; i < len(os.Args); i++ {
@@ -90,6 +91,7 @@ func main() {
 			isSilent = true
 		} else if arg == "--silent-install-dir" {
 			isSilent = true
+			isTestingMode = true
 			if i+1 < len(os.Args) {
 				customDir = os.Args[i+1]
 				i++
@@ -107,6 +109,7 @@ func main() {
 			customDir = strings.TrimPrefix(arg, "--dir=")
 		} else if strings.HasPrefix(arg, "--silent-install-dir=") {
 			isSilent = true
+			isTestingMode = true
 			customDir = strings.TrimPrefix(arg, "--silent-install-dir=")
 		}
 	}
@@ -200,28 +203,30 @@ func main() {
 	// 4. 释放卸载程序 uninstall.exe
 	_ = os.WriteFile(uninstallExe, uninstallerBinary, 0755)
 
-	// 5. 创建快捷方式 (桌面 + 开始菜单)
-	homeDir, _ := os.UserHomeDir()
-	desktopLnk := filepath.Join(homeDir, "Desktop", "Tcode Studio.lnk")
-	startMenuDir := filepath.Join(homeDir, "AppData", "Roaming", "Microsoft", "Windows", "Start Menu", "Programs")
-	startMenuLnk := filepath.Join(startMenuDir, "Tcode Studio.lnk")
+	// 5. 创建快捷方式 (桌面 + 开始菜单) - 仅在非隔离测试模式下生成
+	if !isTestingMode {
+		homeDir, _ := os.UserHomeDir()
+		desktopLnk := filepath.Join(homeDir, "Desktop", "Tcode Studio.lnk")
+		startMenuDir := filepath.Join(homeDir, "AppData", "Roaming", "Microsoft", "Windows", "Start Menu", "Programs")
+		startMenuLnk := filepath.Join(startMenuDir, "Tcode Studio.lnk")
 
-	createShortcut(desktopLnk, targetExe, installDir)
-	createShortcut(startMenuLnk, targetExe, installDir)
+		createShortcut(desktopLnk, targetExe, installDir)
+		createShortcut(startMenuLnk, targetExe, installDir)
 
-	// 6. 注册 Windows 卸载表项
-	regPath := `Software\Microsoft\Windows\CurrentVersion\Uninstall\TcodeStudio`
-	k, _, err := registry.CreateKey(registry.CURRENT_USER, regPath, registry.ALL_ACCESS)
-	if err == nil {
-		defer k.Close()
-		_ = k.SetStringValue("DisplayName", "Tcode Agentic Studio v2.0")
-		_ = k.SetStringValue("DisplayVersion", "2.0.0")
-		_ = k.SetStringValue("Publisher", "Tcode Studio")
-		_ = k.SetStringValue("DisplayIcon", targetExe+",0")
-		_ = k.SetStringValue("InstallLocation", installDir)
-		_ = k.SetStringValue("UninstallString", fmt.Sprintf("\"%s\"", uninstallExe))
-		_ = k.SetDWordValue("NoModify", 1)
-		_ = k.SetDWordValue("NoRepair", 1)
+		// 6. 注册 Windows 卸载表项
+		regPath := `Software\Microsoft\Windows\CurrentVersion\Uninstall\TcodeStudio`
+		k, _, err := registry.CreateKey(registry.CURRENT_USER, regPath, registry.ALL_ACCESS)
+		if err == nil {
+			defer k.Close()
+			_ = k.SetStringValue("DisplayName", "Tcode Agentic Studio v2.0")
+			_ = k.SetStringValue("DisplayVersion", "2.0.0")
+			_ = k.SetStringValue("Publisher", "Tcode Studio")
+			_ = k.SetStringValue("DisplayIcon", targetExe+",0")
+			_ = k.SetStringValue("InstallLocation", installDir)
+			_ = k.SetStringValue("UninstallString", fmt.Sprintf("\"%s\"", uninstallExe))
+			_ = k.SetDWordValue("NoModify", 1)
+			_ = k.SetDWordValue("NoRepair", 1)
+		}
 	}
 
 	// 7. 安装完成提示与直接启动选项

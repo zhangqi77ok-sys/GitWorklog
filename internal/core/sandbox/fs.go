@@ -38,6 +38,9 @@ func normalizeWindowsPath(p string) string {
 // ValidatePath 严格校验目标路径是否越界
 func (s *Sandbox) ValidatePath(targetPath string) (string, error) {
 	cleanTarget := strings.TrimSpace(targetPath)
+	if cleanTarget == "" {
+		return "", fmt.Errorf("SECURITY: empty path is not allowed")
+	}
 	if strings.Contains(cleanTarget, "\x00") {
 		return "", fmt.Errorf("SECURITY: null byte in path [%s]", targetPath)
 	}
@@ -80,6 +83,9 @@ func (s *Sandbox) AtomicWriteFile(path string, content []byte) error {
 	validated, err := s.ValidatePath(path)
 	if err != nil {
 		return err
+	}
+	if validated == s.rootDir {
+		return fmt.Errorf("SECURITY: cannot overwrite workspace root directory [%s]", s.rootDir)
 	}
 
 	dir := filepath.Dir(validated)

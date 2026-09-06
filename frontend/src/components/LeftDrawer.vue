@@ -131,7 +131,7 @@
         </div>
 
         <div class="pt-2 border-t border-black/[0.06] space-y-2">
-          <input v-model="commitMessage" type="text" placeholder="提交信息 (Commit message)..." class="w-full px-2.5 py-1.5 rounded-lg border border-black/[0.1] text-xs focus:outline-none focus:border-[#D96B27]">
+          <input v-model="commitMessage" @keyup.enter="handleGitCommit" type="text" placeholder="提交信息 (Commit message)..." class="w-full px-2.5 py-1.5 rounded-lg border border-black/[0.1] text-xs focus:outline-none focus:border-[#D96B27]">
           <button @click="handleGitCommit" :disabled="isCommitting || !commitMessage.trim()" class="w-full py-1.5 rounded-lg bg-[#D96B27] disabled:opacity-50 text-white text-xs font-semibold shadow-xs hover:bg-[#B8551B] cursor-pointer">
             {{ isCommitting ? '正在提交...' : '✓ 提交变更 (Commit & Push)' }}
           </button>
@@ -195,6 +195,10 @@ watch(() => store.activeActivity, (act) => {
   if (act === 'git') loadGitStatus()
 })
 
+watch(() => store.gitVersion, () => {
+  loadGitStatus()
+})
+
 async function loadFileTree() {
   try {
     const tree = await wailsBridge.getFileTree()
@@ -221,7 +225,7 @@ function handleNodeClick(node: FileNode) {
   if (node.is_dir) {
     expandedFolders[node.path] = !expandedFolders[node.path]
   } else {
-    store.openDiff(node.name)
+    store.openDiff(node.path)
   }
 }
 

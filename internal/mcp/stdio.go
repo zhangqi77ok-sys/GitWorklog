@@ -24,6 +24,7 @@ type StdioClient struct {
 	cmd    *exec.Cmd
 	stdin  io.WriteCloser
 	stdout io.ReadCloser
+	stderr io.ReadCloser
 
 	pending  sync.Map // map[int64]chan *JSONRPCMessage
 	nextID   atomic.Int64
@@ -72,6 +73,12 @@ func (c *StdioClient) Start(ctx context.Context) error {
 		return fmt.Errorf("stdout pipe error: %w", err)
 	}
 
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		c.mu.Unlock()
+		return fmt.Errorf("stderr pipe error: %w", err)
+	}
+
 	if runtime.GOOS == "windows" {
 		cmd.SysProcAttr = &syscall.SysProcAttr{
 			CreationFlags: 0x08000000,
@@ -87,11 +94,23 @@ func (c *StdioClient) Start(ctx context.Context) error {
 	c.cmd = cmd
 	c.stdin = stdin
 	c.stdout = stdout
+	c.stderr = stderr
 	c.started = true
 	c.mu.Unlock()
 
 	// 启动后台扫描协程监听服务端按行输出
 	go c.readLoop()
+
+	// 启动后台排水协程消费 stderr，杜绝外部进程日志占满管道缓冲区引发死锁
+	go func(r io.Reader) {
+		buf := make([]byte, 4096)
+		for {
+			_, err := r.Read(buf)
+			if err != nil {
+				break
+			}
+		}
+	}(stderr)
 
 	// 1. 发起 initialize 握手
 	initParams := InitializeParams{
@@ -146,6 +165,10 @@ func (c *StdioClient) Stop() error {
 	if c.stdout != nil {
 		_ = c.stdout.Close()
 		c.stdout = nil
+	}
+	if c.stderr != nil {
+		_ = c.stderr.Close()
+		c.stderr = nil
 	}
 
 	// 唤醒并清空所有悬挂的等待请求

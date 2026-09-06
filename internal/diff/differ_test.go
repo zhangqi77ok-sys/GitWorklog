@@ -142,3 +142,30 @@ func TestDiscardHunkPatch_UntrackedFile(t *testing.T) {
 	}
 }
 
+func TestComputeFileDiff_EmptyRepoNoHead(t *testing.T) {
+	tmpDir := t.TempDir()
+	// 初始化全新的 git 仓库 (不创建任何 commit，无 HEAD)
+	cmdInit := gitCmd(tmpDir, "init")
+	if err := cmdInit.Run(); err != nil {
+		t.Fatalf("git init failed: %v", err)
+	}
+
+	testFile := "new_file.txt"
+	absPath := filepath.Join(tmpDir, testFile)
+	_ = os.WriteFile(absPath, []byte("hello from empty repo\nsecond line"), 0644)
+
+	// 计算 diff，确保不会因 bad revision 'HEAD' 崩溃
+	report, err := ComputeFileDiff(tmpDir, testFile)
+	if err != nil {
+		t.Fatalf("ComputeFileDiff failed on empty repo without HEAD: %v", err)
+	}
+
+	if len(report.Lines) != 2 {
+		t.Errorf("expected 2 lines in diff report, got %d", len(report.Lines))
+	}
+	if !strings.Contains(report.Stats, "新文件") {
+		t.Errorf("expected stats to indicate new file, got %s", report.Stats)
+	}
+}
+
+
