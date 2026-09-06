@@ -460,6 +460,20 @@ Tcode 打破了单体硬编码调度逻辑，将 Agent 的执行循环、能力�
 * **会话 ID 白名单解耦与手动中断即时持久化**：
   - 移除会话存储中对 `sess_` 前缀的硬编码过滤，兼容所有合法扩展 ID；在前端点击手动中断时即时触发 `saveSession`，确保已生成的局部回复不丢失；并在 IPC 桥接层补齐对 `agent:interrupted` 事件的清理与回调触发。
 
+### 38. 未追踪代码块安全丢弃、Windows 盘符全链路归一化与网络探活连接池治理 (Untracked Hunk Discard, Drive Letter Normalization & Pinger Pooling)
+* **未追踪新文件 (Untracked Files) 行级 Hunk 丢弃安全回退机制**：
+  - 在 `internal/diff/differ.go` 的 `DiscardHunkPatch` 与 `plugins/tool/git/git_tool.go` 的 `RestoreFile` 中，针对未加入 Git 索引的新增文件（补丁头 `--- /dev/null`），拦截 `git apply --reverse` 报错，并在工作区沙箱安全校验通过的前提下，安全物理移除未追踪文件，确保代码树与前端放弃改动意图无损对齐；
+* **LSP 编译器诊断与 AST 拓扑扫描 Windows 盘符大小写全链路归一化**：
+  - 彻底治理 `internal/lsp/diagnostics.go` 与 `internal/ast/scanner.go` 中因 Windows 盘符大小写差异（如 `D:` vs `d:`）导致 `filepath.Rel` 计算报错 `path escapes workspace sandbox` 的假阳性沙箱误杀，并在 `filepath.Walk` 回调首行增加 `info == nil` 空指针熔断；
+* **网络探活工具连接池复用与本地回环协议智能自适应**：
+  - 重构 `internal/network/pinger.go`，构建全局共享连接池 `http.Transport`，解决高频测速 socket 泄漏；对 `localhost`、`127.0.0.1`、`0.0.0.0` 等本地地址智能补齐 `http://` 避免 TLS 握手崩溃，探测响应浅读排空实现 HTTP Keep-Alive；
+* **文件系统算子 (fs_control) 多别名全量兼容与空白路径防御**：
+  - 在 `plugins/tool/fs/fs_tool.go` 中为大模型算子调用无缝支持 `path`、`rel_path` 与 `file_path` 三重别名解析与 `TrimSpace` 防御，规避模型参数漂移导致的执行中断；
+* **前端全局 Esc 事件生命周期管理与渠道列表纯净同步**：
+  - 在 `SettingsModal.vue` 中挂载全局键盘事件并在组件卸载时安全解绑；修正 `loadChannels` 赋值逻辑，确保在渠道被清空时前端能够真实展示纯净空状态；
+* **深度思考抽屉空白渲染过滤与硬编码历史残留彻底根除**：
+  - 在 `ChatCockpit.vue` 中为 `msg.thinking` 增加非空过滤（`msg.thinking.trim().length > 0`），杜绝空白思考框占位；彻底移除早期原型遗留的 `msg.id === 'msg_2'` 假条件，改动文件卡片完全基于真实的 `allModifiedFiles` 动态响应。
+
 ---
 
 ## 🎨 四、视觉与人机工程学规范

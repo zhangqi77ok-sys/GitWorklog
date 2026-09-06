@@ -109,3 +109,30 @@ func TestDiagnoseFile_PathTraversal(t *testing.T) {
 		}
 	}
 }
+
+func TestDiagnoseFile_WindowsDriveNormalization(t *testing.T) {
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Skip("cannot get working dir")
+	}
+
+	vol := filepath.VolumeName(wd)
+	if vol == "" {
+		t.Skip("not windows drive")
+	}
+
+	// 构造小写盘符 workspace
+	lowerWd := strings.ToLower(vol) + wd[len(vol):]
+	target := "diagnostics.go"
+	if _, err := os.Stat(filepath.Join(lowerWd, "internal", "lsp", "diagnostics.go")); err == nil {
+		target = "internal/lsp/diagnostics.go"
+	}
+
+	report, err := DiagnoseFile(lowerWd, target)
+	if err != nil {
+		t.Fatalf("DiagnoseFile with lower drive letter failed: %v", err)
+	}
+	if report == nil {
+		t.Fatalf("expected report, got nil")
+	}
+}

@@ -26,6 +26,25 @@ func TestRunTDDValidation_NoGoMod(t *testing.T) {
 	}
 }
 
+func TestRunTDDValidation_WithGoMod(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "tcode_test_agent_gomod_*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	_ = os.WriteFile(filepath.Join(tempDir, "go.mod"), []byte("module testmod\n\ngo 1.22\n"), 0644)
+	report, err := RunTDDValidation(tempDir)
+	if err != nil {
+		t.Fatalf("RunTDDValidation failed: %v", err)
+	}
+	// 无论是否有测试文件，状态应返回有效报表（PASS 或 FAIL），而不是崩溃
+	if report.Status != "PASS" && report.Status != "FAIL" {
+		t.Errorf("expected PASS or FAIL, got: %s", report.Status)
+	}
+}
+
+
 func TestRunSecurityAudit_Clean(t *testing.T) {
 	wd, err := os.Getwd()
 	if err != nil {

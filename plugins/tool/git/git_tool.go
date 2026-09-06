@@ -5,7 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"syscall"
@@ -198,7 +200,32 @@ func (t *Tool) UnstageFile(filePath string) error {
 
 // RestoreFile 放弃工作区更改
 func (t *Tool) RestoreFile(filePath string) error {
-	_, err := t.execGit("restore", "--", filePath)
+	trimmed := strings.TrimSpace(filePath)
+	if trimmed == "" {
+		return fmt.Errorf("empty file path")
+	}
+	_, err := t.execGit("restore", "--", trimmed)
+	if err != nil {
+		// 如果是未追踪新文件，git restore 会报错：error: pathspec '...' did not match any file(s) known to git
+		// 安全回退：如果在仓库沙箱内且属于未追踪文件，物理移除该文件
+		absPath := filepath.Join(t.rootDir, trimmed)
+		cleanAbs, absErr := filepath.Abs(absPath)
+		cleanRepo, repoErr := filepath.Abs(t.rootDir)
+		if absErr == nil && repoErr == nil {
+			volRepo := filepath.VolumeName(cleanRepo)
+			normRepo := strings.ToUpper(volRepo) + cleanRepo[len(volRepo):]
+			volAbs := filepath.VolumeName(cleanAbs)
+			normAbs := strings.ToUpper(volAbs) + cleanAbs[len(volAbs):]
+			rel, relErr := filepath.Rel(normRepo, normAbs)
+			if relErr == nil && !strings.HasPrefix(rel, "..") {
+				if fi, statErr := os.Stat(cleanAbs); statErr == nil && !fi.IsDir() {
+					if rmErr := os.Remove(cleanAbs); rmErr == nil || os.IsNotExist(rmErr) {
+						return nil
+					}
+				}
+			}
+		}
+	}
 	return err
 }
 

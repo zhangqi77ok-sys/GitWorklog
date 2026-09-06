@@ -65,7 +65,7 @@
           </div>
 
           <!-- 深度思考抽屉 (真实大模型 reasoning_content 流式动态展开) -->
-          <div v-if="msg.thinking" class="w-full rounded-xl border border-black/[0.08] bg-white/60 shadow-2xs overflow-hidden">
+          <div v-if="msg.thinking && msg.thinking.trim().length > 0" class="w-full rounded-xl border border-black/[0.08] bg-white/60 shadow-2xs overflow-hidden">
             <div @click="toggleThinking(msg.id)" class="p-2.5 flex items-center justify-between hover:bg-black/[0.02] cursor-pointer">
               <div class="flex items-center gap-2">
                 <span class="text-sm">🧠</span>
@@ -114,7 +114,7 @@
           ></div>
 
           <!-- 改动文件列表与即时 Diff 预览卡片 -->
-          <div v-if="msg.id === 'msg_2' || dynamicallyModifiedFiles.length > 0" class="w-full rounded-2xl border border-black/[0.08] bg-white shadow-xs p-3 space-y-2.5">
+          <div v-if="allModifiedFiles.length > 0" class="w-full rounded-2xl border border-black/[0.08] bg-white shadow-xs p-3 space-y-2.5">
             <div class="flex items-center justify-between">
               <div class="flex items-center gap-1.5 text-xs font-bold text-[#18181B]">
                 <span class="text-sm">📝</span>

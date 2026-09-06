@@ -51,6 +51,17 @@ func RunTDDValidation(workspace string) (TestReport, error) {
 		}, nil
 	}
 
+	if _, lookErr := exec.LookPath("go"); lookErr != nil {
+		return TestReport{
+			Status:    "FAIL",
+			Passed:    0,
+			Failed:    1,
+			Duration:  "0ms",
+			Output:    "未检测到系统安装的 Go 编译器环境 (go not found in PATH)，请先安装 Go 工具链以运行 TDD 验证套件",
+			Timestamp: time.Now().Unix(),
+		}, nil
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 

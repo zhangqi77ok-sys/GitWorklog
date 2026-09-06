@@ -30,6 +30,9 @@ func ScanWorkspaceAST(rootDir string) ([]GraphNode, error) {
 		if err != nil {
 			return nil
 		}
+		if info == nil {
+			return nil
+		}
 		// 忽略隐藏目录与大型依赖产物目录
 		if info.IsDir() {
 			base := strings.ToLower(info.Name())
@@ -49,7 +52,12 @@ func ScanWorkspaceAST(rootDir string) ([]GraphNode, error) {
 			return nil
 		}
 
-		rel, _ := filepath.Rel(rootDir, path)
+		normRoot := normalizeWindowsPath(filepath.Clean(rootDir))
+		normPath := normalizeWindowsPath(filepath.Clean(path))
+		rel, relErr := filepath.Rel(normRoot, normPath)
+		if relErr != nil {
+			rel = filepath.Base(path)
+		}
 		rel = filepath.ToSlash(rel)
 
 		safeParse := func() (n *ast.File, err error) {
@@ -122,4 +130,12 @@ func ScanWorkspaceAST(rootDir string) ([]GraphNode, error) {
 	}
 
 	return nodes, nil
+}
+
+func normalizeWindowsPath(p string) string {
+	vol := filepath.VolumeName(p)
+	if len(vol) > 0 {
+		return strings.ToUpper(vol) + p[len(vol):]
+	}
+	return p
 }

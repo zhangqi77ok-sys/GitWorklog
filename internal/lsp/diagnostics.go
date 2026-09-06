@@ -57,7 +57,9 @@ func DiagnoseFile(workspace string, relPath string) (*DiagnosticReport, error) {
 	if err != nil {
 		return nil, fmt.Errorf("invalid workspace: %w", err)
 	}
-	rel, err := filepath.Rel(cleanWorkspace, cleanAbs)
+	normWorkspace := normalizeWindowsPath(cleanWorkspace)
+	normAbs := normalizeWindowsPath(cleanAbs)
+	rel, err := filepath.Rel(normWorkspace, normAbs)
 	if err != nil || strings.HasPrefix(rel, "..") {
 		return nil, fmt.Errorf("path escapes workspace sandbox: %s", relPath)
 	}
@@ -246,4 +248,12 @@ func parsePythonErrors(raw string, targetFile string) []DiagnosticItem {
 		})
 	}
 	return items
+}
+
+func normalizeWindowsPath(p string) string {
+	vol := filepath.VolumeName(p)
+	if len(vol) > 0 {
+		return strings.ToUpper(vol) + p[len(vol):]
+	}
+	return p
 }

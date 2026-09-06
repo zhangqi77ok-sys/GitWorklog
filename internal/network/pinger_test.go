@@ -1,4 +1,4 @@
-﻿package network
+package network
 
 import (
 	"net/http"
@@ -30,11 +30,14 @@ func TestPingTarget_AutoScheme(t *testing.T) {
 		t.Errorf("expected latency to end with ms, got: %s", latency)
 	}
 
-	// 传入缺少 scheme 的主机名/端口
+	// 传入缺少 scheme 的主机名/端口 (如 127.0.0.1:xxxx)
 	hostPort := strings.TrimPrefix(ts.URL, "http://")
-	// 因为测试服务器是 HTTP，不带 scheme 默认被补成 https:// 会被底层拦截，但不能报 unsupported protocol scheme
-	_, pingErr := PingTarget(hostPort)
-	if pingErr != nil && strings.Contains(pingErr.Error(), "unsupported protocol scheme") {
-		t.Errorf("protocol scheme should be auto completed, but got error: %v", pingErr)
+	// 针对 127.0.0.1 / localhost，应智能补齐 http://，且能成功连通返回有效延迟
+	localLatency, pingErr := PingTarget(hostPort)
+	if pingErr != nil {
+		t.Fatalf("local hostPort without scheme should be completed with http:// and succeed, got error: %v", pingErr)
+	}
+	if !strings.HasSuffix(localLatency, "ms") {
+		t.Errorf("expected local latency to end with ms, got: %s", localLatency)
 	}
 }

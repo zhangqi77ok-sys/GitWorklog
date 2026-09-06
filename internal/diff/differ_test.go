@@ -122,3 +122,23 @@ func TestValidateRelPath_LeadingSlash(t *testing.T) {
 	}
 }
 
+func TestDiscardHunkPatch_UntrackedFile(t *testing.T) {
+	wd, _ := os.Getwd()
+	repoRoot := filepath.Dir(filepath.Dir(wd))
+
+	tempFileName := "temp_untracked_discard_test.txt"
+	absPath := filepath.Join(repoRoot, tempFileName)
+	_ = os.WriteFile(absPath, []byte("discard this untracked line 1\nline 2"), 0644)
+	defer os.Remove(absPath)
+
+	err := DiscardHunkPatch(repoRoot, tempFileName, 0)
+	if err != nil {
+		t.Fatalf("DiscardHunkPatch failed on untracked file: %v", err)
+	}
+
+	// 验证文件已被安全物理清理
+	if _, err := os.Stat(absPath); !os.IsNotExist(err) {
+		t.Errorf("expected untracked file to be removed after discarding hunk, but it still exists")
+	}
+}
+

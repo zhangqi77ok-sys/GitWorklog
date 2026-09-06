@@ -341,7 +341,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { useChatStore } from '../stores/chatStore'
 import {
   wailsBridge,
@@ -391,14 +391,31 @@ const form = reactive<ChannelConfig>({
   updated_at: 0
 })
 
+function handleGlobalKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape' && store.isSettingsOpen) {
+    if (isEditing.value) {
+      isEditing.value = false
+    } else if (isEditingMCP.value) {
+      isEditingMCP.value = false
+    } else {
+      store.isSettingsOpen = false
+    }
+  }
+}
+
 onMounted(async () => {
+  window.addEventListener('keydown', handleGlobalKeydown)
   await Promise.all([loadChannels(), loadMCPs(), loadSkills(), loadRules()])
+})
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleGlobalKeydown)
 })
 
 async function loadChannels() {
   try {
     const list = await wailsBridge.listChannels()
-    if (list && list.length > 0) channels.value = list
+    channels.value = list || []
   } catch (err) {
     console.error('Failed to load channels:', err)
   }

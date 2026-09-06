@@ -803,8 +803,9 @@ func (a *App) FetchUpstreamModels(endpoint, apiKey string) ([]string, error) {
 
 // GitCommit 真实执行本地工作区提交
 func (a *App) GitCommit(msg string) (string, error) {
-	if msg == "" {
-		msg = "feat: update by tcode agent"
+	cleanMsg := strings.TrimSpace(msg)
+	if cleanMsg == "" {
+		cleanMsg = "feat: update by tcode agent"
 	}
 	cmdAdd := exec.Command("git", "add", "-A")
 	cmdAdd.Dir = a.workspace
@@ -815,7 +816,7 @@ func (a *App) GitCommit(msg string) (string, error) {
 		return "", err
 	}
 
-	cmdCommit := exec.Command("git", "commit", "-m", msg)
+	cmdCommit := exec.Command("git", "commit", "-m", cleanMsg)
 	cmdCommit.Dir = a.workspace
 	if attr := windowsSysProcAttr(); attr != nil {
 		cmdCommit.SysProcAttr = attr

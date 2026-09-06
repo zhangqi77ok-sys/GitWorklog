@@ -40,6 +40,7 @@
 | **30** | **MCP 外部握手并发锁粒度优化、终端守护协程防泄漏、Git 状态路径空格防御与时间戳量级校验** | 协议并发 / 协程生命周期 / CLI边界 / 数据一致性 | 外部进程握手移出全局写锁防雪崩、终端执行守护协程通道退出、Git Porcelain v2 空格路径保护与 13 位毫秒时间戳归一化 | [30-mcp-concurrency-goroutine-leak-and-status-path-hygiene.md](./30-mcp-concurrency-goroutine-leak-and-status-path-hygiene.md) |
 | **31** | **插件分段锁热替换、Windows 驱动器盘符归一化、任务并发取消保护与状态码防御** | 架构扩展 / 跨平台兼容 / 并发时序 / 协议边界 | 注册中心原子替换接口防旧工作区越权、盘符大小写归一化根除文件树空白、单调递增任务序号防取消句柄冲掉、HTTP状态码严格Fail-Closed | [31-plugin-hot-reload-drive-normalization-and-concurrency-cancel-guard.md](./31-plugin-hot-reload-drive-normalization-and-concurrency-cancel-guard.md) |
 | **32** | **MCP 悬挂通道空指针防御、代码审计 OOM 熔断与 HTTP 连接池复用治理** | 并发通信 / 内存安全 / 遥测连通 / 网络性能 | StdioClient 关闭时 pending channel 非空保护防 SIGSEGV、安全审计大文件 5MB 熔断、会话 ID 白名单解耦、HTTP Transport 实例复用防连接泄漏与 Telemetry 实效采集 | [32-mcp-pending-nil-defense-audit-oom-and-http-connection-pooling.md](./32-mcp-pending-nil-defense-audit-oom-and-http-connection-pooling.md) |
+| **33** | **未追踪代码块安全丢弃、Windows 盘符归一化与网络探活连接池治理** | 代码审查 / GitOps / 跨平台路径 / 网络性能 | 未追踪单文件 Hunk 丢弃安全物理回退、全链路 Windows 盘符大小写归一化防沙箱误报、网络探活长连接池复用与本地地址协议自适应 | [33-untracked-hunk-discard-drive-letter-normalization-and-pinger-pooling.md](./33-untracked-hunk-discard-drive-letter-normalization-and-pinger-pooling.md) |
 
 
 

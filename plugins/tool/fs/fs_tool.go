@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"tcode/internal/core/sandbox"
 	v1 "tcode/pkg/plugin/v1"
 )
@@ -74,36 +75,52 @@ func (t *Tool) Execute(ctx context.Context, rawArgs json.RawMessage) (*v1.ToolRe
 	}
 
 	var args struct {
-		Action  string `json:"action"`
-		Path    string `json:"path"`
-		Content string `json:"content"`
+		Action   string `json:"action"`
+		Path     string `json:"path"`
+		RelPath  string `json:"rel_path"`
+		FilePath string `json:"file_path"`
+		Content  string `json:"content"`
 	}
 
 	if err := json.Unmarshal(rawArgs, &args); err != nil {
 		return &v1.ToolResult{Content: fmt.Sprintf("invalid arguments: %v", err), IsError: true}, nil
 	}
 
+	targetPath := strings.TrimSpace(args.Path)
+	if targetPath == "" {
+		targetPath = strings.TrimSpace(args.RelPath)
+	}
+	if targetPath == "" {
+		targetPath = strings.TrimSpace(args.FilePath)
+	}
+
 	switch args.Action {
 	case "read":
-		data, err := t.sandbox.SafeReadFile(args.Path)
+		if targetPath == "" {
+			return &v1.ToolResult{Content: "read error: empty file path", IsError: true}, nil
+		}
+		data, err := t.sandbox.SafeReadFile(targetPath)
 		if err != nil {
 			return &v1.ToolResult{Content: fmt.Sprintf("read error: %v", err), IsError: true}, nil
 		}
 		return &v1.ToolResult{Content: string(data), IsError: false}, nil
 
 	case "write":
+		if targetPath == "" {
+			return &v1.ToolResult{Content: "atomic write error: empty file path", IsError: true}, nil
+		}
 		// 写前轻量建立影子快照
 		if t.snapshotMgr != nil {
-			_, _ = t.snapshotMgr.CreateSnapshot(fmt.Sprintf("before write to %s", args.Path))
+			_, _ = t.snapshotMgr.CreateSnapshot(fmt.Sprintf("before write to %s", targetPath))
 		}
 
-		if err := t.sandbox.AtomicWriteFile(args.Path, []byte(args.Content)); err != nil {
+		if err := t.sandbox.AtomicWriteFile(targetPath, []byte(args.Content)); err != nil {
 			return &v1.ToolResult{Content: fmt.Sprintf("atomic write error: %v", err), IsError: true}, nil
 		}
-		return &v1.ToolResult{Content: fmt.Sprintf("file [%s] written successfully (atomic sync)", args.Path), IsError: false}, nil
+		return &v1.ToolResult{Content: fmt.Sprintf("file [%s] written successfully (atomic sync)", targetPath), IsError: false}, nil
 
 	case "list":
-		entries, err := t.sandbox.ListDir(args.Path)
+		entries, err := t.sandbox.ListDir(targetPath)
 		if err != nil {
 			return &v1.ToolResult{Content: fmt.Sprintf("list error: %v", err), IsError: true}, nil
 		}

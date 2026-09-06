@@ -277,6 +277,16 @@ func DiscardHunkPatch(workspaceRoot, relPath string, hunkIndex int) error {
 	cmd.Stdin = strings.NewReader(patch)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
+		// 如果是未追踪新文件 (--- /dev/null)，git apply --reverse 无法在 git index 中找到该文件
+		// 此时安全回退为物理移除该未追踪新文件
+		if strings.HasPrefix(strings.TrimSpace(patch), "--- /dev/null") {
+			absPath, valErr := validateRelPath(workspaceRoot, relPath)
+			if valErr == nil {
+				if removeErr := os.Remove(absPath); removeErr == nil || os.IsNotExist(removeErr) {
+					return nil
+				}
+			}
+		}
 		return fmt.Errorf("git apply --reverse failed: %s", string(out))
 	}
 	return nil
