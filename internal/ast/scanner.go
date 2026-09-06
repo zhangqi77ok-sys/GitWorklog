@@ -23,10 +23,22 @@ type GraphNode struct {
 
 // ScanWorkspaceAST 真实扫描工作区 Go 源代码语法树并提取实体拓扑
 func ScanWorkspaceAST(rootDir string) ([]GraphNode, error) {
+	trimmed := strings.TrimSpace(rootDir)
+	if trimmed == "" {
+		return nil, fmt.Errorf("workspace root directory cannot be empty")
+	}
+	stat, err := os.Stat(trimmed)
+	if err != nil {
+		return nil, fmt.Errorf("workspace root [%s] does not exist: %w", trimmed, err)
+	}
+	if !stat.IsDir() {
+		return nil, fmt.Errorf("workspace root [%s] is not a directory", trimmed)
+	}
+
 	nodes := make([]GraphNode, 0)
 	fset := token.NewFileSet()
 
-	err := filepath.Walk(rootDir, func(path string, info os.FileInfo, err error) error {
+	err = filepath.Walk(trimmed, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return nil
 		}

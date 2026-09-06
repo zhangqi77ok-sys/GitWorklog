@@ -75,3 +75,16 @@ type Greeter struct {}`
 		t.Fatalf("expected at least 1 node, got 0")
 	}
 }
+
+func TestScanWorkspaceAST_NonExistentDir(t *testing.T) {
+	// 空路径
+	if _, err := ScanWorkspaceAST(""); err == nil {
+		t.Errorf("expected error for empty rootDir, got nil")
+	}
+
+	// 明确不存在的路径
+	nonExistent := filepath.Join(os.TempDir(), "definitely_not_exist_tcode_dir_99999")
+	if _, err := ScanWorkspaceAST(nonExistent); err == nil {
+		t.Errorf("expected error for non-existent rootDir [%s], got nil", nonExistent)
+	}
+}

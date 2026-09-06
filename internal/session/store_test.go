@@ -2,6 +2,7 @@ package session
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -197,6 +198,87 @@ func TestStore_CustomIDListing(t *testing.T) {
 		t.Errorf("expected ID 'chat_custom_id_999', got %s", metas[0].ID)
 	}
 }
+
+func TestStore_List_OrderedByUpdatedAt(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "tcode_test_ordered_*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	s := &Store{baseDir: tempDir}
+	// 创建三个不同时间更新的会话 (乱序存入)
+	s.Save(ChatSession{ID: "sess_mid", Title: "中等时间", UpdatedAt: 2000})
+	s.Save(ChatSession{ID: "sess_old", Title: "最老时间", UpdatedAt: 1000})
+	s.Save(ChatSession{ID: "sess_new", Title: "最新时间", UpdatedAt: 3000})
+
+	metas := s.List()
+	if len(metas) != 3 {
+		t.Fatalf("expected 3 sessions, got %d", len(metas))
+	}
+	if metas[0].ID != "sess_new" || metas[1].ID != "sess_mid" || metas[2].ID != "sess_old" {
+		t.Errorf("expected sessions ordered by UpdatedAt desc [new, mid, old], got [%s, %s, %s]",
+			metas[0].ID, metas[1].ID, metas[2].ID)
+	}
+}
+
+func TestStore_SanitizeID_WindowsReservedNames(t *testing.T) {
+	reserved := []string{
+		"con", "CON", "prn", "PRN", "aux", "AUX", "nul", "NUL",
+		"com1", "COM1", "com9", "COM9", "lpt1", "LPT1", "lpt9", "LPT9",
+		"CON.json", "nul.txt", "aux.log",
+	}
+	for _, r := range reserved {
+		if _, err := sanitizeID(r); err == nil {
+			t.Errorf("expected error for reserved name '%s', got nil", r)
+		}
+	}
+
+	illegal := []string{
+		"test<name", "test>name", "test:name", "test\"name",
+		"test/name", "test\\name", "test|name", "test?name", "test*name",
+	}
+	for _, il := range illegal {
+		if _, err := sanitizeID(il); err == nil {
+			t.Errorf("expected error for illegal characters in '%s', got nil", il)
+		}
+	}
+
+	// 正常合法 ID
+	valid := []string{"sess_12345", "chat-session-ok", "my_session_2026"}
+	for _, v := range valid {
+		clean, err := sanitizeID(v)
+		if err != nil {
+			t.Errorf("expected valid ID for '%s', got error: %v", v, err)
+		}
+		if clean != v {
+			t.Errorf("expected '%s', got '%s'", v, clean)
+		}
+	}
+}
+
+func TestStore_AtomicWriteSession_CreatesParentDir(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "tcode_test_mkdir_*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	subDir := filepath.Join(tempDir, "nested", "sub", "sessions")
+	targetFile := filepath.Join(subDir, "test.json")
+	if err := atomicWriteSession(targetFile, []byte(`{"test": true}`)); err != nil {
+		t.Fatalf("atomicWriteSession failed on non-existent parent: %v", err)
+	}
+
+	data, err := os.ReadFile(targetFile)
+	if err != nil {
+		t.Fatalf("failed to read back file: %v", err)
+	}
+	if string(data) != `{"test": true}` {
+		t.Errorf("unexpected content: %s", string(data))
+	}
+}
+
 
 
 

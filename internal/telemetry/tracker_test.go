@@ -31,3 +31,25 @@ func TestTracker_EstimatedCostAccuracy(t *testing.T) {
 		t.Errorf("EstimatedCost should not contain time colon: %s", m2.EstimatedCost)
 	}
 }
+
+func TestTracker_EdgeDefenses(t *testing.T) {
+	tracker := NewTracker()
+
+	// 1. 空模型名称自动归一化为 "unknown"
+	tracker.Record("   ", 100, 50, 10)
+	m := tracker.GetMetrics(-5) // 负数 activeSessions 防护
+	if m.ActiveSessions != 0 {
+		t.Errorf("expected activeSessions clamped to 0, got %d", m.ActiveSessions)
+	}
+	if _, ok := m.PerModel["unknown"]; !ok {
+		t.Errorf("expected 'unknown' model key for empty model name")
+	}
+
+	// 2. 负数 tokens 与耗时防御
+	tracker.Record("test-model", -50, -20, -100)
+	m2 := tracker.GetMetrics(1)
+	mu := m2.PerModel["test-model"]
+	if mu.TotalTokens < 0 || mu.AvgLatencyMs < 0 {
+		t.Errorf("expected non-negative values for negative token input")
+	}
+}

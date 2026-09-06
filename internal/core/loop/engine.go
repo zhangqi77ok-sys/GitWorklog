@@ -243,11 +243,15 @@ func (e *ExecutionEngine) Execute(ctx context.Context, req *EngineRequest, event
 				IsError:    isErr,
 			}
 
-			// 将工具结果回填进会话上下文
+			// 将工具结果回填进会话上下文，确保 content 绝不为空（防御上游网关 400 校验）
+			contentForContext := toolOutput
+			if strings.TrimSpace(contentForContext) == "" {
+				contentForContext = fmt.Sprintf("tool [%s] executed successfully with empty output", atc.Name)
+			}
 			messages = append(messages, map[string]any{
 				"role":         "tool",
 				"tool_call_id": atc.ID,
-				"content":      toolOutput,
+				"content":      contentForContext,
 			})
 		}
 	}

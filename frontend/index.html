@@ -3216,7 +3216,7 @@
               </div>
               <div class="flex items-center justify-between text-xs text-[#71717A] pt-1 border-t border-black/[0.04]">
                 <div class="flex items-center gap-3 font-mono text-[11px]">
-                  <span>凭据: <strong class="text-[#27272A]">oauth-session-token-live...</strong></span>
+                  <span>凭据: <strong class="text-[#27272A]">已安全加密存储 (AES-GCM)</strong></span>
                   <span>模型: <span class="text-[#27272A]">claude-3-7-sonnet</span></span>
                 </div>
                 <div class="flex items-center gap-1.5">
@@ -4109,22 +4109,22 @@
         ],
         fields: {
           oauth: [
-            { label: "Claude Code OAuth Setup Token", type: "password", val: "oauth-session-token-live-893f4820a", hint: "运行 claude setup 获取的令牌" },
+            { label: "Claude Code OAuth Setup Token", type: "password", val: "", hint: "运行 claude setup 获取的令牌" },
             { label: "Base URL (可选反代中转)", type: "text", val: "https://api.anthropic.com", hint: "默认官方地址" }
           ],
           apikey: [
-            { label: "Anthropic API Key", type: "password", val: "sk-ant-api03-xxxxxxxxxxxxxxxx", hint: "以 sk-ant- 开头" },
+            { label: "Anthropic API Key", type: "password", val: "", hint: "以 sk-ant- 开头" },
             { label: "Base URL", type: "text", val: "https://api.anthropic.com", hint: "" }
           ],
           bedrock: [
-            { label: "AWS Access Key ID", type: "text", val: "AKIAIOSFODNN7EXAMPLE", hint: "" },
-            { label: "AWS Secret Access Key", type: "password", val: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", hint: "" },
+            { label: "AWS Access Key ID", type: "text", val: "", hint: "" },
+            { label: "AWS Secret Access Key", type: "password", val: "", hint: "" },
             { label: "AWS Region", type: "text", val: "us-east-1", hint: "例如 us-east-1, us-west-2" }
           ],
           vertex: [
-            { label: "Google Cloud Project ID", type: "text", val: "my-gcp-ai-project-2026", hint: "" },
+            { label: "Google Cloud Project ID", type: "text", val: "", hint: "" },
             { label: "Vertex Region", type: "text", val: "us-east5", hint: "" },
-            { label: "Service Account JSON 密钥内容", type: "textarea", val: '{\n  "type": "service_account",\n  "project_id": "...",\n  "private_key": "..."\n}', hint: "Google Cloud 服务账号密钥" }
+            { label: "Service Account JSON 密钥内容", type: "textarea", val: "", hint: "Google Cloud 服务账号密钥" }
           ]
         }
       },
@@ -4139,23 +4139,23 @@
         ],
         fields: {
           cap_import: [
-            { label: "Codex OAuth auth.json 原始内容 / Access Token (CAP 格式)", type: "textarea", val: '{\n  "access_token": "ey...",\n  "refresh_token": "rt-...",\n  "auth_mode": "chatgpt_oauth",\n  "account_id": "acc-123"\n}', hint: "粘贴 Codex auth.json 或第三方 CAP 工具导出的 JSON" },
+            { label: "Codex OAuth auth.json 原始内容 / Access Token (CAP 格式)", type: "textarea", val: "", hint: "粘贴 Codex auth.json 或第三方 CAP 工具导出的 JSON" },
             { label: "Codex 指纹收敛模式 (Fingerprint Mode)", type: "text", val: "device+session (多人防关联收敛)", hint: "可选：关闭透传 / 仅设备 / 设备+会话 / 完全收敛" }
           ],
           sub2_relay: [
             { label: "Sub2API 上游节点 Base URL", type: "text", val: "https://my-sub2api-node.example.com", hint: "指向远端 Sub2API 实例或自建集群网关" },
-            { label: "Sub2 订阅 Key / 凭据 (sub2_...)", type: "password", val: "sub2_live_token_789f4102ba98e", hint: "Sub2API 专属订阅分发令牌" }
+            { label: "Sub2 订阅 Key / 凭据 (sub2_...)", type: "password", val: "", hint: "Sub2API 专属订阅分发令牌" }
           ],
           apikey: [
-            { label: "OpenAI API Key", type: "password", val: "sk-proj-xxxxxxxxxxxxxxxx", hint: "官方 API 密钥" },
+            { label: "OpenAI API Key", type: "password", val: "", hint: "官方 API 密钥" },
             { label: "Base URL", type: "text", val: "https://api.openai.com/v1", hint: "" }
           ],
           refresh_token: [
-            { label: "OpenAI Refresh Token (支持多行批量输入)", type: "textarea", val: "rt-live-xxxx-session-1\nrt-live-xxxx-session-2", hint: "每行一个 RT" }
+            { label: "OpenAI Refresh Token (支持多行批量输入)", type: "textarea", val: "", hint: "每行一个 RT" }
           ],
           azure: [
             { label: "Azure Endpoint URL", type: "text", val: "https://my-resource.openai.azure.com", hint: "Azure 终结点" },
-            { label: "Azure API Key", type: "password", val: "azure-key-xxxx", hint: "" },
+            { label: "Azure API Key", type: "password", val: "", hint: "" },
             { label: "Deployment Name (部署名)", type: "text", val: "gpt-4o-deployment", hint: "" }
           ]
         }
@@ -4167,11 +4167,11 @@
           { id: "vertex", name: "Vertex AI", desc: "GCP 服务账号鉴权", badge: "企业", icon: "🌐" }
         ],
         fields: {
-          apikey: [{ label: "Gemini API Key", type: "password", val: "AIzaSyDxxxxxxxxxxxxxxxxx", hint: "AI Studio 密钥" }],
+          apikey: [{ label: "Gemini API Key", type: "password", val: "", hint: "AI Studio 密钥" }],
           vertex: [
-            { label: "GCP Project ID", type: "text", val: "gcp-gemini-prod", hint: "" },
+            { label: "GCP Project ID", type: "text", val: "", hint: "" },
             { label: "Location", type: "text", val: "us-central1", hint: "" },
-            { label: "Service Account JSON", type: "textarea", val: "{\n  \"type\": \"service_account\", ...\n}", hint: "GCP 服务凭据" }
+            { label: "Service Account JSON", type: "textarea", val: "", hint: "GCP 服务凭据" }
           ]
         }
       },
@@ -4182,8 +4182,8 @@
           { id: "oauth", name: "网页 SSO Cookie", desc: "sso-rw 提取", badge: "订阅", icon: "🍪" }
         ],
         fields: {
-          apikey: [{ label: "xAI API Key", type: "password", val: "xai-xxxxxxxxxxxxxxxxx", hint: "" }],
-          oauth: [{ label: "sso-rw Cookie 值", type: "password", val: "sso-rw=xxxxxxxx", hint: "grok.com Cookie" }]
+          apikey: [{ label: "xAI API Key", type: "password", val: "", hint: "" }],
+          oauth: [{ label: "sso-rw Cookie 值", type: "password", val: "", hint: "grok.com Cookie" }]
         }
       },
       deepseek: {
@@ -4191,7 +4191,7 @@
         types: [{ id: "payg", name: "按量计费 (PAYG)", desc: "Token 账户直连", badge: "官方直连", icon: "⚡" }],
         fields: {
           payg: [
-            { label: "DeepSeek API Key", type: "password", val: "sk-deepseek-xxxxxxxx", hint: "直连密钥" },
+            { label: "DeepSeek API Key", type: "password", val: "", hint: "直连密钥" },
             { label: "Base URL", type: "text", val: "https://api.deepseek.com", hint: "官方端点" }
           ]
         }
@@ -4204,10 +4204,10 @@
         ],
         fields: {
           payg: [
-            { label: "Moonshot API Key", type: "password", val: "sk-kimi-xxxxxxxx", hint: "" },
+            { label: "Moonshot API Key", type: "password", val: "", hint: "" },
             { label: "Base URL", type: "text", val: "https://api.moonshot.cn/v1", hint: "" }
           ],
-          coding: [{ label: "Coding Plan 访问凭证", type: "password", val: "sk-coding-kimi-xxxx", hint: "Coding Plan 专属 Token" }]
+          coding: [{ label: "Coding Plan 访问凭证", type: "password", val: "", hint: "Coding Plan 专属 Token" }]
         }
       },
       zhipu: {
@@ -4217,8 +4217,8 @@
           { id: "coding", name: "GLM Coding Plan", desc: "开发者包月套餐", badge: "特惠", icon: "💻" }
         ],
         fields: {
-          payg: [{ label: "Zhipu API Key", type: "password", val: "zhipu.xxxxxxxx.xxxx", hint: "" }],
-          coding: [{ label: "GLM Coding Token", type: "password", val: "coding-token-xxxx", hint: "" }]
+          payg: [{ label: "Zhipu API Key", type: "password", val: "", hint: "" }],
+          coding: [{ label: "GLM Coding Token", type: "password", val: "", hint: "" }]
         }
       },
       agentrouter: {
@@ -4227,7 +4227,7 @@
         fields: {
           proxy: [
             { label: "Base URL", type: "text", val: "https://agentrouter.org", hint: "中转端点地址" },
-            { label: "API Key 密文存储", type: "password", val: "sk-gKTbHfCZqgyDVf3TaXWpXT5TXW9qIZdAFVMOsY49ZKFssyFZ", hint: "平台令牌" }
+            { label: "API Key 密文存储", type: "password", val: "", hint: "平台令牌" }
           ]
         }
       },
@@ -4239,7 +4239,7 @@
         fields: {
           openai_compat: [
             { label: "Base URL", type: "text", val: "http://127.0.0.1:8000/v1", hint: "自建中转端点" },
-            { label: "API Key", type: "password", val: "sk-custom-xxxx", hint: "" }
+            { label: "API Key", type: "password", val: "", hint: "" }
           ]
         }
       }

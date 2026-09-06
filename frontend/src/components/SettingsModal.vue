@@ -470,12 +470,19 @@ async function executePing(id: string) {
   }
 }
 
-function setPrimaryChannel(id: string) {
+async function setPrimaryChannel(id: string) {
   channels.value.forEach(c => {
     c.primary = (c.id === id)
   })
   const current = channels.value.find(c => c.id === id)
-  if (current) wailsBridge.saveChannel(current)
+  if (current) {
+    try {
+      await wailsBridge.saveChannel(current)
+      await loadChannels()
+    } catch (err) {
+      console.error('Failed to set primary channel:', err)
+    }
+  }
 }
 
 function openAddChannel() {

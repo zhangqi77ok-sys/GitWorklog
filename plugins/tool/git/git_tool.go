@@ -188,13 +188,21 @@ func parsePorcelainV2(rawStatus, branch string) *GitStatusReport {
 
 // StageFile 暂存单个文件
 func (t *Tool) StageFile(filePath string) error {
-	_, err := t.execGit("add", "--", filePath)
+	trimmed := strings.TrimSpace(filePath)
+	if trimmed == "" {
+		return fmt.Errorf("empty file path")
+	}
+	_, err := t.execGit("add", "--", trimmed)
 	return err
 }
 
 // UnstageFile 取消暂存单个文件
 func (t *Tool) UnstageFile(filePath string) error {
-	_, err := t.execGit("restore", "--staged", "--", filePath)
+	trimmed := strings.TrimSpace(filePath)
+	if trimmed == "" {
+		return fmt.Errorf("empty file path")
+	}
+	_, err := t.execGit("restore", "--staged", "--", trimmed)
 	return err
 }
 
@@ -217,7 +225,7 @@ func (t *Tool) RestoreFile(filePath string) error {
 			volAbs := filepath.VolumeName(cleanAbs)
 			normAbs := strings.ToUpper(volAbs) + cleanAbs[len(volAbs):]
 			rel, relErr := filepath.Rel(normRepo, normAbs)
-			if relErr == nil && !strings.HasPrefix(rel, "..") {
+			if relErr == nil && rel != "." && rel != "" && !strings.HasPrefix(rel, "..") {
 				if fi, statErr := os.Stat(cleanAbs); statErr == nil && !fi.IsDir() {
 					if rmErr := os.Remove(cleanAbs); rmErr == nil || os.IsNotExist(rmErr) {
 						return nil

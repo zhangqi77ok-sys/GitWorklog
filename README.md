@@ -531,6 +531,30 @@ Tcode 打破了单体硬编码调度逻辑，将 Agent 的执行循环、能力�
 * **编译器语法诊断子进程超时级联树杀 (`cmd.Cancel`)**：
   - 在 `internal/lsp/diagnostics.go` 中为 Go、TypeScript 与 Python 诊断执行注入 Windows 递归树杀，杜绝 4s 超时后孤儿编译器进程僵死。
 
+### 42. 会话更新时序保序、Windows 设备保留名防御与零假凭据架构防线 (Session Sorting, Windows Device Name Defense & Zero Demo Hardening)
+* **会话列表更新时序强制降序排列 (`Store.List`)**：
+  - 彻底治理文件系统遍历无序导致的会话列表乱序跳动，在 `internal/session/store.go` 中引入 `sort.Slice` 按 `UpdatedAt` 降序排列，并在 `Store.Save` 中提供时间戳非零保留与毫秒格式化，保障前端会话历史体验严格有序；
+* **Windows 操作系统保留设备名称应用层坚固防线**：
+  - 在 `sanitizeID` 中增加对 Windows 底层保留设备名（`CON, PRN, AUX, NUL, COM1..9, LPT1..9` 忽略大小写及后缀）的黑名单拦截与 `<>:"/\|?*` 非法字符过滤，杜绝应用层请求触发底层文件系统不可挽回的拒绝与句柄悬挂；
+* **原子写入持久化父目录自动级联创建保障**：
+  - 在 `internal/session/store.go` 的 `atomicWriteSession` 与 `internal/config/extra_stores.go` 的 `atomicWriteConfig` 写入临时文件前强制执行 `os.MkdirAll(filepath.Dir(filePath), 0755)`，防止跨模块调用或环境清理后父目录缺失引发的运行时崩溃；
+* **双环执行引擎模型工具空输出网关契约守卫**：
+  - 在 `internal/core/loop/engine.go` 将工具输出回填进上下文时，对纯空字符串注入安全保全说明，彻底防御上游 OpenAI/Anthropic/DeepSeek 网关因 `messages[x].content` 为空而抛出 `400 Bad Request`；
+* **物理撤回文件路径沙箱边界与根目录误伤防护**：
+  - 在 `plugins/tool/git/git_tool.go` 中对 `RestoreFile`、`StageFile` 与 `UnstageFile` 增加严格非空校验与工作区沙箱绝对路径规范化，拦截 `.` 与超出工作区的非法路径；
+* **工作区 AST 语法树扫描根路径 Fail-Closed 预检**：
+  - 在 `internal/ast/scanner.go` 中执行 `filepath.Walk` 之前增加 `os.Stat(rootDir)` 真实检查，对不存在的目录直接返回清晰错误，严禁静默降级为假成功与空结果；
+* **遥测大盘模型名称归一化与负数边界防御**：
+  - 在 `internal/telemetry/tracker.go` 中对空模型名自动归一化为 `"unknown"`，对 Tokens 消耗、执行耗时与活跃会话数实施非负数防护；
+* **主渠道切换异步等待与最新状态自动同步**：
+  - 改造 `frontend/src/components/SettingsModal.vue` 中的 `setPrimaryChannel` 为 `async`，`await wailsBridge.saveChannel` 并立即触发 `await loadChannels()`，保持前后端状态原子同步；
+* **流式 SSE 上游错误报文快速拦截解析与派发**：
+  - 在 `plugins/provider/openai/openai_provider.go` 中引入针对上游 `error` 报文的探测解析，遇到限流或网关异常第一时间向前端派发 `StreamChunk{Error: ...}` 并平滑退出，杜绝流式静默截断；
+* **空 Diff 计算文件拦截与零冗余 IPC 调用**：
+  - 在 `frontend/src/App.vue` 的 `loadDiff` 顶部增加空文件拦截，防止空路径触发后端无效 Diff 计算与前端控制台报错；
+* **全量 Demo 假数据、泄露密钥与预填凭据彻底清洗 (铁律 0.5)**：
+  - 全面清退 `frontend/index.html`、`prototype/index.html` 与 `web_prototype.html` 中所有硬编码的假 Token、泄露 API Key 与假会话，所有敏感凭据重置为纯净空字符串，展示层统一执行 `已安全加密存储 (AES-GCM)` 脱敏。
+
 ---
 
 

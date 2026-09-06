@@ -314,6 +314,21 @@ func (p *Provider) StreamChat(ctx context.Context, req *v1.ChatRequest) (<-chan 
 				} `json:"usage"`
 			}
 
+			// 检查是否为上游错误报文 (Fail-Closed, 绝不静默吞错误)
+			var errPayload struct {
+				Error *struct {
+					Message string `json:"message"`
+					Type    string `json:"type"`
+					Code    any    `json:"code"`
+				} `json:"error"`
+			}
+			if err := json.Unmarshal([]byte(dataStr), &errPayload); err == nil && errPayload.Error != nil && errPayload.Error.Message != "" {
+				outChan <- v1.StreamChunk{
+					Error: fmt.Errorf("upstream API error: %s", errPayload.Error.Message),
+				}
+				return
+			}
+
 			if err := json.Unmarshal([]byte(dataStr), &sseChunk); err != nil {
 				continue
 			}

@@ -1437,6 +1437,10 @@ async function openFileDiff(filePath: string) {
 }
 
 async function loadDiff() {
+  if (!activeDiffFile.value) {
+    diffReport.value = null
+    return
+  }
   try {
     diffReport.value = await wailsBridge.getStructuredDiff(activeDiffFile.value)
   } catch (err) {

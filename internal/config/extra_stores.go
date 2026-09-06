@@ -104,6 +104,9 @@ func (s *ExtraStore) loadAll() error {
 }
 
 func atomicWriteConfig(filePath string, data []byte) error {
+	if err := os.MkdirAll(filepath.Dir(filePath), 0755); err != nil {
+		return err
+	}
 	tmpPath := fmt.Sprintf("%s.tmp.%d", filePath, time.Now().UnixNano())
 	if err := os.WriteFile(tmpPath, data, 0644); err != nil {
 		return err

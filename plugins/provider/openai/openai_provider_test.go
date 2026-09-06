@@ -83,3 +83,44 @@ func TestOpenAIProvider_ListModels_RealModelsOnly(t *testing.T) {
 	}
 }
 
+func TestOpenAIProvider_UpstreamErrorInSSE(t *testing.T) {
+	// 模拟返回包含 error 报文的 SSE 流
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+
+		// 模拟上游速率限制或网关报错
+		_, _ = w.Write([]byte("data: {\"error\":{\"message\":\"Rate limit exceeded: please slow down\",\"type\":\"insufficient_quota\"}}\n\n"))
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
+	}))
+	defer server.Close()
+
+	p := NewProvider()
+	p.baseURL = server.URL
+	p.apiKey = "test-api-key"
+
+	req := &v1.ChatRequest{
+		Model:  "deepseek-chat",
+		Stream: true,
+	}
+
+	ch, err := p.StreamChat(context.Background(), req)
+	if err != nil {
+		t.Fatalf("StreamChat failed: %v", err)
+	}
+
+	gotError := false
+	for chunk := range ch {
+		if chunk.Error != nil {
+			gotError = true
+			if chunk.Error.Error() != "upstream API error: Rate limit exceeded: please slow down" {
+				t.Errorf("unexpected error message: %v", chunk.Error)
+			}
+		}
+	}
+
+	if !gotError {
+		t.Errorf("expected error chunk from SSE error payload, but got none")
+	}
+}
+

@@ -2,6 +2,7 @@ package telemetry
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 )
@@ -47,12 +48,26 @@ func (t *Tracker) Record(model string, promptTokens, compTokens int, durationMs 
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	mu, exists := t.perModel[model]
+	trimmedModel := strings.TrimSpace(model)
+	if trimmedModel == "" {
+		trimmedModel = "unknown"
+	}
+	if promptTokens < 0 {
+		promptTokens = 0
+	}
+	if compTokens < 0 {
+		compTokens = 0
+	}
+	if durationMs < 0 {
+		durationMs = 0
+	}
+
+	mu, exists := t.perModel[trimmedModel]
 	if !exists {
 		mu = &ModelUsage{
-			Model: model,
+			Model: trimmedModel,
 		}
-		t.perModel[model] = mu
+		t.perModel[trimmedModel] = mu
 	}
 
 	mu.Calls++
@@ -67,6 +82,10 @@ func (t *Tracker) Record(model string, promptTokens, compTokens int, durationMs 
 func (t *Tracker) GetMetrics(activeSessions int) UsageMetrics {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
+
+	if activeSessions < 0 {
+		activeSessions = 0
+	}
 
 	totalTokens := 0
 	totalCalls := 0

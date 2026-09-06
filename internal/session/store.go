@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -127,6 +128,11 @@ func (s *Store) List() []SessionMeta {
 		}
 	}
 
+	// 强制按更新时间降序排列，保证前端会话历史顺序严格一致
+	sort.Slice(metas, func(i, j int) bool {
+		return metas[i].UpdatedAt > metas[j].UpdatedAt
+	})
+
 	return metas
 }
 
@@ -140,6 +146,22 @@ func sanitizeID(id string) (string, error) {
 	if clean == "." || clean == "/" || clean == "\\" || clean != trimmed {
 		return "", fmt.Errorf("invalid session id format: %s", id)
 	}
+
+	// 拦截 Windows 设备保留字 (无论大小写与是否带后缀)
+	upper := strings.ToUpper(clean)
+	baseUpper := strings.TrimSuffix(upper, filepath.Ext(upper))
+	switch baseUpper {
+	case "CON", "PRN", "AUX", "NUL",
+		"COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+		"LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9":
+		return "", fmt.Errorf("reserved device name cannot be used as session id: %s", id)
+	}
+
+	// 拦截非法文件名字符
+	if strings.ContainsAny(clean, `<>:"/\|?*`+"\x00") {
+		return "", fmt.Errorf("session id contains illegal characters: %s", id)
+	}
+
 	return clean, nil
 }
 
@@ -177,7 +199,9 @@ func (s *Store) Save(sess ChatSession) error {
 	}
 	sess.ID = safeID
 
-	sess.UpdatedAt = time.Now().Unix()
+	if sess.UpdatedAt == 0 {
+		sess.UpdatedAt = time.Now().Unix()
+	}
 	if sess.CreatedAt == 0 {
 		sess.CreatedAt = sess.UpdatedAt
 	}
@@ -195,6 +219,9 @@ func (s *Store) Save(sess ChatSession) error {
 }
 
 func atomicWriteSession(filePath string, data []byte) error {
+	if err := os.MkdirAll(filepath.Dir(filePath), 0755); err != nil {
+		return err
+	}
 	tmpPath := fmt.Sprintf("%s.tmp.%d", filePath, time.Now().UnixNano())
 	if err := os.WriteFile(tmpPath, data, 0644); err != nil {
 		return err
