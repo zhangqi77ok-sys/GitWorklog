@@ -116,13 +116,13 @@ func main() {
 	}
 	_ = os.WriteFile(batPath, []byte(batContent), 0755)
 
+	if !silent {
+		messageBox("卸载完成", "Tcode Studio 已成功从您的计算机移除。", MB_ICONINFO)
+	}
+
 	op, _ := syscall.UTF16PtrFromString("open")
 	file, _ := syscall.UTF16PtrFromString("cmd.exe")
 	params, _ := syscall.UTF16PtrFromString(fmt.Sprintf("/c \"%s\"", batPath))
 	dir, _ := syscall.UTF16PtrFromString(tempDir)
 	procShellExecute.Call(0, uintptr(unsafe.Pointer(op)), uintptr(unsafe.Pointer(file)), uintptr(unsafe.Pointer(params)), uintptr(unsafe.Pointer(dir)), 0)
-
-	if !silent {
-		messageBox("卸载完成", "Tcode Studio 已成功从您的计算机移除。", MB_ICONINFO)
-	}
 }

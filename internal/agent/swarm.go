@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -71,6 +72,14 @@ func RunTDDValidation(workspace string) (TestReport, error) {
 		cmd.SysProcAttr = &syscall.SysProcAttr{
 			CreationFlags: 0x08000000,
 			HideWindow:    true,
+		}
+		cmd.Cancel = func() error {
+			if cmd.Process != nil && cmd.Process.Pid > 0 {
+				killCmd := exec.Command("taskkill", "/F", "/T", "/PID", fmt.Sprintf("%d", cmd.Process.Pid))
+				killCmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: 0x08000000, HideWindow: true}
+				return killCmd.Run()
+			}
+			return nil
 		}
 	}
 	out, err := cmd.CombinedOutput()

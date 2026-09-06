@@ -570,8 +570,17 @@ async function executeTestMCP(mcp: MCPServerConfig) {
     if (res.tools && res.tools.length > 0) {
       expandedToolsMap[mcp.id] = true
     }
-  } catch (err) {
+  } catch (err: any) {
     console.error('Test MCP error:', err)
+    mcpTestResultMap[mcp.id] = {
+      id: mcp.id,
+      name: mcp.name,
+      status: 'ERROR',
+      latency: '0ms',
+      tool_count: 0,
+      tools: [],
+      error: err?.message || String(err)
+    }
   } finally {
     mcpTestLoadingMap[mcp.id] = false
   }

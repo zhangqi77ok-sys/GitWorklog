@@ -461,11 +461,6 @@ export const wailsBridge = {
     return { branch: 'main', staged: [], working: [], untracked: [] }
   },
 
-  async gitStage(filePath: string): Promise<void> {
-    const app = getApp()
-    if (app?.GitStage) await app.GitStage(filePath)
-  },
-
   async getProjectASTGraph(): Promise<GraphNode[]> {
     const app = getApp()
     if (app?.GetProjectASTGraph) return await app.GetProjectASTGraph()

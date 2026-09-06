@@ -131,9 +131,9 @@
         </div>
 
         <div class="pt-2 border-t border-black/[0.06] space-y-2">
-          <input type="text" placeholder="提交信息 (Commit message)..." class="w-full px-2.5 py-1.5 rounded-lg border border-black/[0.1] text-xs focus:outline-none focus:border-[#D96B27]">
-          <button class="w-full py-1.5 rounded-lg bg-[#D96B27] text-white text-xs font-semibold shadow-xs hover:bg-[#B8551B] cursor-pointer">
-            ✓ 提交变更 (Commit & Push)
+          <input v-model="commitMessage" type="text" placeholder="提交信息 (Commit message)..." class="w-full px-2.5 py-1.5 rounded-lg border border-black/[0.1] text-xs focus:outline-none focus:border-[#D96B27]">
+          <button @click="handleGitCommit" :disabled="isCommitting || !commitMessage.trim()" class="w-full py-1.5 rounded-lg bg-[#D96B27] disabled:opacity-50 text-white text-xs font-semibold shadow-xs hover:bg-[#B8551B] cursor-pointer">
+            {{ isCommitting ? '正在提交...' : '✓ 提交变更 (Commit & Push)' }}
           </button>
         </div>
       </div>
@@ -237,6 +237,23 @@ async function createNewSession() {
     desc: '已就绪'
   })
   await store.switchSession(newId)
+}
+
+const commitMessage = ref('')
+const isCommitting = ref(false)
+
+async function handleGitCommit() {
+  if (!commitMessage.value.trim() || isCommitting.value) return
+  isCommitting.value = true
+  try {
+    await wailsBridge.gitCommit(commitMessage.value.trim())
+    commitMessage.value = ''
+    await loadGitStatus()
+  } catch (err) {
+    console.error('Git commit error:', err)
+  } finally {
+    isCommitting.value = false
+  }
 }
 
 async function selectSession(id: string) {

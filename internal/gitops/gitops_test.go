@@ -1,6 +1,7 @@
 package gitops
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -31,6 +32,18 @@ func TestRestoreSnapshot_InvalidID(t *testing.T) {
 	err := RestoreSnapshot(".", "rm -rf /")
 	if err == nil {
 		t.Errorf("expected error for invalid stash id, got nil")
+	}
+	if !strings.Contains(err.Error(), "invalid stash id") {
+		t.Errorf("expected 'invalid stash id' error, got: %v", err)
+	}
+}
+
+func TestRestoreSnapshot_NumericID_Validation(t *testing.T) {
+	// 验证 "0" 不会因为非 stash@{ 开头而在验证阶段抛出 invalid stash id
+	err := RestoreSnapshot(".", "0")
+	// 即使本地仓库执行出错（例如无对应 stash），错误不应是 "invalid stash id"
+	if err != nil && strings.Contains(err.Error(), "invalid stash id") {
+		t.Errorf("expected numeric '0' to be accepted as valid stash id, got: %v", err)
 	}
 }
 

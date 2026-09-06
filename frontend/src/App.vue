@@ -257,18 +257,18 @@
             </div>
             <div v-else>
               <div class="text-[10px] font-bold text-[#71717A] uppercase mb-1">变更文件 (WORKING TREE)</div>
-              <div v-if="!gitStatus.working || gitStatus.working.length === 0" class="p-3 text-center text-[#A1A1AA] text-xs bg-black/[0.02] rounded-lg">
+              <div v-if="workingTreeFiles.length === 0" class="p-3 text-center text-[#A1A1AA] text-xs bg-black/[0.02] rounded-lg">
                 ✓ 工作区干净，无未暂存改动
               </div>
               <div v-else class="space-y-1">
                 <div
-                  v-for="file in gitStatus.working"
-                  :key="file"
-                  @click="openFileDiff(file)"
+                  v-for="file in workingTreeFiles"
+                  :key="file.path"
+                  @click="openFileDiff(file.path)"
                   class="p-1.5 rounded hover:bg-black/[0.04] cursor-pointer flex items-center justify-between font-mono text-[11px]"
                 >
-                  <span class="truncate">{{ file }}</span>
-                  <span class="text-amber-600 font-bold">~M</span>
+                  <span class="truncate">{{ file.path }}</span>
+                  <span :class="file.color" class="font-bold">{{ file.type }}</span>
                 </div>
               </div>
             </div>
@@ -1357,6 +1357,33 @@ const fileTree = ref<FileNode[]>([])
 const expandedFolders = reactive<Record<string, boolean>>({ 'frontend': true })
 const gitStatus = ref<any>({ branch: 'main', working: [], staged: [] })
 const commitMessage = ref('')
+
+const workingTreeFiles = computed(() => {
+  const list: { path: string; type: string; color: string }[] = []
+  if (gitStatus.value?.working && Array.isArray(gitStatus.value.working)) {
+    for (const f of gitStatus.value.working) {
+      if (typeof f === 'string') {
+        list.push({ path: f, type: 'M', color: 'text-amber-600' })
+      } else if (f && typeof f === 'object') {
+        list.push({
+          path: f.path || '',
+          type: f.work_code || 'M',
+          color: f.work_code === 'D' ? 'text-red-500' : 'text-amber-600'
+        })
+      }
+    }
+  }
+  if (gitStatus.value?.untracked && Array.isArray(gitStatus.value.untracked)) {
+    for (const p of gitStatus.value.untracked) {
+      list.push({
+        path: typeof p === 'string' ? p : (p as any)?.path || '',
+        type: 'U',
+        color: 'text-emerald-600'
+      })
+    }
+  }
+  return list
+})
 
 async function loadFileTree() {
   fileTree.value = await wailsBridge.getFileTree()

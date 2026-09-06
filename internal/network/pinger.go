@@ -62,6 +62,10 @@ func PingTarget(targetURL string) (string, error) {
 	// 浅读排空以复用长连接
 	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
 
+	if resp.StatusCode >= 500 {
+		return "", fmt.Errorf("ping failed: server returned status %d", resp.StatusCode)
+	}
+
 	latencyMs := fmt.Sprintf("%dms", duration.Milliseconds())
 	return latencyMs, nil
 }

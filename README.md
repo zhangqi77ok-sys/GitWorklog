@@ -489,10 +489,30 @@ Tcode 打破了单体硬编码调度逻辑，将 Agent 的执行循环、能力�
   - 在 `chatStore.ts` 的 `switchSession` 首行执行 `messages.value = []`，将 `currentSessionId` 默认值从假会话 `'sess1'` 重置为空字符串，并在左侧历史会话卡片与新建会话点击时立即触发 `switchSession`；
 * **Diff 审查变更采纳物理暂存闭环 (`GitStage`)**：
   - 在 `wailsBridge.ts` 与 `DiffWorkspace.vue` 中打通 `wailsBridge.gitStage`，用户点击“采纳变更”时真正将修改文件加入 Git 暂存区（`git add`）；
-* **流式终端与智能体 IPC 监听器生命周期防泄漏**：
-  - 在 `wailsBridge.ts` 的 `execTerminalStream` 与 `sendMessage` 中加入安全清理保护，确保底层网络异常或抛错时监听器不会无限泄漏累加。
+### 40. Git 源码管理全交互闭环、TDD 进程树熔断、文件物理删除 Diff 容错与卸载器自删除锁治理 (Git Full Loop, TDD Tree Kill & Differ Resilience)
+* **Git 抽屉源码管理真实提交与刷新全链路驱动**：
+  - 彻底铲除 `frontend/src/components/LeftDrawer.vue` 中提交信息输入框与提交按钮无任何事件绑定的 Hollow UI 漏洞；补齐 `commitMessage` 双向绑定、回车快捷提交、`handleGitCommit` 调用链及提交成功后自动清空输入并全量刷新 Working Tree 状态；
+* **Working Tree 状态结构体响应式映射与纯净空状态**：
+  - 修复 `frontend/src/App.vue` 中将后端返回的 `GitFileStatus` 结构体切片直接当作字符串遍历渲染导致界面显示 `[object Object]` 并漏掉未追踪文件的缺陷；引入 `workingTreeFiles` 计算属性，归一化工作区变更与未追踪文件，并在工作区干净时呈现纯净空状态；
+* **TDD 自动化测试跨平台孤儿进程树级联销毁 (`cmd.Cancel`)**：
+  - 在 `internal/agent/swarm.go` 的 `RunTDDValidation` 中注入 `cmd.Cancel = func() error { ... taskkill /F /T /PID ... }`，确保当 60 秒硬超时或上下文取消触发时，Windows 下由 `go test` 编译生成的真实 `.test.exe` 进程及其整棵派生树被彻底递归销毁，杜绝孤儿测试进程僵死霸占 CPU 与端口；
+* **文件物理删除状态下 Diff 引擎容错与补丁计算**：
+  - 在 `internal/diff/differ.go` 的 `ComputeFileDiff` 中解除对本地文件必须物理存在的硬性限制；针对被删除的文件（`os.IsNotExist`），自动尝试比对 `git diff HEAD -- <relPath>`，确保代码审查与版本树能精准展示文件的负向变更差异；
+* **文件系统算子动作指令大小写容错清洗**：
+  - 在 `plugins/tool/fs/fs_tool.go` 中加入 `strings.ToLower(strings.TrimSpace(args.Action))` 容错清洗，防止大模型输出 `"Write"`、`"READ"` 时误报 `unknown action`；
+* **智能体自主执行写文件影子快照保障**：
+  - 在 `app.go` 主执行循环的 `write_file` 算子调度分支前，无缝注入 `snapshotMgr.CreateSnapshot`，为每次代码写入自动生成轻量 Git 影子快照，确保故障时可秒级无损回退；
+* **网络探活服务端 5xx 异常状态码严格 Fail-Closed**：
+  - 在 `internal/network/pinger.go` 中补全 HTTP 状态码校验，对上游网关返回的 500/502/503 等服务端崩溃明确判定为探活失败，杜绝误报低延迟；
+* **工作区热切换多任务原子取消**：
+  - 在 `app.go` 的 `SetWorkspace` 入口处同时触发 `agentCancel()` 与 `terminalCancel()`，防止旧工作区未完成的长推理与终端阻塞任务跨工作区交织；
+* **快照编号自适应格式化与防注入守卫**：
+  - 在 `internal/gitops/gitops.go` 的 `RestoreSnapshot` 中为纯数字 Stash 编号（如 `"0"`）自适应组装为 `stash@{0}`，兼顾灵活性与严格校验；
+* **Windows 单文件卸载器脱机批处理自删除锁机制治理**：
+  - 在 `cmd/uninstaller/main.go` 中重排执行时序，先向用户弹出确认完成提示，用户确认后异步触发脱机延时批处理并立即终结卸载主进程自身，彻底消除 Windows 独占 PE 句柄锁导致的卸载程序自残留。
 
 ---
+
 
 ## 🎨 四、视觉与人机工程学规范
 

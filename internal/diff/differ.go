@@ -95,7 +95,13 @@ func ComputeFileDiff(workspaceRoot, relPath string) (DiffReport, error) {
 		return report, err
 	}
 	if _, err := os.Stat(absPath); os.IsNotExist(err) {
-		return report, fmt.Errorf("file [%s] does not exist", relPath)
+		// 检查是否为 Git 已追踪但在工作区已被物理删除的文件
+		cmdCheck := gitCmd(workspaceRoot, "diff", "HEAD", "--", relPath)
+		var checkOut bytes.Buffer
+		cmdCheck.Stdout = &checkOut
+		if errCheck := cmdCheck.Run(); errCheck != nil || checkOut.Len() == 0 {
+			return report, fmt.Errorf("file [%s] does not exist", relPath)
+		}
 	}
 
 	cmd := gitCmd(workspaceRoot, "diff", "HEAD", "--", relPath)

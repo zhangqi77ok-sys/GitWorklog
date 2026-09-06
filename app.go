@@ -215,6 +215,21 @@ func (a *App) SetWorkspace(dir string) error {
 		return fmt.Errorf("workspace directory does not exist or is not a directory: %s", absDir)
 	}
 
+	// 切换工作区前，主动取消前序可能仍在运行的智能体流式推理或终端命令
+	a.agentMu.Lock()
+	if a.agentCancel != nil {
+		a.agentCancel()
+		a.agentCancel = nil
+	}
+	a.agentMu.Unlock()
+
+	a.terminalMu.Lock()
+	if a.terminalCancel != nil {
+		a.terminalCancel()
+		a.terminalCancel = nil
+	}
+	a.terminalMu.Unlock()
+
 	a.workspace = absDir
 	sb, _ := sandbox.NewSandbox(absDir)
 	a.sandbox = sb
@@ -1106,6 +1121,9 @@ func (a *App) SendMessage(req ChatRequest) error {
 						} else {
 							targetRelPath = argsObj.FilePath
 						}
+					}
+					if a.snapshotMgr != nil {
+						_, _ = a.snapshotMgr.CreateSnapshot(fmt.Sprintf("agent auto write before %s", targetRelPath))
 					}
 					err := a.sandbox.AtomicWriteFile(targetRelPath, []byte(argsObj.Content))
 					if err != nil {

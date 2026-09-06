@@ -174,8 +174,21 @@ func CreateSnapshot(workspace, msg string) error {
 // RestoreSnapshot 应用并还原指定快照
 func RestoreSnapshot(workspace, stashID string) error {
 	stashID = strings.TrimSpace(stashID)
+	isAllDigits := func(s string) bool {
+		if len(s) == 0 {
+			return false
+		}
+		for _, c := range s {
+			if c < '0' || c > '9' {
+				return false
+			}
+		}
+		return true
+	}
 	if stashID == "" {
 		stashID = "stash@{0}"
+	} else if isAllDigits(stashID) {
+		stashID = fmt.Sprintf("stash@{%s}", stashID)
 	}
 	if !isValidStashID(stashID) {
 		return fmt.Errorf("invalid stash id: %q", stashID)

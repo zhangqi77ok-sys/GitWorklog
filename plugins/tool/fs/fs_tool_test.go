@@ -69,3 +69,37 @@ func TestFSTool_ParameterAliases(t *testing.T) {
 		t.Errorf("expected IsError=true for empty path, got: %+v", resEmpty)
 	}
 }
+
+func TestFSTool_CaseInsensitiveAction(t *testing.T) {
+	tempDir := t.TempDir()
+	sb, err := sandbox.NewSandbox(tempDir)
+	if err != nil {
+		t.Fatalf("failed to create sandbox: %v", err)
+	}
+	sm := sandbox.NewSnapshotManager(tempDir)
+	tool := NewTool(sb, sm)
+
+	// 测试大写 "WRITE"
+	writeArgs, _ := json.Marshal(map[string]string{
+		"action":  "WRITE",
+		"path":    "case_test.txt",
+		"content": "case insensitive content",
+	})
+	resWrite, err := tool.Execute(context.Background(), writeArgs)
+	if err != nil || resWrite.IsError {
+		t.Fatalf("write with uppercase action failed: %v, content: %s", err, resWrite.Content)
+	}
+
+	// 测试首字母大写 "Read"
+	readArgs, _ := json.Marshal(map[string]string{
+		"action": "Read",
+		"path":   "case_test.txt",
+	})
+	resRead, err := tool.Execute(context.Background(), readArgs)
+	if err != nil || resRead.IsError {
+		t.Fatalf("read with titlecase action failed: %v, content: %s", err, resRead.Content)
+	}
+	if resRead.Content != "case insensitive content" {
+		t.Errorf("expected 'case insensitive content', got: %s", resRead.Content)
+	}
+}

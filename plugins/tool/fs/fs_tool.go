@@ -94,7 +94,7 @@ func (t *Tool) Execute(ctx context.Context, rawArgs json.RawMessage) (*v1.ToolRe
 		targetPath = strings.TrimSpace(args.FilePath)
 	}
 
-	switch args.Action {
+	switch strings.ToLower(strings.TrimSpace(args.Action)) {
 	case "read":
 		if targetPath == "" {
 			return &v1.ToolResult{Content: "read error: empty file path", IsError: true}, nil

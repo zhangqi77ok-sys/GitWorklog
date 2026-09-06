@@ -41,3 +41,19 @@ func TestPingTarget_AutoScheme(t *testing.T) {
 		t.Errorf("expected local latency to end with ms, got: %s", localLatency)
 	}
 }
+
+func TestPingTarget_ServerError(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = w.Write([]byte("502 Bad Gateway"))
+	}))
+	defer ts.Close()
+
+	_, err := PingTarget(ts.URL)
+	if err == nil {
+		t.Fatalf("expected error for 502 Bad Gateway, got nil")
+	}
+	if !strings.Contains(err.Error(), "502") {
+		t.Errorf("expected error message to contain 502, got %v", err)
+	}
+}
