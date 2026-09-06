@@ -222,6 +222,9 @@ func (e *ExecutionEngine) Execute(ctx context.Context, req *EngineRequest, event
 				if err != nil {
 					toolOutput = fmt.Sprintf("execution failure: %v", err)
 					isErr = true
+				} else if res == nil {
+					toolOutput = fmt.Sprintf("tool [%s] returned nil result", atc.Name)
+					isErr = true
 				} else {
 					toolOutput = res.Content
 					isErr = res.IsError

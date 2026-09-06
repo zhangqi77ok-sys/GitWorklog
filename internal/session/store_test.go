@@ -162,11 +162,41 @@ func TestStore_DeleteIdempotent(t *testing.T) {
 	defer os.RemoveAll(tempDir)
 
 	s := &Store{baseDir: tempDir}
-	// 删除一个从未存在过的合法会话 ID，应当安全幂等返回 nil，而不是抛出文件不存在报错
 	err = s.Delete("sess_never_existed")
 	if err != nil {
 		t.Errorf("expected nil error on deleting non-existent session, got: %v", err)
 	}
 }
+
+func TestStore_CustomIDListing(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "tcode_test_sessions_*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	s := &Store{baseDir: tempDir}
+	// 保存一个不带 sess_ 前缀的自定义合法会话 ID
+	sess := ChatSession{
+		ID:        "chat_custom_id_999",
+		Title:     "自定义会话",
+		Model:     "deepseek-chat",
+		CreatedAt: 1788480000,
+		UpdatedAt: 1788480000,
+		Messages:  []SessionMessage{},
+	}
+	if err := s.Save(sess); err != nil {
+		t.Fatalf("failed to save session: %v", err)
+	}
+
+	metas := s.List()
+	if len(metas) != 1 {
+		t.Fatalf("expected 1 session listed for custom ID, got %d", len(metas))
+	}
+	if metas[0].ID != "chat_custom_id_999" {
+		t.Errorf("expected ID 'chat_custom_id_999', got %s", metas[0].ID)
+	}
+}
+
 
 

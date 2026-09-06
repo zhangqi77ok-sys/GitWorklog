@@ -14,6 +14,19 @@ import (
 	"time"
 )
 
+var (
+	sharedTransport = &http.Transport{
+		TLSClientConfig:     &tls.Config{InsecureSkipVerify: true},
+		MaxIdleConns:        100,
+		MaxIdleConnsPerHost: 20,
+		IdleConnTimeout:     90 * time.Second,
+	}
+	sharedLLMClient = &http.Client{
+		Timeout:   180 * time.Second,
+		Transport: sharedTransport,
+	}
+)
+
 // StreamHandlers 流式回调处理器
 type StreamHandlers struct {
 	OnThinking  func(text string)
@@ -165,14 +178,7 @@ func StreamChat(ctx context.Context, req Request, handlers StreamHandlers) ([]To
 	httpReq.Header.Set("Originator", "codex_cli_rs")
 	httpReq.Header.Set("Version", "0.101.0")
 
-	client := &http.Client{
-		Timeout: 180 * time.Second,
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		},
-	}
-
-	resp, err := client.Do(httpReq)
+	resp, err := sharedLLMClient.Do(httpReq)
 	if err != nil {
 		if handlers.OnError != nil {
 			handlers.OnError(err)

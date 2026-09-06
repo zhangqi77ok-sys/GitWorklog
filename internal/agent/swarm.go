@@ -66,12 +66,19 @@ func RunTDDValidation(workspace string) (TestReport, error) {
 	duration := time.Since(start).Round(time.Millisecond).String()
 
 	outputStr := string(out)
+	if ctx.Err() == context.DeadlineExceeded {
+		outputStr += "\n[超时警告] 测试执行超过 60s 硬超时上限，已被安全中断"
+	}
+
 	passed := strings.Count(outputStr, "--- PASS:")
 	failed := strings.Count(outputStr, "--- FAIL:")
 
 	status := "PASS"
 	if err != nil || failed > 0 {
 		status = "FAIL"
+		if failed == 0 {
+			failed = 1 // 编译失败或异常退出时，确保 failed >= 1，杜绝 0 失败假成功
+		}
 	}
 
 	return TestReport{
@@ -95,11 +102,19 @@ func RunSecurityAudit(workspace string) (AuditReport, error) {
 	}
 
 	_ = filepath.Walk(workspace, func(path string, info os.FileInfo, err error) error {
-		if err != nil || info.IsDir() {
+		if err != nil || info == nil {
+			return nil
+		}
+		if info.IsDir() {
 			base := filepath.Base(path)
-			if base == ".git" || base == "node_modules" || base == "bin" || base == "dist" {
+			if base == ".git" || base == "node_modules" || base == "bin" || base == "dist" || base == "build" || base == ".idea" || base == ".vscode" {
 				return filepath.SkipDir
 			}
+			return nil
+		}
+
+		// 限制单个审计文件最大不超过 5MB，杜绝大文件读取引发 OOM
+		if info.Size() > 5*1024*1024 {
 			return nil
 		}
 

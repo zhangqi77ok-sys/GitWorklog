@@ -112,6 +112,11 @@ func (c *StdioClient) Start(ctx context.Context) error {
 		return fmt.Errorf("mcp initialize failed: %w", err)
 	}
 
+	if resp == nil {
+		_ = c.Stop()
+		return fmt.Errorf("mcp initialize failed: received nil response from server")
+	}
+
 	if resp.Error != nil {
 		_ = c.Stop()
 		return fmt.Errorf("mcp initialize error from server: %s", resp.Error.Message)
@@ -127,10 +132,6 @@ func (c *StdioClient) Start(ctx context.Context) error {
 func (c *StdioClient) Stop() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-
-	if !c.started {
-		return nil
-	}
 
 	select {
 	case <-c.stopChan:
@@ -158,6 +159,10 @@ func (c *StdioClient) Stop() error {
 		}
 		return true
 	})
+
+	if !c.started {
+		return nil
+	}
 
 	done := make(chan error, 1)
 	go func() {
@@ -192,6 +197,9 @@ func (c *StdioClient) ListTools(ctx context.Context) ([]Tool, error) {
 	if err != nil {
 		return nil, err
 	}
+	if resp == nil {
+		return nil, fmt.Errorf("received nil response for tools/list")
+	}
 	if resp.Error != nil {
 		return nil, fmt.Errorf("server error: %s", resp.Error.Message)
 	}
@@ -215,6 +223,9 @@ func (c *StdioClient) CallTool(ctx context.Context, name string, args map[string
 	resp, err := c.sendRequest(ctx, "tools/call", pBytes)
 	if err != nil {
 		return "", err
+	}
+	if resp == nil {
+		return "", fmt.Errorf("received nil response for tools/call")
 	}
 	if resp.Error != nil {
 		return "", fmt.Errorf("tool call error: %s", resp.Error.Message)
@@ -287,6 +298,9 @@ func (c *StdioClient) sendRequest(ctx context.Context, method string, params jso
 	case <-c.stopChan:
 		return nil, fmt.Errorf("client stopped")
 	case res := <-ch:
+		if res == nil {
+			return nil, fmt.Errorf("request canceled or client stopped")
+		}
 		return res, nil
 	}
 }

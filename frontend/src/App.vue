@@ -1588,7 +1588,12 @@ async function handleSend() {
 async function stopGenerationAction() {
   await wailsBridge.cancelAgentStream()
   isStreaming.value = false
-  showToast('已中断本次推理')
+  if (currentSession.value && currentSession.value.id) {
+    try {
+      await wailsBridge.saveSession(currentSession.value)
+    } catch (_) {}
+  }
+  showToast('已中断本次推理并保存当前内容')
 }
 
 // 6. 设置中枢 (渠道、MCP、Skill、Rule)

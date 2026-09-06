@@ -72,14 +72,35 @@ func ListBranches(workspace string) ([]string, string, error) {
 	return branches, current, nil
 }
 
+// isValidStashID 严格校验 stash ID 格式，形如 stash@{0}、stash@{12}
+func isValidStashID(id string) bool {
+	if !strings.HasPrefix(id, "stash@{") || !strings.HasSuffix(id, "}") {
+		return false
+	}
+	numStr := strings.TrimSuffix(strings.TrimPrefix(id, "stash@{"), "}")
+	if len(numStr) == 0 {
+		return false
+	}
+	for _, c := range numStr {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
+}
+
 // CheckoutBranch 真实检出指定分支 (严格参数隔离与合法性校验)
 func CheckoutBranch(workspace, name string) error {
 	name = strings.TrimSpace(name)
 	if !isValidBranchName(name) {
 		return fmt.Errorf("invalid branch name: %q", name)
 	}
-	cmd := gitCmd(workspace, "checkout", name)
-	return cmd.Run()
+	cmd := gitCmd(workspace, "checkout", "--", name)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git checkout failed: %s (%w)", strings.TrimSpace(string(out)), err)
+	}
+	return nil
 }
 
 // CreateBranch 基于当前 HEAD 创建并切换到新分支
@@ -89,7 +110,11 @@ func CreateBranch(workspace, name string) error {
 		return fmt.Errorf("invalid branch name: %q", name)
 	}
 	cmd := gitCmd(workspace, "checkout", "-b", name)
-	return cmd.Run()
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git create branch failed: %s (%w)", strings.TrimSpace(string(out)), err)
+	}
+	return nil
 }
 
 // ListSnapshots 枚举历史检查点快照 (git stash)
@@ -139,7 +164,11 @@ func CreateSnapshot(workspace, msg string) error {
 	}
 	msg = strings.ReplaceAll(msg, "\n", " ")
 	cmd := gitCmd(workspace, "stash", "push", "-m", msg, "--include-untracked")
-	return cmd.Run()
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git stash push failed: %s (%w)", strings.TrimSpace(string(out)), err)
+	}
+	return nil
 }
 
 // RestoreSnapshot 应用并还原指定快照
@@ -148,9 +177,13 @@ func RestoreSnapshot(workspace, stashID string) error {
 	if stashID == "" {
 		stashID = "stash@{0}"
 	}
-	if !strings.HasPrefix(stashID, "stash@{") || strings.ContainsAny(stashID, " \t\r\n;&|") {
+	if !isValidStashID(stashID) {
 		return fmt.Errorf("invalid stash id: %q", stashID)
 	}
 	cmd := gitCmd(workspace, "stash", "apply", stashID)
-	return cmd.Run()
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git stash apply failed: %s (%w)", strings.TrimSpace(string(out)), err)
+	}
+	return nil
 }

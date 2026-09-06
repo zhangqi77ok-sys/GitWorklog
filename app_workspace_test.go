@@ -45,3 +45,14 @@ func TestApp_SetAndGetWorkspace(t *testing.T) {
 		t.Errorf("expected error when setting non-existent workspace, got nil")
 	}
 }
+
+func TestApp_GetUsageMetrics_NilSessionStore(t *testing.T) {
+	app := &App{
+		sessionStore: nil,
+	}
+	// 验证 sessionStore 为 nil 时不会 panic
+	metrics := app.GetUsageMetrics()
+	if metrics.ActiveSessions != 0 {
+		t.Errorf("expected 0 active sessions when sessionStore is nil, got %d", metrics.ActiveSessions)
+	}
+}

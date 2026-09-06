@@ -478,6 +478,7 @@ export const wailsBridge = {
           runtime.EventsOff('agent:tool_end')
           runtime.EventsOff('agent:done')
           runtime.EventsOff('agent:complete')
+          runtime.EventsOff('agent:interrupted')
         }
       } catch (_) {}
 
@@ -490,6 +491,7 @@ export const wailsBridge = {
             runtime.EventsOff('agent:tool_end')
             runtime.EventsOff('agent:done')
             runtime.EventsOff('agent:complete')
+            runtime.EventsOff('agent:interrupted')
           }
         } catch (_) {}
       }
@@ -522,6 +524,7 @@ export const wailsBridge = {
       }
       runtime.EventsOn('agent:done', handleFinish)
       runtime.EventsOn('agent:complete', handleFinish)
+      runtime.EventsOn('agent:interrupted', handleFinish)
 
       await app.SendMessage(req)
       return

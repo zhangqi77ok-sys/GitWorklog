@@ -443,6 +443,23 @@ Tcode 打破了单体硬编码调度逻辑，将 Agent 的执行循环、能力�
 * **算子参数名多别名自适应兼容与原子写临时文件防泄漏**：
   - `write_file` 与 `read_file` 同时兼容 `rel_path`、`path` 与 `file_path`，沙箱原子写入引入强生命周期 `isCleaned` 状态，彻底杜绝 `.tmp` 文件在重命名失败时残留。
 
+### 37. MCP 悬挂通道空指针防御、代码审计 OOM 熔断与 HTTP 连接池复用治理 (MCP Nil Defense, Audit OOM Guard & HTTP Pooling)
+* **MCP StdioClient 悬挂请求 nil 安全唤醒与强类型异常隔离**：
+  - 彻底治理客户端停止时向挂起 channel 派发 `nil` 导致调用方访问 `resp.Error` 产生的 `SIGSEGV` 空指针解引用崩溃；在 `Stop` 中先唤醒 channel 防死锁，在 `sendRequest` 中拦截 `nil` 明确返回错误，且在 `Start`、`ListTools`、`CallTool` 中全量补齐安全判空；
+* **安全审查器大文件 5MB 熔断与 WalkFunc 空指针守卫**：
+  - 在 `RunSecurityAudit` 中将 `err != nil` 与 `info.IsDir()` 彻底解耦，杜绝权限异常时解引用 `nil info` 崩溃；限制单个待审源码体积不超过 5MB，阻断潜在超大文件读取引发的 OOM；
+  - 在 TDD 验证中，若编译或执行失败，强制置 `failed >= 1`，彻底杜绝 0 失败假绿灯误导；
+* **全局 HTTP Transport 与连接池长连接复用**：
+  - 在 `internal/llm/client.go` 中提取单例 `sharedTransport` 与 `sharedLLMClient`，统一管理 TCP 连接池与 HTTP Keep-Alive，杜绝每次请求重复创建 Transport 导致的握手延迟与高频短连接端口耗尽；
+* **全局用量遥测 (Telemetry) 调用链连通与大盘实效采集**：
+  - 将 `telemetry.GetTracker().Record(...)` 无缝接入智能体多轮流式推理主循环，根据每轮推理耗时与生成 Token 实时核算指标，同时为 `GetUsageMetrics` 补齐 `sessionStore` 判空防御；
+* **GitOps 快照 Stash ID 严格白名单与标准错误捕获**：
+  - `RestoreSnapshot` 引入 `isValidStashID` 格式严格校验（`^stash@\{\d+\}$`），并在所有分支切换、检出与快照操作中统一采用 `CombinedOutput` 捕获完整 stderr 输出，告别抽象的 `exit status 1`；
+* **执行引擎 ToolPlugin 返回值 nil 判空守卫**：
+  - 在自主执行双环内核中增加对算子返回空结果（`res == nil`）的防御性检测，杜绝第三方插件未遵循强契约引发的崩溃；
+* **会话 ID 白名单解耦与手动中断即时持久化**：
+  - 移除会话存储中对 `sess_` 前缀的硬编码过滤，兼容所有合法扩展 ID；在前端点击手动中断时即时触发 `saveSession`，确保已生成的局部回复不丢失；并在 IPC 桥接层补齐对 `agent:interrupted` 事件的清理与回调触发。
+
 ---
 
 ## 🎨 四、视觉与人机工程学规范

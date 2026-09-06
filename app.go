@@ -1005,6 +1005,7 @@ func (a *App) SendMessage(req ChatRequest) error {
 				Tools:    workspaceTools,
 			}
 
+			roundStart := time.Now()
 			var roundContent strings.Builder
 			toolCalls, err := llm.StreamChat(agentCtx, llmReq, llm.StreamHandlers{
 				OnThinking: func(text string) {
@@ -1034,6 +1035,15 @@ func (a *App) SendMessage(req ChatRequest) error {
 					})
 				},
 			})
+
+			// 记录遥测大盘用量指标 (耗时与 Token 消耗估算)
+			roundDuration := time.Since(roundStart).Milliseconds()
+			promptTok := (len(req.Prompt) + 300) / 3
+			compTok := (roundContent.Len() + len(assistantThinking.String())) / 3
+			if compTok < 1 && roundContent.Len() > 0 {
+				compTok = 1
+			}
+			telemetry.GetTracker().Record(model, promptTok, compTok, roundDuration)
 
 			// 核心自然收敛判定：若模型没有发起工具调用 (Zero Tool Calls) 或发生错误，说明目标已达成或已汇报完毕，立即退出循环！
 			if err != nil || len(toolCalls) == 0 {
@@ -1247,6 +1257,10 @@ func (a *App) RunSecurityAudit() (agent.AuditReport, error) {
 
 // GetUsageMetrics 获取 Token 消耗与网关使用量统计大盘
 func (a *App) GetUsageMetrics() telemetry.UsageMetrics {
-	sessions := a.sessionStore.List()
-	return telemetry.GetTracker().GetMetrics(len(sessions))
+	activeCount := 0
+	if a.sessionStore != nil {
+		sessions := a.sessionStore.List()
+		activeCount = len(sessions)
+	}
+	return telemetry.GetTracker().GetMetrics(activeCount)
 }

@@ -42,3 +42,28 @@ func TestStdioClient_RestartAndStopChan(t *testing.T) {
 	_ = client.Stop()
 }
 
+func TestStdioClient_SendRequestNilResDefense(t *testing.T) {
+	client := NewStdioClient("powershell", []string{"-Command", "Start-Sleep -Seconds 1"}, ".")
+	// 模拟挂起请求并在 Stop 时清理
+	ch := make(chan *JSONRPCMessage, 1)
+	client.pending.Store(int64(999), ch)
+
+	// 关闭客户端，触发 pending channel 发送 nil
+	_ = client.Stop()
+
+	// 从 channel 接收
+	val := <-ch
+	if val != nil {
+		t.Errorf("expected nil from closed pending channel, got %v", val)
+	}
+
+	// 再次验证 sendRequest 不会导致 panic，且返回错误
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	_, err := client.sendRequest(ctx, "test", nil)
+	if err == nil {
+		t.Errorf("expected error from stopped client, got nil")
+	}
+}
+

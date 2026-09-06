@@ -1,4 +1,4 @@
-﻿package gitops
+package gitops
 
 import (
 	"testing"
@@ -33,3 +33,20 @@ func TestRestoreSnapshot_InvalidID(t *testing.T) {
 		t.Errorf("expected error for invalid stash id, got nil")
 	}
 }
+
+func TestIsValidStashID(t *testing.T) {
+	valid := []string{"stash@{0}", "stash@{1}", "stash@{42}"}
+	for _, s := range valid {
+		if !isValidStashID(s) {
+			t.Errorf("expected stash id %q to be valid", s)
+		}
+	}
+
+	invalid := []string{"", "stash", "stash@{", "stash@{}", "stash@{abc}", "stash@{0}xyz", "stash@{0};rm -rf /"}
+	for _, s := range invalid {
+		if isValidStashID(s) {
+			t.Errorf("expected stash id %q to be invalid", s)
+		}
+	}
+}
+

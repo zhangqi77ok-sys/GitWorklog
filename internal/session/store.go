@@ -84,7 +84,7 @@ func (s *Store) List() []SessionMeta {
 	metas := make([]SessionMeta, 0, len(entries))
 	for _, entry := range entries {
 		name := entry.Name()
-		if entry.IsDir() || (!strings.HasPrefix(name, "sess_") && !strings.HasPrefix(name, "sess")) {
+		if entry.IsDir() || strings.HasPrefix(name, ".") || strings.Contains(name, ".tmp.") {
 			continue
 		}
 		if filepath.Ext(name) != ".json" {
