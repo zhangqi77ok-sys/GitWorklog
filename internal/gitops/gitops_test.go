@@ -1,6 +1,8 @@
 package gitops
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -102,6 +104,48 @@ func TestCheckoutBranch_Execution(t *testing.T) {
 	// 再次检出 test-feat
 	if err := CheckoutBranch(tmpDir, "test-feat"); err != nil {
 		t.Errorf("CheckoutBranch to test-feat failed: %v", err)
+	}
+}
+
+func TestListSnapshots_RealTimestamp(t *testing.T) {
+	tmpDir := t.TempDir()
+	_ = gitCmd(tmpDir, "init").Run()
+	_ = gitCmd(tmpDir, "config", "user.email", "test@tcode.local").Run()
+	_ = gitCmd(tmpDir, "config", "user.name", "TcodeTest").Run()
+	_ = gitCmd(tmpDir, "commit", "--allow-empty", "-m", "initial commit").Run()
+
+	// 1. 无快照时应返回空切片
+	listEmpty, err := ListSnapshots(tmpDir)
+	if err != nil {
+		t.Fatalf("ListSnapshots on empty repo failed: %v", err)
+	}
+	if len(listEmpty) != 0 {
+		t.Errorf("expected 0 snapshots, got %d", len(listEmpty))
+	}
+
+	// 2. 创建修改并生成快照
+	_ = os.WriteFile(filepath.Join(tmpDir, "dirty.txt"), []byte("stash content"), 0644)
+	if err := CreateSnapshot(tmpDir, "test checkpoint message"); err != nil {
+		t.Fatalf("CreateSnapshot failed: %v", err)
+	}
+
+	listWithSnap, err := ListSnapshots(tmpDir)
+	if err != nil {
+		t.Fatalf("ListSnapshots failed: %v", err)
+	}
+	if len(listWithSnap) != 1 {
+		t.Fatalf("expected 1 snapshot, got %d", len(listWithSnap))
+	}
+
+	snap := listWithSnap[0]
+	if snap.Timestamp <= 0 {
+		t.Errorf("expected valid positive timestamp, got %d", snap.Timestamp)
+	}
+	if snap.Time == "" {
+		t.Errorf("expected non-empty formatted time, got %q", snap.Time)
+	}
+	if !strings.Contains(snap.Message, "test checkpoint message") {
+		t.Errorf("expected message to contain 'test checkpoint message', got %q", snap.Message)
 	}
 }
 

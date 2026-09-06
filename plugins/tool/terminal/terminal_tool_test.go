@@ -85,3 +85,20 @@ func TestTerminalTool_ExecuteStream_GoroutineLeak(t *testing.T) {
 	// 等待一小会儿让系统调度
 	time.Sleep(100 * time.Millisecond)
 }
+
+func TestTerminalTool_WhitespaceCommand(t *testing.T) {
+	tool := NewTool(".")
+	rawArgs, _ := json.Marshal(map[string]string{"command": "   \t\n  "})
+	res, err := tool.Execute(context.Background(), rawArgs)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !res.IsError {
+		t.Errorf("expected isError true for whitespace command")
+	}
+
+	_, errStream := tool.ExecuteStream(context.Background(), "   ", nil)
+	if errStream == nil {
+		t.Errorf("expected error for whitespace command in ExecuteStream")
+	}
+}

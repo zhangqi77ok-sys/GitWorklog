@@ -2,6 +2,7 @@ package protocol
 
 import (
 	"fmt"
+	"strings"
 )
 
 // OpenAIChatMessage OpenAI 请求消息
@@ -78,10 +79,14 @@ func ConvertCanonicalToOpenAI(messages []CanonicalMessage) ([]OpenAIChatMessage,
 		case RoleTool:
 			for _, p := range msg.Parts {
 				if p.Type == ContentToolResult && p.ToolResult != nil {
+					toolContent := strings.TrimSpace(p.ToolResult.Content)
+					if toolContent == "" {
+						toolContent = "tool executed successfully with empty output"
+					}
 					out = append(out, OpenAIChatMessage{
 						Role:       "tool",
 						ToolCallID: p.ToolResult.ToolCallID,
-						Content:    p.ToolResult.Content,
+						Content:    toolContent,
 					})
 				}
 			}

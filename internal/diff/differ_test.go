@@ -168,4 +168,31 @@ func TestComputeFileDiff_EmptyRepoNoHead(t *testing.T) {
 	}
 }
 
+func TestComputeFileDiff_EmptyUntrackedFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	cmdInit := gitCmd(tmpDir, "init")
+	if err := cmdInit.Run(); err != nil {
+		t.Fatalf("git init failed: %v", err)
+	}
+
+	testFile := "empty_new.txt"
+	absPath := filepath.Join(tmpDir, testFile)
+	_ = os.WriteFile(absPath, []byte(""), 0644)
+
+	report, err := ComputeFileDiff(tmpDir, testFile)
+	if err != nil {
+		t.Fatalf("ComputeFileDiff failed on empty file: %v", err)
+	}
+
+	if len(report.Lines) != 0 {
+		t.Errorf("expected 0 lines for empty file, got %d", len(report.Lines))
+	}
+	if len(report.Hunks) != 0 {
+		t.Errorf("expected 0 hunks for empty file, got %d", len(report.Hunks))
+	}
+	if !strings.Contains(report.Stats, "+0 行") {
+		t.Errorf("expected stats to indicate +0 lines, got %s", report.Stats)
+	}
+}
+
 

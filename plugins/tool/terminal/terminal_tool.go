@@ -8,6 +8,7 @@ import (
 	"io"
 	"os/exec"
 	"runtime"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -74,7 +75,8 @@ func (t *Tool) Execute(ctx context.Context, rawArgs json.RawMessage) (*v1.ToolRe
 		return &v1.ToolResult{Content: fmt.Sprintf("invalid args: %v", err), IsError: true}, nil
 	}
 
-	if args.Command == "" {
+	cmdStr := strings.TrimSpace(args.Command)
+	if cmdStr == "" {
 		return &v1.ToolResult{Content: "command is required", IsError: true}, nil
 	}
 
@@ -83,7 +85,7 @@ func (t *Tool) Execute(ctx context.Context, rawArgs json.RawMessage) (*v1.ToolRe
 
 	var cmd *exec.Cmd
 	if runtime.GOOS == "windows" {
-		cmd = exec.CommandContext(execCtx, "cmd", "/d", "/s", "/c", args.Command)
+		cmd = exec.CommandContext(execCtx, "cmd", "/d", "/s", "/c", cmdStr)
 		// 关键铁律: 注入 CREATE_NO_WINDOW = 0x08000000 杜绝 Windows 黑色控制台弹窗
 		cmd.SysProcAttr = &syscall.SysProcAttr{
 			CreationFlags: 0x08000000,
@@ -165,13 +167,14 @@ type StreamChunkHandler func(chunk string)
 
 // ExecuteStream 实时流式执行终端指令，边读边回调 onChunk，并在命令结束时返回 exitCode
 func (t *Tool) ExecuteStream(ctx context.Context, command string, onChunk StreamChunkHandler) (int, error) {
-	if command == "" {
+	cmdStr := strings.TrimSpace(command)
+	if cmdStr == "" {
 		return -1, fmt.Errorf("command is required")
 	}
 
 	var cmd *exec.Cmd
 	if runtime.GOOS == "windows" {
-		cmd = exec.CommandContext(ctx, "cmd", "/d", "/s", "/c", command)
+		cmd = exec.CommandContext(ctx, "cmd", "/d", "/s", "/c", cmdStr)
 		// 关键铁律: 注入 CREATE_NO_WINDOW = 0x08000000 杜绝 Windows 黑色控制台弹窗
 		cmd.SysProcAttr = &syscall.SysProcAttr{
 			CreationFlags: 0x08000000,

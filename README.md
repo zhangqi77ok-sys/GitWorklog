@@ -555,6 +555,28 @@ Tcode 打破了单体硬编码调度逻辑，将 Agent 的执行循环、能力�
 * **全量 Demo 假数据、泄露密钥与预填凭据彻底清洗 (铁律 0.5)**：
   - 全面清退 `frontend/index.html`、`prototype/index.html` 与 `web_prototype.html` 中所有硬编码的假 Token、泄露 API Key 与假会话，所有敏感凭据重置为纯净空字符串，展示层统一执行 `已安全加密存储 (AES-GCM)` 脱敏。
 
+### 43. 工具空输出防御、RevertFile 撤销防误删、真实快照时间戳与事件全量清理 (Empty Tool Content Defense, RevertFile Safe Deletion, Real Snapshot Timestamps & Event Cleanup)
+* **主智能体执行循环工具空输出保全防上游崩溃 (`app.go`)**：
+  - 当大模型调用的工具无控制台输出时，自动注入语义说明 `tool [%s] executed successfully with empty output`，并在 `pkg/protocol/openai_adapter.go` 建立双层保全，彻底根除 OpenAI / Anthropic 等网关返回 `400 Bad Request: 'messages[x].content' cannot be empty`；
+* **`RevertFile` 空仓库无 HEAD 撤销防误删与状态精准识别**：
+  - 彻底治理旧逻辑在未产生初次提交的空仓库中执行 `git checkout HEAD` 报错后盲目调用 `os.Remove(validPath)` 导致代码被物理毁灭删除的严重缺陷；引入 `git status --porcelain` 精确识别 `??` 未追踪文件，仅对真正未追踪新文件安全清理，已追踪文件优先使用 `git restore`，杜绝误伤；
+* **沙箱路径逃逸检测放行以双点开头的合法文件名**：
+  - 修复 `internal/core/sandbox/fs.go` 与 `internal/diff/differ.go` 中直接使用 `strings.HasPrefix(rel, "..")` 导致工作区内合法文件（如 `..config.json`）被误杀的缺陷，精准判定跃迁逃逸；
+* **沙箱与文件工具 `ListDir` 完美支持根目录枚举**：
+  - 针对大模型传入空路径或 `.` 列出工作区根目录的操作，`ListDir` 自动安全映射为沙箱根目录，解决 `empty path is not allowed` 阻断大模型目录感知的问题；
+* **Git 快照真实提交时间戳提取 (铁律 0.5)**：
+  - 铲除 `internal/gitops/gitops.go` 中使用 `time.Now()` 伪造快照时间的弊端，通过 `git log -g --pretty=format:"%gd|%ct|%gs" refs/stash` 获取真实的 Unix 秒级时间戳与时分秒格式化；
+* **未追踪空文件 Diff 精确计算与 Windows CRLF 换行清洗**：
+  - 针对 0 字节空文件计算出 0 行变动与空 Hunk，防止生成无效 patch 损坏应用；并自动去除 Windows 换行符 `\r`，保障 patch 干净规范；
+* **MCP `StdioClient.readLoop` 空指针防御**：
+  - 在 `internal/mcp/stdio.go` 的 `readLoop` 入口增加 `c.stdout == nil` 保护，防止进程异常启动或提前关闭引发空指针解引用；
+* **终端工具全空格指令严格拦截**：
+  - 在 `plugins/tool/terminal/terminal_tool.go` 的 `Execute` 与 `ExecuteStream` 中使用 `strings.TrimSpace` 过滤全空格指令，防止空白指令下发 CMD 挂起；
+* **SSE 流式传输网关错误探测与即时报错**：
+  - 在 `internal/llm/client.go` 中解析 SSE 数据时优先探测 `error` 报文（限流、欠费或敏感词拦截），直接触发 `OnError` 中断，杜绝虚假成功；
+* **前端全局事件监听器统一声明式注销与零残留**：
+  - 在 `frontend/src/core/wailsBridge.ts` 中以声明式数组统一注册与注销 `agent:start`、`agent:files_changed`、`lsp:diagnostic` 等全部事件，彻底根除长期运行中的监听器泄漏。
+
 ---
 
 

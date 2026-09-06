@@ -228,6 +228,21 @@ func StreamChat(ctx context.Context, req Request, handlers StreamHandlers) ([]To
 				break
 			}
 
+			// 探测上游流式返回的错误报文 (如限流、余额不足或敏感词拦截)
+			var errChunk struct {
+				Error *struct {
+					Message string `json:"message"`
+					Type    string `json:"type"`
+				} `json:"error"`
+			}
+			if err := json.Unmarshal([]byte(dataStr), &errChunk); err == nil && errChunk.Error != nil && errChunk.Error.Message != "" {
+				streamErr := fmt.Errorf("upstream stream error [%s]: %s", errChunk.Error.Type, errChunk.Error.Message)
+				if handlers.OnError != nil {
+					handlers.OnError(streamErr)
+				}
+				return nil, streamErr
+			}
+
 			var chunk struct {
 				Choices []struct {
 					Delta struct {

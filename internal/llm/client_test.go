@@ -84,3 +84,37 @@ func TestStreamChat_MissingToolCallIDAndType(t *testing.T) {
 		t.Errorf("expected tool name read_file, got %s", toolCalls[0].Function.Name)
 	}
 }
+
+func TestStreamChat_UpstreamErrorChunk(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+
+		_, _ = w.Write([]byte("data: {\"error\":{\"message\":\"Rate limit exceeded\",\"type\":\"requests\"}}\n\n"))
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
+	}))
+	defer server.Close()
+
+	req := Request{
+		Endpoint: server.URL,
+		APIKey:   "dummy-key",
+		Model:    "test-model",
+		Messages: []Message{
+			{Role: "user", Content: "test"},
+		},
+	}
+
+	var capturedErr error
+	_, err := StreamChat(context.Background(), req, StreamHandlers{
+		OnError: func(err error) {
+			capturedErr = err
+		},
+	})
+
+	if err == nil {
+		t.Fatalf("expected error from upstream error chunk, got nil")
+	}
+	if capturedErr == nil {
+		t.Fatalf("expected OnError callback to capture error, got nil")
+	}
+}

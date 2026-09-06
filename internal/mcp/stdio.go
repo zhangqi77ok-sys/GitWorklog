@@ -347,6 +347,9 @@ func (c *StdioClient) sendNotification(method string, params json.RawMessage) er
 
 // readLoop 持续按行读取外部进程输出并派发给对应 Request ID
 func (c *StdioClient) readLoop() {
+	if c.stdout == nil {
+		return
+	}
 	defer func() {
 		// 进程输出流关闭或异常退出时，立即唤醒所有挂起的等待请求，杜绝死锁挂死
 		c.pending.Range(func(key, value any) bool {

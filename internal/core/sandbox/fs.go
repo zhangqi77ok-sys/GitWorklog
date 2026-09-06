@@ -61,7 +61,7 @@ func (s *Sandbox) ValidatePath(targetPath string) (string, error) {
 	normFull := normalizeWindowsPath(fullPath)
 
 	rel, err := filepath.Rel(normRoot, normFull)
-	if err != nil || strings.HasPrefix(rel, "..") || rel == ".." {
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || strings.HasPrefix(rel, "../") {
 		return "", fmt.Errorf("SECURITY: path [%s] escapes sandbox root [%s]", targetPath, s.rootDir)
 	}
 
@@ -143,8 +143,12 @@ func (s *Sandbox) AtomicWriteFile(path string, content []byte) error {
 	return nil
 }
 
-// ListDir 列出指定目录内容
+// ListDir 列出指定目录内容（支持空路径或 "." 代表沙箱根目录）
 func (s *Sandbox) ListDir(relPath string) ([]os.DirEntry, error) {
+	trimmed := strings.TrimSpace(relPath)
+	if trimmed == "" || trimmed == "." {
+		return os.ReadDir(s.rootDir)
+	}
 	validated, err := s.ValidatePath(relPath)
 	if err != nil {
 		return nil, err

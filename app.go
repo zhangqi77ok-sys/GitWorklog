@@ -336,19 +336,40 @@ func (a *App) RevertFile(filePath string) error {
 		validPath = filepath.Join(a.workspace, filePath)
 	}
 
-	cmd := exec.Command("git", "checkout", "HEAD", "--", filePath)
-	cmd.Dir = a.workspace
+	// 1. 先检查该文件在 git 中的真实状态，严禁无条件物理删除
+	statusCmd := exec.Command("git", "status", "--porcelain", "--", filePath)
+	statusCmd.Dir = a.workspace
 	if attr := windowsSysProcAttr(); attr != nil {
-		cmd.SysProcAttr = attr
+		statusCmd.SysProcAttr = attr
 	}
-	if err := cmd.Run(); err != nil {
-		// 若 git checkout 失败 (例如该文件为未追踪 Untracked 新文件)，安全从磁盘中删除
+	statusOut, _ := statusCmd.Output()
+	statusStr := strings.TrimSpace(string(statusOut))
+
+	// 若确认为未追踪文件 (??)，撤销即删除该未追踪新文件
+	if strings.HasPrefix(statusStr, "??") {
 		if fi, statErr := os.Stat(validPath); statErr == nil && !fi.IsDir() {
 			return os.Remove(validPath)
 		}
-		return err
+		return nil
 	}
-	return nil
+
+	// 2. 对于已追踪文件，优先使用 git restore 撤销暂存区和工作区修改
+	restoreCmd := exec.Command("git", "restore", "--staged", "--worktree", "--", filePath)
+	restoreCmd.Dir = a.workspace
+	if attr := windowsSysProcAttr(); attr != nil {
+		restoreCmd.SysProcAttr = attr
+	}
+	if err := restoreCmd.Run(); err == nil {
+		return nil
+	}
+
+	// 3. 降级尝试 git checkout HEAD -- filePath
+	checkoutCmd := exec.Command("git", "checkout", "HEAD", "--", filePath)
+	checkoutCmd.Dir = a.workspace
+	if attr := windowsSysProcAttr(); attr != nil {
+		checkoutCmd.SysProcAttr = attr
+	}
+	return checkoutCmd.Run()
 }
 
 // ApplyDiffHunk 采纳指定代码块 (Hunk) 变更
@@ -1217,11 +1238,15 @@ func (a *App) SendMessage(req ChatRequest) error {
 					"turn":       turn,
 				})
 
+				toolOutput := strings.TrimSpace(output)
+				if toolOutput == "" {
+					toolOutput = fmt.Sprintf("tool [%s] executed successfully with empty output", toolName)
+				}
 				conversation = append(conversation, llm.Message{
 					Role:       "tool",
 					ToolCallID: tc.ID,
 					Name:       toolName,
-					Content:    output,
+					Content:    toolOutput,
 				})
 			}
 		}

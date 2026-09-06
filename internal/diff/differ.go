@@ -49,7 +49,7 @@ func validateRelPath(workspaceRoot, relPath string) (string, error) {
 	normWorkspace := normalizeWindowsPath(cleanWorkspace)
 	normAbs := normalizeWindowsPath(cleanAbs)
 	rel, err := filepath.Rel(normWorkspace, normAbs)
-	if err != nil || strings.HasPrefix(rel, "..") {
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || strings.HasPrefix(rel, "../") {
 		return "", fmt.Errorf("path escapes workspace sandbox: %s", relPath)
 	}
 	return cleanAbs, nil
@@ -129,9 +129,27 @@ func ComputeFileDiff(workspaceRoot, relPath string) (DiffReport, error) {
 
 		content, err := os.ReadFile(absPath)
 		if err == nil {
-			lines := strings.Split(string(content), "\n")
+			var lines []string
+			if len(content) > 0 {
+				rawLines := strings.Split(string(content), "\n")
+				lines = make([]string, 0, len(rawLines))
+				for _, l := range rawLines {
+					lines = append(lines, strings.TrimSuffix(l, "\r"))
+				}
+			} else {
+				lines = []string{}
+			}
+
 			// 如果是未追踪新文件 (??) 或新增暂存文件 (A )
 			if strings.HasPrefix(statusStr, "??") || strings.HasPrefix(statusStr, "A ") {
+				if len(lines) == 0 {
+					report.Stats = "+0 行 (新文件)"
+					report.Header = "@@ 新增空文件 @@"
+					report.Lines = []DiffLine{}
+					report.Hunks = []DiffHunk{}
+					return report, nil
+				}
+
 				for _, line := range lines {
 					report.Lines = append(report.Lines, DiffLine{
 						Type: "add",

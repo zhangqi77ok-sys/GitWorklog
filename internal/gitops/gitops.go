@@ -1,9 +1,11 @@
 package gitops
 
 import (
+	"bytes"
 	"fmt"
 	"os/exec"
 	"runtime"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -117,8 +119,52 @@ func CreateBranch(workspace, name string) error {
 	return nil
 }
 
-// ListSnapshots 枚举历史检查点快照 (git stash)
+// ListSnapshots 枚举历史检查点快照 (git stash)，读取真实历史时间戳
 func ListSnapshots(workspace string) ([]Snapshot, error) {
+	// 优先使用 git log 查询 refs/stash 获取真实创建时间戳 (%ct)
+	cmdLog := gitCmd(workspace, "log", "-g", "--pretty=format:%gd|%ct|%gs", "refs/stash")
+	if out, err := cmdLog.Output(); err == nil && len(bytes.TrimSpace(out)) > 0 {
+		lines := strings.Split(string(out), "\n")
+		res := make([]Snapshot, 0, len(lines))
+		for _, line := range lines {
+			trimmed := strings.TrimSpace(line)
+			if trimmed == "" {
+				continue
+			}
+			parts := strings.SplitN(trimmed, "|", 3)
+			if len(parts) < 3 {
+				continue
+			}
+			stashID := strings.TrimSpace(parts[0])
+			ts, _ := strconv.ParseInt(strings.TrimSpace(parts[1]), 10, 64)
+			desc := strings.TrimSpace(parts[2])
+
+			branch := "main"
+			msg := desc
+			if strings.Contains(desc, ":") {
+				subparts := strings.SplitN(desc, ":", 2)
+				b := strings.TrimSpace(subparts[0])
+				if strings.HasPrefix(b, "On ") {
+					branch = strings.TrimSpace(strings.TrimPrefix(b, "On "))
+				} else if strings.HasPrefix(b, "WIP on ") {
+					branch = strings.TrimSpace(strings.TrimPrefix(b, "WIP on "))
+				}
+				msg = strings.TrimSpace(subparts[1])
+			}
+
+			tTime := time.Unix(ts, 0)
+			res = append(res, Snapshot{
+				ID:        stashID,
+				Branch:    branch,
+				Message:   msg,
+				Time:      tTime.Format("15:04:05"),
+				Timestamp: ts,
+			})
+		}
+		return res, nil
+	}
+
+	// 降级使用 git stash list
 	cmd := gitCmd(workspace, "stash", "list")
 	out, err := cmd.Output()
 	if err != nil {
@@ -149,8 +195,8 @@ func ListSnapshots(workspace string) ([]Snapshot, error) {
 			ID:        stashID,
 			Branch:    branch,
 			Message:   msg,
-			Time:      time.Now().Format("15:04:05"),
-			Timestamp: time.Now().Unix(),
+			Time:      "",
+			Timestamp: 0,
 		})
 	}
 

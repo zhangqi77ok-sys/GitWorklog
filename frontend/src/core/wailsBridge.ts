@@ -483,28 +483,33 @@ export const wailsBridge = {
 
     if (runtime && app?.SendMessage) {
       // 治理内存泄漏与 Chunk 重复打印：清理残留监听器
+      const agentEvents = [
+        'agent:start',
+        'agent:thinking',
+        'agent:chunk',
+        'agent:tool_start',
+        'agent:tool_end',
+        'agent:files_changed',
+        'agent:done',
+        'agent:complete',
+        'agent:interrupted',
+        'lsp:diagnostic'
+      ]
+
       try {
         if (runtime.EventsOff) {
-          runtime.EventsOff('agent:thinking')
-          runtime.EventsOff('agent:chunk')
-          runtime.EventsOff('agent:tool_start')
-          runtime.EventsOff('agent:tool_end')
-          runtime.EventsOff('agent:done')
-          runtime.EventsOff('agent:complete')
-          runtime.EventsOff('agent:interrupted')
+          for (const ev of agentEvents) {
+            runtime.EventsOff(ev)
+          }
         }
       } catch (_) {}
 
       const cleanAll = () => {
         try {
           if (runtime.EventsOff) {
-            runtime.EventsOff('agent:thinking')
-            runtime.EventsOff('agent:chunk')
-            runtime.EventsOff('agent:tool_start')
-            runtime.EventsOff('agent:tool_end')
-            runtime.EventsOff('agent:done')
-            runtime.EventsOff('agent:complete')
-            runtime.EventsOff('agent:interrupted')
+            for (const ev of agentEvents) {
+              runtime.EventsOff(ev)
+            }
           }
         } catch (_) {}
       }

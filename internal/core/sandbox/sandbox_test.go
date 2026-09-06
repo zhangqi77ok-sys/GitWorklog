@@ -108,5 +108,29 @@ func TestSandbox_ValidatePathAndAtomicWrite(t *testing.T) {
 	if err := sb.AtomicWriteFile("", []byte("evil")); err == nil {
 		t.Errorf("expected writing to empty path/root to be rejected, got nil")
 	}
+
+	// 9. 双点前缀合法文件名测试 (非逃逸路径)
+	dotDotFile := "..legit_config.json"
+	validDotDot, err := sb.ValidatePath(dotDotFile)
+	if err != nil {
+		t.Errorf("legitimate file [%s] starting with .. was falsely rejected: %v", dotDotFile, err)
+	}
+	expectedDotDot := filepath.Clean(filepath.Join(tmpDir, dotDotFile))
+	if validDotDot != expectedDotDot {
+		t.Errorf("expected [%s], got [%s]", expectedDotDot, validDotDot)
+	}
+
+	// 10. ListDir 支持空路径和 "." 列出根目录测试
+	entriesEmpty, err := sb.ListDir("")
+	if err != nil {
+		t.Errorf("ListDir(\"\") failed: %v", err)
+	}
+	entriesDot, err := sb.ListDir(".")
+	if err != nil {
+		t.Errorf("ListDir(\".\") failed: %v", err)
+	}
+	if len(entriesEmpty) != len(entriesDot) {
+		t.Errorf("entries count mismatch between empty and dot: %d vs %d", len(entriesEmpty), len(entriesDot))
+	}
 }
 

@@ -45,6 +45,7 @@
 | **35** | **Git 源码管理闭环绑定、TDD 跨平台进程树熔断、文件物理删除 Diff 容错与卸载器自删除锁治理** | 交互闭环 / 进程生命周期 / GitOps / 卸载安全 | Git 抽屉真实提交与刷新全链路驱动、Working Tree 状态结构体映射、RunTDDValidation 超时孤儿进程树销毁、负向变更 Diff 容错与卸载器脱机批处理防文件锁定 | [35-git-source-control-binding-tdd-process-tree-and-differ-resilience.md](./35-git-source-control-binding-tdd-process-tree-and-differ-resilience.md) |
 | **36** | **Git 分支检出双横杠陷阱、MCP Stderr 管道死锁与流式中断隔离治理** | 命令行协议 / 进程IO生命周期 / IPC事件闭环 / 版本控制 | 移除 `git checkout --` 恢复分支切换、MCP 子进程 Stderr 异步非阻塞排水防管道死锁、中断事件注入 `session_id` 彻底清退监听器、空 Git 仓库 HEAD 探测容错与沙箱空路径越权拦截 | [36-git-checkout-double-dash-mcp-stderr-pipe-and-cancellation-isolation.md](./36-git-checkout-double-dash-mcp-stderr-pipe-and-cancellation-isolation.md) |
 | **37** | **会话更新时序保序、Windows 设备保留名防御与零假凭据架构防线** | 数据一致性 / 操作系统兼容 / 安全边界 / 契约守卫 | 会话列表按 `UpdatedAt` 降序保序、Windows 设备保留字（CON/PRN/AUX/NUL）黑名单拦截、原子写入父目录创建保证、工具空输出回填防护与零假数据凭据全量清洗 | [37-session-sorting-windows-reserved-names-and-zero-demo-hardening.md](./37-session-sorting-windows-reserved-names-and-zero-demo-hardening.md) |
+| **38** | **工具空输出防御、RevertFile 撤销防误删、真实快照时间戳与事件全量清理** | 协议安全 / 数据防丢 / 零假数据 / IPC生命周期 | 主循环工具空输出保全防上游 400 崩溃、RevertFile 状态精准识别防空仓库误删、沙箱合法双点文件放行、ListDir 根目录支持、git stash 真实历史时间戳提取、0 字节 Diff 修正与前端全量事件无残留注销 | [38-empty-tool-content-defense-revert-safety-and-event-cleanup.md](./38-empty-tool-content-defense-revert-safety-and-event-cleanup.md) |
 
 
 
